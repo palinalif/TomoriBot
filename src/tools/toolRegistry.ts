@@ -36,6 +36,7 @@ export interface ToolStateForContext {
     self_teaching_enabled: boolean;
     pin_message_enabled: boolean;
     imagegen_enabled: boolean;
+    videogen_enabled: boolean;
     nai_exclusive_imggen: boolean;
     voice_message_enabled: boolean;
   };

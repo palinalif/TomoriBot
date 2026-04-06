@@ -1,0 +1,70 @@
+import { log } from "@/utils/misc/logger";
+
+/** Result from a single poll attempt */
+export interface PollResult<T> {
+  done: boolean;
+  result?: T;
+  error?: string;
+}
+
+/** Configuration for the polling loop */
+export interface PollOptions<T> {
+  /** Function called each iteration to check completion status */
+  pollFn: () => Promise<PollResult<T>>;
+  /** Milliseconds between poll attempts */
+  intervalMs: number;
+  /** Maximum number of poll attempts before timeout */
+  maxAttempts: number;
+  /** Optional callback invoked before each poll with the current attempt number */
+  onPoll?: (attempt: number) => void;
+  /** Label for log messages (e.g. "GoogleVideoGeneration") */
+  logLabel?: string;
+}
+
+/**
+ * Generic async polling utility for long-running operations.
+ * Repeatedly calls pollFn at the specified interval until:
+ *   1. pollFn returns { done: true, result } → resolves with result
+ *   2. pollFn returns { done: true, error } → rejects with error
+ *   3. maxAttempts is exceeded → rejects with timeout error
+ *
+ * @param options - Polling configuration
+ * @returns The final result from the completed operation
+ * @throws Error if the operation fails or times out
+ */
+export async function pollForCompletion<T>(options: PollOptions<T>): Promise<T> {
+  const { pollFn, intervalMs, maxAttempts, onPoll, logLabel } = options;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // 1. Wait before polling (skip wait on first attempt)
+    if (attempt > 1) {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+
+    // 2. Invoke optional callback
+    onPoll?.(attempt);
+
+    // 3. Poll for status
+    const pollResult = await pollFn();
+
+    // 4. Check if done
+    if (pollResult.done) {
+      if (pollResult.error) {
+        throw new Error(pollResult.error);
+      }
+      if (pollResult.result === undefined) {
+        throw new Error(`${logLabel ?? "Poll"}: operation completed but returned no result`);
+      }
+      return pollResult.result;
+    }
+
+    // 5. Log progress periodically (every 5th attempt)
+    if (attempt % 5 === 0) {
+      log.info(`${logLabel ?? "Poll"}: still waiting (attempt ${attempt}/${maxAttempts})`);
+    }
+  }
+
+  // 6. Timeout — max attempts exceeded
+  const totalWaitSec = Math.round((maxAttempts * intervalMs) / 1000);
+  throw new Error(`${logLabel ?? "Poll"}: operation timed out after ${maxAttempts} attempts (~${totalWaitSec}s)`);
+}

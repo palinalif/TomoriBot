@@ -6,6 +6,7 @@ export const TOOL_NOTICE_KEYS = [
   "web_fetch",
   "document_reading",
   "image_generation",
+  "video_generation",
   "image_editing",
   "image_analysis",
   "gif_processing",
@@ -60,6 +61,11 @@ export const TOOL_NOTICE_DEFINITIONS: ToolNoticeDefinition[] = [
     key: "image_generation",
     labelKey: "commands.config.tool-notices.visibility.notice_image_generation_label",
     descriptionKey: "commands.config.tool-notices.visibility.notice_image_generation_description",
+  },
+  {
+    key: "video_generation",
+    labelKey: "commands.config.tool-notices.visibility.notice_video_generation_label",
+    descriptionKey: "commands.config.tool-notices.visibility.notice_video_generation_description",
   },
   {
     key: "image_editing",

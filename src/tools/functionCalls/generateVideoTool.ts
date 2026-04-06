@@ -1,0 +1,451 @@
+/**
+ * Video Generation Tool
+ * Allows TomoriBot to generate videos using the active provider's native video API.
+ * Supports text-to-video and image-to-video (via message_id reference).
+ *
+ * Key difference from image generation: all video APIs are async with polling,
+ * so the execute() method blocks for 30s–5min while the video renders.
+ */
+
+import { AttachmentBuilder } from "discord.js";
+import { log, ColorCode } from "../../utils/misc/logger";
+import { localizer } from "../../utils/text/localizer";
+import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
+import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
+import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
+import { sql } from "../../utils/db/client";
+import { decryptApiKey } from "../../utils/security/crypto";
+import { checkVideoQuota, incrementVideoQuota } from "../../utils/quota/videoQuotaManager";
+import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
+
+/** Discord file size limit for non-boosted servers (25 MB) */
+const DISCORD_FILE_SIZE_LIMIT = 25 * 1024 * 1024;
+
+/**
+ * Tool for generating videos using the active provider's native video API.
+ * Registered automatically by the tool initializer from src/tools/functionCalls/.
+ */
+export class GenerateVideoTool extends BaseTool {
+  name = "generate_video";
+  description =
+    "Generate a short AI video using the active provider's native video model. Provide a detailed text prompt describing the video scene, action, and style. Optionally reference a Discord message containing an image to use as the starting frame (image-to-video). Video generation takes 1-3 minutes. The video will be sent directly to the Discord channel as an MP4 file.";
+  category = "utility" as const;
+  requiresFeatureFlag = "video_gen";
+
+  parameters: ToolParameterSchema = {
+    type: "object",
+    properties: {
+      prompt: {
+        type: "string",
+        description:
+          "A detailed text description of the video you want to generate. Describe the scene, camera movement, action, style, and any dialogue or sound effects. For image-to-video, describe the desired motion and changes from the reference image.",
+      },
+      message_id: {
+        type: "string",
+        description:
+          "Optional: The Discord message ID containing an image to use as the starting frame for image-to-video generation. The first image from this message will be used as the initial frame. If not provided, generates a video from scratch (text-to-video).",
+      },
+      aspect_ratio: {
+        type: "string",
+        description: "Optional: The aspect ratio for the generated video. Default is '16:9' (landscape).",
+        enum: ["16:9", "9:16", "1:1"],
+      },
+    },
+    required: ["prompt"],
+  };
+
+  /**
+   * Check if video generation is available for the given provider.
+   * Uses provider capability metadata.
+   * @param provider - LLM provider name
+   * @returns True if provider supports native video generation
+   */
+  isAvailableFor(provider: string): boolean {
+    return providerSupportsFeature(provider, "nativeVideoGeneration");
+  }
+
+  /**
+   * Check if video generation is enabled in Tomori config.
+   * @param context - Tool execution context
+   * @returns True if video generation is enabled
+   */
+  protected isEnabled(context: ToolContext): boolean {
+    return context.tomoriState.config.videogen_enabled;
+  }
+
+  /**
+   * Get the video model codename from the database.
+   * @param videoModelId - Database ID of the video generation model
+   * @returns The model codename string (e.g., "veo-3.1-generate-preview")
+   */
+  private async getVideoModelCodename(videoModelId: number): Promise<string> {
+    const result = await sql`
+      SELECT codename
+      FROM video_generation_models
+      WHERE video_model_id = ${videoModelId}
+    `.values();
+
+    if (result.length === 0) {
+      throw new Error(`Video model not found in database: ${videoModelId}`);
+    }
+
+    return result[0][0] as string;
+  }
+
+  /**
+   * Send a generated video to the Discord channel via webhook or bot message.
+   * @param context - Tool execution context
+   * @param attachment - Discord attachment containing the video file
+   * @returns The sent Discord message
+   */
+  private async sendGeneratedVideo(
+    context: ToolContext,
+    attachment: AttachmentBuilder,
+  ): Promise<import("discord.js").Message> {
+    const threadId =
+      "isThread" in context.channel && typeof context.channel.isThread === "function" && context.channel.isThread()
+        ? context.channel.id
+        : undefined;
+
+    // Try persona webhook first
+    if (context.webhook && context.personaUsername) {
+      try {
+        return await sendWebhookMessageWithIdentity(
+          context.webhook,
+          {
+            files: [attachment],
+            ...(threadId ? { threadId } : {}),
+          },
+          {
+            username: context.personaUsername,
+            avatarUrl: context.personaAvatarUrl,
+            avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/") ? context.personaAvatarUrl : undefined,
+          },
+        );
+      } catch (error) {
+        log.warn("Failed to send generated video via webhook, falling back to bot message", error as Error);
+      }
+    }
+
+    return await context.channel.send({ files: [attachment] });
+  }
+
+  /**
+   * Extract the first image from a Discord message for image-to-video generation.
+   * @param messageId - Discord message ID to fetch image from
+   * @param context - Tool execution context
+   * @returns Reference image as { mimeType, data (base64) }, or null if no image found
+   */
+  private async extractReferenceImageFromMessage(
+    messageId: string,
+    context: ToolContext,
+  ): Promise<{ mimeType: string; data: string } | null> {
+    try {
+      const message = await context.channel.messages.fetch(messageId);
+      if (!message) return null;
+
+      // Check attachments first
+      const imageAttachment = message.attachments.find((a) => a.contentType?.startsWith("image/"));
+
+      let imageUrl: string | undefined;
+      let mimeType = "image/png";
+
+      if (imageAttachment) {
+        imageUrl = imageAttachment.url;
+        mimeType = imageAttachment.contentType ?? "image/png";
+      } else {
+        // Fallback to embed images
+        const embedImage = message.embeds.find((e) => e.image?.url || e.thumbnail?.url);
+        imageUrl = embedImage?.image?.url ?? embedImage?.thumbnail?.url;
+      }
+
+      if (!imageUrl) {
+        log.warn(`No image found in message ${messageId} for image-to-video`);
+        return null;
+      }
+
+      // Fetch and convert to base64
+      const imageResponse = await fetch(imageUrl);
+      if (!imageResponse.ok) {
+        log.warn(`Failed to fetch image from message ${messageId}: HTTP ${imageResponse.status}`);
+        return null;
+      }
+
+      const contentType = imageResponse.headers.get("Content-Type") ?? mimeType;
+      const arrayBuffer = await imageResponse.arrayBuffer();
+      const base64 = Buffer.from(arrayBuffer).toString("base64");
+
+      return {
+        mimeType: contentType.split(";")[0].trim(),
+        data: base64,
+      };
+    } catch (error) {
+      log.error(`Failed to extract reference image from message ${messageId}`, error as Error);
+      return null;
+    }
+  }
+
+  /**
+   * Execute video generation.
+   *
+   * Flow:
+   *   1. Validate params and check permissions/quota
+   *   2. Look up video model and decrypt API key
+   *   3. Send progress notice (video gen takes 1-3 min)
+   *   4. Optionally extract reference image from message
+   *   5. Route to appropriate provider implementation
+   *   6. Check Discord file size limit
+   *   7. Send video attachment to Discord
+   *   8. Increment quota and return success
+   */
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    // 1. Validate parameters
+    const validation = this.validateParameters(args);
+    if (!validation.isValid) {
+      return {
+        success: false,
+        error: `Invalid parameters: ${validation.errors?.join(", ") || `Missing required parameters: ${validation.missingParams?.join(", ")}`}`,
+      };
+    }
+
+    // 2. Check if tool is enabled
+    if (!this.isEnabled(context)) {
+      return {
+        success: false,
+        error: "Video generation is disabled for this server",
+        message: localizer(context.locale, "tools.generate_video.disabled"),
+      };
+    }
+
+    // 3. Check video generation quota
+    const userDiscId = context.userId || context.message?.author.id || "";
+    if (!userDiscId) {
+      return {
+        success: false,
+        error: "Unable to identify user for quota checking",
+      };
+    }
+
+    const quotaCheck = await checkVideoQuota(context.tomoriState.server_id, userDiscId);
+
+    if (!quotaCheck.allowed) {
+      let errorMessage = "";
+      let resetInfo = "";
+
+      if (quotaCheck.resetTime) {
+        const now = new Date();
+        const hoursUntilReset = Math.ceil((quotaCheck.resetTime.getTime() - now.getTime()) / (1000 * 60 * 60));
+
+        if (hoursUntilReset < 24) {
+          resetInfo = localizer(context.locale, "tools.generate_video.quota_resets_in_hours", {
+            hours: hoursUntilReset.toString(),
+          });
+        } else {
+          const daysUntilReset = Math.ceil(hoursUntilReset / 24);
+          resetInfo = localizer(context.locale, "tools.generate_video.quota_resets_in_days", {
+            days: daysUntilReset.toString(),
+          });
+        }
+      }
+
+      if (quotaCheck.reason === "user_quota_exceeded") {
+        errorMessage = localizer(context.locale, "tools.generate_video.user_quota_exceeded", { reset_info: resetInfo });
+      } else if (quotaCheck.reason === "serverwide_quota_exceeded") {
+        errorMessage = localizer(context.locale, "tools.generate_video.serverwide_quota_exceeded", {
+          reset_info: resetInfo,
+        });
+      } else {
+        errorMessage = localizer(context.locale, "tools.generate_video.quota_exceeded_generic");
+      }
+
+      return {
+        success: false,
+        error: "Video generation quota exceeded",
+        message: errorMessage,
+      };
+    }
+
+    // 4. Extract arguments
+    const prompt = args.prompt as string;
+    const messageId = args.message_id as string | undefined;
+    const aspectRatio = (args.aspect_ratio as string) || "16:9";
+    const usesReference = !!messageId;
+
+    try {
+      // 5. Get the video model codename from database
+      const videoModelId = context.tomoriState.config.video_model_id;
+
+      if (!videoModelId) {
+        return {
+          success: false,
+          error:
+            "No video model configured for this server. The active provider may not support video generation, or setup has not been completed.",
+        };
+      }
+
+      const modelCodename = await this.getVideoModelCodename(videoModelId);
+      log.info(`Using video model: ${modelCodename} for video generation`);
+
+      // 6. Decrypt API key
+      const encryptedApiKey = context.tomoriState.config.api_key;
+      const keyVersion = context.tomoriState.config.key_version || 1;
+
+      if (!encryptedApiKey) {
+        return { success: false, error: "No API key configured for this server" };
+      }
+
+      const apiKey = await decryptApiKey(encryptedApiKey, keyVersion);
+      if (!apiKey) {
+        return { success: false, error: "Failed to decrypt API key" };
+      }
+
+      // 7. Send progress notice — video generation takes 1-3 minutes
+      if (!context.suppressProgressNotices) {
+        await sendToolProgressNotice(
+          context,
+          "video_generation",
+          {
+            titleKey: "genai.video.generating_title",
+            descriptionKey: usesReference
+              ? "genai.video.generating_with_references_description"
+              : "genai.video.generating_description",
+            footerKey: "genai.video.generating_footer",
+            color: ColorCode.INFO,
+          },
+          "GenerateVideoTool",
+        );
+      }
+
+      // 8. Extract reference image if message_id provided
+      let referenceImages: Array<{ mimeType: string; data: string }> | undefined;
+
+      if (messageId) {
+        log.info(`Extracting reference image from message ${messageId} for image-to-video`);
+        const refImage = await this.extractReferenceImageFromMessage(messageId, context);
+        if (refImage) {
+          referenceImages = [refImage];
+          log.info(`Using reference image from message ${messageId} for image-to-video generation`);
+        } else {
+          log.warn(`No image found in message ${messageId}, proceeding with text-to-video`);
+        }
+      }
+
+      // 9. Route to appropriate provider implementation
+      log.info(
+        `Generating video with ${context.provider} via ${modelCodename}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio})`,
+      );
+
+      let videoData: Buffer | null = null;
+      const videoImplementation = resolveProviderFeatureImplementation(context.provider, "nativeVideoGeneration");
+
+      if (videoImplementation === "google") {
+        const { generateGoogleNativeVideo } = await import("@/providers/google/googleVideoGeneration");
+        const result = await generateGoogleNativeVideo({
+          apiKey,
+          model: modelCodename,
+          prompt,
+          aspectRatio,
+          referenceImages,
+        });
+        videoData = result.videoData;
+      } else if (videoImplementation === "openrouter") {
+        const { generateOpenRouterNativeVideo } = await import("@/providers/openrouter/openrouterVideoGeneration");
+        const result = await generateOpenRouterNativeVideo({
+          apiKey,
+          model: modelCodename,
+          prompt,
+          aspectRatio,
+          referenceImages,
+        });
+        videoData = result.videoData;
+      } else if (videoImplementation === "zai") {
+        const { generateZaiNativeVideo } = await import("@/providers/zai/zaiVideoGeneration");
+        const result = await generateZaiNativeVideo({
+          apiKey,
+          model: modelCodename,
+          prompt,
+          aspectRatio,
+          referenceImages,
+        });
+        videoData = result.videoData;
+      } else {
+        return {
+          success: false,
+          error: `Video generation is not implemented for provider ${context.provider}`,
+        };
+      }
+
+      // 10. Validate result
+      if (!videoData) {
+        return {
+          success: false,
+          error: "No video data received from API. The generation may have been blocked or failed.",
+        };
+      }
+
+      // 11. Check Discord file size limit
+      if (videoData.length > DISCORD_FILE_SIZE_LIMIT) {
+        const sizeMB = (videoData.length / (1024 * 1024)).toFixed(1);
+        log.warn(`Generated video exceeds Discord file size limit: ${sizeMB}MB > 25MB`);
+        return {
+          success: false,
+          error: localizer(context.locale, "tools.generate_video.file_too_large", { size_mb: sizeMB }),
+          message: localizer(context.locale, "tools.generate_video.file_too_large", { size_mb: sizeMB }),
+        };
+      }
+
+      // 12. Create attachment and send to Discord
+      const attachment = new AttachmentBuilder(videoData, {
+        name: `generated_${Date.now()}.mp4`,
+      });
+
+      const sentMessage = await this.sendGeneratedVideo(context, attachment);
+
+      log.success("Successfully generated and sent video to Discord");
+
+      // 13. Increment quota after successful generation
+      await incrementVideoQuota(context.tomoriState.server_id, userDiscId);
+
+      // 14. Build success message
+      let successMessage = `Successfully generated and sent video to Discord (message ID: ${sentMessage.id}). The video has been created based on your prompt${
+        referenceImages ? " and the reference image" : ""
+      }.`;
+
+      if (quotaCheck.userRemaining !== undefined) {
+        const remainingText = localizer(context.locale, "tools.generate_video.quota_remaining", {
+          remaining: quotaCheck.userRemaining.toString(),
+        });
+        successMessage += ` ${remainingText}`;
+      }
+
+      return {
+        success: true,
+        message: successMessage,
+        endTurn: context.streamContext?.endTurnAfterTools?.includes(this.name) ?? false,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      log.error("Video generation failed:", error as Error);
+
+      // Check for common error patterns
+      if (errorMessage.includes("timed out")) {
+        return {
+          success: false,
+          error: "Video generation timed out. The provider may be experiencing high load. Please try again later.",
+        };
+      }
+
+      if (errorMessage.includes("content") || errorMessage.includes("safety") || errorMessage.includes("blocked")) {
+        return {
+          success: false,
+          error: "Video generation was blocked by the provider's content safety filter. Please try a different prompt.",
+        };
+      }
+
+      return {
+        success: false,
+        error: `Video generation failed: ${errorMessage}`,
+      };
+    }
+  }
+}

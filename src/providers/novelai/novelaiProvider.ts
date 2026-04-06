@@ -200,6 +200,7 @@ export class NovelaiProvider extends BaseLLMProvider implements LLMProvider {
           self_teaching_enabled: tomoriState.config.self_teaching_enabled,
           pin_message_enabled: tomoriState.config.pin_message_enabled,
           imagegen_enabled: tomoriState.config.imagegen_enabled,
+          videogen_enabled: tomoriState.config.videogen_enabled,
           nai_exclusive_imggen: tomoriState.config.nai_exclusive_imggen,
           voice_message_enabled: tomoriState.config.voice_message_enabled,
         },

@@ -5,6 +5,7 @@ import type {
   SupportsEmbeddings,
   SupportsLiveTokenCounting,
   SupportsNativeImageGeneration,
+  SupportsNativeVideoGeneration,
   SupportsPresetGeneration,
   SupportsStructuredOutput,
 } from "@/types/provider/featureInterfaces";
@@ -46,6 +47,12 @@ function hasNativeImageGenerationCapability(
   return typeof (provider as Partial<SupportsNativeImageGeneration>).generateNativeImage === "function";
 }
 
+function hasNativeVideoGenerationCapability(
+  provider: LLMProvider,
+): provider is LLMProvider & SupportsNativeVideoGeneration {
+  return typeof (provider as Partial<SupportsNativeVideoGeneration>).generateNativeVideo === "function";
+}
+
 const capabilityGuards = {
   embeddings: hasEmbeddingsCapability,
   structuredOutput: hasStructuredOutputCapability,
@@ -53,6 +60,7 @@ const capabilityGuards = {
   conversationCompaction: hasConversationCompactionCapability,
   liveTokenCounting: hasLiveTokenCountingCapability,
   nativeImageGeneration: hasNativeImageGenerationCapability,
+  nativeVideoGeneration: hasNativeVideoGenerationCapability,
 } satisfies {
   [K in ProviderCapabilityName]: (provider: LLMProvider) => provider is LLMProvider & ProviderCapabilityMap[K];
 };

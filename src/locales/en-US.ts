@@ -215,11 +215,16 @@ export default {
       hide_footer: `Hide this using \`/config tool-notices visibility\``,
     },
 
-    // YouTube video processing messages
+    // YouTube video processing messages + video generation progress notices
     video: {
       youtube_processing_title: "👁️  Watching YouTube Video...",
       youtube_processing_description: "I'm currently watching the YouTube video: {video_url}",
       youtube_processing_footer: "This may take a moment depending on the video length",
+      generating_title: "🎬 Generating Video...",
+      generating_description: "Creating a video from the current prompt. This may take 1-3 minutes.",
+      generating_with_references_description:
+        "Creating a video from the current prompt and reference image. This may take 1-3 minutes.",
+      generating_footer: "Video generation is asynchronous — please be patient",
     },
 
     // Inline document reading messages (read_document tool)
@@ -2790,6 +2795,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           notice_document_reading_description: `Show document reading notices.`,
           notice_image_generation_label: `Image Generation`,
           notice_image_generation_description: `Show image generation notices.`,
+          notice_video_generation_label: `Video Generation`,
+          notice_video_generation_description: `Show video generation notices.`,
           notice_image_editing_label: `Image Editing`,
           notice_image_editing_description: `Show image editing or inpaint notices.`,
           notice_image_analysis_label: `Image Analysis`,
@@ -3081,6 +3088,23 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           already_selected_description: `Already using the \`{model_name}\` image model.`,
           success_title: `Image Model Updated`,
           success_description: `Image generation will now use the \`{model_name}\` model (previously \`{previous_model}\`).`,
+          current_none: `None`,
+        },
+        video: {
+          description: `Change the video generation model for this server.`,
+          modal_title: `Select Video Generation Model`,
+          select_label: `Video Model`,
+          select_description: `Choose the video generation model. Check your AI provider for pricing.`,
+          select_placeholder: `Choose a video model...`,
+          no_api_key_title: `No API Key Set`,
+          no_api_key_description: `An API key must be configured before changing video models.`,
+          no_models_title: `No Video Models Available`,
+          no_models_description: `Your current text model provider ({provider}) does not support video generation. Switch to Google, OpenRouter, or Z.ai using \`/config api-key set\` first.`,
+          invalid_model_description: `The selected video model is not valid or available.`,
+          already_selected_title: `Model Already Selected`,
+          already_selected_description: `Already using the \`{model_name}\` video model.`,
+          success_title: `Video Model Updated`,
+          success_description: `Video generation will now use the \`{model_name}\` model (previously \`{previous_model}\`).`,
           current_none: `None`,
         },
         vision: {
@@ -4979,6 +5003,70 @@ You can change this anytime using \`/personal privacy\`.`,
         quota_resets_in_days: "Quota resets in {days} day(s).",
         quota_exceeded_footer: "This quota is configured by this server's managers via `/server quota`.",
       },
+      video: {
+        // Command
+        description: "Generate an AI video using Google Veo, OpenRouter, or Z.ai",
+
+        // Modal
+        modal: {
+          title: "Generate Video",
+          prompt_label: "Video Prompt",
+          prompt_description: "Describe the video you want to generate",
+          prompt_placeholder: "A serene sunrise over a mountain lake with gentle ripples on the water",
+          image_upload_label: "Reference Image (Optional)",
+          image_upload_description: "Upload a reference image for image-to-video generation",
+          aspect_ratio_label: "Aspect Ratio",
+          aspect_ratio_description: "Select the desired aspect ratio",
+        },
+
+        // Success embed
+        success_title: "🟢 Video Generated Successfully!",
+        success_description: "Generated with `{model}` in {elapsed}s.\n**Prompt:** {prompt}",
+
+        // Progress embed
+        generating_title: "🎬 Generating Video...",
+        generating_description:
+          "Your video is being generated. This process typically takes 1-3 minutes. Please wait...",
+
+        // Errors
+        disabled_title: "🔴 Video Generation Disabled",
+        disabled_description:
+          "Video generation is disabled on this server. A server member with `Manage Server` permissions can enable it using `/config bot-permissions`.",
+        wrong_provider_title: "🔴 Unsupported Provider",
+        wrong_provider_description:
+          "Video generation requires Google, OpenRouter, or Z.ai. Your current provider is **{current_provider}**.",
+        no_api_key_title: "🔴 No API Key",
+        no_api_key_description: "No API key configured. Please use `/config api-key set`.",
+        api_key_decrypt_failed_title: "🔴 API Key Error",
+        api_key_decrypt_failed_description:
+          "Failed to decrypt API key. Please reconfigure using `/config api-key set`.",
+        no_video_model_title: "🔴 No Video Model",
+        no_video_model_description:
+          "No video model configured for your provider. Use `/config model video` to set one.",
+        error_title: "🔴 Video Generation Failed",
+        unsupported_provider_description: "Video generation is not supported for provider **{provider}**.",
+        no_data_description: "No video data was received from the API. The generation may have been blocked or failed.",
+        file_too_large_title: "🔴 Video Too Large",
+        file_too_large_description:
+          "The generated video ({size_mb} MB) exceeds Discord's 25 MB file size limit. Try a shorter prompt or different aspect ratio.",
+        invalid_image_title: "🔴 Invalid Image",
+        invalid_image_description: "The uploaded reference image could not be processed. Please try a different image.",
+        timeout_description:
+          "Video generation timed out. The provider may be experiencing high load. Please try again later.",
+        blocked_description:
+          "Video generation was blocked by the provider's content safety filter. Please try a different prompt.",
+        generic_error_description: "An unexpected error occurred during video generation. Please try again later.",
+
+        // Quota errors
+        quota_exceeded_title: "🔴 Video Quota Exceeded",
+        quota_exceeded_description: "You have reached your video generation quota. {reset_info}",
+        user_quota_exceeded_description: "You have reached your daily video generation quota. {reset_info}",
+        serverwide_quota_exceeded_description:
+          "This server has reached its video generation quota for this period. {reset_info}",
+        quota_resets_in_hours: "Quota resets in {hours} hour(s).",
+        quota_resets_in_days: "Quota resets in {days} day(s).",
+        quota_exceeded_footer: "This quota is configured by this server's managers via `/server quota`.",
+      },
     },
   },
 
@@ -5035,6 +5123,16 @@ You can change this anytime using \`/personal privacy\`.`,
       quota_resets_in_hours: `Quota resets in {hours} hour(s).`,
       quota_resets_in_days: `Quota resets in {days} day(s).`,
       quota_remaining: `You have {remaining} image(s) remaining for today.`,
+    },
+    generate_video: {
+      disabled: `Video generation is disabled for this server.`,
+      quota_exceeded_generic: `Video generation quota has been exceeded.`,
+      user_quota_exceeded: `You have reached your daily video generation quota. {reset_info}`,
+      serverwide_quota_exceeded: `This server has reached its video generation quota for this period. {reset_info}`,
+      quota_resets_in_hours: `Quota resets in {hours} hour(s).`,
+      quota_resets_in_days: `Quota resets in {days} day(s).`,
+      quota_remaining: `You have {remaining} video(s) remaining for today.`,
+      file_too_large: `The generated video ({size_mb} MB) exceeds Discord's 25 MB file size limit.`,
     },
     generate_image_nai: {
       no_google_api_key: `Inpainting requires a Google API key for image segmentation. Set one with /optional-key google set, or switch to the Google provider.`,

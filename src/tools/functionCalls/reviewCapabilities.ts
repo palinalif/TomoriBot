@@ -709,6 +709,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
             self_teaching_enabled: config.self_teaching_enabled,
             pin_message_enabled: config.pin_message_enabled,
             imagegen_enabled: config.imagegen_enabled,
+            videogen_enabled: config.videogen_enabled,
             nai_exclusive_imggen: config.nai_exclusive_imggen ?? false,
             voice_message_enabled: config.voice_message_enabled ?? true,
           },
