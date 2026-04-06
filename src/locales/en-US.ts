@@ -1468,7 +1468,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - Supports Text2Image and Image2Image with customizable aspect ratios
 - Use \`/generate image\` or just ask me to generate an image
 - Reference images can come from message attachments, stickers, emojis, or user avatars
-- Available on Google, OpenRouter, Z.ai, Z.ai (Coding), and NVIDIA NIM providers (configure with \`/config model image\`)`,
+- Available on Google, OpenRouter, Z.ai, and NVIDIA NIM providers (configure with \`/config model image\`)`,
         footer: `Not all features are available for all AI providers. Recommended: Google Gemini. You can also just ask me what I can do!`,
       },
 
@@ -1728,8 +1728,8 @@ Leave unset for endpoints that require no authentication.`,
 4. Create a new API key
 5. Copy this API key into {configSetup} or {configApikeySet}`,
         zai_important_title: `Important Notes:`,
-        zai_important_description: `- Use the general endpoint for normal chat, reasoning, and image generation
-- The dedicated Coding endpoint is separate and intended for coding-specific workflows`,
+        zai_important_description: `- Use the general endpoint for normal chat, reasoning, and native image generation
+  - The dedicated Coding endpoint is separate and intended for coding-specific workflows`,
         zai_footer: `After setting up this provider, you may change its default model with {configModel}`,
         // NovelAI
         novelai_title: `Setting Up NovelAI API Key`,

@@ -113,7 +113,7 @@ VALUES
   ('nvidia', 'z.ai/glm-4.7', false, false, false, false, true, true, false, false, false, false, true, 'Tool-capable NVIDIA NIM GLM model with structured output support', 'ツール利用と構造化出力に対応した、NVIDIA NIMのGLMモデル'),
   ('nvidia', 'stepfun-ai/step-3.5-flash', false, false, false, false, true, true, false, false, false, false, false, 'Fast NVIDIA NIM chat model with tool support only', 'ツール利用のみに対応した高速NVIDIA NIMチャットモデル'),
   ('nvidia', 'google/gemma-3-27b-it', false, false, false, true, true, false, true, false, false, false, false, 'Vision-capable NVIDIA NIM Gemma model for image understanding', '画像理解に対応した、NVIDIA NIMのGemmaビジョンモデル'),
-  ('nvidia', 'google/gemma-4-31b-it', false, false, false, false, false, false, true, false, false, false, true, 'Vision-capable NVIDIA NIM Gemma 4.31B IT model with structured output support (tools disabled, video disabled)', '動画とツールが利用できないものの画像理解と構造化出力に対応するNVIDIA NIM向けGemma 4.31B ITモデル'),
+  ('nvidia', 'google/gemma-4-31b-it', false, false, false, false, false, true, true, false, false, false, true, 'Vision-capable NVIDIA NIM Gemma 4.31B IT model with tool use and structured output (video disabled)', '動画非対応ながらツール利用と構造化出力に対応するNVIDIA NIM向けGemma 4.31B ITモデル'),
   -- Z.ai (Coding) Models (plain codenames preserved for backward compatibility)
   ('zaicoding', 'glm-4.6', false, false, false, false, false, true, false, false, false, false, true, 'Text-only GLM model optimized for roleplay', 'ロールプレイ向けに最適化されたテキスト専用GLMモデル'),
   ('zaicoding', 'glm-4.6v', false, false, false, false, false, true, true, false, false, false, true, 'Vision-capable GLM model with image understanding, tool use, and structured output', '画像理解、ツール利用、構造化出力に対応したビジョン対応GLMモデル'),
@@ -276,6 +276,44 @@ EXCEPTION
         RAISE NOTICE 'image_diffusion_models not found, skipping legacy codename cleanup';
 END $$;
 
+-- PART 0.5: Remove legacy Z.ai Coding image generation model now that the coding endpoint
+-- is no longer treated as a native image generation provider.
+DO $$
+DECLARE
+    legacy_zaicoding_diffusion_model_id INTEGER;
+BEGIN
+    SELECT diffusion_model_id
+    INTO legacy_zaicoding_diffusion_model_id
+    FROM image_diffusion_models
+    WHERE provider = 'zaicoding'
+      AND codename = 'glm-image'
+    LIMIT 1;
+
+    IF legacy_zaicoding_diffusion_model_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    UPDATE tomori_configs
+    SET diffusion_model_id = NULL
+    WHERE diffusion_model_id = legacy_zaicoding_diffusion_model_id;
+
+    UPDATE saved_provider_configs
+    SET diffusion_model_id = NULL
+    WHERE diffusion_model_id = legacy_zaicoding_diffusion_model_id;
+
+    UPDATE saved_provider_configs
+    SET nai_diffusion_model_id = NULL
+    WHERE nai_diffusion_model_id = legacy_zaicoding_diffusion_model_id;
+
+    DELETE FROM image_diffusion_models
+    WHERE diffusion_model_id = legacy_zaicoding_diffusion_model_id;
+EXCEPTION
+    WHEN undefined_table THEN
+        RAISE NOTICE 'Table not found during legacy Z.ai Coding image cleanup, skipping';
+    WHEN undefined_column THEN
+        RAISE NOTICE 'Column not found during legacy Z.ai Coding image cleanup, skipping';
+END $$;
+
 -- PART 1: Drop FK constraint and clean up orphaned references BEFORE inserting diffusion models
 -- This allows the INSERT to succeed, then we recreate the constraint after
 DO $$
@@ -325,10 +363,6 @@ VALUES
   ('openrouter', 'bytedance-seed/seedream-4.5', false, false, false, false,
    'Latest in-house image generation model developed by ByteDance. Cheap and high performance',
    'ByteDanceが開発した最新の自社製画像生成モデル。低コストかつ高性能'),
-  -- Z.ai (Coding) Image Generation Models
-  ('zaicoding', 'glm-image', true, false, false, false,
-   'Z.ai Coding image generation model with HD quality output',
-   'HD品質の出力に対応したZ.ai Coding画像生成モデル'),
   -- Z.ai General API Image Generation Models
   ('zai', 'zai/glm-image', true, false, false, false,
    'Z.ai native image generation model with HD quality output',

@@ -12,7 +12,7 @@ export const zaicodingProviderInfo: ProviderInfo = {
   supportsVideos: false,
   apiFamily: "openai-compatible",
   featureSupport: {
-    nativeImageGeneration: true,
+    nativeImageGeneration: false,
     embeddings: false,
     structuredOutput: true,
     presetGeneration: true,

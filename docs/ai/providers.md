@@ -180,7 +180,7 @@ Rule:
 `zaicoding` uses the shared OpenAI-compatible family layer for the GLM family via `https://api.z.ai/api/coding/paas/v4`.
 
 - **Chat models**: `glm-5`, `glm-4.7`, `glm-4.7-flash`, `glm-4.6v`, `glm-4.6v-flash`
-- **Image generation**: `glm-image` via the coding-endpoint image generation route
+- **Image generation**: disabled; the coding endpoint is no longer treated as a native image generation provider
 - Uses the same streaming, tool-calling, and structured-output pipeline as the general `zai` provider
 - Intended for dedicated coding-endpoint access such as GLM Coding Plan workflows
 - Conversation compaction and roleplay compaction delegate to the shared ZAI generators with the coding endpoint URL

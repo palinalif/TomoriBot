@@ -1473,7 +1473,7 @@ export default {
 - Text2ImageとImage2Imageをカスタマイズタブルなアスペクト比で対応
 - \`/generate image\`を使うか、画像を生成してほしいと頼むだけで動作します
 - 参照画像としてメッセージの添付ファイル、ステッカー、絵文字、ユーザーアバターを使えます
-- Google、OpenRouter、Z.ai、Z.ai (Coding)、NVIDIA NIMプロバイダーで利用可能（\`/config model image\`で設定）`,
+- Google、OpenRouter、Z.ai、NVIDIA NIMプロバイダーで利用可能（\`/config model image\`で設定）`,
         footer: `すべての機能がすべてのAIプロバイダーで利用できるわけではありません。推奨：Google Gemini。私に直接何ができるか聞いてみることもできます！`,
       },
 

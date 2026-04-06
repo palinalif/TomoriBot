@@ -22,7 +22,11 @@
     "audit-keys": "bun run scripts/auditKeyVersions.ts",
     "rotate-keys": "bun run scripts/rotateAllKeys.ts",
     "check-keys": "bun run scripts/checkKeys.ts",
-    "setup:tokenizers": "bun run scripts/downloadTokenizers.ts"
+    "setup:tokenizers": "bun run scripts/downloadTokenizers.ts",
+    "//audit": "audit:clean suppresses GHSA-p8p7-x288-28g6 (request<=2.88.2 SSRF) — ghost vuln, no patch exists since 'request' was archived in 2020",
+    "audit:clean": "bun run scripts/auditClean.ts",
+    "validate": "bun run check && bun run lint && bun run check-locales && bun run audit:clean",
+    "vl": "bun run validate"
   },
   "author": "Bredrumb",
   "license": "ISC",

@@ -55,7 +55,6 @@ const providerFeatureImplementations: Partial<
     google: "google",
     openrouter: "openrouter",
     zai: "zai",
-    zaicoding: "zai",
     nvidia: "nvidia",
   },
   liveTokenCounting: {

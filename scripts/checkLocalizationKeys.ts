@@ -841,30 +841,11 @@ function checkLocaleParity(localeKeys: Map<string, Set<string>>): LocaleParityIs
  * Main analysis function
  */
 async function analyzeLocalizationKeys(): Promise<AnalysisResult> {
-  log.info("🔍 Starting localization key analysis...");
-
-  // Load available keys from locale files
-  log.info("📚 Loading available keys...");
   const { availableKeys, localeKeys } = await loadAvailableKeys();
-
-  // Check for key parity across locales
-  log.info("🌐 Checking key parity across locales...");
   const parityIssues = checkLocaleParity(localeKeys);
-
-  // Check modal title lengths
-  log.info("📏 Checking modal title lengths...");
   const modalTitleViolations = await checkModalTitleLengths(localeKeys);
-
-  // Check modal description lengths
-  log.info("📏 Checking modal description lengths...");
   const modalDescriptionViolations = await checkModalDescriptionLengths(localeKeys);
-
-  // Check command description lengths
-  log.info("📏 Checking command description lengths...");
   const commandDescriptionViolations = await checkCommandDescriptionLengths(localeKeys);
-
-  // Extract referenced keys from source code
-  log.info("🔎 Scanning source code for referenced keys...");
   const referencedKeysMap = await extractReferencedKeys(availableKeys);
   const referencedKeys = new Set(referencedKeysMap.keys());
 
@@ -901,131 +882,81 @@ async function analyzeLocalizationKeys(): Promise<AnalysisResult> {
  * Formats and displays the analysis results
  */
 function displayResults(results: AnalysisResult): void {
+  const hasErrors =
+    results.parityIssues.length > 0 ||
+    results.modalTitleViolations.length > 0 ||
+    results.modalDescriptionViolations.length > 0 ||
+    results.commandDescriptionViolations.length > 0 ||
+    results.missingKeys.length > 0;
+
+  // Clean run — single summary line
+  if (!hasErrors) {
+    const localeNames = Array.from(results.localeKeys.keys());
+    console.log(
+      `✅ Locales OK (${localeNames.join(", ")} — ${results.availableKeys.size} keys, ${results.unusedKeys.length} unused)`,
+    );
+    return;
+  }
+
+  // Error run — full report
   console.log(`\n${"=".repeat(80)}`);
   console.log("🔍 LOCALIZATION KEY ANALYSIS RESULTS");
   console.log("=".repeat(80));
 
-  // Locale parity section
   if (results.parityIssues.length > 0) {
     console.log("\n🌐 LOCALE PARITY ISSUES (Keys missing in some locales):");
     console.log("-".repeat(60));
-
     for (const { key, missingIn, presentIn } of results.parityIssues.sort((a, b) => a.key.localeCompare(b.key))) {
       console.log(`  ⚠️  ${key}`);
       console.log(`     ✅ Present in: ${presentIn.join(", ")}`);
       console.log(`     ❌ Missing in: ${missingIn.join(", ")}`);
     }
-  } else {
-    console.log("\n✅ All locales have matching keys!");
   }
 
-  // Modal title length violations section
   if (results.modalTitleViolations.length > 0) {
     console.log("\n📏 MODAL TITLE LENGTH VIOLATIONS (Must be 5-45 characters for Discord):");
     console.log("-".repeat(60));
-
     for (const { key, value, length, locale } of results.modalTitleViolations.sort((a, b) =>
       a.key.localeCompare(b.key),
     )) {
       const status = length < 5 ? "Too short" : "Too long";
       console.log(`  ⚠️  ${key} [${locale}]`);
       console.log(`     ❌ ${status}: "${value}" (${length} characters)`);
-      console.log(`     ℹ️  Discord requires 5-45 characters`);
     }
-  } else {
-    console.log("\n✅ All modal titles meet Discord length requirements!");
   }
 
-  // Modal description length violations section
   if (results.modalDescriptionViolations.length > 0) {
     console.log("\n📏 MODAL DESCRIPTION LENGTH VIOLATIONS (Must be ≤99 characters for Discord):");
     console.log("-".repeat(60));
-
     for (const { key, value, length, locale } of results.modalDescriptionViolations.sort((a, b) =>
       a.key.localeCompare(b.key),
     )) {
       console.log(`  ⚠️  ${key} [${locale}]`);
       console.log(`     ❌ Too long: "${value}" (${length} characters)`);
-      console.log(`     ℹ️  Discord requires ≤99 characters`);
     }
-  } else {
-    console.log("\n✅ All modal descriptions meet Discord length requirements!");
   }
 
-  // Command description length violations section
   if (results.commandDescriptionViolations.length > 0) {
     console.log("\n📏 COMMAND DESCRIPTION LENGTH VIOLATIONS (Must be 1-100 characters for Discord):");
     console.log("-".repeat(60));
-
     for (const { key, value, length, locale } of results.commandDescriptionViolations.sort((a, b) =>
       a.key.localeCompare(b.key),
     )) {
       const status = length < 1 ? "Empty" : "Too long";
       console.log(`  ⚠️  ${key} [${locale}]`);
       console.log(`     ❌ ${status}: "${value}" (${length} characters)`);
-      console.log(`     ℹ️  Discord requires 1-100 characters`);
     }
-  } else {
-    console.log("\n✅ All command descriptions meet Discord length requirements!");
   }
 
-  // Missing keys section
   if (results.missingKeys.length > 0) {
     console.log("\n❌ MISSING LOCALIZATION KEYS (Referenced but don't exist):");
     console.log("-".repeat(60));
-
     for (const { key, files } of results.missingKeys.sort((a, b) => a.key.localeCompare(b.key))) {
       console.log(`  ❌ ${key}`);
       console.log(
         `     📁 Used in ${files.size} files: ${Array.from(files).slice(0, 3).join(", ")}${files.size > 3 ? "..." : ""}`,
       );
     }
-  } else {
-    console.log("\n✅ No missing localization keys found!");
-  }
-
-  // Unused keys section
-  /*
-	if (results.unusedKeys.length > 0) {
-		console.log("\n🗑️  UNUSED LOCALIZATION KEYS (Exist but never referenced):");
-		console.log("-".repeat(60));
-
-		for (const { key } of results.unusedKeys.sort((a, b) =>
-			a.key.localeCompare(b.key),
-		)) {
-			console.log(`  ⚠️  ${key}`);
-		}
-	} else {
-		console.log("\n✅ No unused localization keys found!");
-	}*/
-
-  // Summary
-  console.log("\n📊 SUMMARY:");
-  console.log("-".repeat(60));
-  const localeNames = Array.from(results.localeKeys.keys());
-  console.log(`  • ${localeNames.length} locales: ${localeNames.join(", ")}`);
-  console.log(`  • ${results.availableKeys.size} total keys available across all locale files`);
-  console.log(`  • ${results.referencedKeys.size} total keys referenced in source code`);
-  console.log(`  • ${results.parityIssues.length} parity issues (keys missing in some locales)`);
-  console.log(`  • ${results.modalTitleViolations.length} modal title length violations (must be 5-45 chars)`);
-  console.log(
-    `  • ${results.modalDescriptionViolations.length} modal description length violations (must be ≤99 chars)`,
-  );
-  console.log(
-    `  • ${results.commandDescriptionViolations.length} command description length violations (must be 1-100 chars)`,
-  );
-  console.log(`  • ${results.missingKeys.length} missing keys (referenced but don't exist)`);
-  console.log(`  • ${results.unusedKeys.length} unused keys (exist but never referenced)`);
-
-  if (
-    results.missingKeys.length === 0 &&
-    results.unusedKeys.length === 0 &&
-    results.parityIssues.length === 0 &&
-    results.modalTitleViolations.length === 0 &&
-    results.modalDescriptionViolations.length === 0 &&
-    results.commandDescriptionViolations.length === 0
-  ) {
-    console.log("\n🎉 Perfect! Your localization is fully synchronized!");
   }
 
   console.log(`\n${"=".repeat(80)}`);

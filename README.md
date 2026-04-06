@@ -112,7 +112,7 @@ TomoriBot supports a wide range of LLM providers, image generation APIs, voice s
 | **Nvidia** | ✅ | ✅ | ✅ | ✅ |Free Models Available | 
 | **Deepseek** | ✅ | ✅ | - | - |- |
 | **Z.ai** | ✅ | ✅ | ✅ | - |Free Models Available |
-| **Z.ai Coding** | ✅ | ✅ | ✅ | - |Subscription Plan |
+| **Z.ai Coding** | ✅ | ✅ | - | - |Subscription Plan |
 | **Google Vertex AI** | ✅ | ✅ | ✅ |✅ | - |
 | **Codex CLI (via ChatMock)** | ✅ | ✅ | ✅ | - |via ChatMock (README for Instructions)) |
 | **Custom (OpenAI-compatible)** | ✅ | ✅ | ✅ | - |KoboldCPP, etc.
@@ -126,7 +126,6 @@ TomoriBot supports a wide range of LLM providers, image generation APIs, voice s
 | **NovelAI** | ✅ | ✅ | ✅ | Can be combined with other providers |
 | **Nvidia** | ✅ | ✅ | - | - |
 | **Z.ai** | ✅ | - | - | - |
-| **Z.ai Coding (Subscription)** | ✅ | - | - | - |
 
 ### Voice & Audio
 
