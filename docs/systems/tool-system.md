@@ -75,7 +75,8 @@ Current name-resolution notes for built-in tools:
 - ambiguous results never auto-pick and instead return candidate labels for clarification
 - if a Discord user resolves successfully but has no Tomori user row yet, reminder/personal-memory tools fail with a human-readable "Tomori doesn't know this user yet" style error
 - bridge users can still be resolved by name from current conversation metadata, but avatar tools reject them and personal-memory creation/update does not create bridge-scoped personal memories
-- message-targeted tools such as `read_document`, `pin_selected_message`, `analyze_image`, `process_gif`, and edit/inpaint reference flows remain message-ID-based in V1
+- message-targeted tools such as `read_document`, `pin_selected_message`, `analyze_image`, `process_gif`, and edit/inpaint reference flows still target Discord messages internally, but the prompt-visible arguments are opaque `media_N` / `ref_N` handles rather than raw snowflakes
+- `ToolRegistry.executeTool()` resolves those opaque handles back to real Discord IDs before dispatch, so individual tool implementations continue to work with normal message IDs
 
 Current `update_short_term_memory` runtime notes:
 

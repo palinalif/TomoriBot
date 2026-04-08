@@ -26,6 +26,7 @@ import type {
 } from "../provider/interfaces";
 import type { TomoriState } from "../db/schema";
 import type { StructuredContextItem } from "../misc/context";
+import type { MessageIdMap } from "@/utils/text/messageIdMap";
 
 /**
  * Normalized chunk format that all providers convert their raw chunks to
@@ -138,6 +139,9 @@ export interface StreamContext {
 
   // External abort signal — allows the SDK call timeout to cancel the underlying HTTP request
   abortSignal?: AbortSignal;
+
+  // Opaque message ID map for resolving media_N/ref_N keys back to Discord snowflake IDs
+  messageIdMap?: MessageIdMap;
 }
 
 /**

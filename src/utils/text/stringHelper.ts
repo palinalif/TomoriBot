@@ -1156,6 +1156,8 @@ export function cleanLLMOutput(
 
   cleanedText = cleanedText
     .replace(/\n{3,}/g, "\n\n")
+    // Collapse orphaned Discord subtext markers ("-#\n") into the next line
+    .replace(/(^|\n)-#[ \t]*\n+/g, "$1-# ")
     .replace(/<\|im_end\|>(\s*)$/, "")
     .replace(/<\|file_separator\|>(\s*)$/, "") // Old Gemini bug when using inline markers
     // NovelAI GLM 4.6 continuation artifacts — stray think tags that leak across chunk boundaries

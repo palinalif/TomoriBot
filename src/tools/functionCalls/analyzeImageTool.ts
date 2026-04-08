@@ -11,6 +11,7 @@ import type { ToolContext, ToolResult, ToolParameterSchema } from "@/types/tool/
 import { decryptApiKey } from "@/utils/security/crypto";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
+import { MessageIdMap } from "@/utils/text/messageIdMap";
 import {
   toZaiApiModelName,
   ZAI_CODING_CHAT_COMPLETIONS_URL,
@@ -60,7 +61,7 @@ export class AnalyzeImageTool extends BaseTool {
       media_id: {
         type: "string",
         description:
-          "The Discord message ID containing the image(s) to analyze. Use the message ID provided in the [System: Media message ID for tool use: ...] hint.",
+          "The media reference ID (e.g., media_1) from the system hint for the message containing the image(s) to analyze.",
       },
       prompt: {
         type: "string",
@@ -102,14 +103,22 @@ export class AnalyzeImageTool extends BaseTool {
    * 5. Return the analysis result
    */
   async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
-    const messageId = args.media_id as string;
+    const rawMediaId = args.media_id as string;
+    const messageId = MessageIdMap.isOpaqueKey(rawMediaId) ? context.messageIdMap?.resolve(rawMediaId) : rawMediaId;
     const prompt = (args.prompt as string) || DEFAULT_VISION_PROMPT;
 
     // 1. Validate media_id format
+    if (!rawMediaId || (!DISCORD_ID_PATTERN.test(rawMediaId) && !MessageIdMap.isOpaqueKey(rawMediaId))) {
+      return {
+        success: false,
+        error: `Invalid media_id: "${rawMediaId}". Expected a media reference ID (for example media_1) or Discord message ID.`,
+      };
+    }
+
     if (!messageId || !DISCORD_ID_PATTERN.test(messageId)) {
       return {
         success: false,
-        error: `Invalid media_id: "${messageId}". Expected a Discord message ID (17-19 digit number).`,
+        error: `Unknown media_id: "${rawMediaId}".`,
       };
     }
 

@@ -39,7 +39,7 @@ export class ProcessGifTool extends BaseTool {
       media_id: {
         type: "string",
         description:
-          "Discord message ID containing the GIF attachment to process. This message must be within the last 100 messages in the channel.",
+          "The media reference ID (e.g., media_1) from the system hint for the message containing the GIF attachment to process. This message must be within the last 100 messages in the channel.",
       },
       reason: {
         type: "string",

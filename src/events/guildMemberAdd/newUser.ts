@@ -187,7 +187,7 @@ async function buildWelcomeContextItem(params: {
     user: member.user,
   });
   const sentences = [
-    `${displayName} just joined the server ${member.guild.name}, greet them by mentioning them by <@${member.id}> (Mention ID: ${member.id})!`,
+    `${displayName} just joined the server ${member.guild.name}, greet them by mentioning them with @{${displayName}}!`,
   ];
   const parts: StructuredContextItem["parts"] = [];
 

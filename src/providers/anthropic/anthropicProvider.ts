@@ -367,6 +367,9 @@ export class AnthropicProvider
         prefixStrippingName,
         forcedMentions: streamingContext?.forcedMentions,
         abortSignal: streamingContext?.abortSignal,
+
+        // Opaque message ID map for snowflake ID abstraction in LLM-visible text
+        messageIdMap: streamingContext?.messageIdMap,
       };
 
       const orchestrator = new StreamOrchestrator();

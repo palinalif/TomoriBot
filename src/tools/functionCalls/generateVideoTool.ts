@@ -47,7 +47,7 @@ export class GenerateVideoTool extends BaseTool {
       media_id: {
         type: "string",
         description:
-          "Optional: The Discord media ID containing an image to use as the starting frame for image-to-video generation. The first image from this message will be used as the initial frame. If not provided, generates a video from scratch (text-to-video).",
+          "Optional: The media reference ID (e.g., media_1) from the system hint for the message containing an image to use as the starting frame for image-to-video generation. The first image from this message will be used as the initial frame. If not provided, generates a video from scratch (text-to-video).",
       },
       aspect_ratio: {
         type: "string",

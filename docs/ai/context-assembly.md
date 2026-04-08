@@ -184,6 +184,13 @@ Conversation history can contain one or more leading `[System: ...]` lines befor
 
 Reply-reference and forwarded-message quotes preserve the full normalized message text. If the prompt later needs to shrink, that happens at the history-truncation layer rather than inside the annotation itself.
 
+When a history annotation needs to identify a Discord message for later tool use, the prompt never sees the raw snowflake. Context assembly now emits opaque per-turn keys instead:
+
+- `ref_N` for reply-reference / pin-target message handles
+- `media_N` for media-bearing message handles used by `analyze_image`, `read_document`, `process_gif`, image/video generation reference flows, and similar tools
+
+The real Discord IDs stay in a per-request `MessageIdMap` carried alongside context metadata and resolved back at tool-execution time.
+
 When those annotations are present, the dialogue formatter keeps the system lines intact and inserts the speaker prefix only before the remaining user text. This prevents forwarded/reply metadata from being misread as user-authored dialogue.
 
 ## File Map

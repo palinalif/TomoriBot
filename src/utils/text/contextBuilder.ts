@@ -54,6 +54,7 @@ import {
   getConditioningContextPastParticiple,
 } from "@/utils/conditioning/conditioning";
 import { createToolPromptMacroResolver, type ToolPromptMacroResolver } from "@/utils/tools/toolPromptMacros";
+import { MessageIdMap } from "@/utils/text/messageIdMap";
 
 /**
  * Maps userId -> nickname for the current mention replacement operation.
@@ -132,9 +133,9 @@ function needsConversion(text: string): boolean {
 }
 
 function normalizeDiscordChannelLinks(text: string): string {
-  return text.replace(DISCORD_CHANNEL_LINK_REPLACE_PATTERN, (_match, channelId: string, messageId?: string) =>
-    messageId ? `<#${channelId}> (message ID: ${messageId})` : `<#${channelId}>`,
-  );
+  // Message IDs are stripped from channel links to prevent snowflake ID exposure to the LLM.
+  // The channel reference alone provides sufficient context.
+  return text.replace(DISCORD_CHANNEL_LINK_REPLACE_PATTERN, (_match, channelId: string) => `<#${channelId}>`);
 }
 
 function formatDiscordChannelReference(channelId: string | undefined, fallbackText: string): string {
@@ -963,6 +964,8 @@ export interface BuildContextParams {
    * `/sysprompt` has been configured — the preset fully controls the system prompt.
    */
   suppressDefaultSystemPrompt?: boolean;
+  /** Opaque message ID map — caller creates, context builder populates. */
+  messageIdMap?: MessageIdMap;
 }
 
 /** Return type for both buildContext variants. */
@@ -970,6 +973,8 @@ type BuildContextResult = {
   contextItems: StructuredContextItem[];
   tailDirectives: string[];
   uncensorDirective?: string;
+  /** Populated map of opaque keys → real Discord message IDs. */
+  messageIdMap: MessageIdMap;
 };
 
 /**
@@ -983,8 +988,12 @@ type BuildContextResult = {
  * All callers use this function; the preset check is transparent.
  */
 export async function buildContext(params: BuildContextParams): Promise<BuildContextResult> {
+  // Create or reuse the opaque message ID map for this request cycle
+  const messageIdMap = params.messageIdMap ?? new MessageIdMap();
+  const paramsWithMap = { ...params, messageIdMap };
+
   // Skip preset routing for user impersonation
-  if (!params.isUserImpersonation) {
+  if (!paramsWithMap.isUserImpersonation) {
     const serverId = params.snapshot?.tomoriState?.server_id;
     if (serverId) {
       const presetData = await getCachedActivePreset(serverId);
@@ -994,7 +1003,7 @@ export async function buildContext(params: BuildContextParams): Promise<BuildCon
         // and the user has NOT set a custom /sysprompt — the preset owns the system prompt.
         const suppressDefaultSystemPrompt = !params.tomoriConfig.system_prompt?.trim();
         const nativeOutput = await buildContextNative({
-          ...params,
+          ...paramsWithMap,
           suppressDefaultSystemPrompt,
         });
 
@@ -1026,7 +1035,7 @@ export async function buildContext(params: BuildContextParams): Promise<BuildCon
         });
 
         // 3. Rearrange native output according to preset node order
-        return reassembleWithPreset(
+        const presetResult = await reassembleWithPreset(
           nativeOutput,
           presetData,
           {
@@ -1047,12 +1056,14 @@ export async function buildContext(params: BuildContextParams): Promise<BuildCon
             toolPromptMacroResolver: presetToolPromptMacroResolver,
           },
         );
+        return { ...presetResult, messageIdMap };
       }
     }
   }
 
   // No active preset (or user impersonation) — use native assembly
-  return buildContextNative(params);
+  const nativeResult = await buildContextNative(paramsWithMap);
+  return { ...nativeResult, messageIdMap };
 }
 
 /**
@@ -1095,6 +1106,7 @@ async function buildContextNative({
   hasVisionTool = false,
   explicitLongTermMemoryIntent: explicitLongTermMemoryIntentOverride,
   suppressDefaultSystemPrompt = false,
+  messageIdMap,
 }: BuildContextParams): Promise<{
   contextItems: StructuredContextItem[];
   tailDirectives: string[];
@@ -2330,7 +2342,7 @@ async function buildContextNative({
       // Add placeholder text
       detachedSystemParts.push({
         type: "text",
-        text: `[System: This message (ID: ${msg.id}) contained ${mediaDescription} - use increase_media_context with extend_by=${extendByNeeded} to view]`,
+        text: `[System: This message (ID: ${messageIdMap?.register(msg.id, "media") ?? msg.id}) contained ${mediaDescription} - use increase_media_context with extend_by=${extendByNeeded} to view]`,
       });
       mediaIdHintAdded = true;
     } else if (isWithinMediaWindow) {
@@ -2482,7 +2494,7 @@ async function buildContextNative({
       const thisOrThese = totalMediaCount === 1 ? "This" : "These";
       const idLabel = mediaMessageIds.length === 1 ? "Media ID" : "Media IDs";
       const wasSent = totalMediaCount === 1 ? "was" : "were";
-      const idList = mediaMessageIds.join(", ");
+      const idList = mediaMessageIds.map((id) => messageIdMap?.register(id, "media") ?? id).join(", ");
 
       // If the current message's ID is absent from mediaSourceMessageIds, all media
       // came from a referenced/forwarded message — the leading [System: ...] block

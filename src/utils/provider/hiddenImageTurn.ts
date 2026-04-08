@@ -217,6 +217,7 @@ export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise
 
   // 4. Build full bot context using the standard context pipeline.
   let contextItems: StructuredContextItem[];
+  let messageIdMap: ToolContext["messageIdMap"];
   try {
     // Use the selected sender persona's identity if an override is provided;
     // otherwise fall back to the active tomoriState values.
@@ -246,6 +247,7 @@ export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise
       isDMChannel: false,
     });
     contextItems = contextBuild.contextItems;
+    messageIdMap = contextBuild.messageIdMap;
   } catch (error) {
     log.error("Hidden image agent: buildContext failed", error as Error, {
       errorType: "HiddenImageAgentContextError",
@@ -299,6 +301,7 @@ export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise
     // End the turn as soon as either image tool succeeds — both are listed so the
     // loop terminates cleanly even if the model calls the non-preferred backend.
     endTurnAfterTools: ["generate_image", "generate_image_nai"],
+    messageIdMap,
   };
 
   // 7. Get provider and create config.
@@ -354,6 +357,7 @@ export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise
     personaUsername,
     personaAvatarUrl,
     contextItems,
+    messageIdMap,
   };
 
   log.info(

@@ -104,11 +104,17 @@ export class VertexStreamAdapter implements StreamProvider {
   public async buildTokenCountPayload(
     contextItems: StructuredContextItem[],
     model?: string,
+    messageIdMap?: StreamContext["messageIdMap"],
   ): Promise<{
     systemInstruction?: string;
     contents: Content[];
   }> {
-    const { systemInstruction, dialogueContents } = await this.assembleVertexContext(contextItems, [], undefined);
+    const { systemInstruction, dialogueContents } = await this.assembleVertexContext(
+      contextItems,
+      [],
+      undefined,
+      messageIdMap,
+    );
 
     const contents = [...dialogueContents];
     let finalSystemInstruction = systemInstruction;
@@ -181,7 +187,7 @@ export class VertexStreamAdapter implements StreamProvider {
     }
 
     // 5. Assemble context (shared logic)
-    const payload = await this.buildTokenCountPayload(context.contextItems, config.model);
+    const payload = await this.buildTokenCountPayload(context.contextItems, config.model, context.messageIdMap);
     const finalContents = [...payload.contents];
 
     if (payload.systemInstruction) {
@@ -262,7 +268,7 @@ export class VertexStreamAdapter implements StreamProvider {
         // Surface Discord message IDs for image references
         if (item.imageMetadata?.messageIds && item.imageMetadata.messageIds.length > 0) {
           responseParts.push({
-            text: `[System: Images were sent to Discord in message ID(s): ${item.imageMetadata.messageIds.join(", ")}]`,
+            text: `[System: Images were sent to Discord in message ID(s): ${item.imageMetadata.messageIds.map((id) => context.messageIdMap?.register(id, "media") ?? id).join(", ")}]`,
           });
         }
 
@@ -1050,6 +1056,7 @@ export class VertexStreamAdapter implements StreamProvider {
       functionResponse: Record<string, unknown>;
       preToolCallTextParts?: Array<Record<string, unknown>>;
     }>,
+    messageIdMap?: StreamContext["messageIdMap"],
   ): Promise<{ systemInstruction?: string; dialogueContents: Content[] }> {
     const systemInstructionParts: string[] = [];
     const dialogueContents: Content[] = [];
@@ -1092,8 +1099,11 @@ export class VertexStreamAdapter implements StreamProvider {
                     });
                   }
                 } else {
+                  const mediaMessageId = item.messageId
+                    ? (messageIdMap?.register(item.messageId, "media") ?? item.messageId)
+                    : "unknown";
                   geminiParts.push({
-                    text: `[System: This message (ID: ${item.messageId}) contains a GIF. Use process_gif tool with this message ID to process it if needed for context.]`,
+                    text: `[System: This message (ID: ${mediaMessageId}) contains a GIF. Use process_gif tool with this message ID to process it if needed for context.]`,
                   });
                 }
               } else {

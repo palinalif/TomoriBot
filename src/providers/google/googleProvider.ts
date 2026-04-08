@@ -658,6 +658,9 @@ export class GoogleProvider
 
         // External abort signal for SDK call timeout cancellation
         abortSignal: streamingContext?.abortSignal,
+
+        // Opaque message ID map for snowflake ID abstraction in LLM-visible text
+        messageIdMap: streamingContext?.messageIdMap,
       };
 
       // Create the modular streaming components

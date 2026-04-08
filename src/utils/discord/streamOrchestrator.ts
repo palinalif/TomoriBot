@@ -706,6 +706,11 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     // Same split-tag handling pattern as think blocks.
     this.drainDetailsBlocksFromBuffer(state);
 
+    // Collapse orphaned Discord subtext markers ("-#\n") so they stay attached to the next line.
+    // LLMs sometimes place "-#" alone on a line, which splits into a bare "-#" message.
+    // Replacing "-#\n" with "-# " keeps the marker with its content for proper subtext rendering.
+    state.buffer = state.buffer.replace(/(^|\n)-#[ \t]*\n+/g, "$1-# ");
+
     // Process buffer iteratively
     let processedSomething: boolean;
     do {

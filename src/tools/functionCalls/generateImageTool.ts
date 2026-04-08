@@ -39,7 +39,7 @@ export class GenerateImageTool extends BaseTool {
       media_id: {
         type: "string",
         description:
-          "Optional: The Discord media ID containing images to use as reference for image-to-image generation. The tool will extract all images from this message and use them to guide the generation along with your prompt. If not provided, generates a new image from scratch (text-to-image).",
+          "Optional: The media reference ID (e.g., media_1) from the system hint for the message containing images to use as reference for image-to-image generation. The tool will extract all images from this message and use them to guide the generation along with your prompt. If not provided, generates a new image from scratch (text-to-image).",
       },
       target_identity: {
         type: "string",

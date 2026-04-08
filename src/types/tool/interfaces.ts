@@ -18,6 +18,7 @@ import type {
 } from "discord.js";
 import type { MCPServerResponse, EnhancedMCPServerConfig, TypedMCPToolResult, MCPExecutionContext } from "./mcpTypes";
 import type { FunctionResponseImageMetadata } from "../provider/interfaces";
+import type { MessageIdMap } from "@/utils/text/messageIdMap";
 
 /**
  * Tool parameter schema definition
@@ -102,6 +103,9 @@ export interface StreamingContext {
    * Any tool whose name appears in this list will end the turn immediately on success.
    */
   endTurnAfterTools?: string[];
+
+  // Opaque message ID map — threaded from tomoriChat through to StreamContext and ToolContext
+  messageIdMap?: MessageIdMap;
 }
 
 /**
@@ -136,6 +140,9 @@ export interface ToolContext {
   impersonatedUserId?: string; // Discord user ID currently being impersonated, if any
   suppressProgressNotices?: boolean; // Skip public "working..." embeds for fire-and-forget flows
   contextItems?: StructuredContextItem[]; // Current LLM context for tools that need hidden resolution metadata
+
+  // Opaque message ID map for resolving media_N/ref_N keys back to Discord snowflake IDs
+  messageIdMap?: MessageIdMap;
 }
 
 /**

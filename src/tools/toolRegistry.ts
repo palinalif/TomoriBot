@@ -21,6 +21,7 @@ import { getCachedEnabledGuildMcpConfigs } from "../utils/cache/guildMcpConfigCa
 import { isBraveSearchAvailable } from "../tools/restAPIs/brave/braveSearchService";
 import { hasOptApiKey } from "../utils/security/crypto";
 import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
+import { MessageIdMap } from "@/utils/text/messageIdMap";
 
 /**
  * Minimal state interface for context building operations
@@ -48,6 +49,32 @@ const BUILTIN_TOOL_ALIASES: Record<string, string> = {
 
 function resolveBuiltInToolAlias(toolName: string): string {
   return BUILTIN_TOOL_ALIASES[toolName] ?? toolName;
+}
+
+function resolveOpaqueIds(args: Record<string, unknown>, messageIdMap?: MessageIdMap): Record<string, unknown> {
+  if (!messageIdMap) {
+    return args;
+  }
+
+  let resolvedArgs: Record<string, unknown> | undefined;
+
+  for (const key of ["media_id", "message_id"] as const) {
+    const value = args[key];
+    if (typeof value !== "string" || !MessageIdMap.isOpaqueKey(value)) {
+      continue;
+    }
+
+    const resolvedValue = messageIdMap.resolve(value);
+    if (!resolvedValue) {
+      log.warn(`Failed to resolve opaque ${key} "${value}" before tool execution`);
+      continue;
+    }
+
+    resolvedArgs ??= { ...args };
+    resolvedArgs[key] = resolvedValue;
+  }
+
+  return resolvedArgs ?? args;
 }
 
 // Re-export ToolContext for external use
@@ -552,11 +579,12 @@ class ToolRegistryImpl implements ToolRegistryInterface {
   async executeTool(toolName: string, args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const startTime = Date.now();
     const resolvedToolName = resolveBuiltInToolAlias(toolName);
+    const resolvedArgs = resolveOpaqueIds(args, context.messageIdMap);
 
     // 1. Check global MCP first
     const isMcp = await this.isMCPFunction(resolvedToolName, context.provider);
     if (isMcp) {
-      return this.executeMCPFunction(resolvedToolName, args, context, startTime);
+      return this.executeMCPFunction(resolvedToolName, resolvedArgs, context, startTime);
     }
 
     // 2. Check guild MCP
@@ -567,7 +595,12 @@ class ToolRegistryImpl implements ToolRegistryInterface {
         const isGuildMcp = await guildMcpManager.isGuildMCPFunction(serverId, resolvedToolName);
         if (isGuildMcp) {
           log.info(`Executing guild MCP function: ${resolvedToolName} for server ${serverId}`);
-          const result = await guildMcpManager.executeGuildMCPFunction(serverId, resolvedToolName, args, context);
+          const result = await guildMcpManager.executeGuildMCPFunction(
+            serverId,
+            resolvedToolName,
+            resolvedArgs,
+            context,
+          );
           const executionTime = Date.now() - startTime;
 
           // Record execution event
@@ -576,7 +609,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
             provider: context.provider,
             serverId: serverId.toString(),
             userId: context.userId,
-            parameters: args,
+            parameters: resolvedArgs,
             result,
             executionTime,
             timestamp: new Date(),
@@ -598,7 +631,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
     }
 
     // 3. Execute as built-in tool
-    return this.executeBuiltInTool(resolvedToolName, args, context, startTime);
+    return this.executeBuiltInTool(resolvedToolName, resolvedArgs, context, startTime);
   }
 
   /**

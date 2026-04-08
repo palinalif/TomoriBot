@@ -168,7 +168,7 @@ export class GenerateImageNaiTool extends BaseTool {
       media_id: {
         type: "string",
         description:
-          "Optional: Discord media ID containing the image to edit. When provided with edit_target, enables inpainting mode. The first image found in the message (attachment, embed, sticker, or emoji) will be used as the source.",
+          "Optional: The media reference ID (e.g., media_1) from the system hint for the message containing the image to edit. When provided with edit_target, enables inpainting mode. The first image found in the message (attachment, embed, sticker, or emoji) will be used as the source.",
       },
       edit_target: {
         type: "string",

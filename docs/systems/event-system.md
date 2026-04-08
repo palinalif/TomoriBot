@@ -39,10 +39,11 @@ TomoriBot routes Discord events through one dispatcher: `src/handlers/eventHandl
 `messageCreate` -> `events/messageCreate/*.ts` -> chat/context/tool/stream pipeline.
 
 Current message preprocessing in `tomoriChat.ts` enriches fetched history before `buildContext()`:
-- reply-reference system annotations (message ID + full quoted content)
+- reply-reference system annotations (opaque `ref_N` handle + full quoted content)
 - forwarded-message snapshot annotations (forwarder + original author + source channel + quoted content)
-- media extraction and media-source message IDs
+- media extraction and opaque `media_N` source-message handles for message-targeted tools
 - forwarded/referenced media extraction so image/video attachments from quoted snapshots reach multimodal models
+- consecutive same-author messages only collapse when both sides are pure text; any turn with media stays separate so media references remain message-local
 - reaction context annotations (emoji/counts plus budgeted reactor identity fetches with counts-only fallback)
 
 ### Slash command event

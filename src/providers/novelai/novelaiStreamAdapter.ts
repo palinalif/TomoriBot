@@ -326,6 +326,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
       prompt = this.assembleGlmChatPrompt(context.contextItems, context.tomoriState.tomori_nickname, {
         toolDefinitions: this.toolDefinitions,
         functionInteractionHistory: context.functionInteractionHistory,
+        messageIdMap: context.messageIdMap,
       });
     } else {
       // Kayra: Flat text prompt with NAI prompt-convention formatting
@@ -335,6 +336,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
         toolDefinitions: this.toolDefinitions,
         functionInteractionHistory: context.functionInteractionHistory,
         attgBlock,
+        messageIdMap: context.messageIdMap,
       });
       // Append bot name to signal it should generate the bot's response, unless
       // /bot respond already injected a final assistant prefill turn as the tail.
@@ -1932,7 +1934,10 @@ export class NovelaiStreamAdapter implements StreamProvider {
    * Build tool interaction history in flat text format (Kayra).
    * Uses simple [Tool Result] labels without GLM role tags.
    */
-  private buildToolHistoryFlat(history: StreamContext["functionInteractionHistory"] = []): string | null {
+  private buildToolHistoryFlat(
+    history: StreamContext["functionInteractionHistory"] = [],
+    messageIdMap?: StreamContext["messageIdMap"],
+  ): string | null {
     if (!history.length) return null;
 
     const lines: string[] = ["[System: Tool Call History]"];
@@ -1945,7 +1950,9 @@ export class NovelaiStreamAdapter implements StreamProvider {
       lines.push(`[Tool Result] ${JSON.stringify(sanitizedResponse)}`);
 
       if (item.imageMetadata?.messageIds?.length) {
-        lines.push(`[System: Images sent to Discord message ID(s): ${item.imageMetadata.messageIds.join(", ")}]`);
+        lines.push(
+          `[System: Images sent to Discord message ID(s): ${item.imageMetadata.messageIds.map((id) => messageIdMap?.register(id, "media") ?? id).join(", ")}]`,
+        );
       }
     }
 
@@ -1960,6 +1967,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
    */
   private buildToolHistoryGlm(
     history: StreamContext["functionInteractionHistory"] = [],
+    messageIdMap?: StreamContext["messageIdMap"],
   ): Array<{ role: "assistant" | "observation"; content: string }> {
     if (!history.length) return [];
 
@@ -2008,7 +2016,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
       if (item.imageMetadata?.messageIds?.length) {
         responseLines.push(
-          `[System: Images sent to Discord message ID(s): ${item.imageMetadata.messageIds.join(", ")}]`,
+          `[System: Images sent to Discord message ID(s): ${item.imageMetadata.messageIds.map((id) => messageIdMap?.register(id, "media") ?? id).join(", ")}]`,
         );
       }
 
@@ -2259,6 +2267,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
       toolDefinitions?: NormalizedToolDefinition[];
       functionInteractionHistory?: StreamContext["functionInteractionHistory"];
       attgBlock?: string | null;
+      messageIdMap?: StreamContext["messageIdMap"];
     },
   ): string {
     // Separate sample dialogue (reference) from live history so a *** dinkus
@@ -2350,7 +2359,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
       const toolGuide = this.buildToolCallingGuide(options?.toolDefinitions ?? []);
       if (toolGuide) instructionParts.push(toolGuide);
 
-      const toolHistory = this.buildToolHistoryFlat(options?.functionInteractionHistory ?? []);
+      const toolHistory = this.buildToolHistoryFlat(options?.functionInteractionHistory ?? [], options?.messageIdMap);
       if (toolHistory) instructionParts.push(toolHistory);
     }
 
@@ -2442,6 +2451,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     options?: {
       toolDefinitions?: NormalizedToolDefinition[];
       functionInteractionHistory?: StreamContext["functionInteractionHistory"];
+      messageIdMap?: StreamContext["messageIdMap"];
     },
   ): string {
     const systemInstructionParts: string[] = [];
@@ -2543,7 +2553,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     //    the model needs to see prior tool calls (and failures) plus any text
     //    it already streamed, so it doesn't repeat itself.
     if (options?.functionInteractionHistory?.length) {
-      const toolTurns = this.buildToolHistoryGlm(options.functionInteractionHistory);
+      const toolTurns = this.buildToolHistoryGlm(options.functionInteractionHistory, options.messageIdMap);
       for (const toolTurn of toolTurns) {
         if (toolTurn.role === "assistant") {
           promptParts.push("<|assistant|>");

@@ -6,6 +6,7 @@
 import type { Message } from "discord.js";
 import { log } from "../../utils/misc/logger";
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
+import { MessageIdMap } from "@/utils/text/messageIdMap";
 
 /**
  * Tool for pinning Discord messages from recent conversation
@@ -25,7 +26,7 @@ export class PinMessageTool extends BaseTool {
       message_id: {
         type: "string",
         description:
-          "The unique Discord ID of the message to pin (e.g., '123456789012345678'). This message must be from the recent conversation in the current channel (last 100 messages).",
+          "The reference ID of the message to pin (e.g., ref_1). This message must be from the recent conversation in the current channel (last 100 messages).",
       },
     },
     required: ["message_id"],
@@ -68,18 +69,33 @@ export class PinMessageTool extends BaseTool {
       };
     }
 
-    let messageId = args.message_id as string;
+    const rawMessageId = args.message_id as string;
+    let messageId = MessageIdMap.isOpaqueKey(rawMessageId)
+      ? (context.messageIdMap?.resolve(rawMessageId) ?? rawMessageId)
+      : rawMessageId;
 
     // 3. Validate message ID format (Discord snowflake pattern)
-    if (!/^\d{17,20}$/.test(messageId)) {
+    if (!messageId || (!/^\d{17,20}$/.test(messageId) && !MessageIdMap.isOpaqueKey(rawMessageId))) {
       return {
         success: false,
         error: "Invalid message ID format",
         message:
-          "The message ID provided doesn't appear to be a valid Discord message ID. Please check the ID and try again.",
+          "The message ID provided doesn't appear to be a valid reference ID or Discord message ID. Please check it and try again.",
         data: {
           status: "invalid_message_id_format",
-          attempted_id: messageId,
+          attempted_id: rawMessageId,
+        },
+      };
+    }
+
+    if (!/^\d{17,20}$/.test(messageId)) {
+      return {
+        success: false,
+        error: "Unknown message reference ID",
+        message: "The message reference ID could not be resolved to a recent Discord message.",
+        data: {
+          status: "invalid_message_id_format",
+          attempted_id: rawMessageId,
         },
       };
     }

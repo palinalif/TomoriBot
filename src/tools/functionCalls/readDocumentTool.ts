@@ -33,7 +33,7 @@ export class ReadDocumentTool extends BaseTool {
       media_id: {
         type: "string",
         description:
-          "The Discord message ID containing the document attachment to read. This message must be within the last 100 messages in the channel.",
+          "The media reference ID (e.g., media_1) from the system hint for the message containing the document attachment to read. This message must be within the last 100 messages in the channel.",
       },
       filename: {
         type: "string",

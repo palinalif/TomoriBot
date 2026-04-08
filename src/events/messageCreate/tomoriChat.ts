@@ -60,6 +60,7 @@ import {
 } from "@/utils/security/keyRotation";
 import { localizer, getSupportedLocales, getLocaleSubKeys } from "../../utils/text/localizer";
 import { escapeRegExp, normalizeCustomEmojisForLlm } from "../../utils/text/stringHelper";
+import { MessageIdMap } from "@/utils/text/messageIdMap";
 import { hasExplicitLongTermMemoryIntent } from "@/utils/memory/explicitLongTermMemoryIntent";
 import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
@@ -377,7 +378,7 @@ function buildQueuedReplyAttachmentSummary(message: Message): string | null {
   return parts.length > 0 ? parts.join(", ") : null;
 }
 
-function buildQueuedReplyDirective(message: Message, replyTargetName: string): string {
+function buildQueuedReplyDirective(message: Message, replyTargetName: string, idMap?: MessageIdMap): string {
   const normalizedTargetName = compactWhitespace(stripBridgePrefix(replyTargetName)) || "User";
   const contentPreview = truncateForSystemContext(
     message.cleanContent || message.content || "",
@@ -386,7 +387,7 @@ function buildQueuedReplyDirective(message: Message, replyTargetName: string): s
   const attachmentSummary = buildQueuedReplyAttachmentSummary(message);
   const normalizedPreview = contentPreview.replaceAll('"', "'");
 
-  let directive = `Create a reply to ${normalizedTargetName}'s message from earlier (ID: ${message.id})`;
+  let directive = `Create a reply to ${normalizedTargetName}'s message from earlier (ID: ${idMap?.register(message.id, "ref") ?? message.id})`;
   if (attachmentSummary) {
     directive += `, which has ${attachmentSummary} attached`;
   }
@@ -1677,6 +1678,11 @@ export default async function tomoriChat(
   let locale = "en-US";
   cleanupTextQuotaTriggerStates();
 
+  // Opaque message ID map — replaces raw Discord snowflake IDs with sequential keys
+  // (media_N, ref_N) in all LLM-visible text. Shared across context build, stream
+  // adapters, and tool execution for this request cycle.
+  const messageIdMap = new MessageIdMap();
+
   const isBotAuthor = message.author.bot;
   const isWebhookMessage = Boolean(message.webhookId);
   const isInteractionResponse = Boolean(message.interaction);
@@ -1832,6 +1838,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
     isManuallyTriggered, // Pass command flag to indicate manual triggering
     disableAllTools: isUserImpersonation, // Disable tools for user impersonation
     naiContinuationPrefill, // NAI GLM-4.6: carry trailing fragment into prompt for mid-sentence continuation
+    messageIdMap, // Opaque message ID map for snowflake ID abstraction
   };
 
   if (manualStreamingContextOverrides) {
@@ -1842,7 +1849,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
   const triggererUsername = manualTriggerInvoker?.username ?? message.author.username;
   const queuedReplyDirective =
     isFromQueue && !isStopResponse
-      ? buildQueuedReplyDirective(message, manualTriggerInvoker?.member?.displayName ?? triggererUsername)
+      ? buildQueuedReplyDirective(message, manualTriggerInvoker?.member?.displayName ?? triggererUsername, messageIdMap)
       : null;
   const matrixRelayUserId = isMatrixRelay ? extractBridgeUserId(message.author.username) : undefined;
   const cooldownUserDiscId = matrixRelayUserId ?? userDiscId;
@@ -3626,7 +3633,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               const referenceMessageId = msgReferencedMessage.id;
 
               // Add reference context to the message
-              const referenceContext = `[System: This message is referring to a previous message (ID: ${referenceMessageId}) by ${referencedAuthorName} saying: ${referencedContent}${attachmentInfo}]`;
+              const referenceContext = `[System: This message is referring to a previous message (ID: ${messageIdMap.register(referenceMessageId, "ref")}) by ${referencedAuthorName} saying: ${referencedContent}${attachmentInfo}]`;
               processedContent = `${referenceContext}\n${processedContent}`;
             }
           } catch (fetchError) {
@@ -4128,13 +4135,13 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 // so the LLM still knows an audio file was present.
                 else {
                   const attachName = attachment.name ?? "file";
-                  const attachHint = `[Attachment: ${attachName} (message ID: ${msg.id})]`;
+                  const attachHint = `[Attachment: ${attachName} (message ID: ${messageIdMap.register(msg.id, "media")})]`;
                   messageContentForLlm = messageContentForLlm ? `${messageContentForLlm} ${attachHint}` : attachHint;
                 }
               }
             } else {
               const attachName = attachment.name ?? "file";
-              const attachHint = `[Attachment: ${attachName} (message ID: ${msg.id})]`;
+              const attachHint = `[Attachment: ${attachName} (message ID: ${messageIdMap.register(msg.id, "media")})]`;
               messageContentForLlm = messageContentForLlm ? `${messageContentForLlm} ${attachHint}` : attachHint;
             }
           }
@@ -4304,14 +4311,26 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         const isSameEffectiveAuthor =
           prevMessage && prevMessage.authorId === effectiveAuthorId && prevWasDebugMessage === isDebugMessage;
 
+        const currentMessageHasMedia =
+          imageAttachments.length > 0 ||
+          videoAttachments.length > 0 ||
+          (resolvedMediaSourceMessageIds?.length ?? 0) > 0;
+        const prevMessageHasMedia =
+          !!prevMessage &&
+          (prevMessage.imageAttachments.length > 0 ||
+            prevMessage.videoAttachments.length > 0 ||
+            (prevMessage.mediaSourceMessageIds?.length ?? 0) > 0);
+
         // 5.d. Determine if we should combine with the previous message or create a new entry.
-        // The previous message is considered "has something to merge into" if it has text OR
-        // media — this handles the case where a user uploads an image without text and then
-        // immediately sends a follow-up reply in the same turn.
+        // Only collapse consecutive same-author messages when BOTH sides are pure text.
+        // If either side contains media, keep them as separate turns so message-local media IDs
+        // stay unambiguous for the LLM and for media-targeted tool references.
         const prevMessageHasContent =
           prevMessage &&
           (prevMessage.content || prevMessage.imageAttachments.length > 0 || prevMessage.videoAttachments.length > 0);
-        if (isSameEffectiveAuthor && messageContentForLlm && prevMessageHasContent) {
+        const shouldKeepSeparateMediaTurn = currentMessageHasMedia || prevMessageHasMedia;
+
+        if (isSameEffectiveAuthor && messageContentForLlm && prevMessageHasContent && !shouldKeepSeparateMediaTurn) {
           // Append this message's content to the previous message with a newline
           prevMessage.content += `\n${messageContentForLlm}`; // If this message has images, add them to the previous message's images
           if (imageAttachments.length > 0) {
@@ -4705,6 +4724,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               seesVideos: effectiveContextSeesVideos,
               // Vision tool available when: vision model configured AND chat model can't see images
               hasVisionTool: !!tomoriState?.vision_llm && !(effectiveContextSeesImages ?? tomoriState?.llm.sees_images),
+              messageIdMap,
             });
             contextSegments = appendInjectedContextItems(contextBuild.contextItems, injectedContextItems);
 
@@ -6176,8 +6196,10 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                         `Media context expansion restart signal detected. Expanding window from ${oldWindow} to ${newWindow} messages (extend_by=${extendBy}).`,
                       );
 
-                      // Rebuild context with expanded media window
-                      // This uses the same simplifiedMessages array that's already been mushed
+                      // Rebuild context with expanded media window.
+                      // A fresh MessageIdMap is created so opaque keys (media_1, ref_1, ...)
+                      // match the rebuilt context — the old map's indices are now stale.
+                      const rebuildMessageIdMap = new MessageIdMap();
                       const contextBuild = await buildContext({
                         guildId: serverDiscId,
                         serverName,
@@ -6217,8 +6239,12 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                         seesVideos: effectiveContextSeesVideos,
                         hasVisionTool:
                           !!tomoriState?.vision_llm && !(effectiveContextSeesImages ?? tomoriState?.llm.sees_images),
+                        messageIdMap: rebuildMessageIdMap,
                       });
                       contextSegments = appendInjectedContextItems(contextBuild.contextItems, injectedContextItems);
+
+                      // Update the streaming context's message ID map to match the rebuilt context
+                      streamingContext.messageIdMap = rebuildMessageIdMap;
 
                       // Truncate oldest dialogue history pairs if the conversation is approaching
                       // the context window limit, ensuring the output budget is always preserved.
@@ -6447,18 +6473,22 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       }
 
                       // Also patch reply reference blocks to include the referenced message's timestamp.
-                      // e.g. "(ID: 123456789)" becomes "(ID: 123456789, sent Feb 28, 2026 12:41 UTC, 20m ago)"
+                      // The ID in the text is now an opaque key (e.g., "ref_1") — resolve it back
+                      // to the real Discord snowflake to look up the timestamp, then inject the
+                      // annotation alongside the opaque key (keeping the real ID hidden from the LLM).
+                      const currentIdMap = streamingContext.messageIdMap;
                       const replyRefPattern =
-                        /\[System: This message is referring to a previous message \(ID: (\d+)\) by/g;
+                        /\[System: This message is referring to a previous message \(ID: (ref_\d+)\) by/g;
                       for (const contextItem of contextSegments) {
                         for (const part of contextItem.parts) {
                           if (part.type === "text" && part.text.includes("This message is referring to")) {
-                            part.text = part.text.replace(replyRefPattern, (match, referencedId: string) => {
-                              const refTimestamp = timestampMap.get(referencedId);
+                            part.text = part.text.replace(replyRefPattern, (match, opaqueId: string) => {
+                              const realId = currentIdMap?.resolve(opaqueId);
+                              const refTimestamp = realId ? timestampMap.get(realId) : undefined;
                               if (!refTimestamp) return match;
                               return match.replace(
-                                `(ID: ${referencedId})`,
-                                `(ID: ${referencedId}, sent ${formatTimestampInline(refTimestamp)})`,
+                                `(ID: ${opaqueId})`,
+                                `(ID: ${opaqueId}, sent ${formatTimestampInline(refTimestamp)})`,
                               );
                             });
                           }

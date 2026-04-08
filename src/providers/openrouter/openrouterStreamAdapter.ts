@@ -415,6 +415,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       openrouterConfig.seesImages ?? true, // Default to true for backward compatibility
       context.tomoriState.tomori_nickname ?? "Assistant",
       openrouterConfig.seesVideos ?? false, // Default false — videos are strictly opt-in per model
+      context.messageIdMap,
     );
 
     // Ensure model is provided
@@ -2129,6 +2130,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
     seesImages: boolean = true,
     botName: string = "Assistant",
     seesVideos: boolean = false,
+    messageIdMap?: StreamContext["messageIdMap"],
   ): Promise<Array<Record<string, unknown>>> {
     const messages: Array<Record<string, unknown>> = [];
     const systemInstructionParts: string[] = [];
@@ -2209,9 +2211,12 @@ export class OpenrouterStreamAdapter implements StreamProvider {
                     } else {
                       // Development: Replace with message ID hint for process_gif tool
                       // Note: URL intentionally omitted to prevent hallucinations - AI should use the tool
+                      const mediaMessageId = item.messageId
+                        ? (messageIdMap?.register(item.messageId, "media") ?? item.messageId)
+                        : "unknown";
                       contentParts.push({
                         type: "text",
-                        text: `[System: This message (ID: ${item.messageId}) contains inline GIF data. Use process_gif tool with this message ID to process it if needed for context.]`,
+                        text: `[System: This message (ID: ${mediaMessageId}) contains inline GIF data. Use process_gif tool with this message ID to process it if needed for context.]`,
                       });
 
                       log.info(
@@ -2289,9 +2294,12 @@ export class OpenrouterStreamAdapter implements StreamProvider {
                     } else {
                       // Development: Replace with message ID hint for process_gif tool
                       // Note: URL intentionally omitted to prevent hallucinations - AI should use the tool
+                      const mediaMessageId = item.messageId
+                        ? (messageIdMap?.register(item.messageId, "media") ?? item.messageId)
+                        : "unknown";
                       contentParts.push({
                         type: "text",
-                        text: `[System: This message (ID: ${item.messageId}) contains a GIF. Use process_gif tool with this message ID to process it if needed for context.]`,
+                        text: `[System: This message (ID: ${mediaMessageId}) contains a GIF. Use process_gif tool with this message ID to process it if needed for context.]`,
                       });
 
                       log.info(
@@ -2551,7 +2559,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         if (interaction.imageMetadata?.messageIds && interaction.imageMetadata.messageIds.length > 0) {
           responseParts.push({
             type: "text",
-            text: `[System: Images were sent to Discord in message ID(s): ${interaction.imageMetadata.messageIds.join(", ")}]`,
+            text: `[System: Images were sent to Discord in message ID(s): ${interaction.imageMetadata.messageIds.map((id) => messageIdMap?.register(id, "media") ?? id).join(", ")}]`,
           });
         }
 
