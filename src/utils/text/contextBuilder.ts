@@ -972,6 +972,7 @@ export interface BuildContextParams {
 type BuildContextResult = {
   contextItems: StructuredContextItem[];
   tailDirectives: string[];
+  lowerPriorityTailDirectives: string[];
   uncensorDirective?: string;
   /** Populated map of opaque keys → real Discord message IDs. */
   messageIdMap: MessageIdMap;
@@ -1110,10 +1111,12 @@ async function buildContextNative({
 }: BuildContextParams): Promise<{
   contextItems: StructuredContextItem[];
   tailDirectives: string[];
+  lowerPriorityTailDirectives: string[];
   uncensorDirective?: string;
 }> {
   const contextItems: StructuredContextItem[] = [];
   const tailDirectives: string[] = [];
+  const lowerPriorityTailDirectives: string[] = [];
   let sameChannelMemoryDirective: string | undefined;
   let uncensorDirective: string | undefined;
   const botName = tomoriNickname;
@@ -2618,9 +2621,10 @@ async function buildContextNative({
   }
 
   // Add same-channel memory prompt at the very end (if it exists)
-  // This ensures the prompt is the last thing the model sees before responding
+  // Keep this directive out of the hottest recency slot so recent user/assistant
+  // turns can sit below it and reduce meta-commentary about following the note.
   if (sameChannelMemoryDirective) {
-    tailDirectives.push(sameChannelMemoryDirective);
+    lowerPriorityTailDirectives.push(sameChannelMemoryDirective);
   }
 
   // Capture optional uncensor prompt injection as the final tail directive (if enabled)
@@ -2639,7 +2643,7 @@ async function buildContextNative({
   }
 
   log.info(`Built ${contextItems.length} structured context items for guild ${guildId}.`);
-  return { contextItems, tailDirectives, uncensorDirective };
+  return { contextItems, tailDirectives, lowerPriorityTailDirectives, uncensorDirective };
 }
 
 /**

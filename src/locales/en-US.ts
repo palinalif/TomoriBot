@@ -239,7 +239,12 @@ export default {
       generating_with_references_description: "Creating an image from the current prompt and reference image(s)",
       editing_title: "🖌️  Editing Image...",
       editing_description: "Editing the referenced image by targeting `{edit_target}`",
-      generating_footer: "This may take a moment depending on provider load",
+      notice_model_line: "**Model:** {model}",
+      notice_prompt_line: "**Prompt:** {prompt}",
+      notice_character_prompt_line: "**Character {index}:** {prompt}",
+      notice_nai_tags_help_line: "Use `/novelai image-tags` to help me generate better NovelAI images.",
+      notice_reference_count_line: "Using {count} reference image(s).",
+      generating_footer: "This may take a moment depending on provider load.",
     },
 
     vision: {

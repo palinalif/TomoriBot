@@ -96,6 +96,8 @@ export interface StreamingContext {
   naiContinuationPrefill?: string;
   /** AbortSignal to cancel the underlying HTTP request when the SDK call timeout fires */
   abortSignal?: AbortSignal;
+  /** Called when streaming makes visible or provider-side progress, so outer watchdogs can refresh their timers. */
+  onStreamProgress?: () => void;
   /**
    * Tool names that should return `endTurn: true` on success.
    * Used by hidden agent turns (e.g., the hidden image agent) to terminate the streaming

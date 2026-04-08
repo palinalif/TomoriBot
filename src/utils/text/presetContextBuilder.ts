@@ -288,6 +288,7 @@ export async function reassembleWithPreset(
   nativeOutput: {
     contextItems: StructuredContextItem[];
     tailDirectives: string[];
+    lowerPriorityTailDirectives: string[];
     uncensorDirective?: string;
   },
   presetData: CachedPresetData,
@@ -296,6 +297,7 @@ export async function reassembleWithPreset(
 ): Promise<{
   contextItems: StructuredContextItem[];
   tailDirectives: string[];
+  lowerPriorityTailDirectives: string[];
   uncensorDirective?: string;
 }> {
   const { nodes } = presetData;
@@ -524,6 +526,7 @@ export async function reassembleWithPreset(
   return {
     contextItems,
     tailDirectives: nativeOutput.tailDirectives,
+    lowerPriorityTailDirectives: nativeOutput.lowerPriorityTailDirectives,
     uncensorDirective: nativeOutput.uncensorDirective,
   };
 }

@@ -195,8 +195,11 @@ Loop control and max iterations are managed by `tomoriChat` (function-call safet
 - fallback embed path handles generic errors
 
 ### Inactivity timeout
-- inactivity timer resets on each chunk
+- orchestrator inactivity timer resets on each provider chunk
+- successful Discord sends also count as progress and refresh the outer SDK timeout watchdog
 - timeout threshold defaults from stream constants
+- `tomoriChat` also wraps the full `streamToDiscord(...)` call in a refreshable SDK watchdog
+- the SDK watchdog now refreshes on orchestrator progress instead of acting as a fixed wall-clock cutoff
 - timeout state is tracked explicitly, so cleanup at normal stream end no longer looks like a timeout
 
 ### Stop requests

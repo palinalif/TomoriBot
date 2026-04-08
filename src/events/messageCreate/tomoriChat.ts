@@ -4859,6 +4859,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 );
               }
             }
+            const lowerPriorityTailDirectives: string[] = [...contextBuild.lowerPriorityTailDirectives];
             const tailDirectives: string[] = [...contextBuild.tailDirectives];
             const uncensorDirective = contextBuild.uncensorDirective;
             if (manualContinuationDirective) {
@@ -4871,7 +4872,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               isUserImpersonation ? null : (tomoriState?.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori"),
             );
             if (emojiPenaltyDirective) {
-              tailDirectives.push(emojiPenaltyDirective);
+              lowerPriorityTailDirectives.push(emojiPenaltyDirective);
             }
 
             // Inject system context for stop responses
@@ -4916,6 +4917,11 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 tailDirectives.push(directiveText);
               }
               log.info(`Injected manual system prompt: "${trimmedPrompt}"`);
+            }
+
+            const lowerPriorityTailMessage = buildCombinedTailDirectiveMessage(lowerPriorityTailDirectives);
+            if (lowerPriorityTailMessage) {
+              contextSegments.push(lowerPriorityTailMessage);
             }
 
             const combinedTailMessage = buildCombinedTailDirectiveMessage(tailDirectives);
@@ -5373,6 +5379,22 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                   // 1. Create an AbortController so the SDK timeout can terminate the underlying HTTP request
                   const sdkAbortController = new AbortController();
                   streamingContext.abortSignal = sdkAbortController.signal;
+                  let sdkTimeoutId: NodeJS.Timeout | null = null;
+                  let sdkTimeoutReject: ((reason?: unknown) => void) | null = null;
+                  const clearSdkTimeout = () => {
+                    if (sdkTimeoutId) {
+                      clearTimeout(sdkTimeoutId);
+                      sdkTimeoutId = null;
+                    }
+                  };
+                  const refreshSdkTimeout = () => {
+                    clearSdkTimeout();
+                    sdkTimeoutId = setTimeout(() => {
+                      sdkAbortController.abort();
+                      sdkTimeoutReject?.(new Error("SDK_CALL_TIMEOUT: provider streamToDiscord call timed out."));
+                    }, STREAM_SDK_CALL_TIMEOUT_MS);
+                  };
+                  streamingContext.onStreamProgress = refreshSdkTimeout;
 
                   const streamProviderPromise = provider.streamToDiscord(
                     channel,
@@ -5393,24 +5415,22 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                     prefixStrippingName, // Pass prefix stripping name for user impersonation
                   );
 
-                  // 2. Race the stream against a timeout that also aborts the underlying HTTP request
-                  let sdkTimeoutId: NodeJS.Timeout | null = null;
+                  // 2. Race the stream against a refreshable timeout that also aborts the underlying HTTP request
                   const timeoutPromise = new Promise<never>((_, reject) => {
-                    sdkTimeoutId = setTimeout(() => {
-                      sdkAbortController.abort(); // Signal the provider to cancel its HTTP request
-                      reject(new Error("SDK_CALL_TIMEOUT: provider streamToDiscord call timed out."));
-                    }, STREAM_SDK_CALL_TIMEOUT_MS);
+                    sdkTimeoutReject = reject;
                   });
+                  refreshSdkTimeout();
 
                   let streamResult: StreamResult;
                   try {
                     // Promise.race will settle as soon as one of the promises settles
                     streamResult = await Promise.race([streamProviderPromise, timeoutPromise]);
                     // Stream completed before timeout — clear the pending timer
-                    if (sdkTimeoutId) clearTimeout(sdkTimeoutId);
+                    clearSdkTimeout();
                   } catch (raceError) {
                     // Clear timeout if the stream itself threw before the timer fired
-                    if (sdkTimeoutId) clearTimeout(sdkTimeoutId);
+                    clearSdkTimeout();
+                    streamingContext.onStreamProgress = undefined;
 
                     // This catch block will execute if timeoutPromise rejects first,
                     // or if streamProviderPromise itself rejects *before* the timeout.
@@ -5436,6 +5456,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                     // If it's not our specific timeout error, re-throw to be caught by the outer catch
                     throw raceError;
                   }
+                  streamingContext.onStreamProgress = undefined;
 
                   lastStreamResult = streamResult;
 
@@ -6386,6 +6407,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                           );
                         }
                       }
+                      const lowerPriorityTailDirectives: string[] = [...contextBuild.lowerPriorityTailDirectives];
                       const tailDirectives: string[] = [...contextBuild.tailDirectives];
                       const uncensorDirective = contextBuild.uncensorDirective;
                       if (manualContinuationDirective) {
@@ -6404,7 +6426,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                           : (tomoriState?.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori"),
                       );
                       if (emojiPenaltyDirective) {
-                        tailDirectives.push(emojiPenaltyDirective);
+                        lowerPriorityTailDirectives.push(emojiPenaltyDirective);
                       }
 
                       // Inject system context for stop responses (if applicable)
@@ -6448,6 +6470,11 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                           tailDirectives.push(directiveText);
                         }
                         log.info(`Injected manual system prompt: "${trimmedPrompt}"`);
+                      }
+
+                      const lowerPriorityTailMessage = buildCombinedTailDirectiveMessage(lowerPriorityTailDirectives);
+                      if (lowerPriorityTailMessage) {
+                        contextSegments.push(lowerPriorityTailMessage);
                       }
 
                       const combinedTailMessage = buildCombinedTailDirectiveMessage(tailDirectives);

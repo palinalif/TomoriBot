@@ -140,6 +140,9 @@ export interface StreamContext {
   // External abort signal — allows the SDK call timeout to cancel the underlying HTTP request
   abortSignal?: AbortSignal;
 
+  // Progress callback for outer watchdog timers (provider chunk received or Discord send succeeded)
+  onStreamProgress?: () => void;
+
   // Opaque message ID map for resolving media_N/ref_N keys back to Discord snowflake IDs
   messageIdMap?: MessageIdMap;
 }

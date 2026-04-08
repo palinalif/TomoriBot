@@ -10,7 +10,7 @@ import { log, ColorCode } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { resolveAvatarByIdentity } from "@/utils/discord/avatarResolver";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
-import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
+import { buildImageToolNoticeDescription, sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { sql } from "../../utils/db/client";
 import { decryptApiKey } from "../../utils/security/crypto";
@@ -595,15 +595,31 @@ export class GenerateImageTool extends BaseTool {
       }
 
       if (!context.suppressProgressNotices) {
+        const baseNoticeDescription = localizer(
+          context.locale,
+          usesReferences ? "genai.image.generating_with_references_description" : "genai.image.generating_description",
+        );
+        const referenceSourceCount = Number(messageId ? 1 : 0) + Number(targetIdentity ? 1 : 0);
+        const extraNoticeLines = referenceSourceCount
+          ? [
+              localizer(context.locale, "genai.image.notice_reference_count_line", {
+                count: referenceSourceCount.toString(),
+              }),
+            ]
+          : [];
         await sendToolProgressNotice(
           context,
           "image_generation",
           {
             titleKey: "genai.image.generating_title",
-            descriptionKey: usesReferences
-              ? "genai.image.generating_with_references_description"
-              : "genai.image.generating_description",
-            footerKey: "genai.image.generating_footer",
+            description: buildImageToolNoticeDescription(
+              context.locale,
+              baseNoticeDescription,
+              modelCodename,
+              prompt,
+              localizer(context.locale, "genai.image.generating_footer"),
+              extraNoticeLines,
+            ),
             color: ColorCode.INFO,
           },
           "GenerateImageTool",

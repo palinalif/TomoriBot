@@ -139,6 +139,8 @@ Typing simulation is enabled for degree `>= MEDIUM`:
 - Config built by `createTypingSimulationConfig(...)`
 - Sends first chunk immediately, then simulates typing for subsequent chunks.
 
+Successful Discord sends count as stream progress for the outer SDK watchdog, so long generations that are still visibly flushing to Discord no longer hit the top-level timeout just because the overall turn exceeds the original wall-clock budget.
+
 Immediate send mode is used when typing simulation is disabled.
 
 ## Message Flood Guard

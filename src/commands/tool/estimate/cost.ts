@@ -880,21 +880,31 @@ async function buildRuntimeParityContext(
     }
   }
 
+  const lowerPriorityTailDirectives = [...contextBuild.lowerPriorityTailDirectives];
   const tailDirectives = [...contextBuild.tailDirectives];
   const emojiPenaltyDirective = getEmojiPenaltyDirective(
     contextSegments,
     tomoriState.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori",
   );
   if (emojiPenaltyDirective) {
-    tailDirectives.push(emojiPenaltyDirective);
+    lowerPriorityTailDirectives.push(emojiPenaltyDirective);
   }
-  if (contextBuild.uncensorDirective) {
-    tailDirectives.push(contextBuild.uncensorDirective);
+
+  const lowerPriorityTailMessage = buildCombinedTailDirectiveMessage(lowerPriorityTailDirectives);
+  if (lowerPriorityTailMessage) {
+    contextSegments.push(lowerPriorityTailMessage);
   }
 
   const combinedTailMessage = buildCombinedTailDirectiveMessage(tailDirectives);
   if (combinedTailMessage) {
     contextSegments.push(combinedTailMessage);
+  }
+
+  if (contextBuild.uncensorDirective) {
+    const uncensorTailMessage = buildCombinedTailDirectiveMessage([contextBuild.uncensorDirective]);
+    if (uncensorTailMessage) {
+      contextSegments.push(uncensorTailMessage);
+    }
   }
 
   return contextSegments;

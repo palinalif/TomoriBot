@@ -16,7 +16,7 @@ import JSZip from "jszip";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
-import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
+import { buildImageToolNoticeDescription, sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { sql } from "../../utils/db/client";
 import { decryptApiKey, getOptApiKey } from "../../utils/security/crypto";
@@ -86,6 +86,22 @@ interface GenerateImageNaiCharacterArg {
 interface NAIIdentityProfile {
   tags: string[];
   refUrl: string | null;
+}
+
+function buildCharacterNoticeLines(locale: string, characters: GenerateImageNaiCharacterArg[]): string[] {
+  return characters
+    .map((character, index) => {
+      const tags = typeof character.tags === "string" ? character.tags.trim() : "";
+      if (!tags) {
+        return "";
+      }
+
+      return localizer(locale, "genai.image.notice_character_prompt_line", {
+        index: (index + 1).toString(),
+        prompt: `\`${tags}\``,
+      });
+    })
+    .filter((line) => line.length > 0);
 }
 
 /**
@@ -969,14 +985,36 @@ export class GenerateImageNaiTool extends BaseTool {
       }
 
       if (!context.suppressProgressNotices) {
+        const baseNoticeDescription = localizer(
+          context.locale,
+          isInpaintMode ? "genai.image.editing_description" : "genai.image.generating_description",
+          isInpaintMode ? { edit_target: editTarget as string } : undefined,
+        );
+        const extraNoticeLines: string[] = [];
+        if ((context.tomoriState.config.nai_style_tags ?? []).length > 0) {
+          extraNoticeLines.push(localizer(context.locale, "genai.image.notice_nai_tags_help_line"));
+        }
+        if (messageId) {
+          extraNoticeLines.push(
+            localizer(context.locale, "genai.image.notice_reference_count_line", {
+              count: "1",
+            }),
+          );
+        }
+        extraNoticeLines.push(...buildCharacterNoticeLines(context.locale, characters));
         await sendToolProgressNotice(
           context,
           isInpaintMode ? "image_editing" : "image_generation",
           {
             titleKey: isInpaintMode ? "genai.image.editing_title" : "genai.image.generating_title",
-            descriptionKey: isInpaintMode ? "genai.image.editing_description" : "genai.image.generating_description",
-            descriptionVars: isInpaintMode ? { edit_target: editTarget as string } : undefined,
-            footerKey: "genai.image.generating_footer",
+            description: buildImageToolNoticeDescription(
+              context.locale,
+              baseNoticeDescription,
+              baseModelCodename,
+              prompt,
+              localizer(context.locale, "genai.image.generating_footer"),
+              extraNoticeLines,
+            ),
             color: ColorCode.INFO,
           },
           "GenerateImageNaiTool",

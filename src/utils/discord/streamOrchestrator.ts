@@ -294,6 +294,10 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     }
   }
 
+  private notifyStreamProgress(context: StreamContext): void {
+    context.onStreamProgress?.();
+  }
+
   private buildThoughtLogPayload(state: StreamState): ThoughtLogPayload | undefined {
     const summary = state.thoughtSummarySegments.join("").trim();
     const raw = state.thoughtRawSegments.join("").trim();
@@ -459,6 +463,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
         // Reset inactivity timer on each chunk
         this.resetInactivityTimer(state, config, context);
+        this.notifyStreamProgress(context);
         metrics.totalChunks++;
 
         // Convert raw chunk to normalized format
@@ -1859,6 +1864,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       }
       state.messageSentCount++;
       state.accumulatedText += content; // Track all sent text for short-term memory
+      this.notifyStreamProgress(context);
       log.info(
         `Stream Send: Sent message (${state.messageSentCount}): "${content.length > 100 ? `${content.substring(0, 100)}...` : content}"`,
       );
@@ -1909,6 +1915,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
               }
               state.messageSentCount++;
               state.accumulatedText += content;
+              this.notifyStreamProgress(context);
               log.info("Stream Send: Recreated webhook after invalid webhook error and resumed persona sending");
               return;
             }

@@ -47,7 +47,8 @@ All callers pass a single `BuildContextParams` object (exported from `contextBui
 ```typescript
 {
   contextItems: StructuredContextItem[];  // Ordered prompt segments
-  tailDirectives: string[];               // End-of-prompt instructions
+  tailDirectives: string[];               // Highest-recency end-of-prompt instructions
+  lowerPriorityTailDirectives: string[];  // End-of-prompt notes injected slightly earlier
   uncensorDirective?: string;             // Optional uncensor instruction
 }
 ```
@@ -139,7 +140,10 @@ When `isUserImpersonation` is true, the preset routing is skipped entirely. Pres
 Tail directives are short instructions appended to the very last dialogue history item (closest to the model's response). They include:
 - Response format hints
 - Tool usage guidance
-- Uncensor directives (if applicable)
+
+TomoriBot also carries a lower-priority tail bucket for reminders that should sit near the end without owning the strongest recency slot. This is currently used for same-channel memory reminders, and the message pipeline also places emoji repetition guidance there.
+
+The uncensor directive is kept isolated and injected after the other tail messages so it retains the strongest recency signal when enabled.
 
 These pass through unchanged in both native and preset modes.
 

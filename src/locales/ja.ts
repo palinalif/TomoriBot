@@ -241,7 +241,12 @@ export default {
       generating_with_references_description: "現在のプロンプトと参照画像を使って画像を作成しています",
       editing_title: "🖌️ 画像を編集中...",
       editing_description: "参照画像の `{edit_target}` を対象に編集しています",
-      generating_footer: "プロバイダーの混雑状況によって少し時間がかかる場合があります",
+      notice_model_line: "**モデル:** {model}",
+      notice_prompt_line: "**プロンプト:** {prompt}",
+      notice_character_prompt_line: "**キャラクター {index}:** {prompt}",
+      notice_nai_tags_help_line: "より良いNovelAI画像を生成するには `/novelai image-tags` を使ってください。",
+      notice_reference_count_line: "参照画像を {count} 枚使用しています。",
+      generating_footer: "プロバイダーの混雑状況によって少し時間がかかる場合があります。",
     },
 
     vision: {

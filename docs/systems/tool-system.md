@@ -248,3 +248,4 @@ Behavior notes:
 - hidden notices from private channels are suppressed instead of being rerouted, so private-channel activity never leaks to thoughtlogs
 - hidden notices in DMs are suppressed because DMs have no guild thought-log destination
 - all tool notices include a footer hint pointing users to `/config tool-notices visibility`
+- image-generation and image-editing notices now append the active diffusion model codename and a trimmed copy of the raw tool-call prompt, plus lightweight execution hints such as configured style tags or reference-image usage; server-side style-tag contents, defaults, and other system-added prompt material are not shown

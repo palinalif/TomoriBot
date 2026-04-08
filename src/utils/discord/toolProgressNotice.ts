@@ -1,4 +1,4 @@
-import type { BaseGuildTextChannel } from "discord.js";
+import { escapeMarkdown, type BaseGuildTextChannel } from "discord.js";
 import type { StandardEmbedOptions } from "@/types/discord/embed";
 import type { ToolContext } from "@/types/tool/interfaces";
 import type { TomoriConfigRow } from "@/types/db/schema";
@@ -8,6 +8,7 @@ import { localizer } from "@/utils/text/localizer";
 import { log } from "@/utils/misc/logger";
 
 const HIDE_NOTICE_FOOTER_KEY = "genai.tool_notice.hide_footer";
+const IMAGE_NOTICE_PROMPT_PREVIEW_LENGTH = 700;
 
 function resolveDescription(locale: string, options: StandardEmbedOptions): string {
   const baseDescription = options.description
@@ -54,6 +55,37 @@ function isDMBasedChannel(channel: ToolContext["channel"]): boolean {
 
 function getSourceLine(context: ToolContext): string {
   return context.message?.url ?? context.channel.toString();
+}
+
+function truncateNoticeText(value: string, maxLength: number): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+export function buildImageToolNoticeDescription(
+  locale: string,
+  baseDescription: string,
+  model: string,
+  prompt: string,
+  timingLine: string,
+  extraLines: string[] = [],
+): string {
+  const safeModel = `\`${escapeMarkdown(model.trim())}\``;
+  const safePrompt = `\`${escapeMarkdown(truncateNoticeText(prompt, IMAGE_NOTICE_PROMPT_PREVIEW_LENGTH))}\``;
+
+  return [
+    baseDescription.trim(),
+    localizer(locale, "genai.image.notice_model_line", { model: safeModel }),
+    localizer(locale, "genai.image.notice_prompt_line", { prompt: safePrompt }),
+    ...extraLines.map((line) => line.trim()).filter((line) => line.length > 0),
+    timingLine.trim(),
+  ]
+    .filter((part) => part.length > 0)
+    .join("\n");
 }
 
 export function isToolNoticeVisible(config: TomoriConfigRow, key: ToolNoticeKey): boolean {
