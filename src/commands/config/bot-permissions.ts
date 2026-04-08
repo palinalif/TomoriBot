@@ -14,7 +14,9 @@ import { type UserRow, type ErrorContext, tomoriConfigSchema, type TomoriConfigR
 import { sql } from "@/utils/db/client";
 import { hasOptApiKey } from "@/utils/security/crypto";
 import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
-import type { CheckboxGroupOption } from "@/types/discord/modal";
+import type { CheckboxGroupOption, ModalCheckboxGroupField } from "@/types/discord/modal";
+
+const PERMISSIONS_MAX_OPTIONS_PER_GROUP = 10;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -192,6 +194,26 @@ export async function execute(
       default: def.getState(tomoriState.config),
     }));
 
+    const checkboxGroups: ModalCheckboxGroupField[] = [];
+    for (let index = 0; index < checkboxOptions.length; index += PERMISSIONS_MAX_OPTIONS_PER_GROUP) {
+      const optionsChunk = checkboxOptions.slice(index, index + PERMISSIONS_MAX_OPTIONS_PER_GROUP);
+      const groupIndex = Math.floor(index / PERMISSIONS_MAX_OPTIONS_PER_GROUP);
+
+      checkboxGroups.push({
+        kind: "checkboxGroup" as const,
+        customId: `${PERMISSIONS_CHECKBOX_ID}_${groupIndex}`,
+        labelKey:
+          groupIndex === 0
+            ? "commands.config.permissions.select_placeholder"
+            : "commands.config.permissions.checkbox_label_continued",
+        descriptionKey: groupIndex === 0 ? "commands.config.permissions.select_embed_description" : undefined,
+        minValues: 0,
+        maxValues: optionsChunk.length,
+        required: false,
+        options: optionsChunk,
+      });
+    }
+
     // 5. Show the checkbox modal — first interaction acknowledgment
     const modalResult = await promptWithRawModal(
       interaction,
@@ -199,17 +221,7 @@ export async function execute(
       {
         modalCustomId: MODAL_CUSTOM_ID,
         modalTitleKey: "commands.config.permissions.select_embed_title",
-        components: [
-          {
-            kind: "checkboxGroup",
-            customId: PERMISSIONS_CHECKBOX_ID,
-            labelKey: "commands.config.permissions.select_placeholder",
-            descriptionKey: "commands.config.permissions.select_embed_description",
-            minValues: 0,
-            required: false,
-            options: checkboxOptions,
-          },
-        ],
+        components: checkboxGroups,
       },
       MessageFlags.Ephemeral,
     );
@@ -223,7 +235,13 @@ export async function execute(
     modalInteraction = modalResult.interaction;
 
     // 6. Determine which permissions changed
-    const newlyEnabled = new Set(modalResult.multiValues?.[PERMISSIONS_CHECKBOX_ID] ?? []);
+    const newlyEnabled = new Set<string>();
+    for (let groupIndex = 0; groupIndex < checkboxGroups.length; groupIndex++) {
+      const selectedValues = modalResult.multiValues?.[`${PERMISSIONS_CHECKBOX_ID}_${groupIndex}`] ?? [];
+      for (const selectedValue of selectedValues) {
+        newlyEnabled.add(selectedValue);
+      }
+    }
     const changes: Array<{
       dbColumn: string;
       isEnabled: boolean;

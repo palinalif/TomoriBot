@@ -138,7 +138,7 @@ Each persona has its own `elevenlabs_voice_id` and `elevenlabs_voice_name` colum
 | `source` | `"user_stt"` (inbound) or `"tts"` (outbound) |
 | TTL | `VOICE_TRANSCRIPT_CACHE_TTL_MINUTES` (default: 120 min) |
 
-On cache miss, history formatting falls back to `[Attachment: filename.mp3]`. The current-turn user message is always re-transcribed fresh — the cache only speeds up older history entries.
+On cache miss, history formatting falls back to a standardized system hint such as `[System: A file named \`filename.mp3\` is attached (message ID: media_1)]`. The current-turn user message is always re-transcribed fresh — the cache only speeds up older history entries.
 
 ---
 

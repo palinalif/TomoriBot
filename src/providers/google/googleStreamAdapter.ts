@@ -1165,7 +1165,7 @@ export class GoogleStreamAdapter implements StreamProvider {
 
                     // Add a text label before the keyframes
                     geminiParts.push({
-                      text: `[Animated GIF - ${keyframes.length} keyframes extracted from ${keyframes[0].totalFrames} total frames]`,
+                      text: `[System: Animated GIF; ${keyframes.length} keyframes extracted from ${keyframes[0].totalFrames} total frames.]`,
                     });
 
                     // Add each keyframe as a separate image with a label

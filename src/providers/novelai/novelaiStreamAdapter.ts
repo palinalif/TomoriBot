@@ -1947,7 +1947,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
 
       // Strip fetch capability reminder fields recursively to save tokens
       const sanitizedResponse = this.stripFetchReminderFields(item.functionResponse);
-      lines.push(`[Tool Result] ${JSON.stringify(sanitizedResponse)}`);
+      lines.push(`[System: Tool result] ${JSON.stringify(sanitizedResponse)}`);
 
       if (item.imageMetadata?.messageIds?.length) {
         lines.push(

@@ -1128,13 +1128,24 @@ function appendSupportedMediaFromMessage(
   return { imageCount, videoCount };
 }
 
-function formatInlineSystemContent(content: string | null | undefined, fallbackText = "[No text content]"): string {
+function formatInlineSystemContent(
+  content: string | null | undefined,
+  fallbackText = "[System: No text content was included]",
+): string {
   const normalizedContent = content?.replace(/\n/g, " ").trim();
   if (!normalizedContent) {
     return fallbackText;
   }
 
   return normalizedContent;
+}
+
+function formatAttachmentSystemHint(filename: string, messageId: string): string {
+  return `[System: A file named \`${filename}\` is attached (message ID: ${messageId})]`;
+}
+
+function formatSystemProducedEmbedHint(embedBody: string): string {
+  return `[System: The following content came from a system-produced embed]\n${embedBody}`;
 }
 
 function formatForwardedAuthorName(
@@ -2807,7 +2818,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
         // Format with "Link Content:" prefix if we have any content
         if (contentParts.length > 0) {
-          textContent = `[Embed Content: ${contentParts.join(" - ")}]`;
+          textContent = `[System: Link preview embed content: ${contentParts.join(" - ")}]`;
         }
 
         // 4. Process embed image if present
@@ -3582,11 +3593,29 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           try {
             const msgReferencedMessage = await channel.messages.fetch(msg.reference.messageId);
             if (msgReferencedMessage) {
-              // Get the author name for the referenced message
+              // Resolve the referenced author using the same nickname/display-name rules
+              // as normal history authors so reply annotations don't leak raw account names.
+              const referencedWebhookName = stripBridgePrefix(msgReferencedMessage.author.username);
+              const referencedMatchedPersona = msgReferencedMessage.webhookId
+                ? personaByNickname.get(referencedWebhookName.toLowerCase())
+                : undefined;
+              const referencedUserRow = await getCachedUserRow(msgReferencedMessage.author.id);
+              const referencedUserBlacklisted = await getCachedBlacklistStatus(
+                serverDiscId,
+                msgReferencedMessage.author.id,
+              );
+              const referencedFallbackName = resolvePreferredDiscordDisplayName({
+                memberDisplayName: msgReferencedMessage.member?.displayName,
+                user: msgReferencedMessage.author,
+                fallback: referencedWebhookName,
+              });
               const referencedAuthorName =
                 msgReferencedMessage.author.id === client.user?.id
                   ? tomoriState?.tomori_nickname || "Bot"
-                  : msgReferencedMessage.author.username;
+                  : (referencedMatchedPersona?.tomori_nickname ??
+                    (referencedUserBlacklisted || serverPersonalizationDisabled || !referencedUserRow?.user_nickname
+                      ? referencedFallbackName
+                      : referencedUserRow.user_nickname));
 
               // Preserve the full quoted reply text; prompt-level history truncation
               // should decide what to drop, not this inline reply annotation.
@@ -3853,7 +3882,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       embedCheck.type === "reward" ||
                       embedCheck.type === "punish"
                         ? `[System: ${embedBody}]`
-                        : `[The following is a system-produced embed]\n${embedBody}`;
+                        : formatSystemProducedEmbedHint(embedBody);
                     forwardedTextSegments.push(embedContent);
                   }
                 } else if (selfDebugEnabled && isForwardedTomoriAuthoredMessage && shouldIncludeSelfDebugEmbed(embed)) {
@@ -4012,7 +4041,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 const embedContent =
                   embedCheck.type === "memory_learning" || embedCheck.type === "reward" || embedCheck.type === "punish"
                     ? `[System: ${embedBody}]`
-                    : `[The following is a system-produced embed]\n${embedBody}`;
+                    : formatSystemProducedEmbedHint(embedBody);
                 messageContentForLlm = messageContentForLlm ? `${messageContentForLlm}\n${embedContent}` : embedContent;
                 hasProcessedEmbed = true;
               }
@@ -4135,13 +4164,13 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 // so the LLM still knows an audio file was present.
                 else {
                   const attachName = attachment.name ?? "file";
-                  const attachHint = `[Attachment: ${attachName} (message ID: ${messageIdMap.register(msg.id, "media")})]`;
+                  const attachHint = formatAttachmentSystemHint(attachName, messageIdMap.register(msg.id, "media"));
                   messageContentForLlm = messageContentForLlm ? `${messageContentForLlm} ${attachHint}` : attachHint;
                 }
               }
             } else {
               const attachName = attachment.name ?? "file";
-              const attachHint = `[Attachment: ${attachName} (message ID: ${messageIdMap.register(msg.id, "media")})]`;
+              const attachHint = formatAttachmentSystemHint(attachName, messageIdMap.register(msg.id, "media"));
               messageContentForLlm = messageContentForLlm ? `${messageContentForLlm} ${attachHint}` : attachHint;
             }
           }
@@ -4550,7 +4579,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
             if (isSelfReminder) {
               reminderContent = `[System: A task reminder you set for yourself has triggered. Task: "${reminderData.reminder_purpose}". Please execute this task now. Do NOT create, save, or schedule this reminder again.]`;
               if (reminderData.reminder_lateness) {
-                reminderContent += ` [This task is ${reminderData.reminder_lateness} overdue.]`;
+                reminderContent += `\n[System: This task is ${reminderData.reminder_lateness} overdue.]`;
               }
             } else if (reminderRecipientID && isBridgeUserId(reminderRecipientID)) {
               // Matrix user IDs (@user:server) must not be wrapped in <@...> Discord mention
@@ -4558,14 +4587,14 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               // Strip the server suffix for display; use @{localpart} as the mention
               // placeholder (matrixRelay.ts converts this to a proper HTML Matrix mention).
               const matrixLocalpart = reminderRecipientID.split(":")[0].replace(/^@/, "");
-              reminderContent = `[A reminder you have set before for @${matrixLocalpart} (Mention ID: @{${matrixLocalpart}}) has been triggered. The reminder is about: "${reminderData.reminder_purpose}". Do NOT create, save, or schedule this reminder again.]`;
+              reminderContent = `[System: A reminder you set earlier for @${matrixLocalpart} (Mention ID: @{${matrixLocalpart}}) has triggered. Reminder: "${reminderData.reminder_purpose}". Do NOT create, save, or schedule this reminder again.]`;
               if (reminderData.reminder_lateness) {
-                reminderContent += ` [You are also ${reminderData.reminder_lateness} to remind the user.]`;
+                reminderContent += `\n[System: You are also ${reminderData.reminder_lateness} late in reminding the user.]`;
               }
             } else {
-              reminderContent = `[A reminder you have set before for <@${reminderRecipientID}> (Mention ID: ${reminderRecipientID}) has been triggered. The reminder is about: "${reminderData.reminder_purpose}". Do NOT create, save, or schedule this reminder again.]`;
+              reminderContent = `[System: A reminder you set earlier for <@${reminderRecipientID}> (Mention ID: ${reminderRecipientID}) has triggered. Reminder: "${reminderData.reminder_purpose}". Do NOT create, save, or schedule this reminder again.]`;
               if (reminderData.reminder_lateness) {
-                reminderContent += ` [You are also ${reminderData.reminder_lateness} to remind the user.]`;
+                reminderContent += `\n[System: You are also ${reminderData.reminder_lateness} late in reminding the user.]`;
               }
             }
 
@@ -4617,7 +4646,9 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               isFromPersona && selectedPersonaNickname && lastMessagePersonaNickname === selectedPersonaNickname;
 
             // 3. Check if the last message contains embeds (skip continuation for embeds)
-            const isEmbedMessage = lastMessage.content?.includes("[The following is a system-produced embed]") ?? false;
+            const isEmbedMessage =
+              lastMessage.content?.includes("[System: The following content came from a system-produced embed]") ??
+              false;
 
             const isNovelaiKayraOrErato =
               tomoriState.llm.llm_provider === "novelai" &&
@@ -5961,6 +5992,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                     isUserImpersonation,
                     impersonatedUserId,
                     contextItems: contextSegments,
+                    messageIdMap: streamingContext.messageIdMap,
                   };
 
                   // Execute tool using ToolRegistry (handles both built-in and MCP tools seamlessly)
@@ -6150,7 +6182,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       (toolResult.data as Record<string, unknown>).type === "context_restart_with_gif"
                     ) {
                       const restartData = toolResult.data as Record<string, unknown>;
-                      const messageId = restartData.message_id as string;
+                      const messageId = (restartData.message_id as string) || (restartData.media_id as string);
                       const frameCount = restartData.frame_count as number;
 
                       log.info(

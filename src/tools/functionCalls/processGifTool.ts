@@ -250,7 +250,7 @@ export class ProcessGifTool extends BaseTool {
       // Add initial text label for the GIF
       frameParts.push({
         type: "text",
-        text: `[Animated GIF from message ${messageId} - ${processedFrames.length} keyframes extracted from ${processedFrames[0].totalFrames} total frames]`,
+        text: `[System: Animated GIF from message ${messageId}; ${processedFrames.length} keyframes extracted from ${processedFrames[0].totalFrames} total frames.]`,
       });
 
       // Add each keyframe with a label (matching googleStreamAdapter pattern)
@@ -291,6 +291,7 @@ export class ProcessGifTool extends BaseTool {
         message: `Successfully processed GIF with ${processedFrames.length} keyframes from message ${messageId}. Processing took ${processingTime}ms.`,
         data: {
           type: "context_restart_with_gif",
+          message_id: messageId,
           media_id: messageId,
           frame_count: processedFrames.length,
           processing_time_ms: processingTime,

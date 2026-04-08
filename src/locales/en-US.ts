@@ -3394,6 +3394,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         voicemessage_desc: "Send ElevenLabs TTS voice messages",
         // Checkbox select menu UI strings
         select_placeholder: "Select permissions to enable...",
+        checkbox_label_continued: "Permissions (Continued)",
         select_embed_title: "Configure Permissions",
         select_embed_description: "Select which permissions to enable. Checked = active, unchecked = disabled.",
         no_changes_title: "No Changes Made",
