@@ -3236,7 +3236,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           already_set_title: `Temperature Already Set`,
           already_set_description: `The temperature is already set to \`{temperature}\`.`,
           success_title: `Temperature Updated`,
-          success_description: `LLM temperature changed from \`{previous_temperature}\` to \`{temperature}\`.\n**Supported by:** Google, OpenRouter, NovelAI, DeepSeek, Z.ai, Custom, NVIDIA NIM`,
+          success_description: `LLM temperature changed from \`{previous_temperature}\` to \`{temperature}\`.\n**Supported by:** {supported_providers}`,
         },
         "top-p": {
           description: `Set top-P nucleus sampling threshold (default: 0.95).`,
@@ -3246,7 +3246,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           already_set_title: `Top-P Already Set`,
           already_set_description: `Top-P is already set to \`{top_p}\`.`,
           success_title: `Top-P Updated`,
-          success_description: `Top-P changed from \`{previous_top_p}\` to \`{top_p}\`.\n**Supported by:** Google, OpenRouter, NovelAI, DeepSeek, Z.ai, NVIDIA NIM`,
+          success_description: `Top-P changed from \`{previous_top_p}\` to \`{top_p}\`.\n**Supported by:** {supported_providers}`,
         },
         "top-k": {
           description: `Set top-K candidate token limit (default: 0).`,
@@ -3256,7 +3256,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           already_set_title: `Top-K Already Set`,
           already_set_description: `Top-K is already set to \`{top_k}\`.`,
           success_title: `Top-K Updated`,
-          success_description: `Top-K changed from \`{previous_top_k}\` to \`{top_k}\`.\n**Supported by:** Google, OpenRouter, NovelAI, DeepSeek, Z.ai, NVIDIA NIM`,
+          success_description: `Top-K changed from \`{previous_top_k}\` to \`{top_k}\`.\n**Supported by:** {supported_providers}`,
         },
         "frequency-penalty": {
           description: `Set frequency penalty for repeated tokens (default: 0.0).`,
@@ -3266,7 +3266,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           already_set_title: `Frequency Penalty Already Set`,
           already_set_description: `Frequency penalty is already set to \`{frequency_penalty}\`.`,
           success_title: `Frequency Penalty Updated`,
-          success_description: `Frequency penalty changed from \`{previous_frequency_penalty}\` to \`{frequency_penalty}\`.\n**Supported by:** OpenRouter, NovelAI, DeepSeek, Z.ai, NVIDIA NIM`,
+          success_description: `Frequency penalty changed from \`{previous_frequency_penalty}\` to \`{frequency_penalty}\`.\n**Supported by:** {supported_providers}`,
         },
         "presence-penalty": {
           description: `Set presence penalty for repeated topics (default: 0.0).`,
@@ -3276,7 +3276,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           already_set_title: `Presence Penalty Already Set`,
           already_set_description: `Presence penalty is already set to \`{presence_penalty}\`.`,
           success_title: `Presence Penalty Updated`,
-          success_description: `Presence penalty changed from \`{previous_presence_penalty}\` to \`{presence_penalty}\`.\n**Supported by:** OpenRouter, NovelAI, DeepSeek, Z.ai, NVIDIA NIM`,
+          success_description: `Presence penalty changed from \`{previous_presence_penalty}\` to \`{presence_penalty}\`.\n**Supported by:** {supported_providers}`,
         },
         "min-p": {
           description: `Set min-P minimum probability threshold (default: 0.0).`,
@@ -3286,7 +3286,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           already_set_title: `Min-P Already Set`,
           already_set_description: `Min-P is already set to \`{min_p}\`.`,
           success_title: `Min-P Updated`,
-          success_description: `Min-P changed from \`{previous_min_p}\` to \`{min_p}\`.\n**Supported by:** OpenRouter, NovelAI, DeepSeek, Z.ai, NVIDIA NIM`,
+          success_description: `Min-P changed from \`{previous_min_p}\` to \`{min_p}\`.\n**Supported by:** {supported_providers}`,
         },
       },
       "logit-bias": {

@@ -10,6 +10,7 @@ import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
 import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
+import { getProviderDisplayNamesForParam } from "../../../utils/provider/providerInfoRegistry";
 
 // Neutral value: 1.0 = full probability distribution (disabled)
 const TOP_P_MIN = 0.0;
@@ -151,6 +152,7 @@ export async function execute(
       descriptionVars: {
         top_p: newValue.toFixed(2),
         previous_top_p: currentValue.toFixed(2),
+        supported_providers: getProviderDisplayNamesForParam("topP", locale),
       },
       color: ColorCode.SUCCESS,
     });

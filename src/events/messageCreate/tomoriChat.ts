@@ -734,6 +734,29 @@ function buildTailDirectiveMessage(directive: string | null | undefined): Struct
   return buildCombinedTailDirectiveMessage([directive]);
 }
 
+function insertBeforeLatestDialoguePair(
+  contextSegments: StructuredContextItem[],
+  injectedItem: StructuredContextItem,
+): void {
+  const dialogueIndexes: number[] = [];
+
+  for (let i = contextSegments.length - 1; i >= 0; i--) {
+    const item = contextSegments[i];
+    if (item.metadataTag === ContextItemTag.DIALOGUE_HISTORY && (item.role === "user" || item.role === "model")) {
+      dialogueIndexes.push(i);
+      if (dialogueIndexes.length === 2) break;
+    }
+  }
+
+  if (dialogueIndexes.length === 0) {
+    contextSegments.push(injectedItem);
+    return;
+  }
+
+  const insertAt = dialogueIndexes.length >= 2 ? dialogueIndexes[1] : dialogueIndexes[0];
+  contextSegments.splice(insertAt, 0, injectedItem);
+}
+
 /**
  * Creates a regex that matches a trigger word with "screaming" support.
  * Allows repeated vowels/consonants, e.g., "Lilja" matches "Liiiljaaaa".
@@ -4921,7 +4944,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
             const lowerPriorityTailMessage = buildCombinedTailDirectiveMessage(lowerPriorityTailDirectives);
             if (lowerPriorityTailMessage) {
-              contextSegments.push(lowerPriorityTailMessage);
+              insertBeforeLatestDialoguePair(contextSegments, lowerPriorityTailMessage);
             }
 
             const combinedTailMessage = buildCombinedTailDirectiveMessage(tailDirectives);
@@ -6474,7 +6497,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
                       const lowerPriorityTailMessage = buildCombinedTailDirectiveMessage(lowerPriorityTailDirectives);
                       if (lowerPriorityTailMessage) {
-                        contextSegments.push(lowerPriorityTailMessage);
+                        insertBeforeLatestDialoguePair(contextSegments, lowerPriorityTailMessage);
                       }
 
                       const combinedTailMessage = buildCombinedTailDirectiveMessage(tailDirectives);

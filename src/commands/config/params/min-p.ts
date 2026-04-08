@@ -10,6 +10,7 @@ import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
 import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
+import { getProviderDisplayNamesForParam } from "../../../utils/provider/providerInfoRegistry";
 
 // Neutral value: 0.0 = disabled (no minimum probability cutoff)
 const MIN_P_MIN = 0.0;
@@ -152,6 +153,7 @@ export async function execute(
       descriptionVars: {
         min_p: newValue.toFixed(2),
         previous_min_p: currentValue.toFixed(2),
+        supported_providers: getProviderDisplayNamesForParam("minP", locale),
       },
       color: ColorCode.SUCCESS,
     });

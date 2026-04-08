@@ -33,4 +33,5 @@ export const vertexProviderInfo: ProviderInfo = {
     conversationCompaction: true,
     historyExtraction: true,
   },
+  supportedParams: ["temperature", "topP", "topK"] as const,
 };

@@ -22,4 +22,5 @@ export const nvidiaProviderInfo: ProviderInfo = {
     conversationCompaction: true,
     historyExtraction: true,
   },
+  supportedParams: ["temperature", "topP", "topK", "frequencyPenalty", "presencePenalty", "minP"] as const,
 };

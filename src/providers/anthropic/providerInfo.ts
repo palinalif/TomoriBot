@@ -22,4 +22,5 @@ export const anthropicProviderInfo: ProviderInfo = {
     conversationCompaction: true,
     historyExtraction: true,
   },
+  supportedParams: ["temperature", "topP", "topK"] as const,
 };

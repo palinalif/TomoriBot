@@ -22,4 +22,5 @@ export const googleProviderInfo: ProviderInfo = {
     conversationCompaction: true,
     historyExtraction: true,
   },
+  supportedParams: ["temperature", "topP", "topK", "frequencyPenalty", "presencePenalty"] as const,
 };

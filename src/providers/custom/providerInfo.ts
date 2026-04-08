@@ -22,4 +22,5 @@ export const customProviderInfo: ProviderInfo = {
     conversationCompaction: true,
     historyExtraction: true,
   },
+  supportedParams: [] as const,
 };

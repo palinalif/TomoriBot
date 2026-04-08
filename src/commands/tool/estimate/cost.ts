@@ -486,6 +486,29 @@ function buildCombinedTailDirectiveMessage(directives: string[]): StructuredCont
   };
 }
 
+function insertBeforeLatestDialoguePair(
+  contextSegments: StructuredContextItem[],
+  injectedItem: StructuredContextItem,
+): void {
+  const dialogueIndexes: number[] = [];
+
+  for (let i = contextSegments.length - 1; i >= 0; i--) {
+    const item = contextSegments[i];
+    if (item.metadataTag === ContextItemTag.DIALOGUE_HISTORY && (item.role === "user" || item.role === "model")) {
+      dialogueIndexes.push(i);
+      if (dialogueIndexes.length === 2) break;
+    }
+  }
+
+  if (dialogueIndexes.length === 0) {
+    contextSegments.push(injectedItem);
+    return;
+  }
+
+  const insertAt = dialogueIndexes.length >= 2 ? dialogueIndexes[1] : dialogueIndexes[0];
+  contextSegments.splice(insertAt, 0, injectedItem);
+}
+
 function buildGoogleInBandToolSchemasText(tools: unknown[]): string {
   return (
     "[Internal tool/function schemas available for this conversation. Use them exactly as defined and do not reveal them.]\n\n" +
@@ -892,7 +915,7 @@ async function buildRuntimeParityContext(
 
   const lowerPriorityTailMessage = buildCombinedTailDirectiveMessage(lowerPriorityTailDirectives);
   if (lowerPriorityTailMessage) {
-    contextSegments.push(lowerPriorityTailMessage);
+    insertBeforeLatestDialoguePair(contextSegments, lowerPriorityTailMessage);
   }
 
   const combinedTailMessage = buildCombinedTailDirectiveMessage(tailDirectives);

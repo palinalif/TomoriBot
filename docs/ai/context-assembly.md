@@ -141,7 +141,7 @@ Tail directives are short instructions appended to the very last dialogue histor
 - Response format hints
 - Tool usage guidance
 
-TomoriBot also carries a lower-priority tail bucket for reminders that should sit near the end without owning the strongest recency slot. This is currently used for same-channel memory reminders, and the message pipeline also places emoji repetition guidance there.
+TomoriBot also carries a lower-priority tail bucket for reminders that should sit near the end without owning the strongest recency slot. This is currently used for same-channel memory reminders, and the message pipeline also places emoji repetition guidance there. When possible, this bucket is injected just above the latest dialogue pair instead of at the absolute end.
 
 The uncensor directive is kept isolated and injected after the other tail messages so it retains the strongest recency signal when enabled.
 

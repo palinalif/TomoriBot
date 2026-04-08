@@ -10,6 +10,7 @@ import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
 import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
+import { getProviderDisplayNamesForParam } from "../../../utils/provider/providerInfoRegistry";
 
 // Neutral value: 0 = disabled (use model default)
 const TOP_K_MIN = 0;
@@ -151,6 +152,7 @@ export async function execute(
       descriptionVars: {
         top_k: String(newValue),
         previous_top_k: String(currentValue),
+        supported_providers: getProviderDisplayNamesForParam("topK", locale),
       },
       color: ColorCode.SUCCESS,
     });

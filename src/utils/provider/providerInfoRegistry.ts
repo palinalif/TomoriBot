@@ -1,4 +1,9 @@
-import type { ProviderApiFamily, ProviderFeatureSupport, ProviderInfo } from "@/types/provider/interfaces";
+import type {
+  ProviderApiFamily,
+  ProviderFeatureSupport,
+  ProviderInfo,
+  SupportedParam,
+} from "@/types/provider/interfaces";
 import { customProviderInfo } from "@/providers/custom/providerInfo";
 import { deepseekProviderInfo } from "@/providers/deepseek/providerInfo";
 import { zaiProviderInfo } from "@/providers/zai/providerInfo";
@@ -100,4 +105,14 @@ export function resolveProviderFeatureImplementation(
 ): ProviderFeatureImplementation | null {
   const canonicalName = normalizeProviderName(providerName);
   return providerFeatureImplementations[featureName]?.[canonicalName] ?? null;
+}
+
+/**
+ * Returns a locale-formatted list of provider display names
+ * that support the given generation parameter.
+ */
+export function getProviderDisplayNamesForParam(param: SupportedParam, locale: string): string {
+  const separator = locale === "ja" ? "\u3001" : ", ";
+  const names = providerInfos.filter((info) => info.supportedParams.includes(param)).map((info) => info.displayName);
+  return names.join(separator);
 }

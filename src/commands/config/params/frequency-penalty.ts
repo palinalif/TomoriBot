@@ -10,6 +10,7 @@ import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
 import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
+import { getProviderDisplayNamesForParam } from "../../../utils/provider/providerInfoRegistry";
 
 // Neutral value: 0.0 = no penalty applied
 const FREQUENCY_PENALTY_MIN = -2.0;
@@ -160,6 +161,7 @@ export async function execute(
       descriptionVars: {
         frequency_penalty: newValue.toFixed(2),
         previous_frequency_penalty: currentValue.toFixed(2),
+        supported_providers: getProviderDisplayNamesForParam("frequencyPenalty", locale),
       },
       color: ColorCode.SUCCESS,
     });

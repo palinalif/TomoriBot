@@ -10,6 +10,7 @@ import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
 import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import { sql } from "@/utils/db/client";
+import { getProviderDisplayNamesForParam } from "../../../utils/provider/providerInfoRegistry";
 
 // Define constants at the top (Rule #20)
 const TEMPERATURE_MIN = 0;
@@ -160,6 +161,7 @@ export async function execute(
       descriptionVars: {
         temperature: temperatureValue.toFixed(1),
         previous_temperature: currentTemperature.toFixed(1),
+        supported_providers: getProviderDisplayNamesForParam("temperature", locale),
       },
       color: ColorCode.SUCCESS,
     });

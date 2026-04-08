@@ -20,6 +20,9 @@ import type { ProviderError } from "../stream/interfaces";
 
 export type ProviderApiFamily = "google-genai" | "openrouter" | "novelai" | "openai-compatible" | "anthropic";
 
+/** LLM generation parameters that providers may support via DB config. */
+export type SupportedParam = "temperature" | "topP" | "topK" | "frequencyPenalty" | "presencePenalty" | "minP";
+
 export interface ProviderFeatureSupport {
   nativeImageGeneration: boolean;
   nativeVideoGeneration: boolean;
@@ -111,6 +114,8 @@ export interface ProviderInfo {
   supportsVideos: boolean;
   apiFamily: ProviderApiFamily;
   featureSupport: ProviderFeatureSupport;
+  /** Generation parameters this provider reads from DB config and sends to its API. */
+  supportedParams: readonly SupportedParam[];
 }
 
 /**
