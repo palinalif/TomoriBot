@@ -108,6 +108,7 @@ const selfReplyChain = [
 - Each trigger message can enqueue up to the configured multi-trigger cap
 - **Depth** = how many generations deep the chain has gone
 - **Limit** = maximum allowed depth (not counting the user/manual trigger)
+- **`limit = 2` means**: the user/manual turn at depth `0`, then up to **2 self-trigger levels** (`depth = 1` and `depth = 2`). It does **not** mean "only 2 total bot messages."
 
 ### How It Works
 
@@ -143,6 +144,14 @@ User: "@A"                          → depth 0 (bypass)
   E: "@G"                           → depth 4 (BLOCKED ❌)
 ```
 
+**Example with limit = 2:**
+```
+User: "@A"                          → depth 0 (bypass)
+  A: "@B"                           → depth 1
+  B: "@C"                           → depth 2 (last allowed self-trigger)
+  C: "@D"                           → depth 3 (BLOCKED ❌)
+```
+
 #### **Important: Depth Increments Per Trigger Message**
 
 If one persona mentions multiple personas, depth only increments **once**:
@@ -164,6 +173,10 @@ The chain resets (depth → 0) when:
 
 1. **User sends a message** → Immediate reset
 2. **30 minutes of inactivity** → Automatic reset (`SELF_REPLY_CHAIN_TTL_MS`)
+
+**Exception:** if the active user sends a natural-language stop message while a generation is already running, TomoriBot preserves the current depth and clears queued self-reply work for that chain instead of resetting it.
+
+Auto-trigger note: auto-chat / always-reply channel behavior only qualifies on real user-like messages. Persona self-messages do not advance the shared auto-chat counter and do not auto-trigger fresh self turns by themselves.
 
 ### Configuration
 
@@ -245,6 +258,11 @@ Level 4       ❌         ❌         ❌        ❌  BLOCKED
 **Want to disable cascading entirely?**
 - Set limit to 0: `/config self-reply-limit limit:0`
 - Only user/manual triggers will work, no persona-to-persona chains
+
+**Need to stop a persona chain without reopening the limit budget?**
+- Send a natural stop message while your generation is active
+- TomoriBot will stop the active stream and clear queued self-reply work for that chain
+- Unlike a normal user message, that stop message does not reset `depth` to `0`
 
 ## Webhook Strategy
 

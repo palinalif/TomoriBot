@@ -186,8 +186,8 @@ export default {
       footer: `Provider: {provider} | Model: {model}`,
     },
     message_interaction: {
-      reply_context_description: `Replying to: {message_url}`,
-      reply_context_footer: `Replying to a previous message by {user}`,
+      reply_context_description: `{message_url}`,
+      reply_context_footer: `Replying to {user}`,
     },
 
     // Text quota errors

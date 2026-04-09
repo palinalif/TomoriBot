@@ -1670,6 +1670,49 @@ export function clearChannelProcessingQueue(channelId: string): number {
   return clearedCount;
 }
 
+function clearQueuedSelfReplyWork(
+  channelId: string,
+  allPersonas: TomoriState[],
+): { clearedPersonaJobCount: number; clearedSelfTriggerCount: number } {
+  const lockEntry = channelLocks.get(channelId);
+  if (!lockEntry || lockEntry.messageQueue.length === 0) {
+    return {
+      clearedPersonaJobCount: 0,
+      clearedSelfTriggerCount: 0,
+    };
+  }
+
+  let clearedPersonaJobCount = 0;
+  let clearedSelfTriggerCount = 0;
+
+  lockEntry.messageQueue = lockEntry.messageQueue.filter((queuedMsg) => {
+    if (queuedMsg.isPersonaJob) {
+      clearedPersonaJobCount++;
+      return false;
+    }
+
+    if (!queuedMsg.isManuallyTriggered && isSelfTriggerMessage(queuedMsg.message, allPersonas)) {
+      clearedSelfTriggerCount++;
+      return false;
+    }
+
+    return true;
+  });
+
+  const clearedTotal = clearedPersonaJobCount + clearedSelfTriggerCount;
+  if (clearedTotal > 0) {
+    log.info(
+      `Cleared ${clearedTotal} queued self-reply item(s) for channel ${channelId} ` +
+        `(personaJobs=${clearedPersonaJobCount}, selfTriggers=${clearedSelfTriggerCount}).`,
+    );
+  }
+
+  return {
+    clearedPersonaJobCount,
+    clearedSelfTriggerCount,
+  };
+}
+
 interface SelfReplyChainState {
   depth: number; // Number of self replies already generated in this chain
   lastWasSelf: boolean;
@@ -2003,6 +2046,16 @@ export default async function tomoriChat(
   // webhook/bot guards so TomoriBot responds to them like regular user messages.
   const isMatrixRelay = isMatrixRelayMessage(message);
   const isLikelySelfMessage = !isMatrixRelay && (isFromClientUser || isWebhookMessage);
+  const isRealUserMessage = isRealUserLikeMessage(message);
+  const naturalStopLockEntry =
+    !isStopResponse && !isManuallyTriggered && isRealUserMessage && isNaturalStopMessage(message.content)
+      ? channelLocks.get(channel.id)
+      : undefined;
+  const isActiveNaturalStopMessage = Boolean(
+    naturalStopLockEntry?.isLocked &&
+      Date.now() - naturalStopLockEntry.lockedAt <= CHANNEL_LOCK_TIMEOUT_MS &&
+      naturalStopLockEntry.userDiscId === message.author.id,
+  );
 
   const isSeedPlaceholderMessage =
     isFromClientUser &&
@@ -2047,7 +2100,7 @@ export default async function tomoriChat(
   // Note: The guard for replies to other bots' messages is placed after earlyAllPersonas
   // is loaded (below), so all persona/alter trigger words can be checked before blocking.
 
-  if (isRealUserLikeMessage(message)) {
+  if (isRealUserMessage && !isActiveNaturalStopMessage) {
     updateSelfReplyChainState(channel.id, false);
   }
 
@@ -2483,16 +2536,21 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
     // Handle stop requests while locked before rate limiting
     // Only the user whose generation is active can stop it with natural language stop words
-    if (
-      lockEntry.isLocked &&
-      !isStopResponse &&
-      !message.author.bot &&
-      !message.webhookId &&
-      lockEntry.userDiscId === message.author.id &&
-      isNaturalStopMessage(message.content)
-    ) {
+    if (lockEntry.isLocked && isActiveNaturalStopMessage) {
+      let clearedPersonaJobCount = 0;
+      let clearedSelfTriggerCount = 0;
+
+      try {
+        const allPersonas = await getCachedAllPersonas(serverDiscId);
+        ({ clearedPersonaJobCount, clearedSelfTriggerCount } = clearQueuedSelfReplyWork(channelLockId, allPersonas));
+      } catch (error) {
+        log.warn(`Failed to clear queued self-reply work for natural stop in channel ${channelLockId}`, error);
+      }
+
       log.info(
-        `Stop message detected in channel ${channelLockId} while processing message ${lockEntry.currentMessageId}. Signaling graceful stop.`,
+        `Stop message detected in channel ${channelLockId} while processing message ${lockEntry.currentMessageId}. ` +
+          `Signaling graceful stop after clearing queued self-reply work ` +
+          `(personaJobs=${clearedPersonaJobCount}, selfTriggers=${clearedSelfTriggerCount}).`,
       );
 
       const { StreamOrchestrator } = await import("../../utils/discord/streamOrchestrator");
@@ -3338,7 +3396,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       const { minThreshold, maxThreshold } = getAutochatRange(config);
       const isAutoCounterChannelActive = isAutochatCounterChannelActive(config, channel.id);
 
-      if (!message.author.bot && isAutoCounterChannelActive) {
+      if (isRealUserMessage && isAutoCounterChannelActive) {
         if (!tomoriState.tomori_id) {
           log.error(`Tomori ID missing for server ${serverDiscId} during counter increment.`);
         } else {
@@ -3471,21 +3529,19 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       } else {
         // Check if the shared auto-chat range hit for this message
         const config = tomoriState?.config;
-        const isAutoMsgHit = !!config && isAutochatCounterHit(tomoriState, message.channel.id);
+        const isAutoMsgHit =
+          !!config &&
+          isAutochatQualifyingMessage(message, isSelfMessage) &&
+          isAutochatCounterHit(tomoriState, message.channel.id);
         const isScopedAlwaysReplyActive =
           !!config &&
           isAutochatAlwaysReplyChannelActive(config, message.channel.id) &&
-          !isSelfMessage &&
-          !message.author.bot &&
-          !(message.channel instanceof DMChannel);
+          isAutochatQualifyingMessage(message, isSelfMessage);
 
         // Check if always-reply mode applies to this message:
         // Must be enabled, must be a real user message (not bot/webhook/self), and in a guild channel
         const isAlwaysReplyActive =
-          (!!config?.always_reply_enabled &&
-            !isSelfMessage &&
-            !message.author.bot &&
-            !(message.channel instanceof DMChannel)) ||
+          (!!config?.always_reply_enabled && isAutochatQualifyingMessage(message, isSelfMessage)) ||
           isScopedAlwaysReplyActive;
 
         // Determine matching personas using the helper function
@@ -7613,6 +7669,10 @@ function isAutochatConfiguredChannel(config: TomoriConfigRow, channelId: string)
   return config.autoch_disc_ids.length > 0 && config.autoch_disc_ids.includes(channelId);
 }
 
+function isAutochatQualifyingMessage(message: Message, isSelfMessage: boolean): boolean {
+  return !isSelfMessage && isRealUserLikeMessage(message) && !(message.channel instanceof DMChannel);
+}
+
 function isAutochatCounterChannelActive(config: TomoriConfigRow, channelId: string): boolean {
   const { minThreshold, maxThreshold } = getAutochatRange(config);
   return minThreshold > 0 && maxThreshold > 0 && isAutochatConfiguredChannel(config, channelId);
@@ -7945,13 +8005,12 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
   }
 
   // 5. Check if the shared auto-chat range hit for this message.
-  const isAutoMsgHit = isAutochatCounterHit(tomoriState, message.channel.id);
+  const isAutoMsgHit =
+    isAutochatQualifyingMessage(message, isSelfMessage) && isAutochatCounterHit(tomoriState, message.channel.id);
   const isScopedAlwaysReplyHit =
-    isAutochatAlwaysReplyChannelActive(config, message.channel.id) &&
-    !isSelfMessage &&
-    !message.author.bot &&
     !isMatrixRelayMessage &&
-    !(message.channel instanceof DMChannel);
+    isAutochatAlwaysReplyChannelActive(config, message.channel.id) &&
+    isAutochatQualifyingMessage(message, isSelfMessage);
 
   // 6. Check always-reply mode:
   // When enabled, main persona replies to all real user messages in guild channels.
@@ -7959,11 +8018,7 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
   // Auto-chat range 0-0 reuses this path, but only for configured auto-chat channels.
   // Persona selection (main vs alter) is handled downstream in determineMatchingPersonas().
   const isAlwaysReplyHit =
-    (config.always_reply_enabled &&
-      !isSelfMessage &&
-      !message.author.bot &&
-      !isMatrixRelayMessage &&
-      !(message.channel instanceof DMChannel)) ||
+    (config.always_reply_enabled && !isMatrixRelayMessage && isAutochatQualifyingMessage(message, isSelfMessage)) ||
     isScopedAlwaysReplyHit;
 
   // 7. Determine if bot should reply:
