@@ -546,7 +546,7 @@ export default {
 
       // HTTP status errors
       "401_default_message":
-        "Authentication failed. If your endpoint requires an API key, please check that it's configured correctly.",
+        "Authentication failed. If your endpoint requires an API key or Bearer token, please check that it's configured correctly.",
 
       "403_default_message": "Access denied by the custom endpoint. Please check your endpoint's access controls.",
 
@@ -1554,12 +1554,19 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         title: `Getting Started with TomoriBot`,
         embed_description: `Here's how to set up TomoriBot in your server (or DMs!):`,
         step1_title: `Step 1: Get an API Key`,
-        step1_description: `TomoriBot uses AI providers like Google Gemini, NovelAI, or OpenRouter. You'll need an API key from one of them.
+        step1_description: `TomoriBot supports multiple AI providers. You'll need an API key from one of them.
 - Use {helpApikey} to learn how to get one
-  - Google's Gemini = general-purpose, free, and can run all features
-  - NovelAI = uncensored role-playing and storytelling specialized
-  - OpenRouter = various available AI models
-- Do **NOT** share this API key with anyone else`,
+  - **Google Gemini** — general-purpose, free tier, runs all features
+  - **OpenRouter** — access to many AI models in one place
+  - **NovelAI** — uncensored role-playing and storytelling
+  - **DeepSeek** — cost-effective reasoning models
+  - **NVIDIA NIM** — hosted NVIDIA models
+  - **Anthropic** — Claude models
+  - **Vertex AI** — Google Cloud models
+  - **Z.ai (Zhipu)** — Chinese AI models with a coding plan
+  - **Custom** — any OpenAI-compatible endpoint (Ollama, vLLM, LiteLLM, etc.)
+- Do **NOT** share this API key with anyone else
+- Custom endpoints can add a Bearer auth token after setup via {configApiKeySet} or {configProviderSwitch}`,
         step2_title: `Step 2: Run the Setup Command`,
         step2_description: `- Use {configSetup} to securely add your API key and initialize TomoriBot
 - (Recommended) Run {serverInitializeExpressions} so I can properly use your server's emojis/stickers
@@ -1730,9 +1737,9 @@ Set during the capabilities prompt after entering the URL. Enter the exact name 
 Sent as the \`model\` field in every request.
 
 **API Key / Bearer Token**
-Optional. After setup, use \`/config api-key set\` again to store an auth token.
-If set, it is sent as \`Authorization: Bearer {token}\`.
-Leave unset for endpoints that require no authentication.`,
+Optional. After setup, use \`/config api-key set\` or \`/config provider switch\` to store a Bearer token.
+If set, it is sent as \`Authorization: Bearer {token}\` with every request.
+Leave unset for endpoints that require no authentication (e.g. local Ollama).`,
         // NVIDIA NIM
         nvidia_title: `Setting Up NVIDIA NIM API Key`,
         nvidia_description: `NVIDIA NIM provides hosted text, embedding, and image APIs through NVIDIA Build.`,
@@ -2629,10 +2636,13 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           provider_label: `AI Provider`,
           provider_description: `Choose the AI provider for your API key`,
           provider_placeholder: `Select a provider...`,
-          api_key_label: `Provider API Key`,
+          api_key_label: `API Key or Endpoint URL`,
           api_key_description: `This key will be securely stored. Use the '/help api-key' command for instructions in getting one. Tip: Use /config provider switch for saved config persistence.`,
           api_key_description_with_custom: `API Key, or OpenAI endpoint URL if using Custom (e.g., http://localhost:11434/v1)`,
           api_key_placeholder: `Do NOT share this key with anyone`,
+          bearer_token_label: `Bearer Token (Optional)`,
+          bearer_token_description: `Auth token for Custom endpoints. Sent as Authorization: Bearer header.`,
+          bearer_token_placeholder: `Leave blank for no authentication`,
           no_providers_title: `No Providers Available`,
           no_providers_description: `No AI providers are available in the database. Please report through \`/support discord\`.`,
           invalid_key_title: `Invalid API Key Format`,
@@ -2733,10 +2743,13 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           provider_label: `Target Provider`,
           provider_description: `Choose the provider to switch to. Providers marked (saved) have stored configs.`,
           provider_placeholder: `Select a provider...`,
-          api_key_label: `API Key (Optional)`,
+          api_key_label: `API Key or Endpoint URL (Optional)`,
           api_key_description: `Leave blank to restore a saved key, or enter a new key to override it.`,
           api_key_description_with_custom: `Leave blank to restore, or enter an OpenAI endpoint URL for a new custom setup.`,
           api_key_placeholder: `Leave blank to use saved key`,
+          bearer_token_label: `Bearer Token (Optional)`,
+          bearer_token_description: `Auth token for Custom endpoints. Sent as Authorization: Bearer header.`,
+          bearer_token_placeholder: `Leave blank for no authentication`,
           save_current_label: `Save Current Config?`,
           save_current_description: `Save your current provider settings so you can restore them later.`,
           save_yes_label: `Yes`,
@@ -3185,9 +3198,9 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         api_provider_label: `API Provider`,
         api_provider_description: `Please choose the provider of the LLM of your choice`,
         api_provider_placeholder: `Choose a provider...`,
-        api_key_label: `API Key`,
+        api_key_label: `API Key or Endpoint URL`,
         api_key_description: `This key will be securely stored. Use the '/help api-key' command for instructions in getting one`,
-        api_key_description_with_custom: `API Key, or OpenAI endpoint URL if using Custom (e.g., http://localhost:11434/v1)`,
+        api_key_description_with_custom: `API Key or Custom endpoint URL. Bearer token can be added after setup.`,
         api_key_placeholder: `Do NOT share this key with anyone`,
         preset_label: `Personality Preset`,
         preset_description: `Choose a personality preset`,
@@ -3228,11 +3241,13 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         next_steps_description: `Use {helpFeatures} to see all my features, or just ask me in chat! I can also tell you what slash commands are available.`,
         novelai_expressions_warning_field: `⚠️ Expressions Disabled`,
         novelai_expressions_warning_value: `Emoji and sticker usage have been automatically disabled to keep NovelAI's context lean and stable. You can re-enable them anytime with .`,
+        custom_bearer_hint_field: `Bearer Token`,
+        custom_bearer_hint_value: `If your endpoint requires authentication, use {apiKeySet} or {providerSwitch} to add a Bearer token.`,
         preset_field: `Personality Preset`,
         name_field: `My Name`,
         dm_context_explanation_title: `About Direct Messages`,
         dm_context_explanation: `I will still refer to this Direct Message as a "server". Meaning all "server" features work the same way, just privately here between us! Think of this Direct Message as a 1-on-1 server with me, therefore its server memories are my memories within here only.`,
-        already_setup_title: `Already SeWt Up`,
+        already_setup_title: `Already Set Up`,
         already_setup_description: `I am already set up for this server. To modify my configuration, please use other commands like \`/config\`, \`/persona\`, \`/memory\`, and \`/server\`.
 
 				If you wish to swap my provider, use the \`/config api-key set\` command.`,

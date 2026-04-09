@@ -33,6 +33,7 @@ import { resolveLogitBiasEntriesForLlm } from "@/utils/provider/logitBiasResolve
 const MODAL_CUSTOM_ID = "config_api_key_set_modal";
 const PROVIDER_SELECT_ID = "provider_select";
 const API_KEY_INPUT_ID = "api_key_input";
+const BEARER_TOKEN_INPUT_ID = "bearer_token_input";
 
 // Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
@@ -122,6 +123,15 @@ export async function execute(
         style: TextInputStyle.Short,
         maxLength: 200,
       },
+      {
+        customId: BEARER_TOKEN_INPUT_ID,
+        labelKey: "commands.config.api-key.set.bearer_token_label",
+        descriptionKey: "commands.config.api-key.set.bearer_token_description",
+        placeholder: "commands.config.api-key.set.bearer_token_placeholder",
+        required: false,
+        style: TextInputStyle.Short,
+        maxLength: 200,
+      },
     ];
 
     const modalResult = await promptWithRawModal(
@@ -145,6 +155,7 @@ export async function execute(
     modalSubmitInteraction = modalResult.interaction;
     const selectedProvider = modalResult.values?.[PROVIDER_SELECT_ID];
     const apiKey = modalResult.values?.[API_KEY_INPUT_ID];
+    const bearerTokenInput = modalResult.values?.[BEARER_TOKEN_INPUT_ID]?.trim() || null;
 
     // Safety checks
     if (!modalSubmitInteraction || !selectedProvider || !apiKey) {
@@ -160,8 +171,9 @@ export async function execute(
     const normalizedProvider = selectedProvider.toLowerCase();
 
     if (isCustomProvider(normalizedProvider)) {
-      // Custom Provider Flow: apiKey field contains the endpoint URL
-      log.info(`Custom provider selected - treating api_key as endpoint URL`);
+      // Custom Provider Flow: API key field contains the endpoint URL,
+      // optional Bearer token field provides auth credentials
+      log.info("Custom provider selected - treating api_key as endpoint URL");
 
       // Validate the endpoint URL format and security (blocks private IPs, localhost in prod, etc.)
       const urlValidation = await validateRemoteMcpUrl(apiKey ?? "");
@@ -200,10 +212,17 @@ export async function execute(
         `Custom model capabilities configured: tools=${customCapabilitiesResult.hasTools}, images=${customCapabilitiesResult.seesImages}, videos=${customCapabilitiesResult.seesVideos}, structOutput=${customCapabilitiesResult.supportsStructOutput}`,
       );
 
-      // Use placeholder API key for custom provider
-      const placeholderResult = await encryptApiKey(CUSTOM_ENDPOINT_PLACEHOLDER_KEY);
-      encrypted = placeholderResult.encrypted;
-      version = placeholderResult.version;
+      // Use placeholder API key, unless a Bearer token was provided
+      if (bearerTokenInput && bearerTokenInput.length >= 8) {
+        const tokenResult = await encryptApiKey(bearerTokenInput);
+        encrypted = tokenResult.encrypted;
+        version = tokenResult.version;
+        log.info("Custom provider Bearer token encrypted and will be stored");
+      } else {
+        const placeholderResult = await encryptApiKey(CUSTOM_ENDPOINT_PLACEHOLDER_KEY);
+        encrypted = placeholderResult.encrypted;
+        version = placeholderResult.version;
+      }
     } else {
       // Regular Provider Flow
       // Basic API key validation - let helper functions manage interaction state

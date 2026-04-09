@@ -49,6 +49,7 @@ import { getDiffusionModelById } from "@/utils/image/naiDiffusionModels";
 const MODAL_CUSTOM_ID = "config_provider_switch_modal";
 const PROVIDER_SELECT_ID = "provider_select";
 const API_KEY_INPUT_ID = "api_key_input";
+const BEARER_TOKEN_INPUT_ID = "bearer_token_input";
 const SAVE_CURRENT_SELECT_ID = "save_current_select";
 const RESTORE_MODEL_PREVIEW_LIMIT = 4;
 const RESTORE_OVERRIDE_PREVIEW_LIMIT = 3;
@@ -164,6 +165,15 @@ export async function execute(
         maxLength: 200,
       },
       {
+        customId: BEARER_TOKEN_INPUT_ID,
+        labelKey: "commands.config.provider.switch.bearer_token_label",
+        descriptionKey: "commands.config.provider.switch.bearer_token_description",
+        placeholder: "commands.config.provider.switch.bearer_token_placeholder",
+        required: false,
+        style: TextInputStyle.Short,
+        maxLength: 200,
+      },
+      {
         // Checkbox: checked (default) = save current config, unchecked = skip.
         // "true" (checked) or "false" (unchecked) in modalResult.values[SAVE_CURRENT_SELECT_ID].
         kind: "checkbox" as const,
@@ -194,6 +204,7 @@ export async function execute(
     modalSubmitInteraction = modalResult.interaction;
     const selectedProvider = modalResult.values?.[PROVIDER_SELECT_ID];
     const apiKeyInput = modalResult.values?.[API_KEY_INPUT_ID]?.trim() || null;
+    const bearerTokenInput = modalResult.values?.[BEARER_TOKEN_INPUT_ID]?.trim() || null;
     // Checkbox returns "true" (checked) or "false" (unchecked); default is "true" (pre-checked)
     const saveCurrentChoice = modalResult.values?.[SAVE_CURRENT_SELECT_ID] ?? "true";
 
@@ -370,6 +381,14 @@ export async function execute(
         newVisionLlmId = null;
         newNaiPresetName = null;
         newFallbackLlmIds = [];
+
+        // Override saved API key with Bearer token if provided during restore
+        if (bearerTokenInput && bearerTokenInput.length >= 8) {
+          const tokenResult = await encryptApiKey(bearerTokenInput);
+          encrypted = tokenResult.encrypted;
+          version = tokenResult.version;
+          log.info("Bearer token provided during custom provider restore — overriding saved key");
+        }
       } else {
         newLlmId = savedConfig.llm_id ?? newLlmId;
         newDiffusionModelId = savedConfig.diffusion_model_id;
@@ -431,10 +450,18 @@ export async function execute(
 
       customModelName = customCapabilitiesResult.modelName || null;
 
-      // Use placeholder API key for custom provider
-      const placeholderResult = await encryptApiKey(CUSTOM_ENDPOINT_PLACEHOLDER_KEY);
-      encrypted = placeholderResult.encrypted;
-      version = placeholderResult.version;
+      // Use placeholder API key for custom provider, unless a Bearer token was provided
+      if (bearerTokenInput && bearerTokenInput.length >= 8) {
+        // Bearer token provided — encrypt it as the real API key
+        const tokenResult = await encryptApiKey(bearerTokenInput);
+        encrypted = tokenResult.encrypted;
+        version = tokenResult.version;
+        log.info("Custom provider Bearer token encrypted and will be stored");
+      } else {
+        const placeholderResult = await encryptApiKey(CUSTOM_ENDPOINT_PLACEHOLDER_KEY);
+        encrypted = placeholderResult.encrypted;
+        version = placeholderResult.version;
+      }
 
       if (customCapabilitiesResult.llmId) {
         newLlmId = customCapabilitiesResult.llmId;

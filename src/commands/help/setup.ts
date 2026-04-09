@@ -45,6 +45,8 @@ export async function execute(
     const helpMemoryMention = commandRegistry.getCommandMention("help", "memory");
     const helpCustomizationMention = commandRegistry.getCommandMention("help", "customization");
     const supportServerMention = commandRegistry.getCommandMention("support", "discord");
+    const configApiKeySetMention = commandRegistry.getCommandMention("config", "api-key set");
+    const configProviderSwitchMention = commandRegistry.getCommandMention("config", "provider switch");
 
     // Use replySummaryEmbed to show structured setup guide
     await replySummaryEmbed(
@@ -59,6 +61,8 @@ export async function execute(
             nameKey: "commands.help.setup.step1_title",
             value: localizer(locale, "commands.help.setup.step1_description", {
               helpApikey: helpApikeyMention,
+              configApiKeySet: configApiKeySetMention,
+              configProviderSwitch: configProviderSwitchMention,
             }),
             inline: false,
           },
