@@ -332,6 +332,11 @@ function compactWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+const DISCORD_MESSAGE_LINK_PATTERN =
+  /https?:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/channels\/(?:@me|\d{17,19})\/(\d{17,19})\/(\d{17,19})/i;
+const REPLY_CONTEXT_URL_SENTINEL = "__TOMORI_REPLY_CONTEXT_URL__";
+const REPLY_CONTEXT_USER_SENTINEL = "__TOMORI_REPLY_CONTEXT_USER__";
+
 const QUEUED_REPLY_DIRECTIVE_MAX_CONTENT_LENGTH = 280;
 
 function truncateForSystemContext(text: string, maxLength: number): string {
@@ -340,6 +345,140 @@ function truncateForSystemContext(text: string, maxLength: number): string {
     return compacted;
   }
   return `${compacted.slice(0, Math.max(0, maxLength - 3))}...`;
+}
+
+function buildReplyReferenceAttachmentInfo(message: Message): string {
+  let imageCount = 0;
+  let videoCount = 0;
+
+  for (const attachment of message.attachments.values()) {
+    if (isSupportedImageAttachmentContentType(attachment.contentType)) {
+      imageCount++;
+      continue;
+    }
+
+    if (isSupportedVideoAttachmentContentType(attachment.contentType)) {
+      videoCount++;
+    }
+  }
+
+  let attachmentInfo = "";
+  if (imageCount > 0) {
+    attachmentInfo += ` (with ${imageCount} image${imageCount > 1 ? "s" : ""})`;
+  }
+  if (videoCount > 0) {
+    attachmentInfo += ` (with ${videoCount} video${videoCount > 1 ? "s" : ""})`;
+  }
+
+  return attachmentInfo;
+}
+
+function matchesLocalizedReplyContextTemplate(
+  text: string,
+  templateKey: string,
+  placeholderValues: Record<string, string>,
+): boolean {
+  for (const locale of getSupportedLocales()) {
+    const template = localizer(locale, templateKey, placeholderValues);
+    const placeholderValue = Object.values(placeholderValues)[0];
+    const [prefix, suffix = ""] = template.split(placeholderValue);
+    if (text.startsWith(prefix) && text.endsWith(suffix)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function extractReplyContextTargetFromEmbed(embed: Embed): { channelId: string; messageId: string } | null {
+  const description = embed.description?.trim() ?? "";
+  const footerText = embed.footer?.text?.trim() ?? "";
+  const hasReplyDescription = matchesLocalizedReplyContextTemplate(
+    description,
+    "genai.message_interaction.reply_context_description",
+    {
+      message_url: REPLY_CONTEXT_URL_SENTINEL,
+    },
+  );
+  const hasReplyFooter = matchesLocalizedReplyContextTemplate(
+    footerText,
+    "genai.message_interaction.reply_context_footer",
+    {
+      user: REPLY_CONTEXT_USER_SENTINEL,
+    },
+  );
+
+  if (!hasReplyDescription && !hasReplyFooter) {
+    return null;
+  }
+
+  const match = `${embed.url ?? ""}\n${description}`.match(DISCORD_MESSAGE_LINK_PATTERN);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    channelId: match[1],
+    messageId: match[2],
+  };
+}
+
+function findReplyContextTargetInMessage(
+  message: Pick<Message, "embeds">,
+): { channelId: string; messageId: string } | null {
+  for (const embed of message.embeds) {
+    const target = extractReplyContextTargetFromEmbed(embed);
+    if (target) {
+      return target;
+    }
+  }
+
+  return null;
+}
+
+async function buildReplyReferenceContextAnnotation(params: {
+  referencedMessage: Message;
+  clientUserId: string | undefined;
+  botDisplayName: string | null | undefined;
+  personaByNickname: Map<string, TomoriState>;
+  serverDiscId: string;
+  serverPersonalizationDisabled: boolean;
+  messageIdMap: MessageIdMap;
+}): Promise<string> {
+  const {
+    referencedMessage,
+    clientUserId,
+    botDisplayName,
+    personaByNickname,
+    serverDiscId,
+    serverPersonalizationDisabled,
+    messageIdMap,
+  } = params;
+
+  const referencedWebhookName = stripBridgePrefix(referencedMessage.author.username);
+  const referencedMatchedPersona = referencedMessage.webhookId
+    ? personaByNickname.get(referencedWebhookName.toLowerCase())
+    : undefined;
+  const referencedUserRow =
+    referencedMessage.author.id !== clientUserId && !referencedMatchedPersona
+      ? await getCachedUserRow(referencedMessage.author.id)
+      : null;
+  const referencedUserBlacklisted =
+    referencedUserRow !== null ? await getCachedBlacklistStatus(serverDiscId, referencedMessage.author.id) : false;
+  const referencedFallbackName = resolvePreferredDiscordDisplayName({
+    memberDisplayName: referencedMessage.member?.displayName,
+    user: referencedMessage.author,
+    fallback: referencedWebhookName,
+  });
+  const referencedAuthorName =
+    referencedMessage.author.id === clientUserId
+      ? botDisplayName || "Bot"
+      : (referencedMatchedPersona?.tomori_nickname ??
+        (referencedUserBlacklisted || serverPersonalizationDisabled || !referencedUserRow?.user_nickname
+          ? referencedFallbackName
+          : referencedUserRow.user_nickname));
+
+  return `[System: This message is referring to a previous message (ID: ${messageIdMap.register(referencedMessage.id, "ref")}) by ${referencedAuthorName} saying: ${formatInlineSystemContent(referencedMessage.content)}${buildReplyReferenceAttachmentInfo(referencedMessage)}]`;
 }
 
 function buildQueuedReplyAttachmentSummary(message: Message): string | null {
@@ -3709,13 +3848,20 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         impersonatedIdentityAvatarUrl = impersonatedIdentity.avatarUrl;
       }
 
-      // Find the most recent message with a reference (latest in the array)
+      // Find the most recent message that carries reply context, either
+      // through a native Discord reply or a webhook reply-context embed.
       let latestReferenceMessageIndex = -1;
       for (let i = relevantMessagesArray.length - 1; i >= 0; i--) {
+        const candidateMessage = relevantMessagesArray[i];
         if (
-          relevantMessagesArray[i].reference?.messageId &&
-          relevantMessagesArray[i].reference?.type !== MessageReferenceType.Forward
+          candidateMessage.reference?.messageId &&
+          candidateMessage.reference?.type !== MessageReferenceType.Forward
         ) {
+          latestReferenceMessageIndex = i;
+          break; // Found the most recent one, stop searching
+        }
+
+        if (findReplyContextTargetInMessage(candidateMessage)) {
           latestReferenceMessageIndex = i;
           break; // Found the most recent one, stop searching
         }
@@ -3757,85 +3903,65 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           processedContent = msg.content.slice(2); // Remove "$:" prefix
         }
 
-        // 3. Add reference context only for the most recent message with a reference
-        if (index === latestReferenceMessageIndex && msg.reference?.messageId && processedContent) {
-          try {
-            const msgReferencedMessage = await channel.messages.fetch(msg.reference.messageId);
-            if (msgReferencedMessage) {
-              // Resolve the referenced author using the same nickname/display-name rules
-              // as normal history authors so reply annotations don't leak raw account names.
-              const referencedWebhookName = stripBridgePrefix(msgReferencedMessage.author.username);
-              const referencedMatchedPersona = msgReferencedMessage.webhookId
-                ? personaByNickname.get(referencedWebhookName.toLowerCase())
-                : undefined;
-              const referencedUserRow = await getCachedUserRow(msgReferencedMessage.author.id);
-              const referencedUserBlacklisted = await getCachedBlacklistStatus(
-                serverDiscId,
-                msgReferencedMessage.author.id,
-              );
-              const referencedFallbackName = resolvePreferredDiscordDisplayName({
-                memberDisplayName: msgReferencedMessage.member?.displayName,
-                user: msgReferencedMessage.author,
-                fallback: referencedWebhookName,
-              });
-              const referencedAuthorName =
-                msgReferencedMessage.author.id === client.user?.id
-                  ? tomoriState?.tomori_nickname || "Bot"
-                  : (referencedMatchedPersona?.tomori_nickname ??
-                    (referencedUserBlacklisted || serverPersonalizationDisabled || !referencedUserRow?.user_nickname
-                      ? referencedFallbackName
-                      : referencedUserRow.user_nickname));
+        // 3. Add reference context only for the most recent reply-like message
+        const replyContextEmbedTarget =
+          index === latestReferenceMessageIndex && !msg.reference?.messageId
+            ? findReplyContextTargetInMessage(msg)
+            : null;
+        if (index === latestReferenceMessageIndex) {
+          if (msg.reference?.messageId && processedContent) {
+            try {
+              const msgReferencedMessage = await channel.messages.fetch(msg.reference.messageId);
+              if (msgReferencedMessage) {
+                // Store referenced message info for later attachment extraction
+                // (attachments will be processed after imageAttachments/videoAttachments arrays are declared)
+                referencedMessageData = {
+                  message: msgReferencedMessage,
+                };
 
-              // Preserve the full quoted reply text; prompt-level history truncation
-              // should decide what to drop, not this inline reply annotation.
-              const referencedContent = formatInlineSystemContent(msgReferencedMessage.content);
+                processedContent = `${await buildReplyReferenceContextAnnotation({
+                  referencedMessage: msgReferencedMessage,
+                  clientUserId: client.user?.id,
+                  botDisplayName: tomoriState?.tomori_nickname,
+                  personaByNickname,
+                  serverDiscId,
+                  serverPersonalizationDisabled,
+                  messageIdMap,
+                })}\n${processedContent}`;
+              }
+            } catch (fetchError) {
+              log.warn(`Could not fetch referenced message ${msg.reference.messageId} for context`, fetchError);
+            }
+          } else if (replyContextEmbedTarget) {
+            try {
+              if (replyContextEmbedTarget.channelId === msg.channel.id) {
+                const msgReferencedMessage =
+                  msg.channel.messages.cache.get(replyContextEmbedTarget.messageId) ??
+                  (await msg.channel.messages.fetch(replyContextEmbedTarget.messageId));
 
-              // Store referenced message info for later attachment extraction
-              // (attachments will be processed after imageAttachments/videoAttachments arrays are declared)
-              referencedMessageData = {
-                message: msgReferencedMessage,
-              };
+                if (msgReferencedMessage) {
+                  referencedMessageData = {
+                    message: msgReferencedMessage,
+                  };
 
-              // Create enhanced reference context that mentions attachments (will be updated later)
-              let attachmentInfo = "";
-              // Temporarily count attachments to show in context
-              let imageCount = 0;
-              let videoCount = 0;
-              if (msgReferencedMessage.attachments.size > 0) {
-                for (const attachment of msgReferencedMessage.attachments.values()) {
-                  if (
-                    attachment.contentType?.startsWith("image/png") ||
-                    attachment.contentType?.startsWith("image/jpeg") ||
-                    attachment.contentType?.startsWith("image/webp") ||
-                    attachment.contentType?.startsWith("image/heic") ||
-                    attachment.contentType?.startsWith("image/heif") ||
-                    attachment.contentType?.startsWith("image/gif")
-                  ) {
-                    imageCount++;
-                  } else if (
-                    attachment.contentType &&
-                    SUPPORTED_VIDEO_MIME_TYPES.some((type) => attachment.contentType?.startsWith(type))
-                  ) {
-                    videoCount++;
-                  }
+                  const referenceContext = await buildReplyReferenceContextAnnotation({
+                    referencedMessage: msgReferencedMessage,
+                    clientUserId: client.user?.id,
+                    botDisplayName: tomoriState?.tomori_nickname,
+                    personaByNickname,
+                    serverDiscId,
+                    serverPersonalizationDisabled,
+                    messageIdMap,
+                  });
+                  processedContent = processedContent ? `${referenceContext}\n${processedContent}` : referenceContext;
                 }
               }
-
-              if (imageCount > 0) {
-                attachmentInfo += ` (with ${imageCount} image${imageCount > 1 ? "s" : ""})`;
-              }
-              if (videoCount > 0) {
-                attachmentInfo += ` (with ${videoCount} video${videoCount > 1 ? "s" : ""})`;
-              }
-
-              const referenceMessageId = msgReferencedMessage.id;
-
-              // Add reference context to the message
-              const referenceContext = `[System: This message is referring to a previous message (ID: ${messageIdMap.register(referenceMessageId, "ref")}) by ${referencedAuthorName} saying: ${referencedContent}${attachmentInfo}]`;
-              processedContent = `${referenceContext}\n${processedContent}`;
+            } catch (fetchError) {
+              log.warn(
+                `Could not fetch referenced message ${replyContextEmbedTarget.messageId} from webhook reply embed`,
+                fetchError,
+              );
             }
-          } catch (fetchError) {
-            log.warn(`Could not fetch referenced message ${msg.reference.messageId} for context`, fetchError);
           }
         }
 

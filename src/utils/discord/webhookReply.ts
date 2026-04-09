@@ -11,6 +11,7 @@ export function getReplyContextAuthorName(message: Message): string {
 export function buildReplyContextEmbed(targetMessage: Message, locale: string): EmbedBuilder {
   return new EmbedBuilder()
     .setColor(ColorCode.INFO)
+    .setURL(targetMessage.url)
     .setDescription(
       localizer(locale, "genai.message_interaction.reply_context_description", {
         message_url: targetMessage.url,
