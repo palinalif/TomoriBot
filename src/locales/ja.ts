@@ -223,10 +223,12 @@ export default {
       youtube_processing_description: "現在、YouTube動画を視聴しています: {video_url}",
       youtube_processing_footer: "動画の長さに応じて、少し時間がかかる場合があります",
       generating_title: "🎬 動画を生成中...",
-      generating_description: "現在のプロンプトから動画を作成しています。1〜3分ほどかかる場合があります。",
-      generating_with_references_description:
-        "現在のプロンプトと参照画像から動画を作成しています。1〜3分ほどかかる場合があります。",
-      generating_footer: "動画生成は非同期で行われます — しばらくお待ちください",
+      generating_description: "現在のプロンプトから動画を作成しています",
+      generating_with_references_description: "現在のプロンプトと参照画像から動画を作成しています",
+      notice_model_line: "**モデル:** {model}",
+      notice_prompt_line: "**プロンプト:** {prompt}",
+      notice_reference_count_line: "参照画像を {count} 枚使用しています。",
+      generating_footer: "1〜3分ほどかかる場合があります。",
     },
 
     // インラインドキュメント読み取りメッセージ (read_document ツール)
@@ -572,10 +574,14 @@ export default {
       server_memory_learned_description: "サーバー記憶を保存しました:\n`{memory_content}`",
       server_memory_updated_title: "📝 {persona_nickname}が記憶を更新しました！",
       server_memory_updated_description: "サーバー記憶を更新しました:\n`{memory_content}`",
+      server_memory_deleted_title: "🗑️ {persona_nickname}が記憶を削除しました！",
+      server_memory_deleted_description: "サーバー記憶を削除しました:\n`{memory_content}`",
       personal_memory_learned_title: "💡 {persona_nickname}が{user_nickname}さんについて新しいことを学びました！",
       personal_memory_learned_description: "{user_nickname}さんに関する個人的な記憶を保存しました:\n`{memory_content}`",
       personal_memory_updated_title: "📝 {persona_nickname}が{user_nickname}さんについての記憶を更新しました！",
       personal_memory_updated_description: "{user_nickname}さんに関する個人的な記憶を更新しました:\n`{memory_content}`",
+      personal_memory_deleted_title: "🗑️ {persona_nickname}が{user_nickname}さんについての記憶を削除しました！",
+      personal_memory_deleted_description: "{user_nickname}さんに関する個人的な記憶を削除しました:\n`{memory_content}`",
       server_memory_footer:
         "サーバー管理者は`/memory server add`、`/memory server remove`、`/memory server export`でこの記憶を管理できます。",
       personal_memory_footer_manage:

@@ -20,7 +20,7 @@ import { resolveUserTarget } from "@/utils/discord/targetResolver";
 export class UpdateLongTermMemoryTool extends BaseTool {
   name = "update_long_term_memory";
   description =
-    "Replace an existing long-term memory (server or personal) by ID. Use this when an existing memory needs revision. For server memories, provide the memory ID shown in context (e.g., ID:24). For personal memories, also provide the target user's name as shown in the conversation or current server, and use the ID shown next to that user's memory.";
+    "Replace or delete an existing long-term memory (server or personal) by ID. Use this when an existing memory needs revision, or leave memory_content blank to delete the targeted memory instead. For server memories, provide the memory ID shown in context (e.g., ID:24). For personal memories, also provide the target user's name as shown in the conversation or current server, and use the ID shown next to that user's memory.";
   category = "memory" as const;
   requiresFeatureFlag = "self_teaching";
 
@@ -34,7 +34,7 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       memory_content: {
         type: "string",
         description:
-          "The full replacement memory content. This completely replaces the existing memory. Do NOT insert user IDs or any meta information here.",
+          "The full replacement memory content. This completely replaces the existing memory. If this is empty or blank, delete the targeted memory instead. Do NOT insert user IDs or any meta information here.",
       },
       target_user: {
         type: "string",
@@ -97,21 +97,22 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       };
     }
 
-    if (typeof memoryContentArg !== "string" || !memoryContentArg.trim()) {
+    if (typeof memoryContentArg !== "string") {
       return {
         success: false,
-        error: "The 'memory_content' argument was missing, empty, or not a string.",
+        error: "The 'memory_content' argument was missing or not a string.",
         data: {
           status: "memory_update_failed_invalid_args",
-          reason: "The 'memory_content' argument was missing, empty, or not a string.",
+          reason: "The 'memory_content' argument was missing or not a string.",
         },
       };
     }
 
     const memoryId = Math.trunc(memoryIdArg);
     const newContent = memoryContentArg.trim();
+    const isDeleteRequested = newContent.length === 0;
 
-    const contentValidation = validateMemoryContent(newContent);
+    const contentValidation = isDeleteRequested ? { isValid: true } : validateMemoryContent(newContent);
     if (!contentValidation.isValid) {
       return {
         success: false,
@@ -204,6 +205,77 @@ export class UpdateLongTermMemoryTool extends BaseTool {
 
     try {
       if (!isPersonalUpdate) {
+        if (isDeleteRequested) {
+          const resolvedTriggererUserId = context.message?.author?.id || context.userId;
+          const triggererRow = resolvedTriggererUserId ? await loadUserRow(resolvedTriggererUserId) : null;
+          const [deletedServerMemory] = await sql`
+						DELETE FROM server_memories
+						WHERE server_memory_id = ${memoryId}
+						  AND server_id = ${tomoriState.server_id}
+						  AND persona_lineage_id = ${tomoriState.persona_lineage_id}
+						RETURNING server_memory_id, content, user_id
+					`;
+
+          if (deletedServerMemory) {
+            const processedMemoryContent = await convertMentions(
+              deletedServerMemory.content,
+              context.client,
+              serverDiscId,
+              triggererRow?.user_nickname,
+              tomoriState.tomori_nickname,
+              tomoriState?.config.personal_memories_enabled,
+            );
+
+            await sendStandardEmbed(
+              context.channel,
+              context.locale,
+              {
+                color: ColorCode.ERROR,
+                titleKey: "genai.self_teach.server_memory_deleted_title",
+                titleVars: {
+                  persona_nickname: personaNickname,
+                },
+                descriptionKey: "genai.self_teach.server_memory_deleted_description",
+                descriptionVars: {
+                  memory_id: memoryId.toString(),
+                  memory_content:
+                    processedMemoryContent.length > 200
+                      ? `${processedMemoryContent.substring(0, 197)}...`
+                      : processedMemoryContent,
+                },
+                footerKey: "genai.self_teach.server_memory_footer",
+              },
+              {
+                webhook: context.webhook,
+                personaUsername: context.personaUsername,
+                personaAvatarUrl: context.personaAvatarUrl,
+              },
+            );
+
+            invalidateTomoriStateCache(serverDiscId);
+
+            return {
+              success: true,
+              message: "Server memory deleted successfully",
+              data: {
+                status: "memory_deleted_successfully",
+                scope: "server_wide",
+                memory_id: memoryId,
+                content_deleted: deletedServerMemory.content,
+              },
+            };
+          }
+
+          return {
+            success: false,
+            error: "Memory ID not found in this server",
+            data: {
+              status: "memory_update_failed_not_found",
+              reason: "Memory ID not found in this server",
+            },
+          };
+        }
+
         // 1) Server memory update (server_id + lineage scoped)
         const [updatedServerMemory] = await sql`
 					UPDATE server_memories
@@ -329,16 +401,25 @@ export class UpdateLongTermMemoryTool extends BaseTool {
           };
         }
       }
-      const userPrivacyLevel = await getPrivacyLevel(resolvedTargetUserId as string);
-      if (userPrivacyLevel === PrivacyLevel.PARTIAL || userPrivacyLevel === PrivacyLevel.FULL) {
-        return {
-          success: false,
-          error: `Cannot update personal memory: ${resolvedTargetUserLabel} has privacy restrictions.`,
-          data: {
-            status: "memory_update_failed_privacy_restricted",
-            reason: `The user ${resolvedTargetUserLabel} has chosen to restrict personal memory storage.`,
-          },
-        };
+      const userDisplayName =
+        resolvedTargetUserLabel ||
+        guildMember?.displayName ||
+        guildMember?.user.username ||
+        targetUserRow.user_nickname ||
+        targetUserRow.user_disc_id;
+
+      if (!isDeleteRequested) {
+        const userPrivacyLevel = await getPrivacyLevel(resolvedTargetUserId as string);
+        if (userPrivacyLevel === PrivacyLevel.PARTIAL || userPrivacyLevel === PrivacyLevel.FULL) {
+          return {
+            success: false,
+            error: `Cannot update personal memory: ${resolvedTargetUserLabel} has privacy restrictions.`,
+            data: {
+              status: "memory_update_failed_privacy_restricted",
+              reason: `The user ${resolvedTargetUserLabel} has chosen to restrict personal memory storage.`,
+            },
+          };
+        }
       }
 
       const personaLineageId = tomoriState.persona_lineage_id ?? 0;
@@ -351,6 +432,89 @@ export class UpdateLongTermMemoryTool extends BaseTool {
           data: {
             status: "memory_update_failed_not_found",
             reason: "Personal memory ID not found",
+          },
+        };
+      }
+
+      const isUserBlacklisted = guild ? await isBlacklisted(serverDiscId, resolvedTargetUserId as string) : false;
+      const footerKey = !tomoriState.config.personal_memories_enabled
+        ? "genai.self_teach.personal_memory_footer_personalization_disabled"
+        : isUserBlacklisted
+          ? "genai.self_teach.personal_memory_footer_user_blacklisted"
+          : "genai.self_teach.personal_memory_footer_manage";
+
+      if (isDeleteRequested) {
+        const [deletedMemory] = await sql`
+					DELETE FROM personal_memories
+					WHERE personal_memory_id = ${memoryId}
+					  AND user_id = ${targetUserRow.user_id}
+					  AND (
+						persona_lineage_id = ${personaLineageId}
+						OR persona_lineage_id = 0
+					  )
+					RETURNING personal_memory_id, content
+				`;
+
+        if (!deletedMemory) {
+          log.error(`Failed to delete personal memory ${memoryId} for user ${targetUserRow.user_id}`);
+          return {
+            success: false,
+            error: "Failed to delete personal memory",
+            data: {
+              status: "memory_update_failed_db_error",
+              reason: "Failed to delete personal memory",
+            },
+          };
+        }
+
+        invalidateUserCache(resolvedTargetUserId as string);
+
+        const processedMemoryContent = await convertMentions(
+          deletedMemory.content,
+          context.client,
+          serverDiscId,
+          userDisplayName,
+          tomoriState.tomori_nickname,
+          tomoriState?.config.personal_memories_enabled,
+        );
+
+        await sendStandardEmbed(
+          context.channel,
+          context.locale,
+          {
+            color: ColorCode.ERROR,
+            titleKey: "genai.self_teach.personal_memory_deleted_title",
+            titleVars: {
+              user_nickname: userDisplayName,
+              persona_nickname: personaNickname,
+            },
+            descriptionKey: "genai.self_teach.personal_memory_deleted_description",
+            descriptionVars: {
+              user_nickname: userDisplayName,
+              memory_id: memoryId.toString(),
+              memory_content:
+                processedMemoryContent.length > 200
+                  ? `${processedMemoryContent.substring(0, 197)}...`
+                  : processedMemoryContent,
+            },
+            footerKey,
+          },
+          {
+            webhook: context.webhook,
+            personaUsername: context.personaUsername,
+            personaAvatarUrl: context.personaAvatarUrl,
+          },
+        );
+
+        return {
+          success: true,
+          message: "Personal memory deleted successfully",
+          data: {
+            status: "memory_deleted_successfully",
+            scope: "target_user",
+            memory_id: memoryId,
+            content_deleted: deletedMemory.content,
+            target_user: userDisplayName,
           },
         };
       }
@@ -380,12 +544,6 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       }
 
       invalidateUserCache(resolvedTargetUserId as string);
-      const userDisplayName =
-        resolvedTargetUserLabel ||
-        guildMember?.displayName ||
-        guildMember?.user.username ||
-        targetUserRow.user_nickname ||
-        targetUserRow.user_disc_id;
 
       const processedMemoryContent = await convertMentions(
         newContent,
@@ -395,13 +553,6 @@ export class UpdateLongTermMemoryTool extends BaseTool {
         tomoriState.tomori_nickname,
         tomoriState?.config.personal_memories_enabled,
       );
-
-      const isUserBlacklisted = guild ? await isBlacklisted(serverDiscId, resolvedTargetUserId as string) : false;
-      const footerKey = !tomoriState.config.personal_memories_enabled
-        ? "genai.self_teach.personal_memory_footer_personalization_disabled"
-        : isUserBlacklisted
-          ? "genai.self_teach.personal_memory_footer_user_blacklisted"
-          : "genai.self_teach.personal_memory_footer_manage";
 
       await sendStandardEmbed(
         context.channel,

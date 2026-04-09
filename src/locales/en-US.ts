@@ -221,10 +221,12 @@ export default {
       youtube_processing_description: "I'm currently watching the YouTube video: {video_url}",
       youtube_processing_footer: "This may take a moment depending on the video length",
       generating_title: "🎬 Generating Video...",
-      generating_description: "Creating a video from the current prompt. This may take 1-3 minutes.",
-      generating_with_references_description:
-        "Creating a video from the current prompt and reference image. This may take 1-3 minutes.",
-      generating_footer: "Video generation takes longer, please be patient",
+      generating_description: "Creating a video from the current prompt",
+      generating_with_references_description: "Creating a video from the current prompt and reference image",
+      notice_model_line: "**Model:** {model}",
+      notice_prompt_line: "**Prompt:** {prompt}",
+      notice_reference_count_line: "Using {count} reference image(s).",
+      generating_footer: "This may take 1-3 minutes.",
     },
 
     // Inline document reading messages (read_document tool)
@@ -564,12 +566,17 @@ export default {
       server_memory_learned_description: "A server memory has been saved:\n`{memory_content}`",
       server_memory_updated_title: "📝 {persona_nickname} Updated a Memory!",
       server_memory_updated_description: "A server memory has been updated:\n`{memory_content}`",
+      server_memory_deleted_title: "🗑️ {persona_nickname} Deleted a Memory!",
+      server_memory_deleted_description: "A server memory has been deleted:\n`{memory_content}`",
       personal_memory_learned_title: "💡 {persona_nickname} Learned Something New about {user_nickname}!",
       personal_memory_learned_description:
         "A personal memory about {user_nickname} has been saved:\n`{memory_content}`",
       personal_memory_updated_title: "📝 {persona_nickname} Updated a Memory about {user_nickname}!",
       personal_memory_updated_description:
         "A personal memory about {user_nickname} has been updated:\n`{memory_content}`",
+      personal_memory_deleted_title: "🗑️ {persona_nickname} Deleted a Memory about {user_nickname}!",
+      personal_memory_deleted_description:
+        "A personal memory about {user_nickname} has been deleted:\n`{memory_content}`",
       server_memory_footer:
         "Server managers can manage this memory using `/memory server add`, `/memory server remove`, and `/memory server export`.",
       personal_memory_footer_manage:

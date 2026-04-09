@@ -66,6 +66,7 @@ Current name-resolution notes for built-in tools:
 
 - `create_task` now advertises `target_user` and optional `target_channel`
 - `create_long_term_memory` and `update_long_term_memory` now advertise `target_user`
+- `update_long_term_memory` treats blank `memory_content` as a delete request and emits the same self-teach-style notification flow with a red embed
 - `peek_profile_picture` and `generate_image` now advertise `target_identity`
 - `peek_profile_picture` now supplies the target Discord user's profile banner alongside the avatar when a banner exists, so vision-capable flows can inspect both images together
 - shared resolution is handled by `src/utils/discord/targetResolver.ts`
@@ -99,7 +100,7 @@ Static built-in macros always expand to the current canonical built-in tool name
 |---|---|---|
 | `{capabilities_tool}` | `review_capabilities` | Inspect current tool/runtime availability first. |
 | `{memory_tool}` | `create_long_term_memory` | Save a new long-term memory. |
-| `{memory_update_tool}` | `update_long_term_memory` | Update an existing long-term memory by ID. |
+| `{memory_update_tool}` | `update_long_term_memory` | Update an existing long-term memory by ID, or delete it with blank content. |
 | `{short_term_memory_tool}` | `update_short_term_memory` | Update the current conversation's STM. |
 | `{task_tool}` | `create_task` | Create reminders or scheduled self-tasks. |
 | `{cross_channel_tool}` | `cross_channel_message` | Send an immediate message to another channel/thread. |
@@ -248,4 +249,4 @@ Behavior notes:
 - hidden notices from private channels are suppressed instead of being rerouted, so private-channel activity never leaks to thoughtlogs
 - hidden notices in DMs are suppressed because DMs have no guild thought-log destination
 - all tool notices include a footer hint pointing users to `/config tool-notices visibility`
-- image-generation and image-editing notices now append the active diffusion model codename and a trimmed copy of the raw tool-call prompt, plus lightweight execution hints such as configured style tags or reference-image usage; server-side style-tag contents, defaults, and other system-added prompt material are not shown
+- image-generation, image-editing, and video-generation notices now append the active model codename and a trimmed copy of the raw tool-call prompt, plus lightweight execution hints such as configured style tags, per-character NAI tags, or reference-image usage; server-side style-tag contents, defaults, and other system-added prompt material are not shown

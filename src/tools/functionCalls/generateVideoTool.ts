@@ -11,7 +11,7 @@ import { AttachmentBuilder } from "discord.js";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
-import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
+import { buildVideoToolNoticeDescription, sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { sql } from "../../utils/db/client";
 import { decryptApiKey } from "../../utils/security/crypto";
@@ -348,15 +348,30 @@ export class GenerateVideoTool extends BaseTool {
 
       // 7. Send progress notice — video generation takes 1-3 minutes
       if (!context.suppressProgressNotices) {
+        const baseNoticeDescription = localizer(
+          context.locale,
+          usesReference ? "genai.video.generating_with_references_description" : "genai.video.generating_description",
+        );
+        const extraNoticeLines = usesReference
+          ? [
+              localizer(context.locale, "genai.video.notice_reference_count_line", {
+                count: "1",
+              }),
+            ]
+          : [];
         await sendToolProgressNotice(
           context,
           "video_generation",
           {
             titleKey: "genai.video.generating_title",
-            descriptionKey: usesReference
-              ? "genai.video.generating_with_references_description"
-              : "genai.video.generating_description",
-            footerKey: "genai.video.generating_footer",
+            description: buildVideoToolNoticeDescription(
+              context.locale,
+              baseNoticeDescription,
+              modelCodename,
+              prompt,
+              localizer(context.locale, "genai.video.generating_footer"),
+              extraNoticeLines,
+            ),
             color: ColorCode.INFO,
           },
           "GenerateVideoTool",

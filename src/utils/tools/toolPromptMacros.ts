@@ -131,7 +131,7 @@ export const TOOL_PROMPT_MACRO_DOCS: ToolPromptMacroDocEntry[] = [
     macro: "{memory_update_tool}",
     type: "static",
     currentTarget: "update_long_term_memory",
-    notes: "Update an existing long-term memory by ID.",
+    notes: "Update an existing long-term memory by ID, or delete it by sending blank content.",
   },
   {
     macro: "{short_term_memory_tool}",

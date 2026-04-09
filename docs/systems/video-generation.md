@@ -29,6 +29,8 @@ This document summarizes the current video generation stack.
 
 This mirrors the image-generation architecture, but all provider implementations are asynchronous and return binary MP4 output rather than base64 images.
 
+The user-facing `video_generation` tool notice now mirrors the image notice format: it includes the active video model codename, a trimmed copy of the raw tool-call prompt, optional reference-image usage, and a separate timing line. System-added prompt material is not shown.
+
 ## Providers
 
 Provider routing is resolved through `utils/provider/providerInfoRegistry.ts`.

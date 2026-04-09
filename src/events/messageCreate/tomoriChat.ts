@@ -2662,8 +2662,10 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           const memoryLearningTitles = [
             localizer(supportedLocale, "genai.self_teach.server_memory_learned_title"),
             localizer(supportedLocale, "genai.self_teach.server_memory_updated_title"),
+            localizer(supportedLocale, "genai.self_teach.server_memory_deleted_title"),
             localizer(supportedLocale, "genai.self_teach.personal_memory_learned_title"),
             localizer(supportedLocale, "genai.self_teach.personal_memory_updated_title"),
+            localizer(supportedLocale, "genai.self_teach.personal_memory_deleted_title"),
           ];
 
           const reminderSetTitles = [

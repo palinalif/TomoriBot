@@ -66,9 +66,11 @@ function truncateNoticeText(value: string, maxLength: number): string {
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
-export function buildImageToolNoticeDescription(
+function buildLabeledGenerationNoticeDescription(
   locale: string,
   baseDescription: string,
+  modelLineKey: string,
+  promptLineKey: string,
   model: string,
   prompt: string,
   timingLine: string,
@@ -79,13 +81,53 @@ export function buildImageToolNoticeDescription(
 
   return [
     baseDescription.trim(),
-    localizer(locale, "genai.image.notice_model_line", { model: safeModel }),
-    localizer(locale, "genai.image.notice_prompt_line", { prompt: safePrompt }),
+    localizer(locale, modelLineKey, { model: safeModel }),
+    localizer(locale, promptLineKey, { prompt: safePrompt }),
     ...extraLines.map((line) => line.trim()).filter((line) => line.length > 0),
     timingLine.trim(),
   ]
     .filter((part) => part.length > 0)
     .join("\n");
+}
+
+export function buildImageToolNoticeDescription(
+  locale: string,
+  baseDescription: string,
+  model: string,
+  prompt: string,
+  timingLine: string,
+  extraLines: string[] = [],
+): string {
+  return buildLabeledGenerationNoticeDescription(
+    locale,
+    baseDescription,
+    "genai.image.notice_model_line",
+    "genai.image.notice_prompt_line",
+    model,
+    prompt,
+    timingLine,
+    extraLines,
+  );
+}
+
+export function buildVideoToolNoticeDescription(
+  locale: string,
+  baseDescription: string,
+  model: string,
+  prompt: string,
+  timingLine: string,
+  extraLines: string[] = [],
+): string {
+  return buildLabeledGenerationNoticeDescription(
+    locale,
+    baseDescription,
+    "genai.video.notice_model_line",
+    "genai.video.notice_prompt_line",
+    model,
+    prompt,
+    timingLine,
+    extraLines,
+  );
 }
 
 export function isToolNoticeVisible(config: TomoriConfigRow, key: ToolNoticeKey): boolean {
