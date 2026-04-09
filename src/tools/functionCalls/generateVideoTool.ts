@@ -11,7 +11,11 @@ import { AttachmentBuilder } from "discord.js";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
-import { buildVideoToolNoticeDescription, sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
+import {
+  buildReferencedMessageUrl,
+  buildVideoToolNoticeDescription,
+  sendToolProgressNotice,
+} from "@/utils/discord/toolProgressNotice";
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { sql } from "../../utils/db/client";
 import { decryptApiKey } from "../../utils/security/crypto";
@@ -352,11 +356,16 @@ export class GenerateVideoTool extends BaseTool {
           context.locale,
           usesReference ? "genai.video.generating_with_references_description" : "genai.video.generating_description",
         );
+        const referencedMessageUrl = messageId ? buildReferencedMessageUrl(context, messageId) : null;
         const extraNoticeLines = usesReference
           ? [
-              localizer(context.locale, "genai.video.notice_reference_count_line", {
-                count: "1",
-              }),
+              referencedMessageUrl
+                ? localizer(context.locale, "genai.video.notice_reference_line", {
+                    message_url: referencedMessageUrl,
+                  })
+                : localizer(context.locale, "genai.video.notice_reference_count_line", {
+                    count: "1",
+                  }),
             ]
           : [];
         await sendToolProgressNotice(

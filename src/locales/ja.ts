@@ -231,6 +231,7 @@ export default {
       generating_with_references_description: "現在のプロンプトと参照画像から動画を作成しています",
       notice_model_line: "**モデル:** {model}",
       notice_prompt_line: "**プロンプト:** {prompt}",
+      notice_reference_line: "参照元: {message_url}",
       notice_reference_count_line: "参照画像を {count} 枚使用しています。",
       generating_footer: "1〜3分ほどかかる場合があります。",
     },
@@ -249,6 +250,7 @@ export default {
       editing_description: "参照画像の `{edit_target}` を対象に編集しています",
       notice_model_line: "**モデル:** {model}",
       notice_prompt_line: "**プロンプト:** {prompt}",
+      notice_reference_line: "参照元: {message_url}",
       notice_character_prompt_line: "**キャラクター {index}:** {prompt}",
       notice_nai_tags_help_line: "より良いNovelAI画像を生成するには `/novelai image-tags` を使ってください。",
       notice_reference_count_line: "参照画像を {count} 枚使用しています。",
@@ -588,12 +590,11 @@ export default {
       personal_memory_deleted_description: "{user_nickname}さんに関する個人的な記憶を削除しました:\n`{memory_content}`",
       server_memory_footer:
         "サーバー管理者は`/memory server add`、`/memory server remove`、`/memory server export`でこの記憶を管理できます。",
-      personal_memory_footer_manage:
-        "あなたの個人的な記憶は`/memory personal add`、`/memory personal remove`、`/memory personal export`で管理できます。個人記憶の保存は`/personal privacy`でオプトアウトできます。",
+      personal_memory_footer_manage: "個人記憶は`/memory personal`で管理できます。",
       personal_memory_footer_personalization_disabled:
-        "この記憶は保存されましたが、現在このサーバーではパーソナライズ機能が無効になっているため、すぐには効果がありません。全文は`/memory personal export`で確認できます。個人記憶の保存は`/personal privacy`でオプトアウトできます。",
+        "この記憶は保存されましたが、現在このサーバーではパーソナライズ機能が無効になっているため、すぐには効果がありません。全文は`/memory personal export`で確認できます。`/personal privacy`でオプトアウトできます。",
       personal_memory_footer_user_blacklisted:
-        "この記憶は保存されましたが、対象のユーザーは現在このサーバーのパーソナライズ機能のブラックリストに登録されているため、すぐには効果がありません。全文は`/memory personal export`で確認できます。個人記憶の保存は`/personal privacy`でオプトアウトできます。",
+        "この記憶は保存されましたが、対象のユーザーは現在このサーバーのパーソナライズ機能のブラックリストに登録されているため、すぐには効果がありません。全文は`/memory personal export`で確認できます。`/personal privacy`でオプトアウトできます。",
     },
   },
 

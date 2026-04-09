@@ -229,6 +229,7 @@ export default {
       generating_with_references_description: "Creating a video from the current prompt and reference image",
       notice_model_line: "**Model:** {model}",
       notice_prompt_line: "**Prompt:** {prompt}",
+      notice_reference_line: "Reference: {message_url}",
       notice_reference_count_line: "Using {count} reference image(s).",
       generating_footer: "This may take 1-3 minutes.",
     },
@@ -247,6 +248,7 @@ export default {
       editing_description: "Editing the referenced image by targeting `{edit_target}`",
       notice_model_line: "**Model:** {model}",
       notice_prompt_line: "**Prompt:** {prompt}",
+      notice_reference_line: "Reference: {message_url}",
       notice_character_prompt_line: "**Character {index}:** {prompt}",
       notice_nai_tags_help_line: "Use `/novelai image-tags` to help me generate better NovelAI images.",
       notice_reference_count_line: "Using {count} reference image(s).",
@@ -583,12 +585,11 @@ export default {
         "A personal memory about {user_nickname} has been deleted:\n`{memory_content}`",
       server_memory_footer:
         "Server managers can manage this memory using `/memory server add`, `/memory server remove`, and `/memory server export`.",
-      personal_memory_footer_manage:
-        "You can manage your personal memories using `/memory personal add`, `/memory personal remove`, and `/memory personal export`. Opt out of personal memory storage with `/personal privacy`.",
+      personal_memory_footer_manage: "You can manage your personal memories using `/memory personal`.",
       personal_memory_footer_personalization_disabled:
-        "This memory was saved, but personalization features are currently disabled on this server, so it will not have an immediate effect here. Use `/memory personal export` to view the full text. Opt out of personal memory storage with `/personal privacy`.",
+        "This memory was saved, but personalization features are currently disabled on this server, so it will not have an immediate effect here. Use `/memory personal export` to view it. You can opt out with `/personal privacy`.",
       personal_memory_footer_user_blacklisted:
-        "This memory was saved, but the user in question is currently blacklisted from personalization features on this server, so it will not have an immediate effect here. Use `/memory personal export` to view the full text. Opt out of personal memory storage with `/personal privacy`.",
+        "This memory was saved, but the user in question is currently blacklisted from personalization features on this server, so it will not have an immediate effect here. Use `/memory personal export` to view it. You can opt out with `/personal privacy`.",
     },
   },
 
@@ -2477,8 +2478,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       shared: {
         select_persona_title: `Select a persona to manage`,
         reason_line: `Reason: \`\`{reason}\`\``,
-        reward_footer: `❤️ {bot} will remember this. Use /conditioning manage.`,
-        punish_footer: `💀 {bot} will remember this. Use /conditioning manage.`,
+        reward_footer: `❤️ {bot} will remember this. Use /conditioning to manage.`,
+        punish_footer: `💀 {bot} will remember this. Use /conditioning to manage.`,
         type_reward: `reward conditioning`,
         type_punish: `punishment conditioning`,
       },

@@ -16,7 +16,11 @@ import JSZip from "jszip";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
-import { buildImageToolNoticeDescription, sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
+import {
+  buildImageToolNoticeDescription,
+  buildReferencedMessageUrl,
+  sendToolProgressNotice,
+} from "@/utils/discord/toolProgressNotice";
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { sql } from "../../utils/db/client";
 import { decryptApiKey, getOptApiKey } from "../../utils/security/crypto";
@@ -995,10 +999,15 @@ export class GenerateImageNaiTool extends BaseTool {
           extraNoticeLines.push(localizer(context.locale, "genai.image.notice_nai_tags_help_line"));
         }
         if (messageId) {
+          const referencedMessageUrl = buildReferencedMessageUrl(context, messageId);
           extraNoticeLines.push(
-            localizer(context.locale, "genai.image.notice_reference_count_line", {
-              count: "1",
-            }),
+            referencedMessageUrl
+              ? localizer(context.locale, "genai.image.notice_reference_line", {
+                  message_url: referencedMessageUrl,
+                })
+              : localizer(context.locale, "genai.image.notice_reference_count_line", {
+                  count: "1",
+                }),
           );
         }
         extraNoticeLines.push(...buildCharacterNoticeLines(context.locale, characters));

@@ -78,16 +78,18 @@ function buildLabeledGenerationNoticeDescription(
 ): string {
   const safeModel = `\`${escapeMarkdown(model.trim())}\``;
   const safePrompt = `\`${escapeMarkdown(truncateNoticeText(prompt, IMAGE_NOTICE_PROMPT_PREVIEW_LENGTH))}\``;
-
-  return [
-    baseDescription.trim(),
+  const metadataLines = [
     localizer(locale, modelLineKey, { model: safeModel }),
     localizer(locale, promptLineKey, { prompt: safePrompt }),
+  ].filter((line) => line.length > 0);
+  const trailingLines = [
     ...extraLines.map((line) => line.trim()).filter((line) => line.length > 0),
     timingLine.trim(),
-  ]
+  ].filter((line) => line.length > 0);
+
+  return [baseDescription.trim(), metadataLines.join("\n"), trailingLines.join("\n")]
     .filter((part) => part.length > 0)
-    .join("\n");
+    .join("\n\n");
 }
 
 export function buildImageToolNoticeDescription(
@@ -108,6 +110,31 @@ export function buildImageToolNoticeDescription(
     timingLine,
     extraLines,
   );
+}
+
+export function buildReferencedMessageUrl(context: ToolContext, messageId: string): string | null {
+  const trimmedMessageId = messageId.trim();
+  if (!trimmedMessageId) {
+    return null;
+  }
+
+  if (
+    "guildId" in context.channel &&
+    typeof context.channel.guildId === "string" &&
+    context.channel.guildId.length > 0
+  ) {
+    return `https://discord.com/channels/${context.channel.guildId}/${context.channel.id}/${trimmedMessageId}`;
+  }
+
+  if (
+    "isDMBased" in context.channel &&
+    typeof context.channel.isDMBased === "function" &&
+    context.channel.isDMBased()
+  ) {
+    return `https://discord.com/channels/@me/${context.channel.id}/${trimmedMessageId}`;
+  }
+
+  return null;
 }
 
 export function buildVideoToolNoticeDescription(
