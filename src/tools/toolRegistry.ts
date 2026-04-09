@@ -35,7 +35,7 @@ export interface ToolStateForContext {
     sticker_usage_enabled: boolean;
     web_search_enabled: boolean;
     self_teaching_enabled: boolean;
-    pin_message_enabled: boolean;
+    manage_message_enabled: boolean;
     imagegen_enabled: boolean;
     videogen_enabled: boolean;
     nai_exclusive_imggen: boolean;

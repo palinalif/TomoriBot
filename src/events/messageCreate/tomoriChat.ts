@@ -37,7 +37,6 @@ import { sendCooldownDM } from "../../utils/discord/cooldownDM";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
 import {
   getOrCreateWebhook,
-  getCachedManagedWebhookForChannel,
   resolvePersonaWebhookIdentity,
   sendUserTranscriptViaWebhook,
   sendWebhookMessageWithIdentity,
@@ -1168,114 +1167,38 @@ function formatAttachmentSystemHint(filename: string, messageId: string): string
   return `[System: A file named \`${filename}\` is attached (message ID: ${messageId})]`;
 }
 
-function resolveManagedWebhookHostChannelId(channel: Message["channel"]): string | null {
-  const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
-  if (isThread) {
-    return channel.parent?.id ?? null;
-  }
-
-  return "fetchWebhooks" in channel && "createWebhook" in channel ? channel.id : null;
+function buildRecentMessageMetadataInline(createdAt: number): string {
+  return `sent ${formatTimestampInline(createdAt)}`;
 }
 
-function truncateMessageMetadataPreview(text: string, maxLength = 90): string {
-  const compact = text.replace(/\s+/g, " ").trim();
-  if (!compact) {
-    return "[No text content]";
-  }
-
-  return compact.length > maxLength ? `${compact.slice(0, maxLength - 3)}...` : compact;
+function buildRecentMessageMetadataAnnotation(messageRef: string, createdAt: number): string {
+  return `[System: Message metadata: ref=${messageRef} | ${buildRecentMessageMetadataInline(createdAt)}]`;
 }
 
-function buildMessageMetadataPreview(message: Message): string {
-  const textPreview = truncateMessageMetadataPreview(message.cleanContent || message.content || "");
-  const attachmentParts: string[] = [];
-  let imageCount = 0;
-  let videoCount = 0;
-  let fileCount = 0;
-
-  for (const attachment of message.attachments.values()) {
-    const contentType = attachment.contentType?.toLowerCase() ?? "";
-    if (contentType.startsWith("image/")) {
-      imageCount++;
-      continue;
-    }
-    if (contentType.startsWith("video/")) {
-      videoCount++;
-      continue;
-    }
-    fileCount++;
-  }
-
-  if (imageCount > 0) {
-    attachmentParts.push(`${imageCount} image${imageCount === 1 ? "" : "s"}`);
-  }
-  if (videoCount > 0) {
-    attachmentParts.push(`${videoCount} video${videoCount === 1 ? "" : "s"}`);
-  }
-  if (message.stickers.size > 0) {
-    attachmentParts.push(`${message.stickers.size} sticker${message.stickers.size === 1 ? "" : "s"}`);
-  }
-  if (fileCount > 0) {
-    attachmentParts.push(`${fileCount} file${fileCount === 1 ? "" : "s"}`);
-  }
-
-  if (attachmentParts.length === 0) {
-    return textPreview;
-  }
-
-  if (textPreview === "[No text content]") {
-    return `[${attachmentParts.join(", ")}]`;
-  }
-
-  return `${textPreview} [+ ${attachmentParts.join(", ")}]`;
+function buildRevealedMessageMetadataTailDirective(): string {
+  return (
+    "Recent message metadata has been revealed in the visible conversation turns. " +
+    "Each annotated message now includes a `ref_N` handle and sent timestamp. " +
+    "`manage_message` can pin any recent message if Discord permissions allow it, and can edit or delete recent messages you or another character owns. " +
+    "`interact_with_recent_message` can react to a recent message with an emoji or send a short reply/backtrack comment about it."
+  );
 }
 
-function isTomoriManagedWebhookHistoryMessage(
-  message: Message,
-  personaNames: Set<string>,
-  managedWebhookHostChannelId: string | null,
-): boolean {
-  if (!message.webhookId || !managedWebhookHostChannelId || isMatrixBridgeWebhookUsername(message.author.username)) {
-    return false;
-  }
-
-  const managedWebhook = getCachedManagedWebhookForChannel(managedWebhookHostChannelId, message.webhookId);
-  if (!managedWebhook) {
-    return false;
-  }
-
-  const webhookAuthorName = stripBridgePrefix(message.author.username).trim().toLowerCase();
-  return webhookAuthorName.length > 0 && personaNames.has(webhookAuthorName);
-}
-
-function buildRecentMessageMetadataLedger(params: {
+function annotateRecentMessageMetadataInContext(params: {
   recentMessages: Message[];
   visibleMessageIds: Set<string>;
+  contextSegments: StructuredContextItem[];
   messageIdMap: MessageIdMap;
-  clientUserId?: string;
-  mainPersonaName: string;
-  personaNames: Set<string>;
-  canPinMessages: boolean;
-  canReactMessages: boolean;
-  canReplyMessages: boolean;
-  isDmChannel: boolean;
-  managedWebhookHostChannelId: string | null;
-}): StructuredContextItem | null {
-  const {
-    recentMessages,
-    visibleMessageIds,
-    messageIdMap,
-    clientUserId,
-    mainPersonaName,
-    personaNames,
-    canPinMessages,
-    canReactMessages,
-    canReplyMessages,
-    isDmChannel,
-    managedWebhookHostChannelId,
-  } = params;
+}): { annotatedCount: number; patchedReplyReferenceCount: number } {
+  const { recentMessages, visibleMessageIds, contextSegments, messageIdMap } = params;
 
-  const metadataLines: string[] = [];
+  const metadataByMessageId = new Map<
+    string,
+    {
+      inline: string;
+      annotation: string;
+    }
+  >();
 
   for (const message of recentMessages) {
     if (!visibleMessageIds.has(message.id)) {
@@ -1283,46 +1206,81 @@ function buildRecentMessageMetadataLedger(params: {
     }
 
     const messageRef = messageIdMap.register(message.id, "ref");
-    const isDirectTomoriMessage = Boolean(clientUserId && message.author.id === clientUserId);
-    const isManagedWebhookMessage = isTomoriManagedWebhookHistoryMessage(
-      message,
-      personaNames,
-      managedWebhookHostChannelId,
-    );
+    const inlineMetadata = buildRecentMessageMetadataInline(message.createdTimestamp);
 
-    const authorName = isDirectTomoriMessage
-      ? mainPersonaName
-      : isManagedWebhookMessage
-        ? stripBridgePrefix(message.author.username)
-        : (message.member?.displayName ?? message.author.globalName ?? stripBridgePrefix(message.author.username));
-
-    const preview = buildMessageMetadataPreview(message).replaceAll("[", "(").replaceAll("]", ")").replaceAll('"', "'");
-
-    metadataLines.push(
-      `${messageRef} | ${authorName} | ${formatTimestampInline(message.createdTimestamp)} | pinned=${message.pinned ? "yes" : "no"} | can_pin=${
-        !isDmChannel && canPinMessages && !message.pinned ? "yes" : "no"
-      } | can_react=${canReactMessages ? "yes" : "no"} | can_reply=${canReplyMessages ? "yes" : "no"} | can_edit=${isDirectTomoriMessage ? (message.editable ? "yes" : "no") : isManagedWebhookMessage ? "yes" : "no"} | can_delete=${
-        isDirectTomoriMessage ? (message.deletable ? "yes" : "no") : isManagedWebhookMessage ? "yes" : "no"
-      } | preview="${preview}"`,
-    );
+    metadataByMessageId.set(message.id, {
+      inline: inlineMetadata,
+      annotation: buildRecentMessageMetadataAnnotation(messageRef, message.createdTimestamp),
+    });
   }
 
-  if (metadataLines.length === 0) {
-    return null;
+  if (metadataByMessageId.size === 0) {
+    return { annotatedCount: 0, patchedReplyReferenceCount: 0 };
   }
 
-  return {
-    role: "user",
-    metadataTag: ContextItemTag.DIALOGUE_HISTORY,
-    parts: [
-      {
+  const targetContextItemByMessageId = new Map<string, StructuredContextItem>();
+  for (const contextItem of contextSegments) {
+    if (contextItem.metadataTag !== ContextItemTag.DIALOGUE_HISTORY || !contextItem.messageId) {
+      continue;
+    }
+
+    targetContextItemByMessageId.set(contextItem.messageId, contextItem);
+  }
+
+  let annotatedCount = 0;
+  for (const [messageId, metadata] of metadataByMessageId.entries()) {
+    const targetContextItem = targetContextItemByMessageId.get(messageId);
+    if (!targetContextItem) {
+      continue;
+    }
+
+    const textParts = targetContextItem.parts.filter(
+      (part): part is Extract<StructuredContextItem["parts"][number], { type: "text" }> => part.type === "text",
+    );
+    const hasExistingAnnotation = textParts.some((part) => part.text.includes("[System: Message metadata: ref="));
+    if (hasExistingAnnotation) {
+      continue;
+    }
+
+    const targetTextPart = textParts[textParts.length - 1];
+    if (targetTextPart) {
+      targetTextPart.text = `${targetTextPart.text}\n${metadata.annotation}`;
+    } else {
+      targetContextItem.parts.push({
         type: "text",
-        text:
-          `[System: Recent message metadata for the current channel. Use these ref_N handles with manage_message or interact_with_recent_message. ` +
-          `Each line is ref | author | sent | pinned | can_pin | can_react | can_reply | can_edit | can_delete | preview.\n${metadataLines.join("\n")}]`,
-      },
-    ],
-  };
+        text: metadata.annotation,
+      });
+    }
+    annotatedCount++;
+  }
+
+  const replyRefPattern = /\[System: This message is referring to a previous message \(ID: (ref_\d+)\)/g;
+  let patchedReplyReferenceCount = 0;
+
+  for (const contextItem of contextSegments) {
+    for (const part of contextItem.parts) {
+      if (part.type !== "text" || !part.text.includes("This message is referring to a previous message")) {
+        continue;
+      }
+
+      part.text = part.text.replace(replyRefPattern, (match, opaqueRef: string) => {
+        const referencedMessageId = messageIdMap.resolve(opaqueRef);
+        if (!referencedMessageId) {
+          return match;
+        }
+
+        const metadata = metadataByMessageId.get(referencedMessageId);
+        if (!metadata || match.includes(", sent ")) {
+          return match;
+        }
+
+        patchedReplyReferenceCount++;
+        return `${match.replace(`(ID: ${opaqueRef})`, `(ID: ${opaqueRef}, ${metadata.inline})`)}`;
+      });
+    }
+  }
+
+  return { annotatedCount, patchedReplyReferenceCount };
 }
 
 function formatSystemProducedEmbedHint(embedBody: string): string {
@@ -5433,6 +5391,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
             streamingContext.outputPrefill = undefined;
             streamingContext.outputPrefillState = undefined;
           }
+          streamingContext.replyNoticeState = { attempted: false, sent: false };
 
           // NAI GLM-4.6 continuation: if retrying with a prompt continuation fragment,
           // also set it as the output prefill so Discord shows the complete sentence
@@ -6153,15 +6112,13 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                     break;
                   }
 
-                  // Capture any text the model streamed to Discord before calling
-                  // the tool, so it appears in the function interaction history
-                  // and the model won't repeat itself on continuation.
-                  const preToolText = (streamResult.accumulatedText ?? "").trim();
-                  if (preToolText) {
-                    accumulatedStreamedModelParts.push({
-                      type: "text",
-                      text: preToolText,
-                    });
+                  // The stream adapter mutates personaAccumulatedParts with the raw
+                  // assistant text from this iteration. That text is archived into
+                  // functionInteractionHistory below, so do not also carry it forward
+                  // as currentTurnModelParts or it will replay as a duplicate trailing
+                  // assistant turn on the next tool-loop iteration.
+                  if (accumulatedStreamedModelParts.length > 0) {
+                    accumulatedStreamedModelParts.length = 0;
                   }
 
                   const funcCall = streamResult.data as FunctionCall; // Type assertion
@@ -6685,72 +6642,29 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       toolResult.data &&
                       (toolResult.data as Record<string, unknown>).type === "context_restart_with_message_metadata"
                     ) {
-                      log.info("Recent message metadata reveal detected. Injecting metadata ledger into context.");
+                      log.info("Recent message metadata reveal detected. Annotating existing context items in place.");
 
                       streamingContext.disableMessageMetadataContext = true;
 
                       const visibleMessageIds = new Set(simplifiedMessages.map((msg) => msg.id));
-                      const personaNames = new Set(
-                        allPersonas
-                          .map((persona) => persona.tomori_nickname?.trim().toLowerCase())
-                          .filter((nickname): nickname is string => Boolean(nickname)),
-                      );
-                      const clientUser = client.user;
-                      const canPinMessages =
-                        !isDMChannel &&
-                        Boolean(
-                          clientUser &&
-                            "permissionsFor" in channel &&
-                            channel.permissionsFor(clientUser)?.has("ManageMessages"),
-                        );
-                      const isThreadChannel =
-                        channel.type === ChannelType.PublicThread ||
-                        channel.type === ChannelType.PrivateThread ||
-                        channel.type === ChannelType.AnnouncementThread;
-                      const canReactMessages =
-                        isDMChannel ||
-                        Boolean(
-                          clientUser &&
-                            "permissionsFor" in channel &&
-                            channel.permissionsFor(clientUser)?.has("AddReactions"),
-                        );
-                      const canSendMessages =
-                        isDMChannel ||
-                        Boolean(
-                          clientUser &&
-                            "permissionsFor" in channel &&
-                            channel
-                              .permissionsFor(clientUser)
-                              ?.has(isThreadChannel ? "SendMessagesInThreads" : "SendMessages"),
-                        );
-                      const managedWebhookHostChannelId = resolveManagedWebhookHostChannelId(channel);
-                      const canReplyMessages =
-                        canSendMessages || Boolean(personaUsername && managedWebhookHostChannelId);
-                      const metadataLedgerItem = buildRecentMessageMetadataLedger({
+                      const { annotatedCount, patchedReplyReferenceCount } = annotateRecentMessageMetadataInContext({
                         recentMessages: relevantMessagesArray,
                         visibleMessageIds,
+                        contextSegments,
                         messageIdMap: streamingContext.messageIdMap ?? messageIdMap,
-                        clientUserId: client.user?.id,
-                        mainPersonaName:
-                          mainPersona?.tomori_nickname ??
-                          tomoriState?.tomori_nickname ??
-                          process.env.DEFAULT_BOTNAME ??
-                          "Tomori",
-                        personaNames,
-                        canPinMessages,
-                        canReactMessages,
-                        canReplyMessages,
-                        isDmChannel: isDMChannel,
-                        managedWebhookHostChannelId,
                       });
 
-                      if (metadataLedgerItem) {
-                        contextSegments.push(metadataLedgerItem);
+                      if (annotatedCount > 0 || patchedReplyReferenceCount > 0) {
                         log.success(
-                          `Injected recent message metadata ledger with ${visibleMessageIds.size} visible entries.`,
+                          `Annotated recent message metadata on ${annotatedCount} visible turn(s) and patched ${patchedReplyReferenceCount} reply reference(s).`,
                         );
                       } else {
-                        log.warn("No visible recent messages were available to include in the metadata ledger.");
+                        log.warn("No visible recent messages were available to annotate with metadata.");
+                      }
+
+                      const metadataActionHint = buildTailDirectiveMessage(buildRevealedMessageMetadataTailDirective());
+                      if (metadataActionHint) {
+                        contextSegments.push(metadataActionHint);
                       }
 
                       // Continue to next iteration WITHOUT adding to function interaction history

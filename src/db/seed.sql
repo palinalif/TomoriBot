@@ -174,6 +174,24 @@ EXCEPTION
         RAISE NOTICE 'tomori_configs column rename skipped: %', SQLERRM;
 END $$;
 
+-- Rename pin_message_enabled to manage_message_enabled in tomori_configs (idempotent).
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tomori_configs' AND column_name = 'pin_message_enabled') THEN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tomori_configs' AND column_name = 'manage_message_enabled') THEN
+            UPDATE tomori_configs
+            SET manage_message_enabled = COALESCE(pin_message_enabled, manage_message_enabled);
+
+            ALTER TABLE tomori_configs DROP COLUMN pin_message_enabled;
+        ELSE
+            ALTER TABLE tomori_configs RENAME COLUMN pin_message_enabled TO manage_message_enabled;
+        END IF;
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'tomori_configs manage_message_enabled rename skipped: %', SQLERRM;
+END $$;
+
 -- Migrate previously-saved legacy Z.ai Coding snapshots to the renamed coding provider.
 -- This must only touch old plain-GLM snapshots. New general Z.ai snapshots use
 -- prefixed `zai/...` model rows and should remain mapped to `zai`.

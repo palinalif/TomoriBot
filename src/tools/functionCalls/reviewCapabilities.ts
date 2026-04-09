@@ -349,8 +349,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
           "- **manage_message** (pin any recent message, or edit/delete Tomori-owned recent messages)\n";
         capabilitiesContent +=
           "- **interact_with_recent_message** (react to or reply to a recent message for fun/backtracking)\n";
-        capabilitiesContent +=
-          "- **reveal_message_metadata** (show recent message refs, timestamps, and action flags)\n";
+        capabilitiesContent += "- **reveal_message_metadata** (annotate recent message refs and sent timestamps)\n";
         capabilitiesContent += "- **create_reminder** (set reminders for users)\n";
         capabilitiesContent +=
           "- **cross_channel_message** (instantly send a message to another channel in the server, with optional boomerang report-back)\n";
@@ -623,7 +622,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
           name: "Sample Dialogue Teaching",
           value: config.sampledialogue_memteaching_enabled,
         },
-        { name: "Message Management Tool", value: config.pin_message_enabled },
+        { name: "Message Management Tool", value: config.manage_message_enabled },
         {
           name: "Uncensored Unicode Space",
           value: config.uncensor_unicode_space_enabled,
@@ -757,7 +756,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
             sticker_usage_enabled: config.sticker_usage_enabled,
             web_search_enabled: config.web_search_enabled,
             self_teaching_enabled: config.self_teaching_enabled,
-            pin_message_enabled: config.pin_message_enabled,
+            manage_message_enabled: config.manage_message_enabled,
             imagegen_enabled: config.imagegen_enabled,
             videogen_enabled: config.videogen_enabled,
             nai_exclusive_imggen: config.nai_exclusive_imggen ?? false,
@@ -885,7 +884,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       if (!config.server_memteaching_enabled) disabledFeatures.push("server memory teaching");
       if (!config.attribute_memteaching_enabled) disabledFeatures.push("attribute teaching");
       if (!config.sampledialogue_memteaching_enabled) disabledFeatures.push("dialogue teaching");
-      if (!config.pin_message_enabled) disabledFeatures.push("message management tool");
+      if (!config.manage_message_enabled) disabledFeatures.push("message management tool");
 
       if (disabledFeatures.length > 0) {
         disabledReasons.push(`**Server Configuration**: Admin has disabled ${disabledFeatures.join(", ")}`);

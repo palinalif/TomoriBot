@@ -138,6 +138,7 @@ Overflow fallback:
 
 ### Alter persona
 - sends via webhook with persona username/avatar
+- when the turn is a reply, Tomori sends one standalone reply-context embed immediately before the first visible alter message of that turn
 - attempts webhook recovery on invalid webhook errors
 - in non-production, avatar identity comes from either a public URL built from local storage or a webhook-avatar mutation fallback guarded by a per-target-channel lock
 - falls back to regular bot message if webhook path fails

@@ -824,8 +824,8 @@ export async function execute(
               inline: true,
             },
             {
-              nameKey: "commands.tool.status.field_pin_message",
-              value: formatBooleanLocalized(config.pin_message_enabled, locale),
+              nameKey: "commands.tool.status.field_manage_message",
+              value: formatBooleanLocalized(config.manage_message_enabled, locale),
               inline: true,
             },
             {

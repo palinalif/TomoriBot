@@ -84,11 +84,11 @@ const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     getState: (c) => c.web_search_enabled,
   },
   {
-    value: "pinmessage",
-    dbColumn: "pin_message_enabled",
-    labelKey: "commands.config.permissions.pinmessage_option",
-    descKey: "commands.config.permissions.pinmessage_desc",
-    getState: (c) => c.pin_message_enabled,
+    value: "managemessage",
+    dbColumn: "manage_message_enabled",
+    labelKey: "commands.config.permissions.managemessage_option",
+    descKey: "commands.config.permissions.managemessage_desc",
+    getState: (c) => c.manage_message_enabled,
   },
   {
     value: "imagegen",

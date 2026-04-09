@@ -110,6 +110,7 @@ export interface StreamContext {
   locale: string;
   suppressUserErrors?: boolean; // Suppress user-facing error embeds during key-rotation retries
   rotationKeyRetriesUsed?: boolean; // True if one or more rotation-key retries were attempted
+  replyNoticeState?: { attempted: boolean; sent: boolean }; // Tracks the standalone alter reply notice across tool-call stream retries
 
   // Tool availability flags
   disableYouTubeProcessing?: boolean; // Temporarily disable YouTube function during enhanced context restart

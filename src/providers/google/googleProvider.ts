@@ -370,7 +370,7 @@ export class GoogleProvider
           sticker_usage_enabled: tomoriState.config.sticker_usage_enabled,
           web_search_enabled: tomoriState.config.web_search_enabled,
           self_teaching_enabled: tomoriState.config.self_teaching_enabled,
-          pin_message_enabled: tomoriState.config.pin_message_enabled,
+          manage_message_enabled: tomoriState.config.manage_message_enabled,
           imagegen_enabled: tomoriState.config.imagegen_enabled,
           videogen_enabled: tomoriState.config.videogen_enabled,
           nai_exclusive_imggen: tomoriState.config.nai_exclusive_imggen,
@@ -646,6 +646,7 @@ export class GoogleProvider
         rotationKeyRetriesUsed: streamingContext?.rotationKeyRetriesUsed,
         outputPrefill: streamingContext?.outputPrefill,
         outputPrefillState: streamingContext?.outputPrefillState,
+        replyNoticeState: streamingContext?.replyNoticeState,
 
         // Multi-persona webhook support
         webhook,

@@ -28,6 +28,7 @@ import { ColorCode, log } from "../misc/logger";
 import { localizer } from "../text/localizer";
 import { STREAMING_LIMITS } from "../security/rateLimiter";
 import { getOrCreateWebhook, invalidateWebhookCache, sendWebhookMessageWithIdentity } from "./webhookManager";
+import { sendWebhookReplyNotice } from "./webhookReply";
 import {
   chunkMessage,
   cleanLLMOutput,
@@ -1763,6 +1764,8 @@ export class StreamOrchestrator implements IStreamOrchestrator {
    */
   private async sendSingleMessage(content: string, context: StreamContext, state: StreamState): Promise<void> {
     const strictUserImpersonation = isUserImpersonationStreamContext(context);
+    let replyNoticeMessage: Message | null = null;
+    const threadId = resolveWebhookThreadId(context.channel);
 
     // Check for stop request first (highest priority - prevents duplicate embeds)
     if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
@@ -1814,7 +1817,6 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     }
 
     try {
-      const threadId = resolveWebhookThreadId(context.channel);
       if (strictUserImpersonation && !context.webhook) {
         throw new Error("User impersonation requires a temporary webhook, but none is available.");
       }
@@ -1827,7 +1829,37 @@ export class StreamOrchestrator implements IStreamOrchestrator {
           `Stream Send: Using webhook for persona "${context.personaUsername}"${context.personaAvatarUrl ? " with custom avatar" : " (default avatar)"}`,
         );
 
-        // Webhooks cannot reply to messages, so always send as new message
+        const identity = {
+          username: context.personaUsername,
+          avatarUrl: context.personaAvatarUrl,
+          avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/") ? context.personaAvatarUrl : undefined,
+        };
+
+        if (
+          !strictUserImpersonation &&
+          context.tomoriState.is_alter &&
+          context.replyToMessage &&
+          context.replyNoticeState &&
+          !context.replyNoticeState.attempted &&
+          state.messageSentCount === 0
+        ) {
+          context.replyNoticeState.attempted = true;
+          try {
+            replyNoticeMessage = await sendWebhookReplyNotice(
+              context.webhook,
+              context.replyToMessage,
+              context.locale,
+              identity,
+              {
+                threadId,
+              },
+            );
+            context.replyNoticeState.sent = true;
+          } catch (noticeError) {
+            log.warn("Stream Send: Failed to send standalone alter reply notice", noticeError as Error);
+          }
+        }
+
         sentMessage = await sendWebhookMessageWithIdentity(
           context.webhook,
           {
@@ -1835,14 +1867,10 @@ export class StreamOrchestrator implements IStreamOrchestrator {
             allowedMentions: { parse: ["users", "roles"], repliedUser: false },
             ...(threadId ? { threadId } : {}),
           },
-          {
-            username: context.personaUsername,
-            avatarUrl: context.personaAvatarUrl,
-            avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/") ? context.personaAvatarUrl : undefined,
-          },
+          identity,
         );
 
-        // Mark as replied since webhook messages can't reply to the original
+        // Mark as replied after the initial webhook send.
         state.hasRepliedToOriginalMessage = true;
       }
       // 2. Regular bot message for main persona or fallback
@@ -1889,7 +1917,15 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
             if (recreatedWebhook) {
               const recoveredThreadId = resolveWebhookThreadId(context.channel);
-              const recoveredMessage = await sendWebhookMessageWithIdentity(
+              const recoveredIdentity = {
+                username: context.personaUsername,
+                avatarUrl: context.personaAvatarUrl,
+                avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/")
+                  ? context.personaAvatarUrl
+                  : undefined,
+              };
+
+              const recoveredReplyMessage = await sendWebhookMessageWithIdentity(
                 recreatedWebhook,
                 {
                   content,
@@ -1899,19 +1935,13 @@ export class StreamOrchestrator implements IStreamOrchestrator {
                   },
                   ...(recoveredThreadId ? { threadId: recoveredThreadId } : {}),
                 },
-                {
-                  username: context.personaUsername,
-                  avatarUrl: context.personaAvatarUrl,
-                  avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/")
-                    ? context.personaAvatarUrl
-                    : undefined,
-                },
+                recoveredIdentity,
               );
 
               context.webhook = recreatedWebhook;
               state.hasRepliedToOriginalMessage = true;
-              if (!state.firstReplyUrl && recoveredMessage?.url) {
-                state.firstReplyUrl = recoveredMessage.url;
+              if (!state.firstReplyUrl && recoveredReplyMessage?.url) {
+                state.firstReplyUrl = recoveredReplyMessage.url;
               }
               state.messageSentCount++;
               state.accumulatedText += content;
@@ -1938,6 +1968,15 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         log.warn("Stream Send: Webhook send failed, falling back to regular bot message", discordError);
 
         try {
+          if (replyNoticeMessage && context.webhook) {
+            await context.webhook.deleteMessage(replyNoticeMessage.id, threadId).catch((deleteError) => {
+              log.warn(
+                "Stream Send: Failed to delete standalone alter reply notice after webhook fallback",
+                deleteError,
+              );
+            });
+          }
+
           // Try fallback to regular message
           let fallbackMessage: Message | null = null;
           if (context.replyToMessage) {

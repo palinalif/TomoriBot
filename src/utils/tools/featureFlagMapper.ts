@@ -19,7 +19,7 @@ export const BUILTIN_TOOL_FEATURE_FLAGS: Record<string, string> = {
   update_long_term_memory: "self_teaching",
 
   // Discord interaction tools
-  manage_message: "pin_message",
+  manage_message: "manage_message",
 
   // Image generation tools
   generate_image: "image_gen",
@@ -136,7 +136,7 @@ export function configToFeatureFlags(config: {
   sticker_usage_enabled: boolean;
   web_search_enabled: boolean;
   self_teaching_enabled: boolean;
-  pin_message_enabled: boolean;
+  manage_message_enabled: boolean;
   imagegen_enabled: boolean;
   videogen_enabled: boolean;
   voice_message_enabled: boolean;
@@ -145,7 +145,7 @@ export function configToFeatureFlags(config: {
     sticker_usage: config.sticker_usage_enabled,
     web_search: config.web_search_enabled,
     self_teaching: config.self_teaching_enabled,
-    pin_message: config.pin_message_enabled,
+    manage_message: config.manage_message_enabled,
     image_gen: config.imagegen_enabled,
     video_gen: config.videogen_enabled,
     voice_message: config.voice_message_enabled,

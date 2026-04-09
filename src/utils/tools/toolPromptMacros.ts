@@ -186,7 +186,7 @@ export const TOOL_PROMPT_MACRO_DOCS: ToolPromptMacroDocEntry[] = [
     macro: "{timestamp_refresh_tool}",
     type: "static",
     currentTarget: "reveal_message_metadata",
-    notes: "Reveal recent message refs, timestamps, and action flags.",
+    notes: "Reveal recent message refs and sent timestamps.",
   },
   {
     macro: "{media_context_tool}",

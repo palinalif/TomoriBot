@@ -6,8 +6,8 @@
 import type { BaseGuildTextChannel, Message, Webhook } from "discord.js";
 import { BaseTool, type ToolContext, type ToolParameterSchema, type ToolResult } from "@/types/tool/interfaces";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
-import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
+import { getKnownPersonaSpeakerNames, stripLeadingKnownSpeakerPrefixes } from "@/utils/discord/modelAuthoredText";
 import { getCachedManagedWebhookForChannel } from "@/utils/discord/webhookManager";
 import { log } from "@/utils/misc/logger";
 import { isMatrixBridgeWebhookUsername, stripBridgePrefix } from "@/utils/bridge";
@@ -87,19 +87,6 @@ function resolveWebhookThreadId(channel: ToolContext["channel"]): string | undef
   return "isThread" in channel && typeof channel.isThread === "function" && channel.isThread() ? channel.id : undefined;
 }
 
-async function getPersonaNameSet(guildId?: string): Promise<Set<string>> {
-  if (!guildId) {
-    return new Set<string>();
-  }
-
-  const personas = await getCachedAllPersonas(guildId);
-  return new Set(
-    personas
-      .map((persona) => persona.tomori_nickname?.trim().toLowerCase())
-      .filter((nickname): nickname is string => Boolean(nickname)),
-  );
-}
-
 function getDisplayAuthorName(message: Message): string {
   return message.member?.displayName ?? message.author.globalName ?? stripBridgePrefix(message.author.username);
 }
@@ -107,9 +94,9 @@ function getDisplayAuthorName(message: Message): string {
 export class ManageMessageTool extends BaseTool {
   name = "manage_message";
   description =
-    "Manage a recent message in the current channel. `pin` can pin any recent message if Discord permissions allow it. `edit` and `delete` only work on Tomori-managed recent messages. Use `reveal_message_metadata` first when you need fresh `ref_N` handles, timestamps, or actionability flags.";
+    "Manage a recent message in the current channel. `pin` can pin any recent message if Discord permissions allow it. `edit` and `delete` only work on recent messages you or another character owns. Use `reveal_message_metadata` first when you need fresh `ref_N` handles or sent timestamps.";
   category = "discord" as const;
-  requiresFeatureFlag = "pin_message";
+  requiresFeatureFlag = "manage_message";
 
   parameters: ToolParameterSchema = {
     type: "object",
@@ -118,7 +105,7 @@ export class ManageMessageTool extends BaseTool {
         type: "string",
         enum: ["pin", "edit", "delete"],
         description:
-          "Which action to perform: pin a message, edit a Tomori-managed message, or delete one or more Tomori-managed messages.",
+          "Which action to perform: pin a message, edit a manageable message, or delete one or more manageable messages.",
       },
       message_id: {
         type: "string",
@@ -279,7 +266,11 @@ export class ManageMessageTool extends BaseTool {
       };
     }
 
-    const personaNameSet = await getPersonaNameSet(context.guildId);
+    const speakerNameSet = await getKnownPersonaSpeakerNames(context.guildId, [
+      context.personaUsername,
+      context.tomoriState.tomori_nickname,
+    ]);
+    const personaNameSet = new Set([...speakerNameSet].map((speakerName) => speakerName.toLowerCase()));
     const fetchLimit = normalizeMessageFetchLimit(context.tomoriState.config.message_fetch_limit);
     const recentMessages = await context.channel.messages.fetch({ limit: fetchLimit });
     const chronologicalMessages = [...recentMessages.values()].reverse();
@@ -446,12 +437,25 @@ export class ManageMessageTool extends BaseTool {
         };
       }
 
+      const sanitizedEditContent = stripLeadingKnownSpeakerPrefixes(editContent?.trim() ?? "", speakerNameSet);
+      if (!sanitizedEditContent) {
+        return {
+          success: false,
+          error: "Edit content collapsed after removing a speaker label",
+          message: "That edit started with a character name label, so I didn't apply it as-is.",
+          data: {
+            status: "edit_content_rejected_speaker_label",
+            message_ref: targetRef,
+          },
+        };
+      }
+
       try {
         if (targetType.kind === "direct") {
-          await targetMessage.edit({ content: editContent });
+          await targetMessage.edit({ content: sanitizedEditContent });
         } else {
           await targetType.webhook.editMessage(targetMessage.id, {
-            content: editContent,
+            content: sanitizedEditContent,
             ...(targetType.threadId ? { threadId: targetType.threadId } : {}),
           });
         }
@@ -463,7 +467,7 @@ export class ManageMessageTool extends BaseTool {
             status: "message_edited_successfully",
             message_ref: targetRef,
             author: getDisplayAuthorName(targetMessage),
-            preview: normalizePreview(editContent ?? ""),
+            preview: normalizePreview(sanitizedEditContent),
           },
         };
       } catch (error) {

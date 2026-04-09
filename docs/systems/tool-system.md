@@ -84,9 +84,9 @@ Current name-resolution notes for built-in tools:
 
 Current message-management / interaction notes:
 
-- `reveal_message_metadata` is a no-argument context rewrite tool that appends one compact ledger of recent visible messages for the current turn and then hides itself for the rest of that turn
-- the metadata ledger is built from the same post-reset recent history window already loaded for chat context, not from whatever subset happened to survive later prompt assembly
-- each metadata row includes `ref_N`, author, absolute + relative timestamp, pin state, react/reply eligibility, edit/delete eligibility, and a short text/media preview
+- `reveal_message_metadata` is a no-argument context rewrite tool that annotates existing visible message turns in place for the current turn and then hides itself for the rest of that turn
+- the metadata annotations are built from the same post-reset recent history window already loaded for chat context, not as a new synthetic ledger message
+- each annotated turn gains a compact metadata suffix containing `ref_N` and an absolute + relative sent timestamp
 - `manage_message` accepts `action = "pin" | "edit" | "delete"` plus `message_id`, optional `end_message_id`, and optional `content`
 - `interact_with_recent_message` accepts `action = "react" | "reply"` plus `message_id` and `content`
 - `pin` remains single-target and still requires Discord `Manage Messages`; `edit` and `delete` are runtime-gated to Tomori-owned direct messages or Tomori-managed persona webhook messages
@@ -124,7 +124,7 @@ Static built-in macros always expand to the current canonical built-in tool name
 | `{message_interaction_tool}` | `interact_with_recent_message` | React to or reply to a recent message for playful backtracking. |
 | `{profile_picture_tool}` | `peek_profile_picture` | Inspect an avatar or banner. |
 | `{document_tool}` | `read_document` | Read PDF/TXT/MD attachments. |
-| `{timestamp_refresh_tool}` | `reveal_message_metadata` | Reveal recent message refs, timestamps, and action flags. |
+| `{timestamp_refresh_tool}` | `reveal_message_metadata` | Reveal recent message refs and sent timestamps. |
 | `{media_context_tool}` | `increase_media_context` | Bring older hidden images/videos back into context. |
 | `{gif_tool}` | `process_gif` | Extract GIF frames for analysis. |
 | `{youtube_tool}` | `process_youtube_video` | Analyze a YouTube video. |

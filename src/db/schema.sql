@@ -490,8 +490,8 @@ SELECT add_column_if_not_exists('tomori_configs', 'timezone_offset', 'INTEGER', 
 -- Rename google_search_enabled to web_search_enabled for Brave Search integration 
 SELECT add_column_if_not_exists('tomori_configs', 'web_search_enabled', 'BOOLEAN', 'true');
 
--- Add pin message permission (November 2025)
-SELECT add_column_if_not_exists('tomori_configs', 'pin_message_enabled', 'BOOLEAN', 'true');
+-- Add message management permission (November 2025)
+SELECT add_column_if_not_exists('tomori_configs', 'manage_message_enabled', 'BOOLEAN', 'true');
 
 -- Add image generation permission
 SELECT add_column_if_not_exists('tomori_configs', 'imagegen_enabled', 'BOOLEAN', 'true');

@@ -3,14 +3,14 @@
  * Lets Tomori react to or reply to a recent message without needing message-management permissions.
  */
 
-import { EmbedBuilder, type BaseGuildTextChannel, type Message, type Webhook } from "discord.js";
+import type { BaseGuildTextChannel, Message, Webhook } from "discord.js";
 import { BaseTool, type ToolContext, type ToolParameterSchema, type ToolResult } from "@/types/tool/interfaces";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
-import { getOrCreateWebhook, sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
-import { ColorCode, log } from "@/utils/misc/logger";
-import { localizer } from "@/utils/text/localizer";
-import { stripBridgePrefix } from "@/utils/bridge";
+import { getOrCreateWebhook } from "@/utils/discord/webhookManager";
+import { log } from "@/utils/misc/logger";
+import { getKnownPersonaSpeakerNames, stripLeadingKnownSpeakerPrefixes } from "@/utils/discord/modelAuthoredText";
+import { getReplyContextAuthorName, sendWebhookReplyWithContext } from "@/utils/discord/webhookReply";
 
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
 const MAX_FUZZY_DISTANCE = 1000n;
@@ -86,31 +86,6 @@ function resolveWebhookThreadId(channel: ToolContext["channel"]): string | undef
   return "isThread" in channel && typeof channel.isThread === "function" && channel.isThread() ? channel.id : undefined;
 }
 
-function getDisplayAuthorName(message: Message): string {
-  return message.member?.displayName ?? message.author.globalName ?? stripBridgePrefix(message.author.username);
-}
-
-function buildReplyContextEmbed(targetMessage: Message, locale: string): EmbedBuilder {
-  return new EmbedBuilder()
-    .setColor(ColorCode.INFO)
-    .setTitle(localizer(locale, "genai.message_interaction.reply_context_title"))
-    .setDescription(
-      localizer(locale, "genai.message_interaction.reply_context_description", {
-        message_url: targetMessage.url,
-      }),
-    )
-    .setFooter({
-      text: localizer(locale, "genai.message_interaction.reply_context_footer", {
-        user: getDisplayAuthorName(targetMessage),
-      }),
-      iconURL: targetMessage.author.displayAvatarURL({
-        size: 64,
-        extension: "png",
-        forceStatic: true,
-      }),
-    });
-}
-
 type WebhookReplyContext = {
   webhook: Webhook;
   threadId?: string;
@@ -119,7 +94,7 @@ type WebhookReplyContext = {
 export class InteractWithRecentMessageTool extends BaseTool {
   name = "interact_with_recent_message";
   description =
-    "Interact with a recent message in the current channel for expressive follow-up behavior. `react` adds an emoji reaction. `reply` sends a short reply or backtrack comment about an earlier message. Use `reveal_message_metadata` first when you need fresh `ref_N` handles, timestamps, or actionability flags.";
+    "Interact with a recent message in the current channel for expressive follow-up behavior. `react` adds an emoji reaction. `reply` sends a short reply or backtrack comment about an earlier message. Use `reveal_message_metadata` first when you need fresh `ref_N` handles or sent timestamps.";
   category = "discord" as const;
 
   parameters: ToolParameterSchema = {
@@ -277,6 +252,14 @@ export class InteractWithRecentMessageTool extends BaseTool {
     };
   }
 
+  private async sanitizeReplyContent(content: string, context: ToolContext): Promise<string> {
+    const speakerNames = await getKnownPersonaSpeakerNames(context.guildId, [
+      context.personaUsername,
+      context.tomoriState.tomori_nickname,
+    ]);
+    return stripLeadingKnownSpeakerPrefixes(content, speakerNames);
+  }
+
   async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const validation = this.validateParameters(args);
     if (!validation.isValid) {
@@ -385,7 +368,7 @@ export class InteractWithRecentMessageTool extends BaseTool {
             status: "message_reacted_successfully",
             message_ref: targetRef,
             emoji: interactionContent,
-            author: getDisplayAuthorName(targetMessage),
+            author: getReplyContextAuthorName(targetMessage),
             preview: buildMessagePreview(targetMessage),
           },
         };
@@ -448,29 +431,39 @@ export class InteractWithRecentMessageTool extends BaseTool {
     }
 
     try {
+      const sanitizedReplyContent = await this.sanitizeReplyContent(interactionContent, context);
+      if (!sanitizedReplyContent) {
+        return {
+          success: false,
+          error: "Reply content collapsed after removing a speaker label",
+          message: "That reply started with a character name label, so I didn't send it as-is.",
+          data: {
+            status: "reply_content_rejected_speaker_label",
+            message_ref: targetRef,
+          },
+        };
+      }
+
       let sentMessage: Message;
 
       if (webhookReplyContext && context.personaUsername) {
-        sentMessage = await sendWebhookMessageWithIdentity(
+        sentMessage = await sendWebhookReplyWithContext(
           webhookReplyContext.webhook,
-          {
-            content: interactionContent,
-            embeds: [buildReplyContextEmbed(targetMessage, context.locale)],
-            allowedMentions: {
-              parse: ["users", "roles"],
-              repliedUser: false,
-            },
-            ...(webhookReplyContext.threadId ? { threadId: webhookReplyContext.threadId } : {}),
-          },
+          targetMessage,
+          context.locale,
+          sanitizedReplyContent,
           {
             username: context.personaUsername,
             avatarUrl: context.personaAvatarUrl,
             avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/") ? context.personaAvatarUrl : undefined,
           },
+          {
+            threadId: webhookReplyContext.threadId,
+          },
         );
       } else {
         sentMessage = await targetMessage.reply({
-          content: interactionContent,
+          content: sanitizedReplyContent,
           allowedMentions: {
             repliedUser: false,
           },
@@ -487,8 +480,8 @@ export class InteractWithRecentMessageTool extends BaseTool {
           status: "message_replied_successfully",
           message_ref: targetRef,
           reply_message_ref: sentMessageRef,
-          author: getDisplayAuthorName(targetMessage),
-          preview: normalizePreview(interactionContent),
+          author: getReplyContextAuthorName(targetMessage),
+          preview: normalizePreview(sanitizedReplyContent),
           used_webhook_context: Boolean(webhookReplyContext && context.personaUsername),
         },
       };

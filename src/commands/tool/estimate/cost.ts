@@ -305,7 +305,7 @@ function estimateToolSchemaTokens(): number {
         sticker_usage_enabled: true,
         web_search_enabled: true,
         self_teaching_enabled: true,
-        pin_message_enabled: true,
+        manage_message_enabled: true,
         imagegen_enabled: true,
         videogen_enabled: true,
         nai_exclusive_imggen: false,

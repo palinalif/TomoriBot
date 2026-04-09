@@ -87,6 +87,7 @@ export interface StreamingContext {
   disableAllTools?: boolean; // Flag to disable all tool calling (e.g., during user impersonation)
   outputPrefill?: string; // Optional prefill to output before streaming (hybrid prefix)
   outputPrefillState?: { sent: boolean }; // Tracks if prefill was already output (avoid duplicates on retry)
+  replyNoticeState?: { attempted: boolean; sent: boolean }; // Tracks the standalone alter reply notice across tool-call stream retries
   forcedMentions?: Array<{
     handle: string;
     userId: string;
