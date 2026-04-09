@@ -33,10 +33,10 @@ const STATIC_TOOL_PROMPT_MACROS: Record<string, string> = {
   "{task_tool}": "create_task",
   "{cross_channel_tool}": "cross_channel_message",
   "{sticker_tool}": "select_sticker_for_response",
-  "{pin_tool}": "pin_selected_message",
+  "{pin_tool}": "manage_message",
   "{profile_picture_tool}": "peek_profile_picture",
   "{document_tool}": "read_document",
-  "{timestamp_refresh_tool}": "refresh_message_timestamps",
+  "{timestamp_refresh_tool}": "reveal_message_metadata",
   "{media_context_tool}": "increase_media_context",
   "{gif_tool}": "process_gif",
   "{youtube_tool}": "process_youtube_video",
@@ -160,8 +160,8 @@ export const TOOL_PROMPT_MACRO_DOCS: ToolPromptMacroDocEntry[] = [
   {
     macro: "{pin_tool}",
     type: "static",
-    currentTarget: "pin_selected_message",
-    notes: "Pin a recent message in the current channel.",
+    currentTarget: "manage_message",
+    notes: "Pin any recent message, or edit/delete Tomori-managed recent messages.",
   },
   {
     macro: "{profile_picture_tool}",
@@ -178,8 +178,8 @@ export const TOOL_PROMPT_MACRO_DOCS: ToolPromptMacroDocEntry[] = [
   {
     macro: "{timestamp_refresh_tool}",
     type: "static",
-    currentTarget: "refresh_message_timestamps",
-    notes: "Rebuild recent context with exact timestamps.",
+    currentTarget: "reveal_message_metadata",
+    notes: "Reveal recent message refs, timestamps, and action flags.",
   },
   {
     macro: "{media_context_tool}",

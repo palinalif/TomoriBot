@@ -273,7 +273,7 @@ export const tomoriConfigSchema = z.object({
   humanizer_degree: z.nativeEnum(HumanizerDegree).default(HumanizerDegree.LIGHT),
   emoji_usage_enabled: z.boolean().default(true), // Added May 5, 2025
   sticker_usage_enabled: z.boolean().default(true), // Added May 5, 2025
-  pin_message_enabled: z.boolean().default(true), // Added November 5, 2025 - Permission for pin message tool
+  pin_message_enabled: z.boolean().default(true), // Added November 5, 2025 - Permission gate for message management tools
   imagegen_enabled: z.boolean().default(true), // Added January 2026 - Permission for image generation
   hide_respond_embed: z.boolean().default(false), // Added January 2026 - Hide respond command success embed
   hide_impersonation_embeds: z.boolean().default(false), // Added February 2026 - Hide impersonation confirmation embeds

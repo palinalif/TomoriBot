@@ -23,8 +23,9 @@ export { StickerTool } from "./stickerTool";
 export { MemoryTool } from "./memoryTool";
 export { YouTubeVideoTool } from "./youtubeVideoTool";
 export { PeekProfilePictureTool } from "./peekProfilePictureTool";
-export { PinMessageTool } from "./pinMessageTool";
+export { ManageMessageTool } from "./manageMessageTool";
 export { ReminderTool } from "./reminderTool";
+export { RevealMessageMetadataTool } from "./revealMessageMetadataTool";
 export { ReviewCapabilitiesTool } from "./reviewCapabilities";
 export { CrossChannelMessageTool } from "./crossChannelMessageTool";
 

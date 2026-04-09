@@ -58,7 +58,7 @@ function resolveOpaqueIds(args: Record<string, unknown>, messageIdMap?: MessageI
 
   let resolvedArgs: Record<string, unknown> | undefined;
 
-  for (const key of ["media_id", "message_id"] as const) {
+  for (const key of ["media_id", "message_id", "end_message_id"] as const) {
     const value = args[key];
     if (typeof value !== "string" || !MessageIdMap.isOpaqueKey(value)) {
       continue;
@@ -72,6 +72,7 @@ function resolveOpaqueIds(args: Record<string, unknown>, messageIdMap?: MessageI
 
     resolvedArgs ??= { ...args };
     resolvedArgs[key] = resolvedValue;
+    resolvedArgs[`__original_${key}`] = value;
   }
 
   return resolvedArgs ?? args;

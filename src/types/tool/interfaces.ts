@@ -78,7 +78,7 @@ export interface StreamingContext {
   disableShortTermMemoryUpdate?: boolean; // Flag to prevent update_short_term_memory from being called more than once per turn
   disableCrossChannelMessage?: boolean; // Flag to prevent nested cross-channel dispatch during tool-driven cross-channel turns
   explicitLongTermMemoryIntent?: boolean; // Flag to suppress STM tool nudges when the current user message explicitly asks for persistent memory
-  disableTimestampContext?: boolean; // Flag to prevent refresh_message_timestamps from being called more than once per turn
+  disableMessageMetadataContext?: boolean; // Flag to prevent reveal_message_metadata from being called more than once per turn
   forceReason?: boolean; // Flag to indicate reasoning mode for enhanced AI responses
   isManuallyTriggered?: boolean; // Flag to indicate this stream was triggered by a manual command
   suppressUserErrors?: boolean; // Suppress user-facing error embeds during key-rotation retries

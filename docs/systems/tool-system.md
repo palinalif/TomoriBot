@@ -27,7 +27,8 @@ From `src/tools/functionCalls/`:
 - `create_task` (`reminderTool.ts`)
 - `select_sticker_for_response` (`stickerTool.ts`)
 - `process_youtube_video` (`youtubeVideoTool.ts`)
-- `pin_selected_message` (`pinMessageTool.ts`)
+- `reveal_message_metadata` (`revealMessageMetadataTool.ts`)
+- `manage_message` (`manageMessageTool.ts`)
 - `peek_profile_picture` (`peekProfilePictureTool.ts`)
 - `increase_media_context` (`increaseMediaContextTool.ts`)
 - `process_gif` (`processGifTool.ts`)
@@ -76,8 +77,18 @@ Current name-resolution notes for built-in tools:
 - ambiguous results never auto-pick and instead return candidate labels for clarification
 - if a Discord user resolves successfully but has no Tomori user row yet, reminder/personal-memory tools fail with a human-readable "Tomori doesn't know this user yet" style error
 - bridge users can still be resolved by name from current conversation metadata, but avatar tools reject them and personal-memory creation/update does not create bridge-scoped personal memories
-- message-targeted tools such as `read_document`, `pin_selected_message`, `analyze_image`, `process_gif`, and edit/inpaint reference flows still target Discord messages internally, but the prompt-visible arguments are opaque `media_N` / `ref_N` handles rather than raw snowflakes
-- `ToolRegistry.executeTool()` resolves those opaque handles back to real Discord IDs before dispatch, so individual tool implementations continue to work with normal message IDs
+- message-targeted tools such as `read_document`, `manage_message`, `analyze_image`, `process_gif`, and edit/inpaint reference flows still target Discord messages internally, but the prompt-visible arguments are opaque `media_N` / `ref_N` handles rather than raw snowflakes
+- `ref_N` is now a general recent-message handle, not just a reply reference
+- `ToolRegistry.executeTool()` resolves those opaque handles back to real Discord IDs before dispatch, including both `message_id` and `end_message_id`, so individual tool implementations continue to work with normal message IDs
+
+Current message-management notes:
+
+- `reveal_message_metadata` is a no-argument context rewrite tool that appends one compact ledger of recent visible messages for the current turn and then hides itself for the rest of that turn
+- the metadata ledger is built from the same post-reset recent history window already loaded for chat context, not from whatever subset happened to survive later prompt assembly
+- each metadata row includes `ref_N`, author, absolute + relative timestamp, pin state, edit/delete eligibility, and a short text/media preview
+- `manage_message` accepts `action = "pin" | "edit" | "delete"` plus `message_id`, optional `end_message_id`, and optional `content`
+- `pin` remains single-target and still requires Discord `Manage Messages`; `edit` and `delete` are runtime-gated to Tomori-owned direct messages or Tomori-managed persona webhook messages
+- delete ranges are inclusive, normalized by recent-message chronology, and report skipped refs/counts instead of failing the whole request when some messages are ineligible
 
 Current `update_short_term_memory` runtime notes:
 
@@ -105,10 +116,10 @@ Static built-in macros always expand to the current canonical built-in tool name
 | `{task_tool}` | `create_task` | Create reminders or scheduled self-tasks. |
 | `{cross_channel_tool}` | `cross_channel_message` | Send an immediate message to another channel/thread. |
 | `{sticker_tool}` | `select_sticker_for_response` | Attach a Discord sticker to the response. |
-| `{pin_tool}` | `pin_selected_message` | Pin a recent message. |
+| `{pin_tool}` | `manage_message` | Pin any recent message, or edit/delete Tomori-owned recent messages. |
 | `{profile_picture_tool}` | `peek_profile_picture` | Inspect an avatar or banner. |
 | `{document_tool}` | `read_document` | Read PDF/TXT/MD attachments. |
-| `{timestamp_refresh_tool}` | `refresh_message_timestamps` | Rebuild recent context with exact timestamps. |
+| `{timestamp_refresh_tool}` | `reveal_message_metadata` | Reveal recent message refs, timestamps, and action flags. |
 | `{media_context_tool}` | `increase_media_context` | Bring older hidden images/videos back into context. |
 | `{gif_tool}` | `process_gif` | Extract GIF frames for analysis. |
 | `{youtube_tool}` | `process_youtube_video` | Analyze a YouTube video. |

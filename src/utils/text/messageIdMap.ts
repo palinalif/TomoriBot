@@ -9,7 +9,8 @@
  * Prefixes:
  * - `media_N` — message IDs referenced by media tools (analyze_image,
  *   generate_image, read_document, process_gif, etc.)
- * - `ref_N`   — message IDs for reply references and pin targets
+ * - `ref_N`   — general recent-message references for replies, metadata reveals,
+ *   and message-management targets
  *
  * The map is instantiated once per request cycle and garbage-collected when
  * the request ends.

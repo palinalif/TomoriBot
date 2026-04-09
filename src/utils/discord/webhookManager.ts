@@ -493,6 +493,41 @@ export async function getOrCreateWebhook(channel: TextChannel | BaseGuildTextCha
   }
 }
 
+/**
+ * Returns a cached Tomori-managed webhook for a channel when the webhook ID matches.
+ * This is intentionally read-only: unlike getOrCreateWebhook(), it never fetches,
+ * recreates, or mutates remote webhook state.
+ *
+ * Shared multi-persona webhooks are cached by channel ID. Legacy persona webhooks
+ * are cached by `channelId:personaId`, so this helper scans both caches.
+ *
+ * @param channelId - Base text channel ID that owns the webhook (threads use parent ID)
+ * @param webhookId - Webhook snowflake to look up
+ * @returns Cached webhook with token, or null when unavailable/not Tomori-managed
+ */
+export function getCachedManagedWebhookForChannel(channelId: string, webhookId?: string | null): Webhook | null {
+  if (!channelId || !webhookId) {
+    return null;
+  }
+
+  const cachedSharedWebhook = webhookCache.get(channelId);
+  if (cachedSharedWebhook?.id === webhookId && cachedSharedWebhook.token) {
+    return cachedSharedWebhook;
+  }
+
+  for (const [cacheKey, webhook] of personaWebhookCache.entries()) {
+    if (!cacheKey.startsWith(`${channelId}:`)) {
+      continue;
+    }
+
+    if (webhook.id === webhookId && webhook.token) {
+      return webhook;
+    }
+  }
+
+  return null;
+}
+
 function buildWebhookSendPayload(payload: WebhookSendPayload, identity?: ResolvedWebhookIdentity): WebhookSendPayload {
   const avatarUrl = sanitizeAvatarUrl(identity?.avatarUrl);
 

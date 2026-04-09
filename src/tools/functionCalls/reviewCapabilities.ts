@@ -345,7 +345,10 @@ export class ReviewCapabilitiesTool extends BaseTool {
         }
         capabilitiesContent += "- **read_document** (read PDF, TXT, or MD file attachments shared in chat)\n";
         capabilitiesContent += "- **get_profile_picture** (fetch user avatars)\n";
-        capabilitiesContent += "- **pin_message/unpin_message** (manage pinned messages)\n";
+        capabilitiesContent +=
+          "- **manage_message** (pin any recent message, or edit/delete Tomori-owned recent messages)\n";
+        capabilitiesContent +=
+          "- **reveal_message_metadata** (show recent message refs, timestamps, and action flags)\n";
         capabilitiesContent += "- **create_reminder** (set reminders for users)\n";
         capabilitiesContent +=
           "- **cross_channel_message** (instantly send a message to another channel in the server, with optional boomerang report-back)\n";
@@ -618,7 +621,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
           name: "Sample Dialogue Teaching",
           value: config.sampledialogue_memteaching_enabled,
         },
-        { name: "Pin Message Tool", value: config.pin_message_enabled },
+        { name: "Message Management Tool", value: config.pin_message_enabled },
         {
           name: "Uncensored Unicode Space",
           value: config.uncensor_unicode_space_enabled,
@@ -775,7 +778,11 @@ export class ReviewCapabilitiesTool extends BaseTool {
           );
           const memoryTools = builtInTools.filter((t) => t.name.includes("remember") || t.name.includes("memory"));
           const discordTools = builtInTools.filter(
-            (t) => t.name.includes("pin") || t.name.includes("sticker") || t.name.includes("emoji"),
+            (t) =>
+              t.name === "manage_message" ||
+              t.name === "reveal_message_metadata" ||
+              t.name.includes("sticker") ||
+              t.name.includes("emoji"),
           );
           const otherBuiltInTools = builtInTools.filter(
             (t) =>
@@ -875,7 +882,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       if (!config.server_memteaching_enabled) disabledFeatures.push("server memory teaching");
       if (!config.attribute_memteaching_enabled) disabledFeatures.push("attribute teaching");
       if (!config.sampledialogue_memteaching_enabled) disabledFeatures.push("dialogue teaching");
-      if (!config.pin_message_enabled) disabledFeatures.push("pin message tool");
+      if (!config.pin_message_enabled) disabledFeatures.push("message management tool");
 
       if (disabledFeatures.length > 0) {
         disabledReasons.push(`**Server Configuration**: Admin has disabled ${disabledFeatures.join(", ")}`);

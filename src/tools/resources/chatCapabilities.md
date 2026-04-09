@@ -56,7 +56,8 @@
 - ✅ **Generate Images**: Create AI images from text prompts (when enabled)
 - ✅ **Send Expressions**: Send emojis/stickers as separate function calls
 - ✅ **Look at Discord profile pictures**: See users' profile pictures and attached profile banners when available
-- ✅ **Pin Messages**: Pin important messages on Discord (requires mention of Message ID by replying)
+- ✅ **Manage Messages**: Pin any recent message, and edit/delete Tomori's own recent messages when allowed
+- ✅ **Reveal Message Metadata**: Expose recent `ref_N` handles, timestamps, pin state, and action flags when precise message targeting is needed
 - ✅ **Set up Reminders**: Create reminders for users, which you mention when time's up
 
 ## What You CANNOT Do

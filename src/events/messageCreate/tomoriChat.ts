@@ -37,13 +37,14 @@ import { sendCooldownDM } from "../../utils/discord/cooldownDM";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
 import {
   getOrCreateWebhook,
+  getCachedManagedWebhookForChannel,
   resolvePersonaWebhookIdentity,
   sendUserTranscriptViaWebhook,
   sendWebhookMessageWithIdentity,
   type WebhookCreateErrorReason,
 } from "../../utils/discord/webhookManager";
 import { ColorCode, log } from "../../utils/misc/logger";
-import { buildContext, formatMessageTimestamp, formatTimestampInline } from "../../utils/text/contextBuilder";
+import { buildContext, formatTimestampInline } from "../../utils/text/contextBuilder";
 import { getEmojiPenaltyDirective } from "../../utils/text/emojiPenalty";
 import { removeYouTubeUrls, extractYouTubeVideoIds } from "../../utils/text/youTubeUrlCleaner";
 import { resolveTenorUrl } from "../../utils/media/tenorResolver";
@@ -1167,6 +1168,159 @@ function formatAttachmentSystemHint(filename: string, messageId: string): string
   return `[System: A file named \`${filename}\` is attached (message ID: ${messageId})]`;
 }
 
+function resolveManagedWebhookHostChannelId(channel: Message["channel"]): string | null {
+  const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
+  if (isThread) {
+    return channel.parent?.id ?? null;
+  }
+
+  return "fetchWebhooks" in channel && "createWebhook" in channel ? channel.id : null;
+}
+
+function truncateMessageMetadataPreview(text: string, maxLength = 90): string {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (!compact) {
+    return "[No text content]";
+  }
+
+  return compact.length > maxLength ? `${compact.slice(0, maxLength - 3)}...` : compact;
+}
+
+function buildMessageMetadataPreview(message: Message): string {
+  const textPreview = truncateMessageMetadataPreview(message.cleanContent || message.content || "");
+  const attachmentParts: string[] = [];
+  let imageCount = 0;
+  let videoCount = 0;
+  let fileCount = 0;
+
+  for (const attachment of message.attachments.values()) {
+    const contentType = attachment.contentType?.toLowerCase() ?? "";
+    if (contentType.startsWith("image/")) {
+      imageCount++;
+      continue;
+    }
+    if (contentType.startsWith("video/")) {
+      videoCount++;
+      continue;
+    }
+    fileCount++;
+  }
+
+  if (imageCount > 0) {
+    attachmentParts.push(`${imageCount} image${imageCount === 1 ? "" : "s"}`);
+  }
+  if (videoCount > 0) {
+    attachmentParts.push(`${videoCount} video${videoCount === 1 ? "" : "s"}`);
+  }
+  if (message.stickers.size > 0) {
+    attachmentParts.push(`${message.stickers.size} sticker${message.stickers.size === 1 ? "" : "s"}`);
+  }
+  if (fileCount > 0) {
+    attachmentParts.push(`${fileCount} file${fileCount === 1 ? "" : "s"}`);
+  }
+
+  if (attachmentParts.length === 0) {
+    return textPreview;
+  }
+
+  if (textPreview === "[No text content]") {
+    return `[${attachmentParts.join(", ")}]`;
+  }
+
+  return `${textPreview} [+ ${attachmentParts.join(", ")}]`;
+}
+
+function isTomoriManagedWebhookHistoryMessage(
+  message: Message,
+  personaNames: Set<string>,
+  managedWebhookHostChannelId: string | null,
+): boolean {
+  if (!message.webhookId || !managedWebhookHostChannelId || isMatrixBridgeWebhookUsername(message.author.username)) {
+    return false;
+  }
+
+  const managedWebhook = getCachedManagedWebhookForChannel(managedWebhookHostChannelId, message.webhookId);
+  if (!managedWebhook) {
+    return false;
+  }
+
+  const webhookAuthorName = stripBridgePrefix(message.author.username).trim().toLowerCase();
+  return webhookAuthorName.length > 0 && personaNames.has(webhookAuthorName);
+}
+
+function buildRecentMessageMetadataLedger(params: {
+  recentMessages: Message[];
+  visibleMessageIds: Set<string>;
+  messageIdMap: MessageIdMap;
+  clientUserId?: string;
+  mainPersonaName: string;
+  personaNames: Set<string>;
+  canPinMessages: boolean;
+  isDmChannel: boolean;
+  managedWebhookHostChannelId: string | null;
+}): StructuredContextItem | null {
+  const {
+    recentMessages,
+    visibleMessageIds,
+    messageIdMap,
+    clientUserId,
+    mainPersonaName,
+    personaNames,
+    canPinMessages,
+    isDmChannel,
+    managedWebhookHostChannelId,
+  } = params;
+
+  const metadataLines: string[] = [];
+
+  for (const message of recentMessages) {
+    if (!visibleMessageIds.has(message.id)) {
+      continue;
+    }
+
+    const messageRef = messageIdMap.register(message.id, "ref");
+    const isDirectTomoriMessage = Boolean(clientUserId && message.author.id === clientUserId);
+    const isManagedWebhookMessage = isTomoriManagedWebhookHistoryMessage(
+      message,
+      personaNames,
+      managedWebhookHostChannelId,
+    );
+
+    const authorName = isDirectTomoriMessage
+      ? mainPersonaName
+      : isManagedWebhookMessage
+        ? stripBridgePrefix(message.author.username)
+        : (message.member?.displayName ?? message.author.globalName ?? stripBridgePrefix(message.author.username));
+
+    const preview = buildMessageMetadataPreview(message).replaceAll("[", "(").replaceAll("]", ")").replaceAll('"', "'");
+
+    metadataLines.push(
+      `${messageRef} | ${authorName} | ${formatTimestampInline(message.createdTimestamp)} | pinned=${message.pinned ? "yes" : "no"} | can_pin=${
+        !isDmChannel && canPinMessages && !message.pinned ? "yes" : "no"
+      } | can_edit=${isDirectTomoriMessage ? (message.editable ? "yes" : "no") : isManagedWebhookMessage ? "yes" : "no"} | can_delete=${
+        isDirectTomoriMessage ? (message.deletable ? "yes" : "no") : isManagedWebhookMessage ? "yes" : "no"
+      } | preview="${preview}"`,
+    );
+  }
+
+  if (metadataLines.length === 0) {
+    return null;
+  }
+
+  return {
+    role: "user",
+    metadataTag: ContextItemTag.DIALOGUE_HISTORY,
+    parts: [
+      {
+        type: "text",
+        text:
+          `[System: Recent message metadata for the current channel. Use these ref_N handles with manage_message. ` +
+          `Each line is ref | author | sent | pinned | can_pin | can_edit | can_delete | preview.\n${metadataLines.join("\n")}]`,
+      },
+    ],
+  };
+}
+
 function formatSystemProducedEmbedHint(embedBody: string): string {
   return `[System: The following content came from a system-produced embed]\n${embedBody}`;
 }
@@ -1867,7 +2021,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
     disableShortTermMemoryUpdate: false, // Will be set to true after first successful STM update to prevent duplicate calls
     disableCrossChannelMessage: false, // Can be enabled for tool-driven cross-channel visits/returns
     explicitLongTermMemoryIntent,
-    disableTimestampContext: false, // Will be set to true after context_restart_with_timestamps to prevent repeat restarts
+    disableMessageMetadataContext: false, // Will be set to true after reveal_message_metadata to prevent repeat restarts
     forceReason, // Pass reasoning flag for enhanced AI responses
     isManuallyTriggered, // Pass command flag to indicate manual triggering
     disableAllTools: isUserImpersonation, // Disable tools for user impersonation
@@ -6521,65 +6675,55 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       continue;
                     }
 
-                    // Handle message timestamps restart signal (in-place context annotation)
+                    // Handle recent message metadata reveal signal (in-place context annotation)
                     if (
-                      funcName === "refresh_message_timestamps" &&
+                      funcName === "reveal_message_metadata" &&
                       toolResult.data &&
-                      (toolResult.data as Record<string, unknown>).type === "context_restart_with_timestamps"
+                      (toolResult.data as Record<string, unknown>).type === "context_restart_with_message_metadata"
                     ) {
-                      log.info(
-                        "Message timestamps restart signal detected. Injecting timestamp annotations into context.",
+                      log.info("Recent message metadata reveal detected. Injecting metadata ledger into context.");
+
+                      streamingContext.disableMessageMetadataContext = true;
+
+                      const visibleMessageIds = new Set(simplifiedMessages.map((msg) => msg.id));
+                      const personaNames = new Set(
+                        allPersonas
+                          .map((persona) => persona.tomori_nickname?.trim().toLowerCase())
+                          .filter((nickname): nickname is string => Boolean(nickname)),
                       );
+                      const clientUser = client.user;
+                      const canPinMessages =
+                        !isDMChannel &&
+                        Boolean(
+                          clientUser &&
+                            "permissionsFor" in channel &&
+                            channel.permissionsFor(clientUser)?.has("ManageMessages"),
+                        );
+                      const managedWebhookHostChannelId = resolveManagedWebhookHostChannelId(channel);
+                      const metadataLedgerItem = buildRecentMessageMetadataLedger({
+                        recentMessages: relevantMessagesArray,
+                        visibleMessageIds,
+                        messageIdMap: streamingContext.messageIdMap ?? messageIdMap,
+                        clientUserId: client.user?.id,
+                        mainPersonaName:
+                          mainPersona?.tomori_nickname ??
+                          tomoriState?.tomori_nickname ??
+                          process.env.DEFAULT_BOTNAME ??
+                          "Tomori",
+                        personaNames,
+                        canPinMessages,
+                        isDmChannel: isDMChannel,
+                        managedWebhookHostChannelId,
+                      });
 
-                      // Disable the tool for the remainder of this turn
-                      streamingContext.disableTimestampContext = true;
-
-                      // Build a mapping from message ID → creation timestamp
-                      const timestampMap = new Map<string, number>();
-                      for (const msg of simplifiedMessages) {
-                        if (msg.createdAt) {
-                          timestampMap.set(msg.id, msg.createdAt);
-                        }
+                      if (metadataLedgerItem) {
+                        contextSegments.push(metadataLedgerItem);
+                        log.success(
+                          `Injected recent message metadata ledger with ${visibleMessageIds.size} visible entries.`,
+                        );
+                      } else {
+                        log.warn("No visible recent messages were available to include in the metadata ledger.");
                       }
-
-                      // Inject [System: Sent ...] annotations into existing DIALOGUE_HISTORY context items
-                      let annotatedCount = 0;
-                      for (const contextItem of contextSegments) {
-                        if (contextItem.messageId && timestampMap.has(contextItem.messageId)) {
-                          // biome-ignore lint/style/noNonNullAssertion: checked by has()
-                          const createdAt = timestampMap.get(contextItem.messageId)!;
-                          contextItem.parts.push({
-                            type: "text",
-                            text: formatMessageTimestamp(createdAt),
-                          });
-                          annotatedCount++;
-                        }
-                      }
-
-                      // Also patch reply reference blocks to include the referenced message's timestamp.
-                      // The ID in the text is now an opaque key (e.g., "ref_1") — resolve it back
-                      // to the real Discord snowflake to look up the timestamp, then inject the
-                      // annotation alongside the opaque key (keeping the real ID hidden from the LLM).
-                      const currentIdMap = streamingContext.messageIdMap;
-                      const replyRefPattern =
-                        /\[System: This message is referring to a previous message \(ID: (ref_\d+)\) by/g;
-                      for (const contextItem of contextSegments) {
-                        for (const part of contextItem.parts) {
-                          if (part.type === "text" && part.text.includes("This message is referring to")) {
-                            part.text = part.text.replace(replyRefPattern, (match, opaqueId: string) => {
-                              const realId = currentIdMap?.resolve(opaqueId);
-                              const refTimestamp = realId ? timestampMap.get(realId) : undefined;
-                              if (!refTimestamp) return match;
-                              return match.replace(
-                                `(ID: ${opaqueId})`,
-                                `(ID: ${opaqueId}, sent ${formatTimestampInline(refTimestamp)})`,
-                              );
-                            });
-                          }
-                        }
-                      }
-
-                      log.success(`Injected timestamp annotations into ${annotatedCount} context items.`);
 
                       // Continue to next iteration WITHOUT adding to function interaction history
                       continue;
