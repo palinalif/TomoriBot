@@ -1,5 +1,8 @@
 -- Ensure all required columns exist in tomori_configs table
 SELECT add_column_if_not_exists('tomori_configs', 'voice_transcript_chat_mode', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('tomori_configs', 'other_model_codename', 'TEXT');
+SELECT add_column_if_not_exists('tomori_configs', 'other_model_capabilities', 'JSONB');
+SELECT add_column_if_not_exists('tomori_configs', 'other_model_capabilities_fetched_at', 'TIMESTAMP');
 
 -- Ensure all required columns exist in persona_configs table
 SELECT add_column_if_not_exists('persona_configs', 'reward_conditioning_enabled', 'BOOLEAN', 'true');

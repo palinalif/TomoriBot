@@ -583,8 +583,7 @@ export default {
       personal_memory_deleted_title: "🗑️ {persona_nickname} Deleted a Memory about {user_nickname}!",
       personal_memory_deleted_description:
         "A personal memory about {user_nickname} has been deleted:\n`{memory_content}`",
-      server_memory_footer:
-        "Server managers can manage this memory using `/memory server add`, `/memory server remove`, and `/memory server export`.",
+      server_memory_footer: "Server managers can manage this memory using `/memory server`.",
       personal_memory_footer_manage: "You can manage your personal memories using `/memory personal`.",
       personal_memory_footer_personalization_disabled:
         "This memory was saved, but personalization features are currently disabled on this server, so it will not have an immediate effect here. Use `/memory personal export` to view it. You can opt out with `/personal privacy`.",
@@ -1482,7 +1481,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - Remove uploaded or history-extracted documents with \`/memory document remove\` and \`/memory history remove\``,
         impersonation_title: `Impersonation & Tools`,
         impersonation_description: `- Use \`/bot impersonate\` to send messages as yourself, a persona, or inject system messages
-- Set a reusable user-impersonation persona prompt with \`/personal impersonate prompt\`
+- Set a reusable user-impersonation prompt with \`/personal impersonate prompt\`
 - \`/tools compact\` can summarize or roleplay-compress conversation history
 - \`/bot respond\` to trigger prefilled or guided messages from the bot`,
         imagegen_title: `Image Generation`,
@@ -2435,7 +2434,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         persona_success_description: `Message sent successfully as {persona}.`,
         persona_impersonation_notice_description: `Hide this embed via \`/config bot-permissions\`.`,
         persona_impersonation_notice_footer: `Impersonation by {user}`,
-        user_impersonation_notice_description: `Hide this embed via \`/config bot-permissions\`.`,
+        user_impersonation_notice_description: `Hide this embed via \`/config bot-permissions\`. To teach me how to impersonate you, set \`/personal impersonate prompt\`.`,
         user_impersonation_notice_footer: `{user} triggered a {target} impersonation`,
 
         // User impersonation
@@ -4403,7 +4402,7 @@ You can change this anytime using \`/personal privacy\`.`,
       impersonate: {
         description: `Manage user impersonation settings.`,
         prompt: {
-          description: `Set a reusable prompt for user impersonation replies.`,
+          description: `Set a reusable prompt that tells me how to impersonate you.`,
           modal_title: `User Impersonation Prompt`,
           prompt_label: `Persona Prompt`,
           prompt_description: `Used whenever your user impersonation is invoked. Leave blank to clear it.`,
