@@ -12,7 +12,7 @@ import { log } from "@/utils/misc/logger";
 export class RevealMessageMetadataTool extends BaseTool {
   name = "reveal_message_metadata";
   description =
-    "Reveal recent message metadata for the current channel, including `ref_N` handles, timestamps, pin state, and whether each message can currently be pinned, edited, or deleted. Use this when you need to identify a specific recent message for `manage_message`, or when the user asks about message timing/metadata. Usually unnecessary if replying already exposed a `ref_N` for the target message.";
+    "Reveal recent message metadata for the current channel, including `ref_N` handles, timestamps, pin state, and whether each message can currently be pinned, edited, deleted, reacted to, or replied to. Use this when you need to identify a specific recent message for `manage_message` or `interact_with_recent_message`, or when the user asks about message timing/metadata. Usually unnecessary if replying already exposed a `ref_N` for the target message.";
   category = "utility" as const;
 
   parameters: ToolParameterSchema = {

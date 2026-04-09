@@ -1,0 +1,508 @@
+/**
+ * Recent Message Interaction Tool
+ * Lets Tomori react to or reply to a recent message without needing message-management permissions.
+ */
+
+import { EmbedBuilder, type BaseGuildTextChannel, type Message, type Webhook } from "discord.js";
+import { BaseTool, type ToolContext, type ToolParameterSchema, type ToolResult } from "@/types/tool/interfaces";
+import { MessageIdMap } from "@/utils/text/messageIdMap";
+import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
+import { getOrCreateWebhook, sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
+import { ColorCode, log } from "@/utils/misc/logger";
+import { localizer } from "@/utils/text/localizer";
+import { stripBridgePrefix } from "@/utils/bridge";
+
+const DISCORD_ID_PATTERN = /^\d{17,20}$/;
+const MAX_FUZZY_DISTANCE = 1000n;
+const PREVIEW_MAX_LENGTH = 120;
+const CUSTOM_EMOJI_PATTERN = /^<(a?):([A-Za-z0-9_~]+):(\d{17,20})>$/;
+const NAMED_EMOJI_PATTERN = /^:([A-Za-z0-9_~]+):$/;
+
+type InteractionAction = "react" | "reply";
+
+function normalizePreview(text: string): string {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (!compact) {
+    return "[No text content]";
+  }
+
+  return compact.length > PREVIEW_MAX_LENGTH ? `${compact.slice(0, PREVIEW_MAX_LENGTH - 3)}...` : compact;
+}
+
+function buildMessagePreview(message: Message): string {
+  const textPreview = normalizePreview(message.cleanContent || message.content || "");
+  const attachmentParts: string[] = [];
+  let imageCount = 0;
+  let videoCount = 0;
+  let fileCount = 0;
+
+  for (const attachment of message.attachments.values()) {
+    const contentType = attachment.contentType?.toLowerCase() ?? "";
+    if (contentType.startsWith("image/")) {
+      imageCount++;
+      continue;
+    }
+    if (contentType.startsWith("video/")) {
+      videoCount++;
+      continue;
+    }
+    fileCount++;
+  }
+
+  if (imageCount > 0) {
+    attachmentParts.push(`${imageCount} image${imageCount === 1 ? "" : "s"}`);
+  }
+  if (videoCount > 0) {
+    attachmentParts.push(`${videoCount} video${videoCount === 1 ? "" : "s"}`);
+  }
+  if (message.stickers.size > 0) {
+    attachmentParts.push(`${message.stickers.size} sticker${message.stickers.size === 1 ? "" : "s"}`);
+  }
+  if (fileCount > 0) {
+    attachmentParts.push(`${fileCount} file${fileCount === 1 ? "" : "s"}`);
+  }
+
+  if (attachmentParts.length === 0) {
+    return textPreview;
+  }
+
+  if (textPreview === "[No text content]") {
+    return `[${attachmentParts.join(", ")}]`;
+  }
+
+  return `${textPreview} [+ ${attachmentParts.join(", ")}]`;
+}
+
+function resolveWebhookHostChannel(channel: ToolContext["channel"]): BaseGuildTextChannel | null {
+  const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
+  if (isThread) {
+    return channel.parent && "fetchWebhooks" in channel.parent ? (channel.parent as BaseGuildTextChannel) : null;
+  }
+
+  return "fetchWebhooks" in channel && "createWebhook" in channel ? (channel as BaseGuildTextChannel) : null;
+}
+
+function resolveWebhookThreadId(channel: ToolContext["channel"]): string | undefined {
+  return "isThread" in channel && typeof channel.isThread === "function" && channel.isThread() ? channel.id : undefined;
+}
+
+function getDisplayAuthorName(message: Message): string {
+  return message.member?.displayName ?? message.author.globalName ?? stripBridgePrefix(message.author.username);
+}
+
+function buildReplyContextEmbed(targetMessage: Message, locale: string): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(ColorCode.INFO)
+    .setTitle(localizer(locale, "genai.message_interaction.reply_context_title"))
+    .setDescription(
+      localizer(locale, "genai.message_interaction.reply_context_description", {
+        message_url: targetMessage.url,
+      }),
+    )
+    .setFooter({
+      text: localizer(locale, "genai.message_interaction.reply_context_footer", {
+        user: getDisplayAuthorName(targetMessage),
+      }),
+      iconURL: targetMessage.author.displayAvatarURL({
+        size: 64,
+        extension: "png",
+        forceStatic: true,
+      }),
+    });
+}
+
+type WebhookReplyContext = {
+  webhook: Webhook;
+  threadId?: string;
+};
+
+export class InteractWithRecentMessageTool extends BaseTool {
+  name = "interact_with_recent_message";
+  description =
+    "Interact with a recent message in the current channel for expressive follow-up behavior. `react` adds an emoji reaction. `reply` sends a short reply or backtrack comment about an earlier message. Use `reveal_message_metadata` first when you need fresh `ref_N` handles, timestamps, or actionability flags.";
+  category = "discord" as const;
+
+  parameters: ToolParameterSchema = {
+    type: "object",
+    properties: {
+      action: {
+        type: "string",
+        enum: ["react", "reply"],
+        description:
+          "Which expressive interaction to perform: react to a recent message with an emoji, or reply to a recent message with new text.",
+      },
+      message_id: {
+        type: "string",
+        description: "The target recent message reference, usually a `ref_N` handle from recent message metadata.",
+      },
+      content: {
+        type: "string",
+        description:
+          "Required interaction content. For `react`, provide the emoji. For `reply`, provide the reply text.",
+      },
+    },
+    required: ["action", "message_id", "content"],
+  };
+
+  isAvailableFor(_provider: string): boolean {
+    return true;
+  }
+
+  private resolveMessageId(
+    rawValue: unknown,
+    context: ToolContext,
+  ): { ok: true; rawValue: string; resolvedId: string } | { ok: false; result: ToolResult } {
+    if (typeof rawValue !== "string" || rawValue.trim().length === 0) {
+      return {
+        ok: false,
+        result: {
+          success: false,
+          error: "Missing required parameter: message_id",
+          message: "I need a message_id string to interact with a recent message.",
+        },
+      };
+    }
+
+    const normalizedValue = rawValue.trim();
+    const resolvedId = MessageIdMap.isOpaqueKey(normalizedValue)
+      ? (context.messageIdMap?.resolve(normalizedValue) ?? normalizedValue)
+      : normalizedValue;
+
+    if (!DISCORD_ID_PATTERN.test(resolvedId)) {
+      const errorMessage = MessageIdMap.isOpaqueKey(normalizedValue)
+        ? "That message reference could not be resolved from the current recent-message context."
+        : "The message_id value does not look like a valid message reference or Discord message ID.";
+
+      return {
+        ok: false,
+        result: {
+          success: false,
+          error: "Invalid message ID format",
+          message: errorMessage,
+          data: {
+            status: "invalid_message_id_format",
+            attempted_id: normalizedValue,
+          },
+        },
+      };
+    }
+
+    return {
+      ok: true,
+      rawValue: normalizedValue,
+      resolvedId,
+    };
+  }
+
+  private canReactInChannel(context: ToolContext): boolean {
+    if (!("guild" in context.channel) || !context.channel.guild) {
+      return true;
+    }
+
+    const clientUser = context.client.user;
+    if (!clientUser || !("permissionsFor" in context.channel)) {
+      return false;
+    }
+
+    return Boolean(context.channel.permissionsFor(clientUser)?.has("AddReactions"));
+  }
+
+  private canSendReplyInChannel(context: ToolContext): boolean {
+    if (!("guild" in context.channel) || !context.channel.guild) {
+      return "send" in context.channel;
+    }
+
+    const clientUser = context.client.user;
+    if (!clientUser || !("permissionsFor" in context.channel)) {
+      return false;
+    }
+
+    const permissions = context.channel.permissionsFor(clientUser);
+    if (!permissions) {
+      return false;
+    }
+
+    const isThread =
+      "isThread" in context.channel && typeof context.channel.isThread === "function" && context.channel.isThread();
+    return permissions.has(isThread ? "SendMessagesInThreads" : "SendMessages");
+  }
+
+  private resolveReactionEmoji(rawValue: string, context: ToolContext): string {
+    const normalized = rawValue.trim();
+    if (CUSTOM_EMOJI_PATTERN.test(normalized)) {
+      return normalized;
+    }
+
+    const namedEmojiMatch = normalized.match(NAMED_EMOJI_PATTERN);
+    const candidateName = namedEmojiMatch?.[1] ?? normalized;
+    if ("guild" in context.channel && context.channel.guild) {
+      const matchedEmoji = context.channel.guild.emojis.cache.find(
+        (emoji) => emoji.name?.toLowerCase() === candidateName.toLowerCase(),
+      );
+      if (matchedEmoji) {
+        return matchedEmoji.animated
+          ? `<a:${matchedEmoji.name}:${matchedEmoji.id}>`
+          : `<:${matchedEmoji.name}:${matchedEmoji.id}>`;
+      }
+    }
+
+    return normalized;
+  }
+
+  private async resolveWebhookReplyContext(context: ToolContext): Promise<WebhookReplyContext | null> {
+    if (!context.personaUsername) {
+      return null;
+    }
+
+    if (context.webhook) {
+      return {
+        webhook: context.webhook,
+        threadId: resolveWebhookThreadId(context.channel),
+      };
+    }
+
+    const webhookHostChannel = resolveWebhookHostChannel(context.channel);
+    if (!webhookHostChannel) {
+      return null;
+    }
+
+    const webhookResult = await getOrCreateWebhook(webhookHostChannel);
+    if (!webhookResult.webhook) {
+      return null;
+    }
+
+    return {
+      webhook: webhookResult.webhook,
+      threadId: resolveWebhookThreadId(context.channel),
+    };
+  }
+
+  async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    const validation = this.validateParameters(args);
+    if (!validation.isValid) {
+      return {
+        success: false,
+        error: `Invalid parameters: ${validation.errors?.join(", ") || validation.missingParams?.join(", ") || "unknown validation error"}`,
+        message: "The recent-message interaction arguments were invalid.",
+      };
+    }
+
+    const action = args.action as InteractionAction;
+    const messageIdResult = this.resolveMessageId(args.message_id, context);
+    if (!messageIdResult.ok) {
+      return messageIdResult.result;
+    }
+
+    const interactionContent = typeof args.content === "string" ? args.content.trim() : "";
+    if (interactionContent.length === 0) {
+      return {
+        success: false,
+        error: "Missing required content",
+        message: action === "react" ? "Reacting requires an emoji." : "Replying requires non-empty text.",
+        data: {
+          status: action === "react" ? "missing_reaction_emoji" : "missing_reply_content",
+        },
+      };
+    }
+
+    const rawMessageId = (
+      typeof args.__original_message_id === "string" ? (args.__original_message_id as string) : messageIdResult.rawValue
+    ).trim();
+
+    const fetchLimit = normalizeMessageFetchLimit(context.tomoriState.config.message_fetch_limit);
+    const recentMessages = await context.channel.messages.fetch({ limit: fetchLimit });
+
+    let targetMessage = recentMessages.get(messageIdResult.resolvedId);
+
+    const originalWasOpaque = MessageIdMap.isOpaqueKey(rawMessageId);
+    const canFuzzyMatch = !originalWasOpaque && DISCORD_ID_PATTERN.test(rawMessageId);
+
+    if (!targetMessage && canFuzzyMatch) {
+      try {
+        const targetBigInt = BigInt(messageIdResult.resolvedId);
+        let bestMatch: Message | undefined;
+        let bestDiff = MAX_FUZZY_DISTANCE;
+
+        for (const [candidateId, candidateMessage] of recentMessages) {
+          const candidateBigInt = BigInt(candidateId);
+          const diff = targetBigInt > candidateBigInt ? targetBigInt - candidateBigInt : candidateBigInt - targetBigInt;
+          if (diff > 0n && diff < bestDiff) {
+            bestDiff = diff;
+            bestMatch = candidateMessage;
+          }
+        }
+
+        if (bestMatch) {
+          targetMessage = bestMatch;
+          log.info(
+            `InteractWithRecentMessageTool: Fuzzy-matched message ID "${messageIdResult.resolvedId}" -> "${bestMatch.id}" (diff=${bestDiff})`,
+          );
+        }
+      } catch {
+        // Ignore parse failures for fuzzy matching; the normal not-found path below will handle it.
+      }
+    }
+
+    if (!targetMessage) {
+      return {
+        success: false,
+        error: "Message not found",
+        message: `I couldn't find that message in the recent conversation window (last ${fetchLimit} messages).`,
+        data: {
+          status: "message_not_found_in_recent",
+          attempted_id: messageIdResult.rawValue,
+          fetch_limit: fetchLimit,
+        },
+      };
+    }
+
+    const targetRef =
+      context.messageIdMap?.getOpaque(targetMessage.id, "ref") ??
+      context.messageIdMap?.register(targetMessage.id, "ref");
+
+    if (action === "react") {
+      const resolvedEmoji = this.resolveReactionEmoji(interactionContent, context);
+
+      if (!this.canReactInChannel(context)) {
+        return {
+          success: false,
+          error: "Insufficient permissions to react",
+          message: "I don't currently have permission to add reactions in this channel.",
+          data: {
+            status: "insufficient_reaction_permissions",
+            message_ref: targetRef,
+            emoji: interactionContent,
+          },
+        };
+      }
+
+      try {
+        await targetMessage.react(resolvedEmoji);
+        return {
+          success: true,
+          message: "Reaction added successfully.",
+          data: {
+            status: "message_reacted_successfully",
+            message_ref: targetRef,
+            emoji: interactionContent,
+            author: getDisplayAuthorName(targetMessage),
+            preview: buildMessagePreview(targetMessage),
+          },
+        };
+      } catch (error) {
+        log.error(`InteractWithRecentMessageTool: Failed to react to message ${targetMessage.id}`, error as Error);
+
+        if (error instanceof Error) {
+          if (error.message.includes("10014") || error.message.includes("Unknown Emoji")) {
+            return {
+              success: false,
+              error: "Invalid emoji",
+              message: "I couldn't use that emoji as a Discord reaction here.",
+              data: {
+                status: "invalid_reaction_emoji",
+                message_ref: targetRef,
+                emoji: interactionContent,
+              },
+            };
+          }
+
+          if (error.message.includes("Missing Permissions") || error.message.includes("50013")) {
+            return {
+              success: false,
+              error: "Insufficient permissions to react",
+              message: "I don't currently have permission to add reactions in this channel.",
+              data: {
+                status: "insufficient_reaction_permissions",
+                message_ref: targetRef,
+                emoji: interactionContent,
+              },
+            };
+          }
+        }
+
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown reaction failure",
+          message: "I couldn't add that reaction due to an unexpected Discord error.",
+          data: {
+            status: "reaction_operation_failed",
+            message_ref: targetRef,
+            emoji: interactionContent,
+          },
+        };
+      }
+    }
+
+    const webhookReplyContext = await this.resolveWebhookReplyContext(context);
+
+    if (!webhookReplyContext && !this.canSendReplyInChannel(context)) {
+      return {
+        success: false,
+        error: "Insufficient permissions to reply",
+        message: "I don't currently have permission to send a reply in this channel.",
+        data: {
+          status: "insufficient_reply_permissions",
+          message_ref: targetRef,
+        },
+      };
+    }
+
+    try {
+      let sentMessage: Message;
+
+      if (webhookReplyContext && context.personaUsername) {
+        sentMessage = await sendWebhookMessageWithIdentity(
+          webhookReplyContext.webhook,
+          {
+            content: interactionContent,
+            embeds: [buildReplyContextEmbed(targetMessage, context.locale)],
+            allowedMentions: {
+              parse: ["users", "roles"],
+              repliedUser: false,
+            },
+            ...(webhookReplyContext.threadId ? { threadId: webhookReplyContext.threadId } : {}),
+          },
+          {
+            username: context.personaUsername,
+            avatarUrl: context.personaAvatarUrl,
+            avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/") ? context.personaAvatarUrl : undefined,
+          },
+        );
+      } else {
+        sentMessage = await targetMessage.reply({
+          content: interactionContent,
+          allowedMentions: {
+            repliedUser: false,
+          },
+        });
+      }
+
+      const sentMessageRef =
+        context.messageIdMap?.getOpaque(sentMessage.id, "ref") ?? context.messageIdMap?.register(sentMessage.id, "ref");
+
+      return {
+        success: true,
+        message: "Reply sent successfully.",
+        data: {
+          status: "message_replied_successfully",
+          message_ref: targetRef,
+          reply_message_ref: sentMessageRef,
+          author: getDisplayAuthorName(targetMessage),
+          preview: normalizePreview(interactionContent),
+          used_webhook_context: Boolean(webhookReplyContext && context.personaUsername),
+        },
+      };
+    } catch (error) {
+      log.error(`InteractWithRecentMessageTool: Failed to reply to message ${targetMessage.id}`, error as Error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown reply failure",
+        message: "I couldn't send that reply due to an unexpected Discord error.",
+        data: {
+          status: "reply_operation_failed",
+          message_ref: targetRef,
+        },
+      };
+    }
+  }
+}

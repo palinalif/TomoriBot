@@ -24,6 +24,7 @@ export { MemoryTool } from "./memoryTool";
 export { YouTubeVideoTool } from "./youtubeVideoTool";
 export { PeekProfilePictureTool } from "./peekProfilePictureTool";
 export { ManageMessageTool } from "./manageMessageTool";
+export { InteractWithRecentMessageTool } from "./interactWithRecentMessageTool";
 export { ReminderTool } from "./reminderTool";
 export { RevealMessageMetadataTool } from "./revealMessageMetadataTool";
 export { ReviewCapabilitiesTool } from "./reviewCapabilities";

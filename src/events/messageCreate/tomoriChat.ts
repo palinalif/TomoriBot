@@ -1256,6 +1256,8 @@ function buildRecentMessageMetadataLedger(params: {
   mainPersonaName: string;
   personaNames: Set<string>;
   canPinMessages: boolean;
+  canReactMessages: boolean;
+  canReplyMessages: boolean;
   isDmChannel: boolean;
   managedWebhookHostChannelId: string | null;
 }): StructuredContextItem | null {
@@ -1267,6 +1269,8 @@ function buildRecentMessageMetadataLedger(params: {
     mainPersonaName,
     personaNames,
     canPinMessages,
+    canReactMessages,
+    canReplyMessages,
     isDmChannel,
     managedWebhookHostChannelId,
   } = params;
@@ -1297,7 +1301,7 @@ function buildRecentMessageMetadataLedger(params: {
     metadataLines.push(
       `${messageRef} | ${authorName} | ${formatTimestampInline(message.createdTimestamp)} | pinned=${message.pinned ? "yes" : "no"} | can_pin=${
         !isDmChannel && canPinMessages && !message.pinned ? "yes" : "no"
-      } | can_edit=${isDirectTomoriMessage ? (message.editable ? "yes" : "no") : isManagedWebhookMessage ? "yes" : "no"} | can_delete=${
+      } | can_react=${canReactMessages ? "yes" : "no"} | can_reply=${canReplyMessages ? "yes" : "no"} | can_edit=${isDirectTomoriMessage ? (message.editable ? "yes" : "no") : isManagedWebhookMessage ? "yes" : "no"} | can_delete=${
         isDirectTomoriMessage ? (message.deletable ? "yes" : "no") : isManagedWebhookMessage ? "yes" : "no"
       } | preview="${preview}"`,
     );
@@ -1314,8 +1318,8 @@ function buildRecentMessageMetadataLedger(params: {
       {
         type: "text",
         text:
-          `[System: Recent message metadata for the current channel. Use these ref_N handles with manage_message. ` +
-          `Each line is ref | author | sent | pinned | can_pin | can_edit | can_delete | preview.\n${metadataLines.join("\n")}]`,
+          `[System: Recent message metadata for the current channel. Use these ref_N handles with manage_message or interact_with_recent_message. ` +
+          `Each line is ref | author | sent | pinned | can_pin | can_react | can_reply | can_edit | can_delete | preview.\n${metadataLines.join("\n")}]`,
       },
     ],
   };
@@ -6699,7 +6703,29 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                             "permissionsFor" in channel &&
                             channel.permissionsFor(clientUser)?.has("ManageMessages"),
                         );
+                      const isThreadChannel =
+                        channel.type === ChannelType.PublicThread ||
+                        channel.type === ChannelType.PrivateThread ||
+                        channel.type === ChannelType.AnnouncementThread;
+                      const canReactMessages =
+                        isDMChannel ||
+                        Boolean(
+                          clientUser &&
+                            "permissionsFor" in channel &&
+                            channel.permissionsFor(clientUser)?.has("AddReactions"),
+                        );
+                      const canSendMessages =
+                        isDMChannel ||
+                        Boolean(
+                          clientUser &&
+                            "permissionsFor" in channel &&
+                            channel
+                              .permissionsFor(clientUser)
+                              ?.has(isThreadChannel ? "SendMessagesInThreads" : "SendMessages"),
+                        );
                       const managedWebhookHostChannelId = resolveManagedWebhookHostChannelId(channel);
+                      const canReplyMessages =
+                        canSendMessages || Boolean(personaUsername && managedWebhookHostChannelId);
                       const metadataLedgerItem = buildRecentMessageMetadataLedger({
                         recentMessages: relevantMessagesArray,
                         visibleMessageIds,
@@ -6712,6 +6738,8 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                           "Tomori",
                         personaNames,
                         canPinMessages,
+                        canReactMessages,
+                        canReplyMessages,
                         isDmChannel: isDMChannel,
                         managedWebhookHostChannelId,
                       });

@@ -34,6 +34,7 @@ const STATIC_TOOL_PROMPT_MACROS: Record<string, string> = {
   "{cross_channel_tool}": "cross_channel_message",
   "{sticker_tool}": "select_sticker_for_response",
   "{pin_tool}": "manage_message",
+  "{message_interaction_tool}": "interact_with_recent_message",
   "{profile_picture_tool}": "peek_profile_picture",
   "{document_tool}": "read_document",
   "{timestamp_refresh_tool}": "reveal_message_metadata",
@@ -162,6 +163,12 @@ export const TOOL_PROMPT_MACRO_DOCS: ToolPromptMacroDocEntry[] = [
     type: "static",
     currentTarget: "manage_message",
     notes: "Pin any recent message, or edit/delete Tomori-managed recent messages.",
+  },
+  {
+    macro: "{message_interaction_tool}",
+    type: "static",
+    currentTarget: "interact_with_recent_message",
+    notes: "React to or reply to a recent message for playful backtracking or commentary.",
   },
   {
     macro: "{profile_picture_tool}",

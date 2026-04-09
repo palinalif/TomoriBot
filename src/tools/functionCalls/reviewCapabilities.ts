@@ -348,6 +348,8 @@ export class ReviewCapabilitiesTool extends BaseTool {
         capabilitiesContent +=
           "- **manage_message** (pin any recent message, or edit/delete Tomori-owned recent messages)\n";
         capabilitiesContent +=
+          "- **interact_with_recent_message** (react to or reply to a recent message for fun/backtracking)\n";
+        capabilitiesContent +=
           "- **reveal_message_metadata** (show recent message refs, timestamps, and action flags)\n";
         capabilitiesContent += "- **create_reminder** (set reminders for users)\n";
         capabilitiesContent +=
@@ -780,6 +782,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
           const discordTools = builtInTools.filter(
             (t) =>
               t.name === "manage_message" ||
+              t.name === "interact_with_recent_message" ||
               t.name === "reveal_message_metadata" ||
               t.name.includes("sticker") ||
               t.name.includes("emoji"),

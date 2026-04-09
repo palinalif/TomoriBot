@@ -29,6 +29,7 @@ From `src/tools/functionCalls/`:
 - `process_youtube_video` (`youtubeVideoTool.ts`)
 - `reveal_message_metadata` (`revealMessageMetadataTool.ts`)
 - `manage_message` (`manageMessageTool.ts`)
+- `interact_with_recent_message` (`interactWithRecentMessageTool.ts`)
 - `peek_profile_picture` (`peekProfilePictureTool.ts`)
 - `increase_media_context` (`increaseMediaContextTool.ts`)
 - `process_gif` (`processGifTool.ts`)
@@ -77,17 +78,20 @@ Current name-resolution notes for built-in tools:
 - ambiguous results never auto-pick and instead return candidate labels for clarification
 - if a Discord user resolves successfully but has no Tomori user row yet, reminder/personal-memory tools fail with a human-readable "Tomori doesn't know this user yet" style error
 - bridge users can still be resolved by name from current conversation metadata, but avatar tools reject them and personal-memory creation/update does not create bridge-scoped personal memories
-- message-targeted tools such as `read_document`, `manage_message`, `analyze_image`, `process_gif`, and edit/inpaint reference flows still target Discord messages internally, but the prompt-visible arguments are opaque `media_N` / `ref_N` handles rather than raw snowflakes
+- message-targeted tools such as `read_document`, `manage_message`, `interact_with_recent_message`, `analyze_image`, `process_gif`, and edit/inpaint reference flows still target Discord messages internally, but the prompt-visible arguments are opaque `media_N` / `ref_N` handles rather than raw snowflakes
 - `ref_N` is now a general recent-message handle, not just a reply reference
 - `ToolRegistry.executeTool()` resolves those opaque handles back to real Discord IDs before dispatch, including both `message_id` and `end_message_id`, so individual tool implementations continue to work with normal message IDs
 
-Current message-management notes:
+Current message-management / interaction notes:
 
 - `reveal_message_metadata` is a no-argument context rewrite tool that appends one compact ledger of recent visible messages for the current turn and then hides itself for the rest of that turn
 - the metadata ledger is built from the same post-reset recent history window already loaded for chat context, not from whatever subset happened to survive later prompt assembly
-- each metadata row includes `ref_N`, author, absolute + relative timestamp, pin state, edit/delete eligibility, and a short text/media preview
+- each metadata row includes `ref_N`, author, absolute + relative timestamp, pin state, react/reply eligibility, edit/delete eligibility, and a short text/media preview
 - `manage_message` accepts `action = "pin" | "edit" | "delete"` plus `message_id`, optional `end_message_id`, and optional `content`
+- `interact_with_recent_message` accepts `action = "react" | "reply"` plus `message_id` and `content`
 - `pin` remains single-target and still requires Discord `Manage Messages`; `edit` and `delete` are runtime-gated to Tomori-owned direct messages or Tomori-managed persona webhook messages
+- `react` and `reply` are intentionally ungated by the message-management feature flag; they are expressive tools for revisiting recent ideas/messages rather than administrative message mutation
+- native replies use Discord reply threading when the active sender is the bot account directly; webhook/persona contexts fall back to a normal message plus a small link embed that points back to the referenced message
 - delete ranges are inclusive, normalized by recent-message chronology, and report skipped refs/counts instead of failing the whole request when some messages are ineligible
 
 Current `update_short_term_memory` runtime notes:
@@ -117,6 +121,7 @@ Static built-in macros always expand to the current canonical built-in tool name
 | `{cross_channel_tool}` | `cross_channel_message` | Send an immediate message to another channel/thread. |
 | `{sticker_tool}` | `select_sticker_for_response` | Attach a Discord sticker to the response. |
 | `{pin_tool}` | `manage_message` | Pin any recent message, or edit/delete Tomori-owned recent messages. |
+| `{message_interaction_tool}` | `interact_with_recent_message` | React to or reply to a recent message for playful backtracking. |
 | `{profile_picture_tool}` | `peek_profile_picture` | Inspect an avatar or banner. |
 | `{document_tool}` | `read_document` | Read PDF/TXT/MD attachments. |
 | `{timestamp_refresh_tool}` | `reveal_message_metadata` | Reveal recent message refs, timestamps, and action flags. |

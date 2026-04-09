@@ -185,6 +185,11 @@ export default {
       raw_field: `Raw Thoughts`,
       footer: `Provider: {provider} | Model: {model}`,
     },
+    message_interaction: {
+      reply_context_title: `Reply Context`,
+      reply_context_description: `This message is a reply to [a previous message]({message_url}).`,
+      reply_context_footer: `Replying to a previous message by {user}`,
+    },
 
     // Text quota errors
     text_quota_exceeded_title: `🔴 Text Quota Exceeded`,
@@ -3388,7 +3393,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         permission_choice_emojiusage: `Emoji Usage`,
         permission_choice_stickerusage: `Sticker Usage`,
         permission_choice_websearch: "Web Search Permission",
-        permission_choice_pinmessage: "Pin Messages",
+        permission_choice_pinmessage: "Manage Messages",
         permission_choice_imagegen: "Image Generation",
         permission_choice_videogen: "Video Generation",
         permission_choice_hiderespondembed: "Hide Response Embeds",
