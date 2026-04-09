@@ -56,7 +56,7 @@
 - ✅ **Generate Images**: Create AI images from text prompts (when enabled)
 - ✅ **Send Expressions**: Send emojis/stickers as separate function calls
 - ✅ **Look at Discord profile pictures**: See users' profile pictures and attached profile banners when available
-- ✅ **Manage Messages**: Pin any recent message, and edit/delete Tomori's own recent messages when allowed
+- ✅ **Manage Messages**: Pin any recent message, and edit/delete recent messages sent through the bot or its characters when allowed
 - ✅ **Interact With Recent Messages**: React to a recent message or send a short backtracking reply to it when something earlier in chat is worth revisiting
 - ✅ **Reveal Message Metadata**: Annotate recent visible turns with `ref_N` handles and sent timestamps when precise message targeting is needed
 - ✅ **Set up Reminders**: Create reminders for users, which you mention when time's up

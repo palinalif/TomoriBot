@@ -154,6 +154,7 @@ TomoriBot supports a wide range of LLM providers, image generation APIs, voice s
 If you customize TomoriBot's system prompt, persona instructions, or external provider prompt templates, prefer the stable prompt macros below instead of hardcoding tool names.
 
 - Prompt macros like `{memory_tool}` are expanded during context assembly. Exact tool names are emitted wrapped in backticks, while unresolved search/fetch families fall back to plain-language text. Static macros always map to the current canonical built-in tool name. Search/fetch family macros resolve to the best currently available exact tool name for the active provider/configuration.
+- Older static macros such as `{pin_tool}` and `{timestamp_refresh_tool}` are kept as compatibility aliases, but new prompt text should prefer `{manage_message_tool}` and `{message_metadata_tool}`.
 - `Base Tool` means the tool is part of TomoriBot's normal built-in tool set. It may still depend on the current provider/model supporting tool calling.
 - Other requirements below are additional gates such as server feature flags, Discord permissions, model capabilities, or optional API keys.
 - Admin-added MCP tools are intentionally not listed here because their names depend on each server's configuration.
@@ -169,10 +170,11 @@ If you customize TomoriBot's system prompt, persona instructions, or external pr
 | `create_task` | `{task_tool}` | Base Tool | Schedule one-time or recurring reminders and self-tasks. |
 | `cross_channel_message` | `{cross_channel_tool}` | Base Tool; unavailable on NovelAI; target channel permissions and cross-channel blocklist still apply | Instantly act in another channel or thread, with optional boomerang report-back. |
 | `select_sticker_for_response` | `{sticker_tool}` | `sticker_usage_enabled`; `USE_EXTERNAL_STICKERS` | Pick a matching server sticker to accompany the response. |
-| `pin_selected_message` | `{pin_tool}` | `pin_message_enabled`; `MANAGE_MESSAGES` | Pin an important recent message in the current channel. |
-| `peek_profile_picture` | `{profile_picture_tool}` | Base Tool; requires either a vision-capable chat model or a configured `vision_llm` | Inspect a user's avatar or the active persona avatar. |
-| `read_document` | `{document_tool}` | Base Tool | Extract text from a PDF, TXT, or MD attachment in a recent message. |
-| `refresh_message_timestamps` | `{timestamp_refresh_tool}` | Base Tool | Rebuild recent context with exact timestamps on every message. |
+| `manage_message` | `{manage_message_tool}` | `manage_message_enabled`; `MANAGE_MESSAGES` still required for `pin` | Pin any recent message, or edit/delete recent messages sent by Tomori or its characters. |
+| `interact_with_recent_message` | `{message_interaction_tool}` | Base Tool; normal Discord send/react capability still applies at runtime | React to a recent message or send a short backtracking reply to it. |
+  | `peek_profile_picture` | `{profile_picture_tool}` | Base Tool; requires either a vision-capable chat model or a configured `vision_llm` | Inspect a user's avatar or the active persona avatar. |
+  | `read_document` | `{document_tool}` | Base Tool | Extract text from a PDF, TXT, or MD attachment in a recent message. |
+| `reveal_message_metadata` | `{message_metadata_tool}` | Base Tool | Annotate recent visible turns with `ref_N` handles and sent timestamps for precise message targeting. |
 | `increase_media_context` | `{media_context_tool}` | Base Tool; requires a vision-capable chat model | Pull older hidden images/videos back into context when media was windowed out for optimization. |
 | `process_gif` | `{gif_tool}` | Base Tool; development only; requires a vision-capable chat model | Extract keyframes from a GIF for analysis. |
 | `process_youtube_video` | `{youtube_tool}` | Base Tool; requires a model with YouTube/video support | Analyze a specific YouTube link on demand. |

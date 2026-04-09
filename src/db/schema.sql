@@ -117,6 +117,29 @@ BEFORE UPDATE ON tomoris
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 
+CREATE TABLE IF NOT EXISTS discord_managed_webhooks (
+  managed_webhook_id SERIAL PRIMARY KEY,
+  guild_disc_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  channel_disc_id TEXT NOT NULL,
+  webhook_disc_id TEXT NOT NULL,
+  webhook_token BYTEA NOT NULL,
+  key_version INTEGER DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (kind, channel_disc_id),
+  UNIQUE (webhook_disc_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_discord_managed_webhooks_guild ON discord_managed_webhooks(guild_disc_id);
+CREATE INDEX IF NOT EXISTS idx_discord_managed_webhooks_channel ON discord_managed_webhooks(channel_disc_id);
+
+DROP TRIGGER IF EXISTS update_discord_managed_webhooks_timestamp ON discord_managed_webhooks;
+CREATE TRIGGER update_discord_managed_webhooks_timestamp
+BEFORE UPDATE ON discord_managed_webhooks
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
 -- Add multi-persona support columns (January 2026)
 -- is_alter: Distinguishes main persona (false) from alter personas (true)
 SELECT add_column_if_not_exists('tomoris', 'is_alter', 'BOOLEAN', 'false');

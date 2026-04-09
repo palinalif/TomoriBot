@@ -123,6 +123,19 @@ export class InteractWithRecentMessageTool extends BaseTool {
     return true;
   }
 
+  isAvailableForContext(provider: string, context?: ToolContext): boolean {
+    if (!this.isAvailableFor(provider)) {
+      return false;
+    }
+
+    if (context?.streamContext?.disableAllTools) {
+      log.info("InteractWithRecentMessageTool: Disabled for this turn because tools are suppressed");
+      return false;
+    }
+
+    return true;
+  }
+
   private resolveMessageId(
     rawValue: unknown,
     context: ToolContext,
@@ -261,6 +274,17 @@ export class InteractWithRecentMessageTool extends BaseTool {
   }
 
   async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+    if (context.streamContext?.disableAllTools) {
+      log.info("InteractWithRecentMessageTool: Execution blocked because tools are suppressed for this turn");
+      return {
+        success: false,
+        error: "Message interaction tools are disabled for this turn.",
+        data: {
+          status: "message_interaction_disabled_for_turn",
+        },
+      };
+    }
+
     const validation = this.validateParameters(args);
     if (!validation.isValid) {
       return {

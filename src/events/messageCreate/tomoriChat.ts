@@ -378,16 +378,24 @@ function buildQueuedReplyAttachmentSummary(message: Message): string | null {
   return parts.length > 0 ? parts.join(", ") : null;
 }
 
-function buildQueuedReplyDirective(message: Message, replyTargetName: string, idMap?: MessageIdMap): string {
+function buildQueuedReplyDirective(
+  message: Message,
+  replyTargetName: string,
+  activePersonaName: string | null | undefined,
+  idMap?: MessageIdMap,
+): string {
   const normalizedTargetName = compactWhitespace(stripBridgePrefix(replyTargetName)) || "User";
+  const normalizedPersonaName =
+    compactWhitespace(stripBridgePrefix(activePersonaName ?? "")) || process.env.DEFAULT_BOTNAME || "Tomori";
   const contentPreview = truncateForSystemContext(
     message.cleanContent || message.content || "",
     QUEUED_REPLY_DIRECTIVE_MAX_CONTENT_LENGTH,
   );
   const attachmentSummary = buildQueuedReplyAttachmentSummary(message);
   const normalizedPreview = contentPreview.replaceAll('"', "'");
+  const normalizedPersonaLabel = normalizedPersonaName.replaceAll('"', "'");
 
-  let directive = `Create a reply to ${normalizedTargetName}'s message from earlier (ID: ${idMap?.register(message.id, "ref") ?? message.id})`;
+  let directive = `Create a reply as ${normalizedPersonaLabel} to ${normalizedTargetName}'s message from earlier (ID: ${idMap?.register(message.id, "ref") ?? message.id})`;
   if (attachmentSummary) {
     directive += `, which has ${attachmentSummary} attached`;
   }
@@ -395,7 +403,7 @@ function buildQueuedReplyDirective(message: Message, replyTargetName: string, id
     directive += ` saying: "${normalizedPreview}"`;
   }
 
-  return `${directive}.`;
+  return `${directive}. Start your next reply with "${normalizedPersonaLabel}:"`;
 }
 
 function checkSelfDebugDiagnosticEmbedTitle(embedTitle: string | null): boolean {
@@ -950,13 +958,27 @@ function normalizeReactionEmojiLabel(reaction: import("discord.js").MessageReact
   return "unknown_emoji";
 }
 
-function formatReactionUserLabel(user: { globalName: string | null; username: string }) {
+function formatReactionUserLabel(
+  user: { id: string; globalName: string | null; username: string },
+  options?: {
+    clientUserId?: string;
+    mainPersonaNickname?: string | null;
+  },
+) {
+  if (options?.clientUserId && user.id === options.clientUserId && options.mainPersonaNickname?.trim()) {
+    return options.mainPersonaNickname.trim();
+  }
+
   return user.globalName || user.username;
 }
 
 async function buildReactionContextAnnotation(
   message: Message,
   budgetState: ReactionContextBudgetState,
+  options?: {
+    clientUserId?: string;
+    mainPersonaNickname?: string | null;
+  },
 ): Promise<string | null> {
   if (!REACTION_CONTEXT_ENABLED || REACTION_CONTEXT_MAX_REACTIONS_PER_MESSAGE < 1) {
     return null;
@@ -988,7 +1010,7 @@ async function buildReactionContextAnnotation(
             limit: REACTION_CONTEXT_MAX_USERS_PER_REACTION,
           });
           const userLabels = Array.from(users.values())
-            .map((user) => formatReactionUserLabel(user))
+            .map((user) => formatReactionUserLabel(user, options))
             .filter((label): label is string => label.length > 0);
 
           if (userLabels.length > 0) {
@@ -1997,9 +2019,15 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
   const userDiscId = manualTriggerInvoker?.userDiscId ?? message.author.id;
   const triggererUsername = manualTriggerInvoker?.username ?? message.author.username;
-  const queuedReplyDirective =
+  const queuedReplyTargetName = manualTriggerInvoker?.member?.displayName ?? triggererUsername;
+  const getQueuedReplyDirective = (activePersonaName: string | null | undefined): string | null =>
     isFromQueue && !isStopResponse
-      ? buildQueuedReplyDirective(message, manualTriggerInvoker?.member?.displayName ?? triggererUsername, messageIdMap)
+      ? buildQueuedReplyDirective(
+          message,
+          queuedReplyTargetName,
+          activePersonaName,
+          streamingContext.messageIdMap ?? messageIdMap,
+        )
       : null;
   const matrixRelayUserId = isMatrixRelay ? extractBridgeUserId(message.author.username) : undefined;
   const cooldownUserDiscId = matrixRelayUserId ?? userDiscId;
@@ -3949,7 +3977,10 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         let hasLocalMedia = false;
         let remoteMediaSourceKind: SimplifiedMessageForContext["remoteMediaSourceKind"];
 
-        const reactionContextLine = await buildReactionContextAnnotation(msg, reactionContextBudget);
+        const reactionContextLine = await buildReactionContextAnnotation(msg, reactionContextBudget, {
+          clientUserId: client.user?.id,
+          mainPersonaNickname: mainPersona?.tomori_nickname ?? tomoriState?.tomori_nickname ?? null,
+        });
         if (reactionContextLine) {
           messageContentForLlm = messageContentForLlm
             ? `${messageContentForLlm}\n${reactionContextLine}`
@@ -5072,7 +5103,9 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
             // Keep queued reply guidance isolated so it does not collapse into
             // unrelated tail notes like emoji penalties or STM reminders.
-            const queuedReplyTailMessage = buildTailDirectiveMessage(queuedReplyDirective);
+            const queuedReplyTailMessage = buildTailDirectiveMessage(
+              getQueuedReplyDirective(currentPersona.tomori_nickname ?? tomoriState?.tomori_nickname),
+            );
             if (queuedReplyTailMessage) {
               contextSegments.push(queuedReplyTailMessage);
             }
@@ -6622,7 +6655,9 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                         contextSegments.push(combinedTailMessage);
                       }
 
-                      const queuedReplyTailMessage = buildTailDirectiveMessage(queuedReplyDirective);
+                      const queuedReplyTailMessage = buildTailDirectiveMessage(
+                        getQueuedReplyDirective(currentPersona.tomori_nickname ?? tomoriState?.tomori_nickname),
+                      );
                       if (queuedReplyTailMessage) {
                         contextSegments.push(queuedReplyTailMessage);
                       }

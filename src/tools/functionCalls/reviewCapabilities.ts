@@ -346,7 +346,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
         capabilitiesContent += "- **read_document** (read PDF, TXT, or MD file attachments shared in chat)\n";
         capabilitiesContent += "- **get_profile_picture** (fetch user avatars)\n";
         capabilitiesContent +=
-          "- **manage_message** (pin any recent message, or edit/delete Tomori-owned recent messages)\n";
+          "- **manage_message** (pin any recent message, or edit/delete recent messages sent by you or another current character)\n";
         capabilitiesContent +=
           "- **interact_with_recent_message** (react to or reply to a recent message for fun/backtracking)\n";
         capabilitiesContent += "- **reveal_message_metadata** (annotate recent message refs and sent timestamps)\n";

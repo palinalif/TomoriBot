@@ -1,6 +1,7 @@
 /**
  * Discord Message Management Tool
- * Allows Tomori to pin any recent message and edit/delete Tomori-managed recent messages.
+ * Allows the bot to pin any recent message and edit/delete recent messages it sent directly
+ * or through its managed character webhooks.
  */
 
 import type { BaseGuildTextChannel, Message, Webhook } from "discord.js";
@@ -8,7 +9,7 @@ import { BaseTool, type ToolContext, type ToolParameterSchema, type ToolResult }
 import { MessageIdMap } from "@/utils/text/messageIdMap";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 import { getKnownPersonaSpeakerNames, stripLeadingKnownSpeakerPrefixes } from "@/utils/discord/modelAuthoredText";
-import { getCachedManagedWebhookForChannel } from "@/utils/discord/webhookManager";
+import { resolveManagedWebhookForChannel } from "@/utils/discord/webhookManager";
 import { log } from "@/utils/misc/logger";
 import { isMatrixBridgeWebhookUsername, stripBridgePrefix } from "@/utils/bridge";
 
@@ -196,7 +197,7 @@ export class ManageMessageTool extends BaseTool {
       return null;
     }
 
-    const managedWebhook = getCachedManagedWebhookForChannel(webhookHostChannel.id, message.webhookId);
+    const managedWebhook = await resolveManagedWebhookForChannel(webhookHostChannel, message.webhookId);
     const webhookAuthorName = stripBridgePrefix(message.author.username).toLowerCase();
     if (!managedWebhook || !personaNameSet.has(webhookAuthorName)) {
       return null;
@@ -428,10 +429,11 @@ export class ManageMessageTool extends BaseTool {
       if (!targetType) {
         return {
           success: false,
-          error: "Message is not editable by Tomori",
-          message: "I can only edit Tomori-owned recent messages that are still editable in this channel.",
+          error: "Message is not editable by the current bot identity",
+          message:
+            "I can only edit recent messages that were sent directly by me or through one of the current character identities, and are still editable in this channel.",
           data: {
-            status: "message_not_editable_by_tomori",
+            status: "message_not_editable_by_current_identity",
             message_ref: targetRef,
           },
         };
@@ -489,10 +491,11 @@ export class ManageMessageTool extends BaseTool {
       if (!targetType) {
         return {
           success: false,
-          error: "Message is not deletable by Tomori",
-          message: "I can only delete Tomori-owned recent messages that are still deletable in this channel.",
+          error: "Message is not deletable by the current bot identity",
+          message:
+            "I can only delete recent messages that were sent directly by me or through one of the current character identities, and are still deletable in this channel.",
           data: {
-            status: "message_not_deletable_by_tomori",
+            status: "message_not_deletable_by_current_identity",
             message_ref: targetRef,
           },
         };
@@ -581,9 +584,8 @@ export class ManageMessageTool extends BaseTool {
     if (deletedRefs.length === 0) {
       return {
         success: false,
-        error: "No Tomori-owned messages found in range",
-        message:
-          "I couldn't find any Tomori-owned recent messages that are currently deletable in that requested range.",
+        error: "No manageable messages found in range",
+        message: "I couldn't find any recent messages in that range that I can currently delete.",
         data: {
           status: "no_eligible_messages_in_range",
           deleted_count: 0,
@@ -597,8 +599,8 @@ export class ManageMessageTool extends BaseTool {
       success: true,
       message:
         skippedRefs.length > 0
-          ? `Deleted ${deletedRefs.length} Tomori-owned message(s) and skipped ${skippedRefs.length} in the requested range.`
-          : `Deleted ${deletedRefs.length} Tomori-owned message(s) in the requested range.`,
+          ? `Deleted ${deletedRefs.length} manageable message(s) and skipped ${skippedRefs.length} in the requested range.`
+          : `Deleted ${deletedRefs.length} manageable message(s) in the requested range.`,
       data: {
         status: skippedRefs.length > 0 ? "range_delete_partial_success" : "range_delete_success",
         deleted_count: deletedRefs.length,

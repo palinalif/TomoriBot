@@ -427,6 +427,7 @@ In-memory caches:
 
 **Cache behavior:**
 - No TTL (persist until bot restart or manual invalidation)
+- Shared channel webhook tokens are also stored encrypted in Postgres so restart recovery can restore the same webhook without recreating it
 - Token validation on cache hit (recreates if webhook was deleted)
 - Auto-invalidation on webhook errors (codes 10015, 50027)
 - Avatar mutation sends also use a per-target-channel mutation lock so concurrent sends cannot cross-contaminate webhook avatars.
@@ -526,3 +527,4 @@ In-memory caches:
 12. **Lazy migration:** Existing local persona with HTTP(S) `webhook_avatar_url` → first alter send migrates to a local path.
 13. **Recovery path:** Break the legacy HTTP(S) URL but keep one legacy `TomoriBot Persona {id}` webhook → next send recovers avatar and stores a local path.
 14. **Shared webhook identity:** Use the same alter in multiple channels/threads → messages still show the correct persona sender without creating new persona webhooks.
+15. **Restart recovery:** Restart the bot, then trigger an alter reply in the same channel → the existing shared webhook is restored from encrypted storage instead of being recreated, so recent alter messages remain manageable.

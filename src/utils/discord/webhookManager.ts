@@ -8,6 +8,14 @@ import type {
   MessageCreateOptions,
 } from "discord.js";
 import type { TomoriState } from "@/types/db/schema";
+import {
+  MANAGED_WEBHOOK_KIND_SHARED_CHANNEL,
+  decryptManagedDiscordWebhookToken,
+  deleteManagedDiscordWebhook,
+  loadManagedDiscordWebhookByChannel,
+  loadManagedDiscordWebhookByChannelAndWebhookId,
+  upsertManagedDiscordWebhook,
+} from "@/utils/db/managedWebhookDb";
 import { log } from "../misc/logger";
 import { safeDownload } from "../security/safeDownload";
 import { PERSONA_LIMITS } from "../security/rateLimiter";
@@ -60,6 +68,7 @@ type WebhookSendPayload = Exclude<Parameters<Webhook["send"]>[0], string>;
 const MAX_AVATAR_SIZE_BYTES = PERSONA_LIMITS.MAX_AVATAR_SIZE_MB * 1024 * 1024;
 const webhookMutationLocks = new Map<string, Promise<void>>();
 const webhookAvatarStateCache = new Map<string, string>();
+const persistedManagedWebhookIds = new Set<string>();
 
 function toWebhookAvatarData(avatar?: Buffer | string | null): string | null {
   if (!avatar) {
@@ -336,6 +345,71 @@ async function resolveNonProductionPersonaAvatarReference(persona: TomoriState, 
   return storedReference ?? avatarReference;
 }
 
+async function persistSharedChannelWebhook(
+  channel: TextChannel | BaseGuildTextChannel,
+  webhook: Webhook,
+): Promise<void> {
+  if (!channel.guildId || !webhook.token || persistedManagedWebhookIds.has(webhook.id)) {
+    return;
+  }
+
+  const stored = await upsertManagedDiscordWebhook({
+    guildDiscId: channel.guildId,
+    kind: MANAGED_WEBHOOK_KIND_SHARED_CHANNEL,
+    channelDiscId: channel.id,
+    webhookDiscId: webhook.id,
+    rawToken: webhook.token,
+  });
+
+  if (stored) {
+    persistedManagedWebhookIds.add(webhook.id);
+  }
+}
+
+async function restoreStoredSharedWebhook(
+  channel: TextChannel | BaseGuildTextChannel,
+  webhookId?: string | null,
+): Promise<Webhook | null> {
+  const storedRow = webhookId
+    ? await loadManagedDiscordWebhookByChannelAndWebhookId(channel.id, webhookId, MANAGED_WEBHOOK_KIND_SHARED_CHANNEL)
+    : await loadManagedDiscordWebhookByChannel(channel.id, MANAGED_WEBHOOK_KIND_SHARED_CHANNEL);
+
+  if (!storedRow) {
+    return null;
+  }
+
+  const decryptedToken = await decryptManagedDiscordWebhookToken(storedRow);
+  if (!decryptedToken) {
+    await deleteManagedDiscordWebhook(channel.id, storedRow.webhook_disc_id, MANAGED_WEBHOOK_KIND_SHARED_CHANNEL);
+    return null;
+  }
+
+  try {
+    const restoredWebhook = await channel.client.fetchWebhook(storedRow.webhook_disc_id, decryptedToken);
+    if (restoredWebhook.channelId !== channel.id) {
+      log.warn(
+        `[Webhook Manager] Stored webhook ${storedRow.webhook_disc_id} does not belong to channel ${channel.id}; removing stale record`,
+      );
+      await deleteManagedDiscordWebhook(channel.id, storedRow.webhook_disc_id, MANAGED_WEBHOOK_KIND_SHARED_CHANNEL);
+      return null;
+    }
+
+    webhookCache.set(channel.id, restoredWebhook);
+    persistedManagedWebhookIds.add(restoredWebhook.id);
+    return restoredWebhook;
+  } catch (error) {
+    if (isInvalidWebhookError(error)) {
+      log.warn(
+        `[Webhook Manager] Stored webhook ${storedRow.webhook_disc_id} for channel ${channel.id} is no longer valid; removing stale record`,
+      );
+      await deleteManagedDiscordWebhook(channel.id, storedRow.webhook_disc_id, MANAGED_WEBHOOK_KIND_SHARED_CHANNEL);
+    } else {
+      log.warn(`[Webhook Manager] Failed to restore stored webhook for channel ${channel.id}`, error);
+    }
+    return null;
+  }
+}
+
 async function resolvePersonaAvatarIdentity(persona: TomoriState, guild?: Guild): Promise<ResolvedWebhookIdentity> {
   const identity: ResolvedWebhookIdentity = {
     username: persona.tomori_nickname,
@@ -408,15 +482,16 @@ async function resolvePersonaWebhookAvatar(persona: TomoriState, guild?: Guild):
 }
 
 /**
- * Gets or creates a webhook for the given channel with in-memory caching.
+ * Gets or creates a shared channel webhook with cache + encrypted DB-backed restore.
  * Webhooks are used to send messages with custom avatars and usernames for alter personas.
  *
  * Flow:
  * 1. Check in-memory cache
  * 2. If cached webhook still exists, return it
- * 3. If not cached or deleted, fetch existing webhook by name
- * 4. If no webhook exists, create new one
- * 5. Cache the webhook for future use
+ * 3. If the process restarted, try to restore the webhook from encrypted DB storage
+ * 4. If still unavailable, fetch existing webhook by name
+ * 5. If no usable webhook exists, create a new one
+ * 6. Cache and persist the webhook for future use
  *
  * @param channel - The text channel to get/create webhook for
  * @returns Webhook object, or null if missing permissions
@@ -441,9 +516,11 @@ export async function getOrCreateWebhook(channel: TextChannel | BaseGuildTextCha
           const liveWebhooks = await channel.fetchWebhooks();
           if (liveWebhooks.has(cachedWebhook.id)) {
             log.info(`[Webhook Manager] Cache HIT for channel ${channelId} (${channel.name})`);
+            await persistSharedChannelWebhook(channel, cachedWebhook);
             return { webhook: cachedWebhook };
           }
           log.warn(`[Webhook Manager] Cached webhook missing in channel ${channelId}, invalidating cache`);
+          await deleteManagedDiscordWebhook(channelId, cachedWebhook.id, MANAGED_WEBHOOK_KIND_SHARED_CHANNEL);
           webhookCache.delete(channelId);
         } catch (fetchError) {
           log.warn(
@@ -456,12 +533,19 @@ export async function getOrCreateWebhook(channel: TextChannel | BaseGuildTextCha
       }
     }
 
-    // 2. Fetch existing webhook by name
+    // 2. Try restoring from encrypted DB storage (survives process restarts)
+    const restoredWebhook = await restoreStoredSharedWebhook(channel);
+    if (restoredWebhook) {
+      log.info(`[Webhook Manager] Restored shared webhook for channel ${channelId} from stored credentials`);
+      return { webhook: restoredWebhook };
+    }
+
+    // 3. Fetch existing webhook by name
     log.info(`[Webhook Manager] Cache MISS for channel ${channelId}, fetching webhooks`);
     const webhooks = await channel.fetchWebhooks();
     let webhook = webhooks.find((wh) => wh.name === WEBHOOK_NAME);
 
-    // 3. Check if webhook has a token (webhooks from fetchWebhooks don't have tokens)
+    // 4. Check if webhook has a token (webhooks from fetchWebhooks don't have tokens)
     if (webhook && !webhook.token) {
       log.warn(
         `[Webhook Manager] Found webhook for channel ${channelId} but it has no token (fetched webhook). Deleting and recreating.`,
@@ -470,7 +554,7 @@ export async function getOrCreateWebhook(channel: TextChannel | BaseGuildTextCha
       webhook = undefined;
     }
 
-    // 4. Create new webhook if none exists or token missing
+    // 5. Create new webhook if none exists or token missing
     if (!webhook) {
       log.info(`[Webhook Manager] No webhook found for channel ${channelId}, creating new one`);
       webhook = await channel.createWebhook({
@@ -480,8 +564,9 @@ export async function getOrCreateWebhook(channel: TextChannel | BaseGuildTextCha
       log.success(`[Webhook Manager] Created webhook for channel ${channelId} (${channel.name})`);
     }
 
-    // 5. Cache the webhook
+    // 6. Cache + persist the webhook
     webhookCache.set(channelId, webhook);
+    await persistSharedChannelWebhook(channel, webhook);
     return { webhook };
   } catch (error) {
     const errorReason = getWebhookErrorReason(error);
@@ -494,7 +579,7 @@ export async function getOrCreateWebhook(channel: TextChannel | BaseGuildTextCha
 }
 
 /**
- * Returns a cached Tomori-managed webhook for a channel when the webhook ID matches.
+ * Returns a cached bot-managed webhook for a channel when the webhook ID matches.
  * This is intentionally read-only: unlike getOrCreateWebhook(), it never fetches,
  * recreates, or mutates remote webhook state.
  *
@@ -503,7 +588,7 @@ export async function getOrCreateWebhook(channel: TextChannel | BaseGuildTextCha
  *
  * @param channelId - Base text channel ID that owns the webhook (threads use parent ID)
  * @param webhookId - Webhook snowflake to look up
- * @returns Cached webhook with token, or null when unavailable/not Tomori-managed
+ * @returns Cached webhook with token, or null when unavailable/not bot-managed
  */
 export function getCachedManagedWebhookForChannel(channelId: string, webhookId?: string | null): Webhook | null {
   if (!channelId || !webhookId) {
@@ -526,6 +611,22 @@ export function getCachedManagedWebhookForChannel(channelId: string, webhookId?:
   }
 
   return null;
+}
+
+export async function resolveManagedWebhookForChannel(
+  channel: TextChannel | BaseGuildTextChannel,
+  webhookId?: string | null,
+): Promise<Webhook | null> {
+  if (!channel.id || !webhookId) {
+    return null;
+  }
+
+  const cachedWebhook = getCachedManagedWebhookForChannel(channel.id, webhookId);
+  if (cachedWebhook) {
+    return cachedWebhook;
+  }
+
+  return await restoreStoredSharedWebhook(channel, webhookId);
 }
 
 function buildWebhookSendPayload(payload: WebhookSendPayload, identity?: ResolvedWebhookIdentity): WebhookSendPayload {
@@ -1028,6 +1129,7 @@ export function invalidateWebhookCache(channelId: string): void {
   const personaCacheRemoved = invalidatePersonaWebhookCacheForChannel(channelId);
   if (cachedWebhook) {
     webhookAvatarStateCache.delete(cachedWebhook.id);
+    persistedManagedWebhookIds.delete(cachedWebhook.id);
   }
 
   if (hadCache || personaCacheRemoved > 0) {
@@ -1072,6 +1174,7 @@ export function clearWebhookCache(): void {
   const personaSize = personaWebhookCache.size;
   personaWebhookCache.clear();
   webhookAvatarStateCache.clear();
+  persistedManagedWebhookIds.clear();
 
   log.info(`[Webhook Manager] Cleared entire webhook cache (${previousSize + personaSize} entries)`);
 }

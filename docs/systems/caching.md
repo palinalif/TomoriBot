@@ -95,6 +95,7 @@ Caching reduces repeated DB/API calls and helps meet Discord interaction timing 
   - channel webhook cache (`channelId`)
   - persona webhook cache (`channelId:personaId`)
 - No TTL; invalidated on delete/change conditions
+- Shared channel webhook tokens are also persisted encrypted in Postgres so restart recovery can rehydrate the cache without recreating the webhook
 
 ### 11) Preset avatar cache (`utils/image/avatarHelper.ts`)
 

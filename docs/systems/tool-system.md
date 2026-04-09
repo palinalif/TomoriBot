@@ -89,7 +89,7 @@ Current message-management / interaction notes:
 - each annotated turn gains a compact metadata suffix containing `ref_N` and an absolute + relative sent timestamp
 - `manage_message` accepts `action = "pin" | "edit" | "delete"` plus `message_id`, optional `end_message_id`, and optional `content`
 - `interact_with_recent_message` accepts `action = "react" | "reply"` plus `message_id` and `content`
-- `pin` remains single-target and still requires Discord `Manage Messages`; `edit` and `delete` are runtime-gated to Tomori-owned direct messages or Tomori-managed persona webhook messages
+- `pin` remains single-target and still requires Discord `Manage Messages`; `edit` and `delete` are runtime-gated to direct bot messages or bot-managed character webhook messages
 - `react` and `reply` are intentionally ungated by the message-management feature flag; they are expressive tools for revisiting recent ideas/messages rather than administrative message mutation
 - native replies use Discord reply threading when the active sender is the bot account directly; webhook/persona contexts fall back to a normal message plus a small link embed that points back to the referenced message
 - delete ranges are inclusive, normalized by recent-message chronology, and report skipped refs/counts instead of failing the whole request when some messages are ineligible
@@ -120,11 +120,13 @@ Static built-in macros always expand to the current canonical built-in tool name
 | `{task_tool}` | `create_task` | Create reminders or scheduled self-tasks. |
 | `{cross_channel_tool}` | `cross_channel_message` | Send an immediate message to another channel/thread. |
 | `{sticker_tool}` | `select_sticker_for_response` | Attach a Discord sticker to the response. |
-| `{pin_tool}` | `manage_message` | Pin any recent message, or edit/delete Tomori-owned recent messages. |
+| `{manage_message_tool}` | `manage_message` | Pin any recent message, or edit/delete recent messages sent by the bot or its characters. |
+| `{pin_tool}` | `manage_message` | Compatibility alias for `{manage_message_tool}`. |
 | `{message_interaction_tool}` | `interact_with_recent_message` | React to or reply to a recent message for playful backtracking. |
 | `{profile_picture_tool}` | `peek_profile_picture` | Inspect an avatar or banner. |
 | `{document_tool}` | `read_document` | Read PDF/TXT/MD attachments. |
-| `{timestamp_refresh_tool}` | `reveal_message_metadata` | Reveal recent message refs and sent timestamps. |
+| `{message_metadata_tool}` | `reveal_message_metadata` | Reveal recent message refs and sent timestamps. |
+| `{timestamp_refresh_tool}` | `reveal_message_metadata` | Compatibility alias for `{message_metadata_tool}`. |
 | `{media_context_tool}` | `increase_media_context` | Bring older hidden images/videos back into context. |
 | `{gif_tool}` | `process_gif` | Extract GIF frames for analysis. |
 | `{youtube_tool}` | `process_youtube_video` | Analyze a YouTube video. |

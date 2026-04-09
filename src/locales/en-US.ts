@@ -3402,7 +3402,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         emojiusage_desc: "Use emojis in responses",
         stickerusage_desc: "Send sticker reactions",
         websearch_desc: "Browse the web for information",
-        managemessage_desc: "Allow pinning any recent message and editing/deleting Tomori-owned recent messages",
+        managemessage_desc: "Allow pinning any recent message and editing/deleting recent bot or character messages",
         imagegen_desc: "Generate images on request",
         videogen_desc: "Generate short videos on request",
         hiderespondembed_desc: "Hide /bot respond success embed",

@@ -33,10 +33,12 @@ const STATIC_TOOL_PROMPT_MACROS: Record<string, string> = {
   "{task_tool}": "create_task",
   "{cross_channel_tool}": "cross_channel_message",
   "{sticker_tool}": "select_sticker_for_response",
+  "{manage_message_tool}": "manage_message",
   "{pin_tool}": "manage_message",
   "{message_interaction_tool}": "interact_with_recent_message",
   "{profile_picture_tool}": "peek_profile_picture",
   "{document_tool}": "read_document",
+  "{message_metadata_tool}": "reveal_message_metadata",
   "{timestamp_refresh_tool}": "reveal_message_metadata",
   "{media_context_tool}": "increase_media_context",
   "{gif_tool}": "process_gif",
@@ -159,10 +161,17 @@ export const TOOL_PROMPT_MACRO_DOCS: ToolPromptMacroDocEntry[] = [
     notes: "Attach a Discord sticker to the response.",
   },
   {
+    macro: "{manage_message_tool}",
+    type: "static",
+    currentTarget: "manage_message",
+    notes:
+      "Canonical macro for pinning any recent message or editing/deleting recent messages sent by you or another current character.",
+  },
+  {
     macro: "{pin_tool}",
     type: "static",
     currentTarget: "manage_message",
-    notes: "Pin any recent message, or edit/delete Tomori-managed recent messages.",
+    notes: "Compatibility alias for `{manage_message_tool}`.",
   },
   {
     macro: "{message_interaction_tool}",
@@ -183,10 +192,16 @@ export const TOOL_PROMPT_MACRO_DOCS: ToolPromptMacroDocEntry[] = [
     notes: "Read recent PDF/TXT/MD attachments.",
   },
   {
+    macro: "{message_metadata_tool}",
+    type: "static",
+    currentTarget: "reveal_message_metadata",
+    notes: "Canonical macro for annotating recent visible turns with refs and sent timestamps.",
+  },
+  {
     macro: "{timestamp_refresh_tool}",
     type: "static",
     currentTarget: "reveal_message_metadata",
-    notes: "Reveal recent message refs and sent timestamps.",
+    notes: "Compatibility alias for `{message_metadata_tool}`.",
   },
   {
     macro: "{media_context_tool}",
