@@ -1300,6 +1300,47 @@ export function cleanLLMOutput(
 
 const RESERVED_INVALID_SPEAKER_LABELS_LOWER = new Set(["assistant"]);
 
+function findMatchingBacktickRun(text: string, startIndex: number, delimiter: string): number {
+  return text.indexOf(delimiter, startIndex);
+}
+
+export function findMarkdownCodeRanges(text: string): Array<{ start: number; end: number }> {
+  if (!text.includes("`")) {
+    return [];
+  }
+
+  const ranges: Array<{ start: number; end: number }> = [];
+  let index = 0;
+
+  while (index < text.length) {
+    if (text[index] !== "`") {
+      index++;
+      continue;
+    }
+
+    let delimiterLength = 1;
+    while (index + delimiterLength < text.length && text[index + delimiterLength] === "`") {
+      delimiterLength++;
+    }
+
+    const delimiter = "`".repeat(delimiterLength);
+    const closingIndex = findMatchingBacktickRun(text, index + delimiterLength, delimiter);
+    const end = closingIndex === -1 ? text.length : closingIndex + delimiterLength;
+
+    ranges.push({
+      start: index,
+      end,
+    });
+    index = end;
+  }
+
+  return ranges;
+}
+
+function isIndexInsideRanges(index: number, ranges: ReadonlyArray<{ start: number; end: number }>): boolean {
+  return ranges.some((range) => index >= range.start && index < range.end);
+}
+
 export function isRegisteredOrReservedSpeakerLabel(
   rawLabel: string,
   registeredSpeakerNamesLower?: ReadonlySet<string>,
@@ -1337,6 +1378,7 @@ export function truncateBeforeRegisteredSpeakerLine(
     };
   }
 
+  const markdownCodeRanges = findMarkdownCodeRanges(text);
   const speakerLinePattern = /(^|\n+)\s*([^\n:]{1,64}):\s*/g;
   let match: RegExpExecArray | null = null;
 
@@ -1346,19 +1388,29 @@ export function truncateBeforeRegisteredSpeakerLine(
       break;
     }
 
-    const rawLabel = match[2]?.trim();
+    const rawLabel = match[2];
     if (!rawLabel) {
       continue;
     }
 
-    if (!isRegisteredOrReservedSpeakerLabel(rawLabel, registeredSpeakerNamesLower)) {
+    const labelIndex = match.index + match[0].indexOf(rawLabel);
+    if (isIndexInsideRanges(labelIndex, markdownCodeRanges)) {
+      continue;
+    }
+
+    const trimmedLabel = rawLabel.trim();
+    if (!trimmedLabel) {
+      continue;
+    }
+
+    if (!isRegisteredOrReservedSpeakerLabel(trimmedLabel, registeredSpeakerNamesLower)) {
       continue;
     }
 
     return {
       text: text.slice(0, match.index),
       stopTriggered: true,
-      matchedSpeaker: rawLabel,
+      matchedSpeaker: trimmedLabel,
     };
   }
 

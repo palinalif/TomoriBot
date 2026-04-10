@@ -104,7 +104,6 @@ import {
 import { isAudioAttachment, transcribeMessageAudioAttachment } from "@/utils/audio/audioAttachmentTranscription";
 import { getCachedVoiceTranscript, setCachedVoiceTranscript } from "@/utils/audio/voiceTranscriptCache";
 import { getCachedRenderedMarkdownTable } from "@/utils/text/markdownTableCache";
-import { isRenderedMarkdownTableAttachmentName } from "@/utils/text/markdownTable";
 
 // Base trigger words that will always work (with or without spaces for English)
 const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map((word) => word.trim()) || [
@@ -4478,69 +4477,63 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         // 5.a. Process direct image attachments and stickers
         if (msg.attachments.size > 0) {
           const cachedRenderedTable = getCachedRenderedMarkdownTable(msg.id);
-          let renderedTableAppended = false;
-          for (const attachment of msg.attachments.values()) {
-            if (
-              cachedRenderedTable &&
-              !renderedTableAppended &&
-              isRenderedMarkdownTableAttachmentName(attachment.name)
-            ) {
-              const tableText = `[System: This was sent as a rendered markdown table image.]\n${cachedRenderedTable}`;
-              messageContentForLlm = messageContentForLlm ? `${messageContentForLlm}\n${tableText}` : tableText;
-              renderedTableAppended = true;
-              continue;
-            }
-
-            if (isSupportedImageAttachmentContentType(attachment.contentType)) {
-              imageAttachments.push({
-                url: attachment.url,
-                proxyUrl: attachment.proxyURL,
-                mimeType: attachment.contentType,
-                filename: attachment.name,
-              });
-              hasLocalMedia = true;
-            }
-            // 1. Check for video attachments using supported MIME types
-            else if (isSupportedVideoAttachmentContentType(attachment.contentType)) {
-              videoAttachments.push({
-                url: attachment.url,
-                proxyUrl: attachment.proxyURL,
-                mimeType: attachment.contentType,
-                filename: attachment.name,
-                isYouTubeLink: false,
-              });
-              hasLocalMedia = true;
-              log.info(`Processed video attachment: ${attachment.name} (${attachment.contentType})`);
-            }
-            // Non-media attachments (PDF, TXT, MD, etc.) — check for audio cache first,
-            // otherwise append a text placeholder with message ID for read_document
-            else if (isAudioAttachment(attachment)) {
-              if (config.voice_transcript_chat_mode) {
-                // Chat mode: skip audio entirely. The transcript was already posted
-                // as a visible webhook message; audio never reaches the AI context.
-              } else {
-                const cached = getCachedVoiceTranscript(msg.id);
-                if (cached?.source === "user_stt") {
-                  // Inline the transcript instead of a filename placeholder.
-                  // Guard against double-appending if applyEffectiveMessageContent
-                  // already embedded the transcript in processedContent.
-                  if (!messageContentForLlm?.includes(cached.transcript)) {
-                    const voiceText = `[System: This was sent as a voice message.]\n${cached.transcript}`;
-                    messageContentForLlm = messageContentForLlm ? `${messageContentForLlm}\n${voiceText}` : voiceText;
+          if (cachedRenderedTable) {
+            const tableText = `[System: This was sent as a rendered markdown table image.]\n${cachedRenderedTable}`;
+            messageContentForLlm = messageContentForLlm ? `${messageContentForLlm}\n${tableText}` : tableText;
+            log.info(`Rehydrated rendered markdown table for message ${msg.id} from cache`);
+          } else {
+            for (const attachment of msg.attachments.values()) {
+              if (isSupportedImageAttachmentContentType(attachment.contentType)) {
+                imageAttachments.push({
+                  url: attachment.url,
+                  proxyUrl: attachment.proxyURL,
+                  mimeType: attachment.contentType,
+                  filename: attachment.name,
+                });
+                hasLocalMedia = true;
+              }
+              // 1. Check for video attachments using supported MIME types
+              else if (isSupportedVideoAttachmentContentType(attachment.contentType)) {
+                videoAttachments.push({
+                  url: attachment.url,
+                  proxyUrl: attachment.proxyURL,
+                  mimeType: attachment.contentType,
+                  filename: attachment.name,
+                  isYouTubeLink: false,
+                });
+                hasLocalMedia = true;
+                log.info(`Processed video attachment: ${attachment.name} (${attachment.contentType})`);
+              }
+              // Non-media attachments (PDF, TXT, MD, etc.) — check for audio cache first,
+              // otherwise append a text placeholder with message ID for read_document
+              else if (isAudioAttachment(attachment)) {
+                if (config.voice_transcript_chat_mode) {
+                  // Chat mode: skip audio entirely. The transcript was already posted
+                  // as a visible webhook message; audio never reaches the AI context.
+                } else {
+                  const cached = getCachedVoiceTranscript(msg.id);
+                  if (cached?.source === "user_stt") {
+                    // Inline the transcript instead of a filename placeholder.
+                    // Guard against double-appending if applyEffectiveMessageContent
+                    // already embedded the transcript in processedContent.
+                    if (!messageContentForLlm?.includes(cached.transcript)) {
+                      const voiceText = `[System: This was sent as a voice message.]\n${cached.transcript}`;
+                      messageContentForLlm = messageContentForLlm ? `${messageContentForLlm}\n${voiceText}` : voiceText;
+                    }
+                  }
+                  // For "tts" source or cache miss, fall through to a generic attachment hint
+                  // so the LLM still knows an audio file was present.
+                  else {
+                    const attachName = attachment.name ?? "file";
+                    const attachHint = formatAttachmentSystemHint(attachName, messageIdMap.register(msg.id, "media"));
+                    messageContentForLlm = messageContentForLlm ? `${messageContentForLlm} ${attachHint}` : attachHint;
                   }
                 }
-                // For "tts" source or cache miss, fall through to a generic attachment hint
-                // so the LLM still knows an audio file was present.
-                else {
-                  const attachName = attachment.name ?? "file";
-                  const attachHint = formatAttachmentSystemHint(attachName, messageIdMap.register(msg.id, "media"));
-                  messageContentForLlm = messageContentForLlm ? `${messageContentForLlm} ${attachHint}` : attachHint;
-                }
+              } else {
+                const attachName = attachment.name ?? "file";
+                const attachHint = formatAttachmentSystemHint(attachName, messageIdMap.register(msg.id, "media"));
+                messageContentForLlm = messageContentForLlm ? `${messageContentForLlm} ${attachHint}` : attachHint;
               }
-            } else {
-              const attachName = attachment.name ?? "file";
-              const attachHint = formatAttachmentSystemHint(attachName, messageIdMap.register(msg.id, "media"));
-              messageContentForLlm = messageContentForLlm ? `${messageContentForLlm} ${attachHint}` : attachHint;
             }
           }
         }

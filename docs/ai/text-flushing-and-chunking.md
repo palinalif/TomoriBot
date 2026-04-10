@@ -26,7 +26,7 @@ For each incoming provider text chunk:
 1. Raw text is appended to stream buffer.
 2. `processBufferContent(...)` decides whether to flush part of buffer now.
 3. If a segment is flushed, `sendBufferSegment(...)` runs text preprocessing.
-4. Registered-speaker guard truncates any known non-active `Name:` line before send, and also blocks reserved `Assistant:` lines.
+4. Registered-speaker guard truncates any known non-active `Name:` line before send, and also blocks reserved `Assistant:` lines, but ignores lines inside fenced or inline backtick code.
 5. Complete markdown tables are split out and rendered to PNG attachments when possible.
 6. Remaining text goes through `sendSegment(...)` and is chunked into Discord-sized messages.
 7. Chunks are optionally humanized (D3) and sent.
@@ -37,7 +37,7 @@ Execution order for a flushed segment:
 2. `cleanLLMOutput(...)` (emoji normalization/conversion + text cleanup)
 3. `resolveGuildMentions(...)`
 4. Prefix stripping / output prefill handling
-5. Registered-speaker guard truncation for known non-active `Name:` lines plus reserved `Assistant:` lines
+5. Registered-speaker guard truncation for known non-active `Name:` lines plus reserved `Assistant:` lines, excluding fenced and inline backtick code spans
 6. Extract complete markdown table blocks and render them to PNG attachments
 7. `chunkMessage(...)` for the remaining text
 8. `humanizeString(...)` only when degree is `HEAVY` (3)
@@ -59,6 +59,7 @@ Additional guards:
 - If sentence punctuation immediately follows newline, punctuation is carried into same flush.
   - Carried punctuation excludes `:` intentionally to avoid splitting `:emoji:` tokens.
 - Immediately before send, the orchestrator truncates at any registered non-active speaker line (`Name:`) or reserved `Assistant:` line and requests a graceful stop so later flushes cannot leak that turn.
+- Speaker-guard matches are ignored inside fenced code blocks and inline backtick code so literal examples like CSS properties do not terminate the stream.
 
 ## Semantic Marker Protection
 

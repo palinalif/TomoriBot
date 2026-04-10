@@ -12,7 +12,6 @@ import { stripBridgePrefix } from "@/utils/bridge";
 import { isAudioAttachment } from "@/utils/audio/audioAttachmentTranscription";
 import { getCachedVoiceTranscript } from "@/utils/audio/voiceTranscriptCache";
 import { getCachedRenderedMarkdownTable } from "@/utils/text/markdownTableCache";
-import { isRenderedMarkdownTableAttachmentName } from "@/utils/text/markdownTable";
 
 /** Result of formatting messages for extraction */
 export interface FormattedHistoryResult {
@@ -123,17 +122,15 @@ export function formatMessagesForExtraction(
 
     // 2. Build message content
     let content = msg.content ? resolveMentions(msg.content, msg) : "";
+    const cachedRenderedTable = getCachedRenderedMarkdownTable(msg.id);
+    if (cachedRenderedTable) {
+      content += ` [Rendered markdown table]\n${cachedRenderedTable}`;
+    }
 
     // 3. Append attachment indicators (or cached voice transcript for audio)
     let audioTranscriptAppended = false;
-    let renderedTableAppended = false;
     for (const attachment of msg.attachments.values()) {
-      const cachedRenderedTable = getCachedRenderedMarkdownTable(msg.id);
-      if (cachedRenderedTable && !renderedTableAppended && isRenderedMarkdownTableAttachmentName(attachment.name)) {
-        content += ` [Rendered markdown table]\n${cachedRenderedTable}`;
-        renderedTableAppended = true;
-        continue;
-      }
+      if (cachedRenderedTable) continue;
 
       if (isAudioAttachment(attachment)) {
         // Check the in-memory cache first — avoids re-running STT on history audio.

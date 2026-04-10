@@ -21,7 +21,7 @@ import type { FunctionCall, ThoughtLogEntry } from "@/types/provider/interfaces"
 import { ContextItemTag, type StructuredContextItem } from "@/types/misc/context";
 import { log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
-import { escapeRegExp } from "@/utils/text/stringHelper";
+import { escapeRegExp, findMarkdownCodeRanges } from "@/utils/text/stringHelper";
 import type {
   ProcessedChunk,
   ProviderError,
@@ -791,13 +791,30 @@ export class NovelaiStreamAdapter implements StreamProvider {
     // 3. Known-name no-colon (\nName<space>): story-format turns where the model
     //    writes "Name text" instead of "Name: text". Only fires for known speakers
     //    from this.knownSpeakers to avoid false positives on mid-sentence proper nouns.
-    const dinkusPattern = /\n\*\*\*/;
-    const speakerPattern = /\n+([^\n:]+):\s*/;
-    let speakerMatch = this.generationBuffer.match(dinkusPattern) ?? this.generationBuffer.match(speakerPattern);
+    const markdownCodeRanges = findMarkdownCodeRanges(this.generationBuffer);
+    let speakerMatch =
+      this.findFirstMarkdownSafeMatch(
+        this.generationBuffer,
+        /\n\*\*\*/g,
+        markdownCodeRanges,
+        (match) => match.index + 1,
+      ) ??
+      this.findFirstMarkdownSafeMatch(this.generationBuffer, /\n+([^\n:]+):\s*/g, markdownCodeRanges, (match) => {
+        const rawLabel = match[1] ?? "";
+        return match.index + match[0].indexOf(rawLabel);
+      });
 
     if (!speakerMatch && this.knownSpeakers.size > 0) {
       const escaped = [...this.knownSpeakers].map(escapeRegExp).join("|");
-      speakerMatch = this.generationBuffer.match(new RegExp(`\\n+(${escaped})\\s`));
+      speakerMatch = this.findFirstMarkdownSafeMatch(
+        this.generationBuffer,
+        new RegExp(`\\n+(${escaped})\\s`, "g"),
+        markdownCodeRanges,
+        (match) => {
+          const rawLabel = match[1] ?? "";
+          return match.index + match[0].indexOf(rawLabel);
+        },
+      );
     }
 
     if (speakerMatch) {
@@ -846,11 +863,12 @@ export class NovelaiStreamAdapter implements StreamProvider {
       if (lastNewlineIdx !== -1) {
         const safeToEmit = combined.slice(0, lastNewlineIdx);
         const trailingLine = combined.slice(lastNewlineIdx + 1);
+        const trailingLineStartIndex = this.generationBuffer.length - trailingLine.length;
 
         // Line-aware speaker boundary stop:
         // keep one trailing line held; if it starts with another speaker,
         // emit everything before the newline and stop before flushing that line.
-        if (this.shouldStopAtKayraHeldLine(trailingLine)) {
+        if (this.shouldStopAtKayraHeldLine(this.generationBuffer, trailingLineStartIndex, markdownCodeRanges)) {
           this.generationBuffer = "";
           this.sentenceTrailingBuffer = "";
           this.kayraHoldBuffer = "";
@@ -901,9 +919,51 @@ export class NovelaiStreamAdapter implements StreamProvider {
     };
   }
 
-  private shouldStopAtKayraHeldLine(line: string): boolean {
+  private findFirstMarkdownSafeMatch(
+    text: string,
+    pattern: RegExp,
+    markdownCodeRanges: ReturnType<typeof findMarkdownCodeRanges>,
+    getProtectedIndex: (match: RegExpExecArray) => number,
+  ): RegExpExecArray | null {
+    pattern.lastIndex = 0;
+    let match: RegExpExecArray | null = null;
+
+    while (true) {
+      match = pattern.exec(text);
+      if (match === null) {
+        return null;
+      }
+
+      if (!this.isIndexInsideMarkdownCodeRanges(getProtectedIndex(match), markdownCodeRanges)) {
+        return match;
+      }
+
+      if (match[0].length === 0) {
+        pattern.lastIndex++;
+      }
+    }
+  }
+
+  private isIndexInsideMarkdownCodeRanges(
+    index: number,
+    markdownCodeRanges: ReturnType<typeof findMarkdownCodeRanges>,
+  ): boolean {
+    return markdownCodeRanges.some((range) => index >= range.start && index < range.end);
+  }
+
+  private shouldStopAtKayraHeldLine(
+    text: string,
+    lineStartIndex: number,
+    markdownCodeRanges: ReturnType<typeof findMarkdownCodeRanges>,
+  ): boolean {
+    const line = text.slice(lineStartIndex);
     const trimmed = line.trimStart();
     if (!trimmed || trimmed.startsWith("[System:")) {
+      return false;
+    }
+
+    const trimmedStartIndex = lineStartIndex + (line.length - trimmed.length);
+    if (this.isIndexInsideMarkdownCodeRanges(trimmedStartIndex, markdownCodeRanges)) {
       return false;
     }
 
