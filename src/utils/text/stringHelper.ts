@@ -2078,3 +2078,10 @@ export function calculateLateness(scheduledTime: Date, currentTime: Date = new D
 
   return `${formatTimeRemaining(diffMilliseconds)} late`;
 }
+
+export {
+  extractMarkdownTableSegments,
+  hasTrailingIncompleteMarkdownTable,
+  isRenderedMarkdownTableAttachmentName,
+  MARKDOWN_TABLE_ATTACHMENT_PREFIX,
+} from "@/utils/text/markdownTable";

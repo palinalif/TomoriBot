@@ -27,8 +27,9 @@ For each incoming provider text chunk:
 2. `processBufferContent(...)` decides whether to flush part of buffer now.
 3. If a segment is flushed, `sendBufferSegment(...)` runs text preprocessing.
 4. Registered-speaker guard truncates any known non-active `Name:` line before send, and also blocks reserved `Assistant:` lines.
-5. `sendSegment(...)` chunks the segment into Discord-sized messages.
-6. Chunks are optionally humanized (D3) and sent.
+5. Complete markdown tables are split out and rendered to PNG attachments when possible.
+6. Remaining text goes through `sendSegment(...)` and is chunked into Discord-sized messages.
+7. Chunks are optionally humanized (D3) and sent.
 
 Execution order for a flushed segment:
 
@@ -37,9 +38,10 @@ Execution order for a flushed segment:
 3. `resolveGuildMentions(...)`
 4. Prefix stripping / output prefill handling
 5. Registered-speaker guard truncation for known non-active `Name:` lines plus reserved `Assistant:` lines
-6. `chunkMessage(...)`
-7. `humanizeString(...)` only when degree is `HEAVY` (3)
-8. Send each final chunk to Discord
+6. Extract complete markdown table blocks and render them to PNG attachments
+7. `chunkMessage(...)` for the remaining text
+8. `humanizeString(...)` only when degree is `HEAVY` (3)
+9. Send each final chunk to Discord
 
 ## Buffer Flush Triggers
 
@@ -65,6 +67,7 @@ Before newline/period flush, buffer is checked for incomplete structures:
 - Unbalanced quotes (`"` and Japanese `「」`)
 - Incomplete markdown link forms
 - Incomplete URL protocol endings (`http:`, `https:/`, `https://`)
+- Incomplete trailing markdown table blocks
 
 If incomplete markers are detected, flush is deferred to avoid broken output.
 

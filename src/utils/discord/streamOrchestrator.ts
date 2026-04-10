@@ -15,6 +15,7 @@
  */
 
 import {
+  AttachmentBuilder,
   EmbedBuilder,
   MessageFlags,
   type Message,
@@ -36,8 +37,13 @@ import {
   replaceMentionHandles,
   createSentenceSplitRegex,
   truncateBeforeRegisteredSpeakerLine,
+  hasTrailingIncompleteMarkdownTable,
+  extractMarkdownTableSegments,
+  MARKDOWN_TABLE_ATTACHMENT_PREFIX,
 } from "../text/stringHelper";
 import { filterDuplicateCustomEmojis } from "../text/emojiPenalty";
+import { renderMarkdownTableToPng } from "@/utils/image/markdownTableRenderer";
+import { setCachedRenderedMarkdownTable } from "@/utils/text/markdownTableCache";
 
 import type {
   StreamResult,
@@ -67,6 +73,15 @@ import {
 } from "../../types/stream/types";
 
 // Empty response handling is now done at the tomoriChat level for fresh context
+
+type StreamSendPayload = {
+  content?: string;
+  files?: AttachmentBuilder[];
+  allowedMentions?: {
+    parse?: Array<"users" | "roles" | "everyone">;
+    repliedUser?: boolean;
+  };
+};
 
 function isInvalidWebhookError(error: unknown): boolean {
   const code = (error as { code?: number | string })?.code;
@@ -1030,7 +1045,14 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       return true;
     }
 
-    // 5. Check for a partial <think> opening tag at the end of the buffer.
+    // 5. Hold incomplete trailing markdown tables so the full block can render as
+    // a single image instead of leaking row-by-row during streaming.
+    if (hasTrailingIncompleteMarkdownTable(buffer)) {
+      log.info(`Stream: Buffer ends with an incomplete markdown table`);
+      return true;
+    }
+
+    // 6. Check for a partial <think> opening tag at the end of the buffer.
     // e.g. buffer ends with "<", "<t", "<th", "<thi", "<thin", "<think" — hold until complete.
     const THINK_OPEN = "<think>";
     for (let len = THINK_OPEN.length - 1; len >= 1; len--) {
@@ -1040,7 +1062,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       }
     }
 
-    // 6. Check for a partial or unclosed <details> tag at the end of the buffer.
+    // 7. Check for a partial or unclosed <details> tag at the end of the buffer.
     // Covers plain "<details>" and attribute variants like "<details open>" — holds until
     // the tag closes with ">". Uses regex instead of the prefix-loop pattern because
     // <details> can carry attributes (unlike <think> which is always bare).
@@ -1424,8 +1446,22 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       return;
     }
 
-    // Send the processed segment
-    await this.sendSegment(segmentToSend, textConfig, typingConfig, context, state);
+    const segmentedParts = extractMarkdownTableSegments(segmentToSend);
+    const hasRenderedTable = segmentedParts.some((part) => part.type === "table");
+
+    if (!hasRenderedTable) {
+      await this.sendSegment(segmentToSend, textConfig, typingConfig, context, state);
+    } else {
+      for (const part of segmentedParts) {
+        if (part.type === "text") {
+          if (!part.content.trim()) continue;
+          await this.sendSegment(part.content, textConfig, typingConfig, context, state);
+          continue;
+        }
+
+        await this.sendRenderedMarkdownTable(part.content, part.table.source, context, state);
+      }
+    }
 
     if (shouldStopForSpeakerGuard) {
       StreamOrchestrator.requestStop(context.channel.id, "speaker_guard");
@@ -1679,6 +1715,47 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     }
   }
 
+  private async sendRenderedMarkdownTable(
+    tableMarkdown: string,
+    fallbackText: string,
+    context: StreamContext,
+    state: StreamState,
+  ): Promise<void> {
+    const tableSegments = extractMarkdownTableSegments(tableMarkdown);
+    const firstTableSegment = tableSegments.find((segment) => segment.type === "table");
+    if (!firstTableSegment || firstTableSegment.type !== "table") {
+      await this.sendSingleMessage(fallbackText, context, state);
+      return;
+    }
+
+    const renderedBuffer = await renderMarkdownTableToPng(firstTableSegment.table);
+    if (!renderedBuffer) {
+      await this.sendSingleMessage(fallbackText, context, state);
+      return;
+    }
+
+    const attachment = new AttachmentBuilder(renderedBuffer, {
+      name: `${MARKDOWN_TABLE_ATTACHMENT_PREFIX}${Date.now()}.png`,
+    });
+
+    const sentMessage = await this.sendSinglePayload(
+      {
+        files: [attachment],
+        allowedMentions: {
+          parse: [],
+          repliedUser: false,
+        },
+      },
+      tableMarkdown,
+      context,
+      state,
+    );
+
+    if (sentMessage) {
+      setCachedRenderedMarkdownTable(sentMessage.id, tableMarkdown.trim());
+    }
+  }
+
   /**
    * Send message chunks with typing simulation
    */
@@ -1763,14 +1840,41 @@ export class StreamOrchestrator implements IStreamOrchestrator {
    * @throws Error if Discord API call fails
    */
   private async sendSingleMessage(content: string, context: StreamContext, state: StreamState): Promise<void> {
+    await this.sendSinglePayload(
+      {
+        content,
+      },
+      content,
+      context,
+      state,
+    );
+  }
+
+  private async sendSinglePayload(
+    payload: StreamSendPayload,
+    textForState: string,
+    context: StreamContext,
+    state: StreamState,
+  ): Promise<Message | null> {
+    if (!payload.content?.trim() && (!payload.files || payload.files.length === 0)) {
+      return null;
+    }
+
     const strictUserImpersonation = isUserImpersonationStreamContext(context);
     let replyNoticeMessage: Message | null = null;
     const threadId = resolveWebhookThreadId(context.channel);
+    const webhookAllowedMentions = payload.allowedMentions ?? {
+      parse: ["users", "roles"],
+      repliedUser: false,
+    };
+    const regularAllowedMentions = payload.allowedMentions ?? {
+      repliedUser: false,
+    };
 
     // Check for stop request first (highest priority - prevents duplicate embeds)
     if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
       log.info("Stream Send: Stop request detected before Discord API call, skipping message send");
-      return;
+      return null;
     }
 
     // Check for per-server send message limit before Discord API call (0 = unlimited)
@@ -1786,7 +1890,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         );
       }
       StreamOrchestrator.requestStop(context.channel.id, "send_message_limit");
-      return;
+      return null;
     }
 
     // Check for safety flush limit before Discord API call
@@ -1813,7 +1917,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
       // Request graceful stop
       StreamOrchestrator.requestStop(context.channel.id, "flush_limit");
-      return;
+      return null;
     }
 
     try {
@@ -1863,8 +1967,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         sentMessage = await sendWebhookMessageWithIdentity(
           context.webhook,
           {
-            content,
-            allowedMentions: { parse: ["users", "roles"], repliedUser: false },
+            ...(payload.content !== undefined ? { content: payload.content } : {}),
+            ...(payload.files?.length ? { files: payload.files } : {}),
+            allowedMentions: webhookAllowedMentions,
             ...(threadId ? { threadId } : {}),
           },
           identity,
@@ -1878,12 +1983,17 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         // Check if we need to reply or send normally
         if (!state.hasRepliedToOriginalMessage && context.replyToMessage) {
           sentMessage = await context.replyToMessage.reply({
-            content,
-            allowedMentions: { repliedUser: false },
+            ...(payload.content !== undefined ? { content: payload.content } : {}),
+            ...(payload.files?.length ? { files: payload.files } : {}),
+            allowedMentions: regularAllowedMentions,
           });
           state.hasRepliedToOriginalMessage = true;
         } else {
-          sentMessage = await context.channel.send({ content });
+          sentMessage = await context.channel.send({
+            ...(payload.content !== undefined ? { content: payload.content } : {}),
+            ...(payload.files?.length ? { files: payload.files } : {}),
+            allowedMentions: regularAllowedMentions,
+          });
         }
       }
 
@@ -1891,11 +2001,17 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         state.firstReplyUrl = sentMessage.url;
       }
       state.messageSentCount++;
-      state.accumulatedText += content; // Track all sent text for short-term memory
+      if (textForState) {
+        state.accumulatedText += textForState; // Track all sent text for short-term memory
+      }
       this.notifyStreamProgress(context);
-      log.info(
-        `Stream Send: Sent message (${state.messageSentCount}): "${content.length > 100 ? `${content.substring(0, 100)}...` : content}"`,
-      );
+      const logPreview = textForState
+        ? textForState.length > 100
+          ? `${textForState.substring(0, 100)}...`
+          : textForState
+        : `[attachment payload: ${payload.files?.length ?? 0} file(s)]`;
+      log.info(`Stream Send: Sent message (${state.messageSentCount}): "${logPreview}"`);
+      return sentMessage;
     } catch (discordError) {
       // Recover stale/deleted webhook caches for alter personas.
       // This applies to both first-send and mid-stream sends.
@@ -1928,11 +2044,9 @@ export class StreamOrchestrator implements IStreamOrchestrator {
               const recoveredReplyMessage = await sendWebhookMessageWithIdentity(
                 recreatedWebhook,
                 {
-                  content,
-                  allowedMentions: {
-                    parse: ["users", "roles"],
-                    repliedUser: false,
-                  },
+                  ...(payload.content !== undefined ? { content: payload.content } : {}),
+                  ...(payload.files?.length ? { files: payload.files } : {}),
+                  allowedMentions: webhookAllowedMentions,
                   ...(recoveredThreadId ? { threadId: recoveredThreadId } : {}),
                 },
                 recoveredIdentity,
@@ -1944,10 +2058,12 @@ export class StreamOrchestrator implements IStreamOrchestrator {
                 state.firstReplyUrl = recoveredReplyMessage.url;
               }
               state.messageSentCount++;
-              state.accumulatedText += content;
+              if (textForState) {
+                state.accumulatedText += textForState;
+              }
               this.notifyStreamProgress(context);
               log.info("Stream Send: Recreated webhook after invalid webhook error and resumed persona sending");
-              return;
+              return recoveredReplyMessage;
             }
           } catch (recoveryError) {
             log.warn(
@@ -1981,11 +2097,16 @@ export class StreamOrchestrator implements IStreamOrchestrator {
           let fallbackMessage: Message | null = null;
           if (context.replyToMessage) {
             fallbackMessage = await context.replyToMessage.reply({
-              content,
-              allowedMentions: { repliedUser: false },
+              ...(payload.content !== undefined ? { content: payload.content } : {}),
+              ...(payload.files?.length ? { files: payload.files } : {}),
+              allowedMentions: regularAllowedMentions,
             });
           } else {
-            fallbackMessage = await context.channel.send({ content });
+            fallbackMessage = await context.channel.send({
+              ...(payload.content !== undefined ? { content: payload.content } : {}),
+              ...(payload.files?.length ? { files: payload.files } : {}),
+              allowedMentions: regularAllowedMentions,
+            });
           }
 
           state.hasRepliedToOriginalMessage = true;
@@ -1993,10 +2114,12 @@ export class StreamOrchestrator implements IStreamOrchestrator {
             state.firstReplyUrl = fallbackMessage.url;
           }
           state.messageSentCount++;
-          state.accumulatedText += content; // Track fallback sent text too
+          if (textForState) {
+            state.accumulatedText += textForState; // Track fallback sent text too
+          }
 
           log.info("Stream Send: Successfully sent message via fallback after webhook failure");
-          return;
+          return fallbackMessage;
         } catch (fallbackError) {
           // Log both errors
           log.error("Stream Send: Both webhook and fallback failed", fallbackError, {
@@ -2024,8 +2147,8 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         errorType: "StreamOrchestrator",
         metadata: {
           channelId: context.channel.id,
-          contentLength: content.length,
-          contentPreview: content.substring(0, 200),
+          contentLength: textForState.length,
+          contentPreview: textForState.substring(0, 200),
           usingWebhook: !!context.webhook,
         },
       });

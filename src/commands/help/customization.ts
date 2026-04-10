@@ -69,7 +69,7 @@ export async function execute(
     const memoryDocumentAddMention = commandRegistry.getCommandMention("memory", "document", "add");
     const memoryDocumentRemoveMention = commandRegistry.getCommandMention("memory", "document", "remove");
     const configApikeyRotationMention = commandRegistry.getCommandMention("config", "api-key", "rotation");
-    const configUncensorsMention = commandRegistry.getCommandMention("config", "jailbreaks");
+    const configUncensorsMention = commandRegistry.getCommandMention("nsfw", "jailbreaks");
     const configModelEmbeddingMention = commandRegistry.getCommandMention("config", "model", "embedding");
     const configModelImageMention = commandRegistry.getCommandMention("config", "model", "image");
     const configPromptChangeMention = commandRegistry.getCommandMention("config", "system-prompt", "set");

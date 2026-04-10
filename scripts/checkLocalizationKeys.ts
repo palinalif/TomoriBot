@@ -963,11 +963,43 @@ function displayResults(results: AnalysisResult): void {
 }
 
 /**
+ * Displays unused keys grouped by prefix for review
+ */
+function displayUnusedKeys(unusedKeys: KeyUsage[]): void {
+  const grouped = new Map<string, string[]>();
+  for (const { key } of unusedKeys.sort((a, b) => a.key.localeCompare(b.key))) {
+    const prefix = key.split(".").slice(0, 2).join(".");
+    const list = grouped.get(prefix) || [];
+    list.push(key);
+    grouped.set(prefix, list);
+  }
+
+  console.log(`\n${"=".repeat(80)}`);
+  console.log(`🗑️  UNUSED LOCALIZATION KEYS (${unusedKeys.length} total)`);
+  console.log("=".repeat(80));
+
+  for (const [prefix, keys] of Array.from(grouped.entries()).sort()) {
+    console.log(`\n## ${prefix} (${keys.length} keys)`);
+    for (const key of keys) {
+      console.log(`  ${key}`);
+    }
+  }
+  console.log(`\n${"=".repeat(80)}`);
+}
+
+/**
  * Main execution
  */
 async function main(): Promise<void> {
   try {
+    const listUnused = process.argv.includes("--list-unused");
     const results = await analyzeLocalizationKeys();
+
+    if (listUnused) {
+      displayUnusedKeys(results.unusedKeys);
+      return;
+    }
+
     displayResults(results);
 
     // Exit with error code for critical issues (missing keys, parity issues, or length violations)

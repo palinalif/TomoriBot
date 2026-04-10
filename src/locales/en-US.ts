@@ -302,7 +302,7 @@ export default {
 
       content_blocked_title: "🔴️ Provider Content Filter",
       content_blocked_tip:
-        "Tip: You can turn on `/config jailbreaks` to help prevent this error. You may also check messages (`/tool refresh`), memories/config (`/memory personal export`, `/memory server export`, `/server config export`), blacklist problematic members (`/server user-blacklist add`), or switch provider (`/config model`)",
+        "Tip: You can turn on `/nsfw jailbreaks` to help prevent this error. You may also check messages (`/tool refresh`), memories/config (`/memory personal export`, `/memory server export`, `/server config export`), blacklist problematic members (`/server user-blacklist add`), or switch provider (`/config model`)",
 
       timeout_title: "🟡️ Provider Request Timeout",
       timeout_tip: "Try shortening your message or try again",
@@ -2618,6 +2618,23 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       },
     },
 
+    nsfw: {
+      description: `Age-restricted commands and settings.`,
+      jailbreaks: {
+        description: `Manage optional jailbreak behaviors for my prompts on this server.`,
+        modal_title: `Manage Jailbreak Strategies`,
+        checkbox_label: `Enabled Jailbreak Strategies`,
+        checkbox_description: `Checked strategies stay enabled. Unchecked strategies are disabled.`,
+        injection_option: `Prompt Injection (18+ acknowledgement)`,
+        unicode_spaces_option: `Unicode Space Replacement`,
+        sanitize_option: `Sensitive Word Sanitization`,
+        no_changes_title: `No Changes Made`,
+        no_changes_description: `The jailbreak strategy checklist was left unchanged.`,
+        success_title: `Jailbreak Strategies Updated`,
+        success_description: `Updated your jailbreak strategy settings. **{enabled_count}** option(s) are currently enabled.`,
+      },
+    },
+
     // Configuration commands (Admin only)
     config: {
       options: {
@@ -3440,19 +3457,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         success_description: `Updated **{count}** permission(s).\n`,
         enabled_success: `My permission for \`{permission_type}\` is now **enabled**.`,
         disabled_success: `My permission for \`{permission_type}\` is now **disabled**.`,
-      },
-      jailbreaks: {
-        description: `Manage optional jailbreak behaviors for my prompts on this server.`,
-        modal_title: `Manage Jailbreak Strategies`,
-        checkbox_label: `Enabled Jailbreak Strategies`,
-        checkbox_description: `Checked strategies stay enabled. Unchecked strategies are disabled.`,
-        injection_option: `Prompt Injection (18+ acknowledgement)`,
-        unicode_spaces_option: `Unicode Space Replacement`,
-        sanitize_option: `Sensitive Word Sanitization`,
-        no_changes_title: `No Changes Made`,
-        no_changes_description: `The jailbreak strategy checklist was left unchanged.`,
-        success_title: `Jailbreak Strategies Updated`,
-        success_description: `Updated your jailbreak strategy settings. **{enabled_count}** option(s) are currently enabled.`,
       },
 
       // System prompt management

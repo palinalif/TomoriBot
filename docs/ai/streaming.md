@@ -24,6 +24,8 @@ Important: TomoriBot now sends **discrete messages**, not "edit the same message
 | Stream constants/types | `src/types/stream/types.ts` | Message length, flush thresholds, typing settings |
 | Provider stream adapters | `src/providers/*/*StreamAdapter.ts` | Convert provider-native events into normalized chunks |
 | Text processing | `src/utils/text/stringHelper.ts` | `cleanLLMOutput`, `chunkMessage`, `humanizeString` |
+| Markdown table detection | `src/utils/text/markdownTable.ts` | Detect complete pipe tables, hold incomplete tails, and split renderable table blocks from plain text |
+| Markdown table rendering | `src/utils/image/markdownTableRenderer.ts` | Render detected markdown tables to PNG attachments without a browser dependency |
 | Emoji dedup controls | `src/utils/text/emojiPenalty.ts` | Duplicate custom-emoji filtering with safety guards |
 
 ## Runtime Flow
@@ -70,7 +72,8 @@ Each flushed segment goes through:
 3. mention resolution
 4. prefix strip/prefill handling
 5. registered-speaker guard truncation (`Name:` lines for known non-active speakers, plus reserved `Assistant:` lines)
-6. `sendSegment(...)`
+6. complete markdown tables are split out and rendered to PNG attachments when possible
+7. remaining text goes through `sendSegment(...)`
 
 ### 6) Message chunking and sending
 
@@ -222,6 +225,9 @@ Loop control and max iterations are managed by `tomoriChat` (function-call safet
 | `INACTIVITY_TIMEOUT_MS` | `src/types/stream/types.ts` | Stream inactivity timeout |
 | `MAX_FLUSH_COUNT` | `src/utils/security/rateLimiter.ts` | Max messages sent per stream session |
 | `DISCORD_TYPING_KEEPALIVE_INTERVAL_MS` | `.env` | Channel-lock typing refresh cadence while work is still active |
+| `MARKDOWN_TABLE_RENDER_MAX_WIDTH` | `.env` | Width cap for rendered markdown table PNGs |
+| `MARKDOWN_TABLE_RENDER_MAX_HEIGHT` | `.env` | Height cap before table rendering falls back to raw text |
+| `MARKDOWN_TABLE_CACHE_TTL_MINUTES` | `.env` | How long rendered-table source text stays available for history/context reuse |
 | `humanizer_degree` | `tomori_configs` | Controls pacing and degree-dependent flush/humanization |
 
 ## Debugging Checklist

@@ -103,6 +103,8 @@ import {
 } from "@/utils/discord/thoughtLog";
 import { isAudioAttachment, transcribeMessageAudioAttachment } from "@/utils/audio/audioAttachmentTranscription";
 import { getCachedVoiceTranscript, setCachedVoiceTranscript } from "@/utils/audio/voiceTranscriptCache";
+import { getCachedRenderedMarkdownTable } from "@/utils/text/markdownTableCache";
+import { isRenderedMarkdownTableAttachmentName } from "@/utils/text/markdownTable";
 
 // Base trigger words that will always work (with or without spaces for English)
 const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map((word) => word.trim()) || [
@@ -4475,7 +4477,20 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
         // 5.a. Process direct image attachments and stickers
         if (msg.attachments.size > 0) {
+          const cachedRenderedTable = getCachedRenderedMarkdownTable(msg.id);
+          let renderedTableAppended = false;
           for (const attachment of msg.attachments.values()) {
+            if (
+              cachedRenderedTable &&
+              !renderedTableAppended &&
+              isRenderedMarkdownTableAttachmentName(attachment.name)
+            ) {
+              const tableText = `[System: This was sent as a rendered markdown table image.]\n${cachedRenderedTable}`;
+              messageContentForLlm = messageContentForLlm ? `${messageContentForLlm}\n${tableText}` : tableText;
+              renderedTableAppended = true;
+              continue;
+            }
+
             if (isSupportedImageAttachmentContentType(attachment.contentType)) {
               imageAttachments.push({
                 url: attachment.url,

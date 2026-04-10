@@ -12,29 +12,29 @@ import { promptWithRawModal, replyInfoEmbed } from "@/utils/discord/interactionH
 import { type UserRow, type ErrorContext, tomoriConfigSchema } from "@/types/db/schema";
 import { sql } from "@/utils/db/client";
 
-const MODAL_CUSTOM_ID = "config_jailbreaks_modal";
-const CHECKBOX_ID = "config_jailbreaks_checkbox_group";
+const MODAL_CUSTOM_ID = "nsfw_jailbreaks_modal";
+const CHECKBOX_ID = "nsfw_jailbreaks_checkbox_group";
 
 const JAILBREAK_OPTIONS = [
   {
     id: "injection",
     columnName: "uncensor_injection_enabled",
-    labelKey: "commands.config.jailbreaks.injection_option",
+    labelKey: "commands.nsfw.jailbreaks.injection_option",
   },
   {
     id: "unicode_spaces",
     columnName: "uncensor_unicode_space_enabled",
-    labelKey: "commands.config.jailbreaks.unicode_spaces_option",
+    labelKey: "commands.nsfw.jailbreaks.unicode_spaces_option",
   },
   {
     id: "sanitize",
     columnName: "uncensor_sanitize_enabled",
-    labelKey: "commands.config.jailbreaks.sanitize_option",
+    labelKey: "commands.nsfw.jailbreaks.sanitize_option",
   },
 ] as const;
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("jailbreaks").setDescription(localizer("en-US", "commands.config.jailbreaks.description"));
+  subcommand.setName("jailbreaks").setDescription(localizer("en-US", "commands.nsfw.jailbreaks.description"));
 
 export async function execute(
   _client: Client,
@@ -78,13 +78,13 @@ export async function execute(
       locale,
       {
         modalCustomId: MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.config.jailbreaks.modal_title",
+        modalTitleKey: "commands.nsfw.jailbreaks.modal_title",
         components: [
           {
             kind: "checkboxGroup",
             customId: CHECKBOX_ID,
-            labelKey: "commands.config.jailbreaks.checkbox_label",
-            descriptionKey: "commands.config.jailbreaks.checkbox_description",
+            labelKey: "commands.nsfw.jailbreaks.checkbox_label",
+            descriptionKey: "commands.nsfw.jailbreaks.checkbox_description",
             minValues: 0,
             maxValues: checkboxOptions.length,
             required: false,
@@ -113,8 +113,8 @@ export async function execute(
 
     if (noChanges) {
       await replyInfoEmbed(modalResult.interaction, locale, {
-        titleKey: "commands.config.jailbreaks.no_changes_title",
-        descriptionKey: "commands.config.jailbreaks.no_changes_description",
+        titleKey: "commands.nsfw.jailbreaks.no_changes_title",
+        descriptionKey: "commands.nsfw.jailbreaks.no_changes_description",
         color: ColorCode.INFO,
       });
       return;
@@ -138,7 +138,7 @@ export async function execute(
         userId: userData.user_id,
         errorType: "DatabaseUpdateError",
         metadata: {
-          command: "config jailbreaks",
+          command: "nsfw jailbreaks",
           guildId: interaction.guild?.id ?? interaction.user.id,
           validationErrors: validatedConfig.success ? null : validatedConfig.error.flatten(),
         },
@@ -159,8 +159,8 @@ export async function execute(
     invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
     await replyInfoEmbed(modalResult.interaction, locale, {
-      titleKey: "commands.config.jailbreaks.success_title",
-      descriptionKey: "commands.config.jailbreaks.success_description",
+      titleKey: "commands.nsfw.jailbreaks.success_title",
+      descriptionKey: "commands.nsfw.jailbreaks.success_description",
       descriptionVars: {
         enabled_count: [
           nextState.uncensor_injection_enabled,
@@ -180,12 +180,12 @@ export async function execute(
       tomoriId: state?.tomori_id ?? null,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "config jailbreaks",
+        command: "nsfw jailbreaks",
         guildId: interaction.guild?.id ?? interaction.user.id,
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error("Error executing /config jailbreaks", error as Error, context);
+    await log.error("Error executing /nsfw jailbreaks", error as Error, context);
 
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({

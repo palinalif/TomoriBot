@@ -46,7 +46,7 @@ export type CommandCooldownMap = Map<string, number>;
 // Categories that are completely restricted to guilds only
 const GUILD_ONLY_CATEGORIES: string[] = ["server", "conditioning"];
 // Categories that require manage permissions in guild context
-const MANAGER_ONLY_CATEGORIES = ["config", "optional-key", "server"];
+const MANAGER_ONLY_CATEGORIES = ["config", "nsfw", "optional-key", "server"];
 
 const COMMAND_LOCALIZATION_ALIASES: Record<string, string> = {
   "commands.memory.description": "commands.teach.memory.description",
@@ -247,6 +247,10 @@ export async function loadCommandData(): Promise<{
         if (MANAGER_ONLY_CATEGORIES.includes(categoryName)) {
           categoryBuilder.setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild); // Require Manage Guild permission
           log.info(`Applied ManageGuild permission requirement to /${categoryName}`);
+        }
+        if (categoryName === "nsfw") {
+          categoryBuilder.setNSFW(true);
+          log.info("Applied age restriction to /nsfw");
         }
 
         // Add localizations if we have any
