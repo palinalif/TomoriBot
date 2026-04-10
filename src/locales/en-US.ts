@@ -1,43 +1,22 @@
-// locales/en.ts (or your desired file name)
+// locales/en-US.ts
 
 // Export the entire locale structure as a default object
 export default {
   general: {
-    // Common strings
     yes: `Yes`,
-    no: `No`,
     confirm: `Confirm`,
-    cancel: `Cancel`,
     none: `None`,
     unknown: `Unknown`,
-
-    // Default configuration values
     defaults: {
       bot_name: `Tomori`,
-      base_trigger_words: ["tomori", "tomo"],
     },
-
-    // Cooldown messages (slash commands)
-    cooldown_title: `⌛ Please wait!`,
-    cooldown: `You need to wait {seconds} seconds before using a \`/{category}\` command again.`,
-
-    // Message trigger cooldown messages
     message_cooldown_title: `⌛ Please wait!`,
-    message_cooldown: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before triggering **{botName}** again.`,
-    message_cooldown_footer_per_user: `Server Setting: Per-User Cooldown`,
-    message_cooldown_footer_per_channel: `Server Setting: Per-Channel Cooldown`,
-    message_cooldown_footer_server_wide: `Server Setting: Server-Wide Cooldown`,
-    message_cooldown_footer_strict: `Server Setting: Strict Server-Wide Cooldown`,
-
-    // Standard interaction responses (buttons, selects)
     interaction: {
       cancel_title: `🔴 Command Cancelled`,
       cancel_description: `The command has been cancelled.`,
       timeout_title: `⏰ Command Timed Out`,
       timeout_description: `You didn't respond in time. Please try again.`,
     },
-
-    // Pagination component messages
     pagination: {
       page_info: `Page {current} of {total}`,
       previous: `Previous`,
@@ -50,22 +29,14 @@ export default {
       select_page_title: `Select Page`,
       select_page_description: `Choose a page to view from {totalItems} items across {totalPages} pages:`,
       select_persona_title: `Select Persona`,
-      select_persona_description: `Choose which persona to target first:\n\n{items}`,
-      select_persona_description_v2: `Choose which persona to target first.`,
-      persona_main_badge: `Main`,
-      persona_alter_badge: `Alter`,
       persona_no_attributes: `No attributes configured yet.`,
       persona_select_button: `Select`,
     },
-
-    // Common error messages
     errors: {
       guild_only_title: `Server Only Command`,
       guild_only_description: `This command can only be used within a server.`,
       channel_only_title: `Channel Required`,
       channel_only_description: `This command requires a channel to function properly.`,
-      guild_only_command_title: `Server Only Command`,
-      guild_only_command_description: `This command can only be used within a server, not in Direct Messages.`,
       channel_not_supported_title: `Unsupported Channel Type`,
       channel_not_supported_description: `Sorry, I can only work in server text channels or Direct Messages. Group DMs and other channel types are not supported.`,
       tomori_not_setup_title: `Initial Setup Required`,
@@ -121,61 +92,36 @@ export default {
       webhook_limit_description: `This channel has reached Discord's webhook limit (10), so alter personas will use regular bot messages. Please delete unused webhooks or reduce the number of alters responding in this channel.`,
       webhook_unknown_error_title: `Webhook Error`,
       webhook_unknown_error_description: `I couldn't create a webhook in this channel, so alter personas will use regular bot messages. Please check my permissions and try again.`,
-      voice_transcription_unavailable_title: `Voice Transcription Unavailable`,
-      voice_transcription_unavailable_description: `Voice transcription isn't available here yet. Configure an ElevenLabs key with \`/optional-key elevenlabs set\` and try again.`,
       voice_transcription_failed_title: `Voice Transcription Failed`,
       voice_transcription_failed_description: `I couldn't transcribe that audio message. Please try again or send the message as text instead.`,
     },
-    tomori_busy_title: "Busy Replying to Someone Else!",
-    tomori_busy_replying: "Currently responding to this message: {message_link}. Your message has been queued.",
+    tomori_busy_title: `Busy Replying to Someone Else!`,
+    tomori_busy_replying: `Currently responding to this message: {message_link}. Your message has been queued.`,
   },
-
   rate_limit: {
-    // User-level rate limiting (DM notification)
     user_exceeded_title: `🟡️ Rate Limit Reached`,
     user_exceeded_description: `You currently have too much active messages being processed across all servers. To prevent abuse, your most recent trigger attempt has been dropped. Please wait for some of your messages to finish processing before sending more.`,
-
-    // Server-level rate limiting (public channel notification)
     server_exceeded_title: `🟡️ Server Overloaded`,
     server_exceeded_description: `This server currently has too much active messages being processed. I'm at capacity right now! Please try again in a moment, or use me in another server or via Direct Messages instead.`,
-
     error_memory_critical_title: `🔴 System Overloaded`,
     error_memory_critical_description: `I'm currently experiencing high memory usage, preventing file uploads. Please try again in a moment.`,
-
     error_quota_exceeded_title: `🔴 Daily Limit Reached`,
     error_quota_exceeded_description: `You've reached the daily limit for this command. Your quota resets at **{reset_time}**. Please try again after the reset time.`,
   },
-
   genai: {
-    // Errors related to LLM API generation
     generic_error_title: `Generation Error`,
     generic_error_description: `{error_message}`,
     generic_error_footer: `Please run \`/tool refresh\` and then try again. If the issue persists, please report it through \`/support discord\`.`,
-    error_stream_timeout_title: "Connection Timeout",
-
-    // Provider error format template: "{Provider name} Error Code {number}: {message from Google}. {tip from us}"
-    provider_error_format: "{providerName} Error Code {errorCode}: {apiMessage}. {tip}",
-    error_stream_timeout_description:
-      "If this keeps happening, there might be a temporary issue with your chosen AI provider. Please try again later or use `/tool refresh` to refresh the context history.",
-
-    // Empty response from API
+    error_stream_timeout_title: `Connection Timeout`,
+    error_stream_timeout_description: `If this keeps happening, there might be a temporary issue with your chosen AI provider. Please try again later or use \`/tool refresh\` to refresh the context history.`,
     empty_response_title: `Empty Response`,
     empty_response_description: `I received an empty response from the AI, use \`/tool refresh\` if this issue persists.`,
-    // New: Max iterations for function calls
-    max_iterations_title: "Thinking Loop",
-    max_iterations_streaming_description:
-      "I got stuck in a thinking loop and couldn't complete the request, use `/tool refresh` if this issue persists.",
-
-    // NAI tool retry exhaustion
-    nai_tool_retry_exhausted_title: "Tool Error",
-    nai_tool_retry_exhausted_description:
-      "A tool failed multiple times and couldn't complete the request. Please try again or use `/tool refresh` if this issue persists.",
-
-    // Fallback model info (shown when primary model fails but a fallback succeeded)
+    max_iterations_title: `Thinking Loop`,
+    max_iterations_streaming_description: `I got stuck in a thinking loop and couldn't complete the request, use \`/tool refresh\` if this issue persists.`,
+    nai_tool_retry_exhausted_title: `Tool Error`,
+    nai_tool_retry_exhausted_description: `A tool failed multiple times and couldn't complete the request. Please try again or use \`/tool refresh\` if this issue persists.`,
     fallback_used_title: `Fallback Model Used`,
     fallback_used_description: `\`{success_model}\` was used instead of {chain}`,
-
-    // Generic no response warning (for unknown status or unhandled cases)
     no_response_title: `No Response`,
     no_response_description: `I didn't respond - this may be due to an empty response or timeout from the AI.`,
     thought_log: {
@@ -189,17 +135,10 @@ export default {
       reply_context_description: `{message_url}`,
       reply_context_footer: `Replying to {user}`,
     },
-
-    // Text quota errors
     text_quota_exceeded_title: `🔴 Text Quota Exceeded`,
-    text_quota_exceeded_description: `You have reached your text generation quota. {reset_info}`,
-    text_user_quota_exceeded_description: `You have reached your daily text generation quota. {reset_info}`,
-    text_serverwide_quota_exceeded_description: `This server has reached its text generation quota for this period. {reset_info}`,
     text_quota_resets_in_hours: `Quota resets in {hours} hour(s).`,
     text_quota_resets_in_days: `Quota resets in {days} day(s).`,
     text_quota_exceeded_footer: `This quota is configured by this server's managers via \`/server quota\`.`,
-
-    // Search related messages
     search: {
       web_search_title: `🔍 Searching for \`{query}\` on the web...`,
       image_search_title: `🔍 Searching for \`{query}\` images...`,
@@ -207,462 +146,164 @@ export default {
       news_search_title: `🔍 Searching for \`{query}\` in the news...`,
       disclaimer_description: `AI-Generated Responses and Search Results may be inaccurate or incomplete, **please double-check important information**.`,
     },
-
-    // Custom MCP server tool usage messages
     mcp: {
       tool_invoke_title: `🔧 Using \`{function}\` from **{server}**...`,
       tool_invoke_description: `Parameters:`,
       tool_invoke_no_params: `No parameters.`,
     },
-
     tool_notice: {
       hide_footer: `Hide this using \`/config tool-notices visibility\``,
     },
-
-    // YouTube video processing messages + video generation progress notices
     video: {
-      youtube_processing_title: "👁️  Watching YouTube Video...",
-      youtube_processing_description: "I'm currently watching the YouTube video: {video_url}",
-      youtube_processing_footer: "This may take a moment depending on the video length",
-      generating_title: "🎬 Generating Video...",
-      generating_description: "Creating a video from the current prompt",
-      generating_with_references_description: "Creating a video from the current prompt and reference image",
-      notice_model_line: "**Model:** {model}",
-      notice_prompt_line: "**Prompt:** {prompt}",
-      notice_reference_line: "Reference: {message_url}",
-      notice_reference_count_line: "Using {count} reference image(s).",
-      generating_footer: "This may take 1-3 minutes.",
+      youtube_processing_title: `👁️  Watching YouTube Video...`,
+      youtube_processing_description: `I'm currently watching the YouTube video: {video_url}`,
+      youtube_processing_footer: `This may take a moment depending on the video length`,
+      generating_title: `🎬 Generating Video...`,
+      generating_description: `Creating a video from the current prompt`,
+      generating_with_references_description: `Creating a video from the current prompt and reference image`,
+      notice_model_line: `**Model:** {model}`,
+      notice_prompt_line: `**Prompt:** {prompt}`,
+      notice_reference_line: `Reference: {message_url}`,
+      notice_reference_count_line: `Using {count} reference image(s).`,
+      generating_footer: `This may take 1-3 minutes.`,
     },
-
-    // Inline document reading messages (read_document tool)
     document: {
-      reading_title: "📄 Reading Document...",
-      reading_description: "Reading the contents of `{filename}`",
+      reading_title: `📄 Reading Document...`,
+      reading_description: `Reading the contents of \`{filename}\``,
     },
-
     image: {
-      generating_title: "🖼️  Generating Image...",
-      generating_description: "Creating an image from the current prompt",
-      generating_with_references_description: "Creating an image from the current prompt and reference image(s)",
-      editing_title: "🖌️  Editing Image...",
-      editing_description: "Editing the referenced image by targeting `{edit_target}`",
-      notice_model_line: "**Model:** {model}",
-      notice_prompt_line: "**Prompt:** {prompt}",
-      notice_reference_line: "Reference: {message_url}",
-      notice_character_prompt_line: "**Character {index}:** {prompt}",
-      notice_nai_tags_help_line: "Use `/novelai image-tags` to help me generate better NovelAI images.",
-      notice_reference_count_line: "Using {count} reference image(s).",
-      generating_footer: "This may take a moment depending on provider load.",
+      generating_title: `🖼️  Generating Image...`,
+      generating_description: `Creating an image from the current prompt`,
+      generating_with_references_description: `Creating an image from the current prompt and reference image(s)`,
+      editing_title: `🖌️  Editing Image...`,
+      editing_description: `Editing the referenced image by targeting \`{edit_target}\``,
+      notice_model_line: `**Model:** {model}`,
+      notice_prompt_line: `**Prompt:** {prompt}`,
+      notice_reference_line: `Reference: {message_url}`,
+      notice_character_prompt_line: `**Character {index}:** {prompt}`,
+      notice_nai_tags_help_line: `Use \`/novelai image-tags\` to help me generate better NovelAI images.`,
+      notice_reference_count_line: `Using {count} reference image(s).`,
+      generating_footer: `This may take a moment depending on provider load.`,
     },
-
     vision: {
-      analyzing_title: "🖼️  Analyzing Image...",
-      analyzing_description: "Current model is non-vision; using configured vision model to analyze images.",
-      analyzing_footer: "This may take a moment depending on image count",
+      analyzing_title: `🖼️  Analyzing Image...`,
+      analyzing_description: `Current model is non-vision; using configured vision model to analyze images.`,
+      analyzing_footer: `This may take a moment depending on image count`,
     },
-
     gif: {
-      processing_title: "🎞️  Processing GIF...",
-      processing_description: "Extracting keyframes from the requested GIF for closer analysis.",
-      processing_footer: "Large GIFs can take a bit longer",
+      processing_title: `🎞️  Processing GIF...`,
+      processing_description: `Extracting keyframes from the requested GIF for closer analysis.`,
+      processing_footer: `Large GIFs can take a bit longer`,
     },
-
     fetch: {
-      reading_title: "🌐  Reading Webpage...",
-      reading_description: "Fetching and reading: {url}",
-      reading_footer: "This may take a moment depending on the page size",
+      reading_title: `🌐  Reading Webpage...`,
+      reading_description: `Fetching and reading: {url}`,
+      reading_footer: `This may take a moment depending on the page size`,
     },
-
-    // New: Stream specific error messages
     stream: {
-      response_stopped_title: "Response Interrupted",
-      response_stopped_description:
-        "The response was interrupted for the following reason: {reason}. Make sure that content sent is not too large for the AI provider to handle. Run `/tool refresh` to clear conversation content.",
-      prohibited_content_title: "Content Policy Violation",
-      prohibited_content_description: "The response was blocked due to prohibited content detection.",
-      prohibited_content_admin_notice_title: "Admin Notice",
-      prohibited_content_admin_notice_description:
-        "Check: messages (`/tool refresh`), memories/config (`/memory personal export`, `/memory server export`, `/server config export`), blacklist problematic members (`/server user-blacklist add`), or switch provider (`/config model`)",
-      streaming_failed_description: "An issue while trying to stream the response.",
-
-      // Error interaction messages
-      provider_error_interaction: "Stream response blocked/stopped. Reason: {reason}.",
-      retry_message: "This error is temporary. You can try again later.",
-
-      // Universal provider error titles and tips (moved from genai.google)
-      api_error_title: "🔴 Provider API Error",
-      api_error_tip:
-        "Please verify your API key and try again. If this error persists, report through `/support discord`",
-
-      rate_limit_title: "🟡 Provider Rate Limit Exceeded",
-      rate_limit_title_all_rotation_keys: "🟡 Provider Rate Limit Exceeded (All Rotation Keys)",
-      rate_limit_tip:
-        "Please wait a few minutes before trying again. If you have multiple personal keys, consider `/config api-key rotation`.",
-      model_fallback_hint: "For better resilience, you can configure model failover with `/config model fallback`.",
-
-      content_blocked_title: "🔴️ Provider Content Filter",
-      content_blocked_tip:
-        "Tip: You can turn on `/nsfw jailbreaks` to help prevent this error. You may also check messages (`/tool refresh`), memories/config (`/memory personal export`, `/memory server export`, `/server config export`), blacklist problematic members (`/server user-blacklist add`), or switch provider (`/config model`)",
-
-      timeout_title: "🟡️ Provider Request Timeout",
-      timeout_tip: "Try shortening your message or try again",
-
-      provider_overloaded_title: "🔴 Provider Overloaded",
-      provider_overloaded_tip:
-        "Provider is currently experiencing unexpectedly high usage, please try again later or swap to a different provider",
-
-      unknown_title: "🔴 Provider Error",
-      unknown_tip: "Please try again or use `/support discord` if this keeps happening",
-
-      flush_limit_title: "🟡️ Response Length Limit Reached",
-      flush_limit_description:
-        "This response has reached the maximum message length limit and has been stopped. You can use `/bot respond` to manually continue the response if needed.",
-
-      inactivity_timeout_title: "🟡️ Response Timed Out",
-      inactivity_timeout_description:
-        "The AI provider stopped responding and the connection timed out. This can happen when the provider is overloaded or experiencing issues. Please try again.",
+      response_stopped_title: `Response Interrupted`,
+      response_stopped_description: `The response was interrupted for the following reason: {reason}. Make sure that content sent is not too large for the AI provider to handle. Run \`/tool refresh\` to clear conversation content.`,
+      streaming_failed_description: `An issue while trying to stream the response.`,
+      provider_error_interaction: `Stream response blocked/stopped. Reason: {reason}.`,
+      api_error_title: `🔴 Provider API Error`,
+      api_error_tip: `Please verify your API key and try again. If this error persists, report through \`/support discord\``,
+      rate_limit_title: `🟡 Provider Rate Limit Exceeded`,
+      rate_limit_title_all_rotation_keys: `🟡 Provider Rate Limit Exceeded (All Rotation Keys)`,
+      rate_limit_tip: `Please wait a few minutes before trying again. If you have multiple personal keys, consider \`/config api-key rotation\`.`,
+      model_fallback_hint: `For better resilience, you can configure model failover with \`/config model fallback\`.`,
+      content_blocked_title: `🔴️ Provider Content Filter`,
+      content_blocked_tip: `Tip: You can turn on \`/nsfw jailbreaks\` to help prevent this error. You may also check messages (\`/tool refresh\`), memories/config (\`/memory personal export\`, \`/memory server export\`, \`/server config export\`), blacklist problematic members (\`/server user-blacklist add\`), or switch provider (\`/config model\`)`,
+      timeout_title: `🟡️ Provider Request Timeout`,
+      timeout_tip: `Try shortening your message or try again`,
+      provider_overloaded_title: `🔴 Provider Overloaded`,
+      provider_overloaded_tip: `Provider is currently experiencing unexpectedly high usage, please try again later or swap to a different provider`,
+      flush_limit_title: `🟡️ Response Length Limit Reached`,
+      flush_limit_description: `This response has reached the maximum message length limit and has been stopped. You can use \`/bot respond\` to manually continue the response if needed.`,
+      inactivity_timeout_title: `🟡️ Response Timed Out`,
+      inactivity_timeout_description: `The AI provider stopped responding and the connection timed out. This can happen when the provider is overloaded or experiencing issues. Please try again.`,
     },
-
-    // Google-specific error messages (provider-specific default messages only)
     google: {
-      // 400 INVALID_ARGUMENT
-      "400_default_message": "There was an error in your request format",
-
-      // 400 FAILED_PRECONDITION (billing)
-      "400_billing_default_message": "Billing is required for this service",
-
-      // 403 PERMISSION_DENIED
-      "403_default_message":
-        "Your API key doesn't have the required permissions. Please ensure you're using your own legally obtained API key from Google AI Studio",
-
-      // 404 NOT_FOUND
-      "404_default_message": "A referenced resource could not be found",
-
-      // 429 RESOURCE_EXHAUSTED
-      "429_default_message": "You've sent too many requests too quickly",
-
-      // 500 INTERNAL
-      "500_default_message": "An unexpected error occurred on Google's servers",
-
-      // 503 UNAVAILABLE
-      "503_default_message": "The AI model is currently overloaded",
-
-      // 504 DEADLINE_EXCEEDED
-      "504_default_message": "Your request took too long to process",
-
-      // Content blocked errors (SAFETY, PROHIBITED_CONTENT, etc.)
-      content_blocked_default_message: "Your content was blocked by safety filters",
-
-      // Generic fallback for unknown Google errors
-      unknown_default_message: "An unexpected error occurred",
+      "400_default_message": `There was an error in your request format`,
+      "400_billing_default_message": `Billing is required for this service`,
+      "403_default_message": `Your API key doesn't have the required permissions. Please ensure you're using your own legally obtained API key from Google AI Studio`,
+      "404_default_message": `A referenced resource could not be found`,
+      "429_default_message": `You've sent too many requests too quickly`,
+      "503_default_message": `The AI model is currently overloaded`,
+      "504_default_message": `Your request took too long to process`,
+      content_blocked_default_message: `Your content was blocked by safety filters`,
+      unknown_default_message: `An unexpected error occurred`,
     },
-
-    // NovelAI-specific error messages (provider-specific default messages only)
     novelai: {
-      // 400 BAD_REQUEST
-      "400_default_message": "Invalid request format or parameters",
-
-      // 400 BAD_REQUEST - Trial account recaptcha requirement
-      "400_trial_message":
-        "Your trial account requires recaptcha verification for generations. API access requires a paid NovelAI subscription. Please upgrade your account at https://novelai.net/",
-
-      // 401 UNAUTHORIZED
-      "401_default_message": "Your NovelAI API key is invalid or expired",
-
-      // 402 PAYMENT_REQUIRED
-      "402_default_message": "You don't have enough Anlas credits",
-
-      // 429 TOO_MANY_REQUESTS
-      "429_default_message": "You're sending too many requests, please slow down",
-
-      // 503 SERVICE_UNAVAILABLE
-      "503_default_message": "NovelAI servers are currently overloaded",
-
-      // 504 GATEWAY_TIMEOUT
-      "504_default_message": "Your request took too long to process",
-
-      // Generic fallback for unknown NovelAI errors
-      unknown_default_message: "An unexpected error occurred",
+      "400_default_message": `Invalid request format or parameters`,
+      "400_trial_message": `Your trial account requires recaptcha verification for generations. API access requires a paid NovelAI subscription. Please upgrade your account at https://novelai.net/`,
+      "401_default_message": `Your NovelAI API key is invalid or expired`,
+      "402_default_message": `You don't have enough Anlas credits`,
+      "429_default_message": `You're sending too many requests, please slow down`,
+      "503_default_message": `NovelAI servers are currently overloaded`,
+      "504_default_message": `Your request took too long to process`,
+      unknown_default_message: `An unexpected error occurred`,
     },
-
-    // OpenRouter-specific error messages (provider-specific default messages only)
     openrouter: {
-      // 400 BAD_REQUEST
-      "400_default_message": "Bad request: invalid or missing params, or CORS issue",
+      "404_privacy_policy_error": `**Privacy Policy Restriction**
+The selected model requires allowing data for paid model training, but your OpenRouter account privacy settings currently block this.
 
-      // 401 UNAUTHORIZED
-      "401_default_message": "Invalid credentials: OAuth session expired or disabled/invalid API key",
-
-      // 402 PAYMENT_REQUIRED
-      "402_default_message":
-        "Your account or API key has insufficient credits. Add more credits and retry the request.",
-
-      // 403 FORBIDDEN
-      "403_default_message": "Your chosen model requires moderation and your input was flagged",
-
-      // 404 NOT_FOUND
-      "404_default_message":
-        "No endpoints found that support the requested features (tools/images). Try a different model using the `/config model text` command.",
-
-      // 404 Privacy Policy Error
-      "404_privacy_policy_error":
-        "**Privacy Policy Restriction**\n" +
-        "The selected model requires allowing data for paid model training, but your OpenRouter account privacy settings currently block this.\n\n" +
-        "**To fix this:**\n" +
-        "1. Visit https://openrouter.ai/settings/privacy\n" +
-        '2. Adjust your "Data Policy" settings to allow this model\n' +
-        "3. Or select a different model that matches your privacy preferences",
-
-      // 408 REQUEST_TIMEOUT
-      "408_default_message": "Your request timed out",
-
-      // 413 PAYLOAD_TOO_LARGE
-      "413_default_message":
-        "Request body too large (context/media exceeds provider limits). Try using `/tool refresh` to clear conversation history, or reduce the amount of media/memories in context.",
-
-      // 429 TOO_MANY_REQUESTS
-      "429_default_message":
-        "You are being rate limited. Please retry shortly, or use a different model that isn't free.",
-
-      // 502 BAD_GATEWAY
-      "502_default_message": "Your chosen model is down or we received an invalid response from it",
-
-      // 503 SERVICE_UNAVAILABLE
-      "503_default_message": "There is no available model provider that meets your routing requirements",
-
-      // invalid_type error (parameter type mismatch)
-      invalid_type_default_message:
-        "Request contains a parameter with an invalid type. This may be a compatibility issue with the selected model. Try using `/tool refresh` to clear context, or try a different model.",
-
-      // Generic fallback for unknown OpenRouter errors
-      unknown_default_message: "An unexpected error occurred",
+**To fix this:**
+1. Visit https://openrouter.ai/settings/privacy
+2. Adjust your "Data Policy" settings to allow this model
+3. Or select a different model that matches your privacy preferences`,
+      unknown_default_message: `An unexpected error occurred`,
     },
-
-    deepseek: {
-      connection_refused: "Could not connect to the DeepSeek API endpoint. Please try again later.",
-
-      "401_default_message": "Your DeepSeek API key is invalid or does not have access to this model.",
-
-      "402_default_message": "Your DeepSeek account does not have sufficient credits for this request.",
-
-      "403_default_message": "DeepSeek denied this request. Please verify your account and model access.",
-
-      "404_default_message": "The requested DeepSeek model or API route could not be found.",
-
-      "408_default_message": "The DeepSeek request timed out before the provider responded.",
-
-      "429_default_message": "DeepSeek is rate limiting this request. Please wait a moment and try again.",
-
-      "429_plan_access_default_message":
-        "Your DeepSeek subscription plan does not include access to this model. Please switch to a different model with `/config model text`.",
-
-      "500_default_message": "DeepSeek returned an internal server error.",
-
-      "503_default_message": "DeepSeek is currently unavailable or overloaded.",
-
-      unknown_default_message: "An unexpected error occurred while communicating with DeepSeek.",
-    },
-
-    nvidia: {
-      connection_refused: "Could not connect to the NVIDIA API endpoint. Please try again later.",
-
-      "401_default_message": "Your NVIDIA API key is invalid or does not have access to this model.",
-
-      "402_default_message": "Your NVIDIA account does not have sufficient credits for this request.",
-
-      "403_default_message": "NVIDIA denied this request. Please verify your account and model access.",
-
-      "404_default_message": "The requested NVIDIA model or API route could not be found.",
-
-      "408_default_message": "The NVIDIA request timed out before the provider responded.",
-
-      "429_default_message": "NVIDIA is rate limiting this request. Please wait a moment and try again.",
-
-      "500_default_message": "NVIDIA returned an internal server error.",
-
-      "503_default_message": "NVIDIA is currently unavailable or overloaded.",
-
-      unknown_default_message: "An unexpected error occurred while communicating with NVIDIA.",
-    },
-
-    // Z.ai provider error messages
-    zai: {
-      connection_refused: "Could not connect to the Z.ai API endpoint. Please try again later.",
-
-      "401_default_message": "Your Z.ai API key is invalid or does not have access to this model.",
-
-      "402_default_message": "Your Z.ai account does not have sufficient credits for this request.",
-
-      "403_default_message": "Z.ai denied this request. Please verify your account and model access.",
-
-      "404_default_message": "The requested Z.ai model or API route could not be found.",
-
-      "429_default_message": "Z.ai is rate limiting this request. Please wait a moment and try again.",
-
-      "429_balance_default_message": "Your Z.ai account does not have enough balance or credits for this request.",
-
-      "429_plan_access_default_message":
-        "Your Z.ai subscription plan does not include access to this model. Please switch to a different model with `/config model text`.",
-
-      "500_default_message": "Z.ai returned an internal server error.",
-
-      "503_default_message": "Z.ai is currently unavailable or overloaded.",
-
-      unknown_default_message: "An unexpected error occurred while communicating with Z.ai.",
-    },
-
-    // Anthropic provider error messages
     anthropic: {
-      connection_refused: "Could not connect to the Anthropic API endpoint. Please try again later.",
-
-      "400_default_message": "Invalid request to Anthropic API. Try a different model or reduce context length.",
-
-      "401_default_message": "Your Anthropic API key is invalid. Please check your key at console.anthropic.com",
-
-      "403_default_message": "Your Anthropic API key does not have permission for this operation.",
-
-      "404_default_message":
-        "The requested Anthropic model could not be found. Try switching models with `/config model text`.",
-
-      "408_default_message": "The Anthropic request timed out before the provider responded.",
-
-      "429_default_message": "Anthropic rate limit exceeded. Please wait a moment and try again.",
-
-      "500_default_message": "Anthropic returned an internal server error.",
-
-      "503_default_message": "Anthropic is currently unavailable or overloaded.",
-
-      overloaded_default_message:
-        "Anthropic is currently overloaded. Please try again later or switch to a different provider.",
-
-      unknown_default_message: "An unexpected error occurred while communicating with Anthropic.",
+      "400_default_message": `Invalid request to Anthropic API. Try a different model or reduce context length.`,
+      "401_default_message": `Your Anthropic API key is invalid. Please check your key at console.anthropic.com`,
+      "403_default_message": `Your Anthropic API key does not have permission for this operation.`,
+      "404_default_message": `The requested Anthropic model could not be found. Try switching models with \`/config model text\`.`,
+      "429_default_message": `Anthropic rate limit exceeded. Please wait a moment and try again.`,
+      "500_default_message": `Anthropic returned an internal server error.`,
+      "503_default_message": `Anthropic is currently unavailable or overloaded.`,
+      unknown_default_message: `An unexpected error occurred while communicating with Anthropic.`,
     },
-
-    // Custom provider error messages (self-hosted OpenAI-compatible endpoints)
-    custom: {
-      // Connection errors
-      connection_refused:
-        "Could not connect to the custom endpoint. Please verify that your local LLM server is running and accessible at the configured URL.",
-
-      // HTTP status errors
-      "401_default_message":
-        "Authentication failed. If your endpoint requires an API key or Bearer token, please check that it's configured correctly.",
-
-      "403_default_message": "Access denied by the custom endpoint. Please check your endpoint's access controls.",
-
-      "404_default_message":
-        "Resource not found. For Ollama users: verify your model name is correct (use `/config setup` to update). Otherwise, check that your endpoint URL includes the proper path (e.g., /v1/chat/completions).",
-
-      "408_default_message": "Request timed out. The custom endpoint took too long to respond.",
-
-      "429_default_message": "Rate limited by the custom endpoint. Please wait a moment and try again.",
-
-      "500_default_message": "Internal server error from the custom endpoint. Please check your LLM server logs.",
-
-      "502_default_message": "Bad gateway error. The custom endpoint returned an invalid response.",
-
-      "503_default_message": "Custom endpoint is currently unavailable. Please ensure your LLM server is running.",
-
-      // Generic fallback
-      unknown_default_message: "An unexpected error occurred while communicating with the custom endpoint.",
-    },
-
     self_teach: {
-      server_memory_learned_title: "🧠 {persona_nickname} Learned Something New!",
-      server_memory_learned_description: "A server memory has been saved:\n`{memory_content}`",
-      server_memory_updated_title: "📝 {persona_nickname} Updated a Memory!",
-      server_memory_updated_description: "A server memory has been updated:\n`{memory_content}`",
-      server_memory_deleted_title: "🗑️ {persona_nickname} Deleted a Memory!",
-      server_memory_deleted_description: "A server memory has been deleted:\n`{memory_content}`",
-      personal_memory_learned_title: "💡 {persona_nickname} Learned Something New about {user_nickname}!",
-      personal_memory_learned_description:
-        "A personal memory about {user_nickname} has been saved:\n`{memory_content}`",
-      personal_memory_updated_title: "📝 {persona_nickname} Updated a Memory about {user_nickname}!",
-      personal_memory_updated_description:
-        "A personal memory about {user_nickname} has been updated:\n`{memory_content}`",
-      personal_memory_deleted_title: "🗑️ {persona_nickname} Deleted a Memory about {user_nickname}!",
-      personal_memory_deleted_description:
-        "A personal memory about {user_nickname} has been deleted:\n`{memory_content}`",
-      server_memory_footer: "Server managers can manage this memory using `/memory server`.",
-      personal_memory_footer_manage: "You can manage your personal memories using `/memory personal`.",
-      personal_memory_footer_personalization_disabled:
-        "This memory was saved, but personalization features are currently disabled on this server, so it will not have an immediate effect here. Use `/memory personal export` to view it. You can opt out with `/personal privacy`.",
-      personal_memory_footer_user_blacklisted:
-        "This memory was saved, but the user in question is currently blacklisted from personalization features on this server, so it will not have an immediate effect here. Use `/memory personal export` to view it. You can opt out with `/personal privacy`.",
+      server_memory_learned_title: `🧠 {persona_nickname} Learned Something New!`,
+      server_memory_learned_description: `A server memory has been saved:
+\`{memory_content}\``,
+      server_memory_updated_title: `📝 {persona_nickname} Updated a Memory!`,
+      server_memory_updated_description: `A server memory has been updated:
+\`{memory_content}\``,
+      server_memory_deleted_title: `🗑️ {persona_nickname} Deleted a Memory!`,
+      server_memory_deleted_description: `A server memory has been deleted:
+\`{memory_content}\``,
+      personal_memory_learned_title: `💡 {persona_nickname} Learned Something New about {user_nickname}!`,
+      personal_memory_learned_description: `A personal memory about {user_nickname} has been saved:
+\`{memory_content}\``,
+      personal_memory_updated_title: `📝 {persona_nickname} Updated a Memory about {user_nickname}!`,
+      personal_memory_updated_description: `A personal memory about {user_nickname} has been updated:
+\`{memory_content}\``,
+      personal_memory_deleted_title: `🗑️ {persona_nickname} Deleted a Memory about {user_nickname}!`,
+      personal_memory_deleted_description: `A personal memory about {user_nickname} has been deleted:
+\`{memory_content}\``,
+      server_memory_footer: `Server managers can manage this memory using \`/memory server\`.`,
+      personal_memory_footer_manage: `You can manage your personal memories using \`/memory personal\`.`,
+      personal_memory_footer_personalization_disabled: `This memory was saved, but personalization features are currently disabled on this server, so it will not have an immediate effect here. Use \`/memory personal export\` to view it. You can opt out with \`/personal privacy\`.`,
+      personal_memory_footer_user_blacklisted: `This memory was saved, but the user in question is currently blacklisted from personalization features on this server, so it will not have an immediate effect here. Use \`/memory personal export\` to view it. You can opt out with \`/personal privacy\`.`,
     },
   },
-
   commands: {
-    // Reusable choice localizations for common options
     choices: {
-      add: "Add",
-      remove: "Remove",
-      always: "Always",
-      enable: "Enable",
-      disable: "Disable",
-      enabled: "Enabled",
-      disabled: "Disabled",
-      on: "On",
-      off: "Off",
-      yes: "Yes",
-      no: "No",
-      true: "True",
-      false: "False",
-      opt_out: "Block Memory Storage",
-      opt_in: "Allow Memory Storage",
-      none: "None",
-      inherit_global: "Inherit Global Cooldown",
+      always: `Always`,
+      enable: `Enable`,
+      disable: `Disable`,
+      enabled: `Enabled`,
+      disabled: `Disabled`,
+      none: `None`,
+      inherit_global: `Inherit Global Cooldown`,
     },
-
-    // SillyTavern preset management
     "st-preset": {
       description: `Manage SillyTavern presets`,
-      upload: {
-        description: `Upload a SillyTavern preset JSON file`,
-        file_description: `The SillyTavern preset .json file to upload`,
-        invalid_file_title: `Invalid File`,
-        invalid_format: `Only \`.json\` files are accepted. Please upload a SillyTavern preset JSON file.`,
-        file_too_large_title: `File Too Large`,
-        file_too_large_description: `The preset file must be under {max_size} MB.`,
-        download_failed: `Failed to download the attachment. Please try again.`,
-        invalid_json: `The file could not be parsed as valid JSON.`,
-        not_a_preset: `This doesn't look like a SillyTavern preset — no \`prompts\` array found.`,
-        no_nodes: `No usable prompt nodes were found in this preset.`,
-        duplicate_name: `A preset named "{name}" already exists for this server. Remove it first or rename the file.`,
-        success_title: `Preset Uploaded`,
-        success_description: `**{name}** has been imported.\n\n• **{total}** total nodes\n• **{markers}** structural markers\n• **{toggleable}** toggleable nodes (**{enabled}** enabled)\n{notes}\nUse \`/st-preset node toggle\` to adjust which nodes are active.\nUse \`/st-preset remove\` to revert to default behavior.`,
-        note_comment_only: `\n> **{count}** comment-only node(s) are visible in \`/st-preset node toggle\` but are never injected into the prompt.`,
-        note_disabled_by_preset: `> **{count}** node(s) are disabled by default in this preset. Use \`/st-preset node toggle\` to enable them.\n`,
-      },
-      remove: {
-        description: `Remove the active SillyTavern preset`,
-        no_preset_title: `No Active Preset`,
-        no_preset_description: `There is no active SillyTavern preset on this server. Nothing to remove.`,
-        failed_title: `Removal Failed`,
-        failed_description: `Failed to remove the preset. Please try again.`,
-        success_title: `Preset Removed`,
-        success_description: `**{name}** has been removed. Context assembly has reverted to the default behavior.`,
-      },
       node: {
         description: `Manage preset prompt nodes`,
-        toggle: {
-          description: `Toggle preset prompt nodes on or off`,
-          no_preset_title: `No Preset Found`,
-          no_preset_description: `No active SillyTavern preset found for this server. Upload one with \`/st-preset upload\` first.`,
-          no_nodes_title: `No Toggleable Nodes`,
-          no_nodes_description: `This preset has no toggleable prompt nodes.`,
-          select_page_title: `Select Page`,
-          select_page_description: `**{preset_name}** has **{total_nodes}** toggleable nodes across **{total_pages}** pages.\nSelect a page to view and toggle nodes:`,
-          group_description: `Check to enable, uncheck to disable`,
-          done_button: `Done`,
-          no_changes: `No changes made`,
-          result_title: `Node Toggle Results`,
-          result_description: `**{enabled}** / **{total}** nodes enabled.\n\n{changes}`,
-        },
       },
     },
-
-    // General utility commands
     tool: {
       ping: {
         description: `Check the bot's latency.`,
@@ -678,11 +319,14 @@ export default {
           embed_description: `Here are **VERY ROUGH** estimated costs per trigger in a Discord channel when using paid AI providers. Costs are estimated using example **{provider}** costs (Input: {inputPrice}/M tokens, Output: {outputPrice}/M tokens)`,
           current_context_description: `Estimated cost for your **current context only**. Input tokens are measured by the provider API using your current setup and recent channel history on **{provider}** model **{model}**. Output tokens remain estimated. Pricing used: Input {inputPrice}/M, Output {outputPrice}/M.`,
           current_input_title: `Measured Input Tokens (Current Context)`,
-          current_input_value: `**Input:** {inputTokens} tokens\n**Input cost only:** ~{inputCost} per trigger`,
+          current_input_value: `**Input:** {inputTokens} tokens
+**Input cost only:** ~{inputCost} per trigger`,
           current_output_short_title: `Estimated Output: Short`,
           current_output_typical_title: `Estimated Output: Typical`,
           current_output_long_title: `Estimated Output: Long`,
-          current_output_band_value: `**Output estimate:** {outputTokens} tokens\n**Total estimate:** {totalTokens} tokens\n**Cost:** ~{costPerMessage} per trigger (~{costPer100} per 100 triggers)`,
+          current_output_band_value: `**Output estimate:** {outputTokens} tokens
+**Total estimate:** {totalTokens} tokens
+**Cost:** ~{costPerMessage} per trigger (~{costPer100} per 100 triggers)`,
           current_footer: `Input token counts are provider-measured only for providers with live counting support. Output token counts are estimated only.`,
           no_cost_provider_description: `Current provider does not have costs`,
           unavailable_description: `Live cost estimation is not available for the current provider (**{provider}**).`,
@@ -722,51 +366,6 @@ I have built-in features to help reduce costs from abusers or spammers in your s
           footer: `Free providers like Google Gemini (free tier) and some OpenRouter models have no cost! NovelAI offers unlimited usage with a subscription. Use \`/help api-key\` to learn more.`,
         },
       },
-      compact: {
-        description: `Summarize the recent conversation into a compact system memory.`,
-        channel_description: `Optional channel to post the summary in (defaults to this channel).`,
-        modal: {
-          title: `Compact Summary`,
-          type_label: `Summary Type`,
-          type_description: `Choose the summary format to generate.`,
-          type_choice_conversation: `Conversation`,
-          type_choice_roleplay: `Roleplay`,
-          refresh_label: `Refresh Context?`,
-          refresh_description: `If Yes, messages above the summary will be ignored.`,
-          analyze_images_label: `Analyze Images?`,
-          analyze_images_description: `Include image analysis for attachments, emojis, and stickers.`,
-          additional_instructions_label: `Additional Instructions`,
-          additional_instructions_placeholder: `Optional: add extra guidance for the summary output.`,
-        },
-        processing_title: `⏳ Building Summary`,
-        processing_description: `I'm compacting the recent conversation now...`,
-        success_title: `✅ Summary Posted`,
-        success_description: `Your compact summary has been posted in this channel.`,
-        success_description_redirect: `Your compact summary has been posted in {channel}.`,
-        failed_title: `Summary Failed`,
-        failed_description: `I couldn't generate the summary: {error}`,
-        provider_unsupported_title: `Provider Not Supported`,
-        provider_unsupported_description: `The current provider ({provider}) does not support compact summaries. Please switch to a compatible provider.`,
-        model_incompatible_title: `Model Incompatible`,
-        model_incompatible_description: `The current model ({model_name}) does not support structured output (STRUCT) required for roleplay summaries.`,
-        image_vision_required_title: `Image Vision Required`,
-        image_vision_required_description: `The current model ({model_name}) cannot analyze images. Please choose a vision-capable model or disable image analysis.`,
-        summary_title: `🧠 Compact Summary`,
-        summary_title_refreshed: `🧹 Compact Summary (Refreshed)`,
-        roleplay_scene_title: `🎭 Roleplay Scene Summary`,
-        roleplay_scene_title_refreshed: `🧹 Roleplay Scene Summary (Refreshed)`,
-        roleplay_scene_synopsis_header: `Synopsis of the current story:`,
-        roleplay_character_title_prefix: `🎭 Character Summary:`,
-        roleplay_labels: {
-          character: `Character summary for`,
-          current_goals: `Immediate Goals of`,
-          emotional_status: `Current Emotional Status of`,
-          physical_status: `Current Physical Status of`,
-          appearance_clothing: `Appearance/Clothing of`,
-          inventory: `Inventory of`,
-        },
-        refresh_footer: `Context refreshed starting with this embed.`,
-      },
       refresh: {
         description: `Clears the recent conversation history.`,
         title: `🧹 Conversation History Cleared`,
@@ -778,12 +377,8 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         scope_choice_personal: `Personal`,
         scope_choice_server: `Server`,
         scope_choice_persona: `Persona`,
-        // Personal scope (1 page)
         personal_title: `Personal Status`,
         personal_description: `Your personal settings and global personal memory`,
-        // Server scope (5 pages)
-        server_title: `Server Status`,
-        server_description: `Server configuration and moderation settings`,
         server_page1_title: `Server Status: Model and Sampling`,
         server_page1_description: `Language model and sampler configuration`,
         server_page2_title: `Server Status: Behavior`,
@@ -798,7 +393,6 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         server_page6_description: `Channel and persona model overrides`,
         server_page7_title: `Server Status: Quotas`,
         server_page7_description: `Complete image and text quota settings`,
-        // Persona scope (persona picker + 5 pages)
         persona_page1_title: `{persona_name}: Identity`,
         persona_page1_description: `Persona identity and trigger words`,
         persona_page2_title: `{persona_name}: Attributes`,
@@ -809,7 +403,6 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         persona_page4_description: `Persona-scoped personal and server memories for you`,
         persona_page5_title: `{persona_name}: Prompt and Tags`,
         persona_page5_description: `Persona prompt and generation tags`,
-        // Shared fields
         field_model: `AI Model`,
         field_temperature: `Temperature`,
         field_top_p: `Top-P`,
@@ -827,8 +420,6 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_crosschannel_blocklist: `Cross-Channel Blocklist`,
         field_thought_logs_channel: `Thought Logs Channel`,
         field_welcome_channel: `Welcome Channel`,
-        field_welcome_persona: `Welcome Persona`,
-        field_trigger_words: `Trigger Words`,
         field_whitelist_channels: `Channel Whitelist`,
         field_whitelist_roles: `Role Whitelist`,
         whitelist_all_allowed: `None (all channels can trigger)`,
@@ -875,8 +466,6 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_quota_reset_days_value: `{days} day(s)`,
         field_quota_unlimited: `Unlimited`,
         field_nickname: `Nickname`,
-        field_dialogue_count: `Sample Dialogues`,
-        field_attributes: `Attributes`,
         field_is_alter: `Is Alter Persona`,
         field_alter_triggers: `Alter Triggers`,
         field_persona_triggers: `Persona Triggers`,
@@ -894,43 +483,18 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_impersonation_prompt: `Impersonation Prompt`,
         field_impersonation_prompt_not_set: `*(Not set)*`,
         field_reminders_count: `Active Reminders`,
-        field_personal_memories: `Personal Memories`,
-        field_server_memories: `Server Memories`,
         item_count: `{count} items`,
-        none: `None`,
-        disabled: `Disabled`,
         unknown_channel: `Unknown Channel ID:`,
-        not_available: `N/A`,
-        see_all_memories_prompt: `Please use \`/memory personal export\` or \`/memory server export\` to see all memories`,
-        memories_omitted: `...and {count} more memories omitted`,
-        export_footer: `Use \`/memory personal export\` or \`/memory server export\` to see full, non-truncated memories`,
-        export_footer_full: `Use \`/memory personal export\`, \`/memory server export\`, or \`/server config export\` to see full details`,
         export_footer_global_personal_memories: `Use \`/memory personal export scope:global\` to view full values`,
         export_footer_persona_memories: `Use \`/memory personal export scope:persona\` and \`/memory server export\` to view full values`,
         export_footer_persona_attributes_and_dialogues: `Use \`/persona export\` to view full attributes and sample dialogues`,
         export_footer_server_config: `Use \`/server config export\` to view full values`,
-        field_personal_memories_with_count: `Personal Memories ({current} out of {max} slots used)`,
         field_global_personal_memories_with_count: `Global Personal Memory ({current} out of {max} slots used)`,
-        field_trigger_words_with_count: `Trigger Words ({current} out of {max} slots used)`,
         field_attributes_with_count: `Attributes ({current} out of {max} slots used)`,
         field_sample_dialogues_with_count: `Sample Dialogues ({current} out of {max} slots used)`,
         field_persona_personal_memories_with_count: `Persona Personal Memories ({current} out of {max} slots used)`,
         field_persona_server_memories_with_count: `Persona Server Memories ({current} out of {max} slots used)`,
-        field_slot_usage: `{current} out of {max} slots used`,
-        field_server_memories_with_count: `Server Memories ({current} out of {max} slots used)`,
-        field_dialogue_count_with_count: `{current} out of {max} slots used`,
         field_blacklisted_members_with_count: `{current} members`,
-      },
-      comment: {
-        description: `Send a comment embed visible in chat but invisible in context.`,
-        modal_title: `Create Comment`,
-        content_label: `Comment Content`,
-        content_placeholder: `Type your comment here...`,
-        invalid_channel_title: `Invalid Channel`,
-        invalid_channel_description: `This command can only be used in text channels.`,
-        footer: `Comment by {user}, invisible in context`,
-        success_title: `Comment Posted`,
-        success_description: `Your comment has been posted in this channel.`,
       },
       delete: {
         description: `Delete turns or other channel content.`,
@@ -954,25 +518,13 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         },
       },
     },
-
-    // Data management commands
     data: {
-      description: `Manage your data exports and imports`,
       export: {
-        description: `Export specific data to a JSON backup file`,
-        type_description: `What do you want to export?`,
-        scope_description: `Choose scope for the selected data type`,
-        type_choice_personal: `Personal Data`,
-        type_choice_server: `Server Data`,
-        type_choice_personality: `Personality Info`,
         type_choice_persona_personal_memories: `Personal Memories of Persona`,
         type_choice_persona_server_memories: `Server Memories of Persona`,
         type_choice_personal_settings: `Personal Settings`,
         type_choice_server_config: `Server Config`,
         type_choice_global_personal_memories: `Global Personal Memories`,
-        scope_choice_persona: `Persona`,
-        scope_choice_global: `Global`,
-        scope_choice_serverwide: `Serverwide`,
         persona_modal_title: `Select Persona`,
         persona_select_label: `Persona`,
         persona_select_description: `Choose which persona to export memory data from.`,
@@ -981,22 +533,14 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         alter_persona_description: `Alter Persona`,
         success_title: `🟢 Export Successful`,
         success_description: `Your {type} data has been sent to your DMs!`,
-        success_description_personality: `My personality has been exported and sent to your DMs!\n\n**Note:** This export is for informational purposes only. To import personalities, use the \`/persona\` commands instead.`,
         failed_title: `🔴 Export Failed`,
         failed_description: `Failed to export your data. Please try again later.`,
         dm_title: `Data Export`,
         dm_description: `Here's the {type} data that you requested from me!`,
-        dm_description_server: `Here's the server data you requested!\n\n**Note:** Trigger words and API keys are excluded for security. You'll need to reconfigure those manually after import.`,
-        dm_description_personality: `Here's the personality information you requested!\n\n**Note:** This text file is for informational purposes only. To import personalities into your server, use the \`/persona\` commands instead.`,
         dm_failed_title: `🔴 Could Not Send DM`,
         dm_failed_description: `I couldn't send you a DM. Please make sure you have DMs enabled from server members, then try again.`,
         no_permission_title: `🔴 Permission Denied`,
         no_permission_description: `You need the **Manage Server** permission to export server data.`,
-        invalid_scope_title: `🔴 Invalid Scope`,
-        invalid_scope_personal_description: `\`serverwide\` scope is not valid for personal data exports.`,
-        invalid_scope_server_description: `\`global\` scope is not valid for server data exports.`,
-        invalid_scope_personality_description: `Only \`persona\` scope is valid for personality exports.`,
-        // Error messages from dataExport utility
         error_no_user_data: `No user data found. You may need to interact with the bot first.`,
         error_no_server_data: `Server not found in database. Please run /config setup first.`,
         error_no_server_config: `Server configuration not found. Please run /config setup first.`,
@@ -1005,59 +549,30 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         error_export_failed: `Failed to export data`,
       },
       import: {
-        description: `Import data from an exported JSON file (auto-detected)`,
-        file_description: `The JSON file to import data from`,
-        confirmation_description: `WARNING: This may replace existing memories/settings based on file type. Continue?`,
-        confirmation_description_server: `WARNING: Replaces server settings & memories. Does NOT restore: trigger words, API keys, personality, avatar.`,
-        scope_description: `Choose scope for where imported data is applied`,
-        confirmation_choice_yes: `Yes, I understand and want to proceed`,
-        confirmation_choice_no: `No, cancel the import`,
-        scope_choice_persona: `Persona`,
-        scope_choice_global: `Global`,
-        scope_choice_serverwide: `Serverwide`,
         persona_modal_title: `Select Persona`,
         persona_select_label: `Persona`,
         persona_select_description: `Choose which persona this import should target.`,
         persona_select_placeholder: `Select a persona...`,
-        global_option_label: `Global`,
-        global_option_description: `Global means shared memory scope, not persona-specific.`,
-        legacy_personal_label: `Legacy Personal Backup`,
-        legacy_server_label: `Legacy Server Backup`,
         main_persona_description: `Main Persona`,
         alter_persona_description: `Alter Persona`,
         success_title: `🟢 Import Successful`,
-        success_description: `Successfully imported {type} data!\nMemories imported: {memories_count}\n Config fields updated: {config_count}`,
-        success_description_server: `Successfully imported server data!\nMemories: {memories_count}\n Settings: {config_count}\n\n**Remember:** Trigger words and API keys were not imported. Configure those separately if needed.`,
-        success_description_server_persona_scope: `Successfully imported server data for the selected persona scope!\nMemories: {memories_count}\n Settings: {config_count}\n\n**Note:** Server settings are still serverwide. Trigger words and API keys were not imported.`,
+        success_description: `Successfully imported {type} data!
+Memories imported: {memories_count}
+ Config fields updated: {config_count}`,
         failed_title: `🔴 Import Failed`,
         failed_description: `Failed to import your data. Please check the file and try again.`,
         cancelled_title: `🔴 Import Cancelled`,
         cancelled_description: `The import has been cancelled. No data was changed.`,
-        invalid_file_type_title: `🔴 Invalid File Type`,
-        invalid_file_type_description: `Please upload a valid .json file.`,
-        file_too_large_title: `🔴 File Too Large`,
-        file_too_large_description: `The file is too large. Maximum file size is 1MB.`,
-        parse_failed_title: `🔴 Invalid JSON`,
-        parse_failed_description: `The file is not a valid JSON file. Please check the file format.`,
         invalid_file_title: `🔴 Invalid Import File`,
         invalid_file_description: `The import file format is invalid or incompatible.`,
         no_permission_title: `🔴 Permission Denied`,
         no_permission_description: `You need the **Manage Server** permission to import server data.`,
-        invalid_scope_title: `🔴 Invalid Scope`,
-        invalid_scope_personal_description: `\`serverwide\` scope is not valid for personal imports.`,
-        invalid_scope_server_description: `\`global\` scope is not valid for server imports.`,
-        error_download_timeout: `File download timed out. Please try again.`,
-        error_download_failed: `Failed to download import file.`,
-        // Error messages from dataImport utility
-        error_invalid_memory: `Invalid memory content: {details}`,
         error_update_failed: `Failed to update user data in database`,
         error_import_failed: `Failed to import data`,
         error_no_server_data: `Server not found in database. Please run /config setup first.`,
-        error_invalid_server_memory: `Invalid server memory content: {details}`,
         error_invalid_config: `Invalid configuration fields in import data`,
         error_no_users: `No users found in database. Cannot attribute server memories.`,
         error_not_json: `Import file must contain a valid JSON object`,
-        error_incompatible_version: `Incompatible import version. Expected {expected}, got {actual}`,
         error_invalid_personal_format: `Invalid personal import file format`,
         error_invalid_server_format: `Invalid server import file format`,
         error_invalid_personal_memories_format: `Invalid personal memories import file format`,
@@ -1067,58 +582,18 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         error_unknown_type: `Unknown import type: {type}.`,
       },
       delete: {
-        description: `Permanently delete selected data scopes`,
-        type_description: `What do you want to delete?`,
-        scope_description: `Optional scope (leave empty for legacy full delete behavior)`,
-        type_choice_personal: `Personal Data`,
-        type_choice_server: `Server Data`,
-        type_choice_persona_personal_memories: `Personal Memories of Persona`,
-        type_choice_persona_server_memories: `Server Memories of Persona`,
-        type_choice_personal_settings: `Personal Settings`,
-        type_choice_server_config: `Server Config`,
-        type_choice_global_personal_memories: `Global Personal Memories`,
-        scope_choice_persona: `Persona`,
-        scope_choice_global: `Global`,
-        scope_choice_serverwide: `Serverwide`,
-        confirmation_description: `Confirm permanent deletion (THIS CANNOT BE UNDONE!)`,
-        confirmation_yes: `Yes, permanently delete - I understand this cannot be undone`,
-        confirmation_no: `No, cancel deletion`,
-        persona_modal_title: `Select Persona`,
-        persona_select_label: `Persona`,
-        persona_select_description: `Choose which persona scope to delete.`,
-        persona_select_placeholder: `Select a persona...`,
-        main_persona_description: `Main Persona`,
-        alter_persona_description: `Alter Persona`,
         confirmation_required_title: `Confirmation Required`,
         confirmation_required_description: `You must confirm deletion by selecting the confirmation option.`,
-        invalid_scope_title: `🔴 Invalid Scope`,
-        invalid_scope_personal_description: `\`serverwide\` scope is not valid for personal deletes.`,
-        invalid_scope_server_description: `\`global\` scope is not valid for server deletes.`,
-        success_memory_scope_title: `🟢 Scoped Memory Deletion Complete`,
-        success_persona_memories_description: `Deleted {memory_count} personal memories for persona "{persona_name}".`,
-        success_global_memories_description: `Deleted {memory_count} global personal memories.`,
-        success_persona_server_memories_description: `Deleted {memory_count} server memories for persona "{persona_name}".`,
-        success_personal_title: `🟢 Personal Data Deleted`,
-        success_personal_description: `All your personal data has been permanently deleted. You'll start fresh with default settings if you interact with me again.`,
-        success_server_title: `🟢 Server Data Deleted`,
-        success_server_description: `All server data has been permanently deleted. You'll need to run \`/config setup\` to use me again.`,
-        success_personal_settings_title: `🟢 Personal Settings Reset`,
-        success_personal_settings_description: `Your personal settings have been reset to defaults.`,
         success_server_config_title: `🟢 Server Config Reset`,
         success_server_config_description: `Server configuration has been reset to defaults.`,
         no_data_title: `🟡️ No Data Found`,
         no_data_description: `You don't have any personal data stored in the database.`,
-        no_persona_memories_description: `No personal memories found for persona "{persona_name}".`,
-        no_global_memories_description: `No global personal memories found.`,
         no_server_data_title: `🟡 No Server Data Found`,
         no_server_data_description: `This server doesn't have any data stored in the database. Please run \`/config setup\` first.`,
-        no_persona_server_memories_description: `No server memories found for persona "{persona_name}".`,
         no_permission_title: `🔴 Permission Denied`,
         no_permission_description: `You need the **Manage Server** permission to delete server data.`,
       },
     },
-
-    // Preset commands
     persona: {
       description: `Manage personality presets`,
       attribute: {
@@ -1145,9 +620,6 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         description: `Export current personality as a shareable PNG file`,
         export_json_select_label: `Export JSON`,
         export_json_select_description: `Optional: export a readable JSON file`,
-        export_json_select_placeholder: `Default: No (PNG export)`,
-        export_json_choice_false: `No (PNG export)`,
-        export_json_choice_true: `Yes (JSON export)`,
         persona_modal_title: `Select Persona`,
         persona_select_label: `Persona`,
         persona_select_description: `Choose which persona to export.`,
@@ -1156,15 +628,15 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         alter_persona_description: `Alter Persona`,
         success_title: `🟢 Persona Exported Successfully`,
         success_description: `Current persona **{nickname}** has been exported! Share this PNG file with others to spread this personality configuration.`,
-        success_description_json: `Current persona **{nickname}** has been exported as a readable JSON file.\n\n**Note:** This JSON export is for reference only and cannot be imported.`,
+        success_description_json: `Current persona **{nickname}** has been exported as a readable JSON file.
+
+**Note:** This JSON export is for reference only and cannot be imported.`,
         json_non_importable_note: `This JSON export is for reference only and cannot be imported.`,
         failed_title: `🔴 Export Failed`,
-        failed_description: `Failed to export the persona. Please try again later.`,
         avatar_failed_title: `🔴 Avatar Download Failed`,
         avatar_failed_description: `Failed to download the persona avatar. Please try again later.`,
         embed_failed_title: `🔴 PNG Processing Failed`,
         embed_failed_description: `Failed to embed metadata into the PNG file. Please try again.`,
-        // Error messages from presetExport utility
         error_no_server_data: `Server not found in database. Please run /config setup first.`,
         error_no_preset_data: `Persona data not found. Please run /config setup first.`,
         error_validation_failed: `Failed to validate export data structure`,
@@ -1180,11 +652,11 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         memories_choice_fork: `No, start fresh user/server memories`,
         type_choice_main: `Main Persona (replaces current persona)`,
         type_choice_alter: `Alter Persona`,
-        confirmation_description: `WARNING: This will REPLACE your current personality settings. Continue?`,
-        confirmation_choice_yes: `Yes, replace my current persona`,
-        confirmation_choice_no: `No, cancel import`,
         success_title: `🟢 Persona Imported Successfully`,
-        success_description: `Successfully imported persona **{nickname}**!\nAttributes: {attribute_count}\nSample Dialogues: {dialogue_count}\nTrigger Words: {trigger_word_count}`,
+        success_description: `Successfully imported persona **{nickname}**!
+Attributes: {attribute_count}
+Sample Dialogues: {dialogue_count}
+Trigger Words: {trigger_word_count}`,
         success_confirmation: `Successfully imported main persona **{nickname}**! The detailed import information has been posted in the channel.`,
         nickname_update_success: `Server nickname has been updated.`,
         nickname_update_failed: `🟡 Server nickname could not be updated, likely due to Discord rate limits. Please change it manually instead.`,
@@ -1193,23 +665,25 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         avatar_update_rate_limited: `🟡 Server avatar was not updated due to Discord rate limits. Please change it manually instead.`,
         avatar_update_failed: `🟡 Server avatar could not be updated, likely due to Discord rate limits. Please change it manually instead.`,
         alter_success_title: `🟢 Alter Persona Imported Successfully`,
-        alter_success_description: `Successfully imported alter persona **{nickname}**!\nUnique Trigger Words: {trigger_count}\nTriggers: {triggers}\n\nThis persona will respond when these triggers appear in messages.`,
+        alter_success_description: `Successfully imported alter persona **{nickname}**!
+Unique Trigger Words: {trigger_count}
+Triggers: {triggers}
+
+This persona will respond when these triggers appear in messages.`,
         alter_success_confirmation: `Successfully imported alter persona **{nickname}** with {trigger_count} unique trigger words! The detailed import information has been posted in the channel.`,
         alter_avatar_fallback_main: `🟡 This import did not include an avatar image, so this alter is using **{nickname}**'s current main persona avatar as a fallback. You can use \`/server avatar\` to change it.`,
         alter_avatar_warning: `⚠️ Do not delete the avatar image embed above, or the alter persona avatar will be lost.`,
         alter_dm_not_allowed_title: `🔴 Alter Personas Not Allowed in DMs`,
         alter_dm_not_allowed_description: `Alter personas can only be imported in servers, not in Direct Messages. Please run this command in a server.`,
-        alter_no_triggers_error_title: `🔴 No Unique Triggers`,
-        alter_no_triggers_error_description: `All trigger words in this persona already exist in other personas.\nOverlapping triggers: {overlap}\n\nPlease edit the import file to add unique trigger words, or remove conflicting personas using \`/persona remove\`.`,
         alter_no_triggers_warning: `⚠️ This persona has no trigger words. It won't respond to any messages until you add triggers using \`/server trigger add\`.`,
         alter_name_conflict_title: `🔴 Persona Name Already Exists`,
-        alter_name_conflict_description: `A persona with the name **{name}** already exists on this server. Each persona must have a unique name.\n\nPlease edit the import file to use a different name, or remove the existing persona using \`/persona remove\`.`,
+        alter_name_conflict_description: `A persona with the name **{name}** already exists on this server. Each persona must have a unique name.
+
+Please edit the import file to use a different name, or remove the existing persona using \`/persona remove\`.`,
         alter_limit_title: `🔴 Persona Limit Reached`,
         alter_limit_description: `This server already has {current} personas. The maximum allowed is {max}. Please remove an alter with \`/persona remove\` before importing a new one.`,
         failed_title: `🔴 Import Failed`,
         failed_description: `Failed to import the persona. Please check the file and try again.`,
-        cancelled_title: `🔴 Import Cancelled`,
-        cancelled_description: `The import has been cancelled. No changes were made to my persona.`,
         invalid_file_type_title: `🔴 Invalid File Type`,
         invalid_file_type_description: `Please upload a valid .png or .json file containing persona data.`,
         file_too_large_title: `🔴 File Too Large`,
@@ -1225,8 +699,6 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         no_permission_title: `🔴 Permission Denied`,
         no_permission_description: `You need the **Manage Server** permission to import personas.`,
         error_download_timeout: `File download timed out. Please try again.`,
-        error_download_failed: `Failed to download preset file.`,
-        // Error messages from presetImport utility
         error_invalid_attribute: `Invalid attribute content: {details}`,
         error_invalid_dialogue_in: `Invalid sample dialogue (input): {details}`,
         error_invalid_dialogue_out: `Invalid sample dialogue (output): {details}`,
@@ -1245,9 +717,6 @@ I have built-in features to help reduce costs from abusers or spammers in your s
       },
       remove: {
         description: `Remove an alter persona from the server`,
-        confirmation_description: `Confirm scope: removes persona assets and persona-scoped data only.`,
-        confirmation_choice_confirm: `Confirm remove (keeps personal user memories)`,
-        confirmation_choice_cancel: `Cancel`,
         no_permission_title: `🔴 Permission Denied`,
         no_permission_description: `You need the **Manage Server** permission to remove alter personas.`,
         modal_title: `Remove Alter Persona`,
@@ -1268,7 +737,8 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         no_alters_error_title: `🟡 No Alter Personas`,
         no_alters_error_description: `There are no alter personas to swap with. Import alter personas using \`/persona import type:alter\`.`,
         success_title: `🟢 Personas Swapped Successfully`,
-        success_description: `**{new_main}** is now the main persona.\n**{old_main}** is now an alter persona.`,
+        success_description: `**{new_main}** is now the main persona.
+**{old_main}** is now an alter persona.`,
         nickname_update_success: `Server nickname has been updated.`,
         nickname_update_failed: `🟡 Server nickname could not be updated, likely due to Discord rate limits. Please change it manually instead.`,
         avatar_update_success: `Server avatar has been updated.`,
@@ -1292,15 +762,16 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         no_presets_description: `There are no personality presets available for your language. Please report through \`/support discord\`.`,
         preset_not_found: `The selected preset could not be found.`,
         success_title: `Preset Applied`,
-        success_description: `Successfully applied the '{preset_name}' preset.`,
-        success_details_description: `Successfully applied preset **{preset_name}** to persona **{nickname}**!\nAttributes: {attribute_count}\nSample Dialogues: {dialogue_count}\nTrigger Words ({trigger_word_count}): {triggers}`,
+        success_details_description: `Successfully applied preset **{preset_name}** to persona **{nickname}**!
+Attributes: {attribute_count}
+Sample Dialogues: {dialogue_count}
+Trigger Words ({trigger_word_count}): {triggers}`,
         success_confirmation: `Preset applied to **{nickname}**. Detailed information has been posted in this channel.`,
         avatar_update_failed: `🟡️ Server avatar could not be updated due to a Discord API error, but persona was applied successfully.`,
         avatar_update_skipped_dm: `Preset was applied successfully, except avatar updates which are not available in Direct Messages`,
       },
       generate: {
         description: `AI-powered personality generation (requires a compatible provider)`,
-        // Modal fields
         modal: {
           title: `Generate AI Personality`,
           character_name_label: `Character Name`,
@@ -1319,40 +790,53 @@ I have built-in features to help reduce costs from abusers or spammers in your s
           file_upload_label: `Character Image / Card (Optional)`,
           file_upload_description: `Upload an image, Tomori preset, or SillyTavern card PNG to generate or transform a character`,
         },
-        // Field labels for memory critical error preservation
         field_character_name: `Character Name`,
         field_character_info: `Character Info & Speech Examples`,
         field_web_search: `Search the Web?`,
         field_additional_inst: `Additional Instructions`,
-        // Error messages
         wrong_provider_title: `🔴 Incompatible Provider`,
         wrong_provider_description: `Preset generation requires a compatible provider. Your current provider is **{current_provider}**. Please use \`/config api-key set\` to switch providers.`,
         no_api_key_title: `🔴 No API Key`,
         no_api_key_description: `No API key configured. Please use \`/config api-key set\` to set up your provider API key.`,
         model_incompatible_title: `Incompatible Model`,
-        model_incompatible_description: `Your current model (**{model_name}**) does not support **STRUCTURED OUTPUT**, which is required for persona generation.\n\n**Next steps:**\nUse \`/config model text\` to switch to a model that supports structured output (e.g., models with "STRUCT" capability).`,
+        model_incompatible_description: `Your current model (**{model_name}**) does not support **STRUCTURED OUTPUT**, which is required for persona generation.
+
+**Next steps:**
+Use \`/config model text\` to switch to a model that supports structured output (e.g., models with "STRUCT" capability).`,
         image_vision_required_title: `🔴 Image Vision Required`,
-        image_vision_required_description: `You uploaded an image, but your current model (**{model_name}**) does not support **IMAGE VISION** and no vision model is configured.\n\n**Next steps:**\n1. Use \`/config model vision\` to set a dedicated vision model, OR\n2. Use \`/config model text\` to switch to a vision-capable model, OR\n3. Remove the image and regenerate without it`,
+        image_vision_required_description: `You uploaded an image, but your current model (**{model_name}**) does not support **IMAGE VISION** and no vision model is configured.
+
+**Next steps:**
+1. Use \`/config model vision\` to set a dedicated vision model, OR
+2. Use \`/config model text\` to switch to a vision-capable model, OR
+3. Remove the image and regenerate without it`,
         vision_model_provider_unsupported_title: `🔴 Vision Model Provider Unsupported`,
-        vision_model_provider_unsupported_description: `Your vision model (**{vision_model_name}**) is on provider **{vision_provider}**, which does not support persona preset generation.\n\n**Next steps:**\n1. Use \`/config model vision\` to set a vision model from a supported provider (Google, OpenRouter, DeepSeek, Z.ai, Custom, NVIDIA NIM), OR\n2. Use \`/config model text\` to switch your primary model to one that supports both vision and preset generation`,
+        vision_model_provider_unsupported_description: `Your vision model (**{vision_model_name}**) is on provider **{vision_provider}**, which does not support persona preset generation.
+
+**Next steps:**
+1. Use \`/config model vision\` to set a vision model from a supported provider (Google, OpenRouter, DeepSeek, Z.ai, Custom, NVIDIA NIM), OR
+2. Use \`/config model text\` to switch your primary model to one that supports both vision and preset generation`,
         web_search_tools_required_title: `🔴 Web Search Unavailable`,
-        web_search_tools_required_description: `You selected web search, but the current model (**{model_name}**) does not support **TOOLS**.\n\n**Next steps:**\n1. Use \`/config model text\` to switch to a tool-enabled model, OR\n2. Regenerate without web search (choose "No" when asked)`,
+        web_search_tools_required_description: `You selected web search, but the current model (**{model_name}**) does not support **TOOLS**.
+
+**Next steps:**
+1. Use \`/config model text\` to switch to a tool-enabled model, OR
+2. Regenerate without web search (choose "No" when asked)`,
         api_key_decrypt_failed_title: `🔴 API Key Error`,
         api_key_decrypt_failed_description: `Failed to decrypt API key. Please reconfigure using \`/config api-key set\`.`,
         invalid_image_title: `🔴 Invalid Image`,
         invalid_image_description: `Please upload a valid image file (PNG, JPG, JPEG, etc.).`,
-        image_download_failed_title: `🔴 Image Download Failed`,
-        image_download_failed_description: `Failed to download the attached image. Please try again.`,
         error_file_too_large: `Avatar image must be under 10 MB.`,
         error_download_timeout: `Avatar download timed out. Please try again.`,
         error_download_failed: `Failed to download avatar image.`,
-
-        // Processing
         processing_title: `Generating Personality...`,
-        processing_description: `This may take 1-2 minutes. Please wait while I generate the character...\n\nThis may produce unexpected results. You can regenerate if needed.`,
-        // Generation errors
+        processing_description: `This may take 1-2 minutes. Please wait while I generate the character...
+
+This may produce unexpected results. You can regenerate if needed.`,
         generation_failed_title: `🔴 Generation Failed`,
-        generation_failed_description: `Failed to generate personality: {error}\n\nPlease try again with different inputs or check your API key.`,
+        generation_failed_description: `Failed to generate personality: {error}
+
+Please try again with different inputs or check your API key.`,
         validation_failed_title: `🔴 Validation Failed`,
         validation_failed_description: `The generated personality data failed validation. Please try again.`,
         image_processing_failed_title: `🔴 Image Processing Failed`,
@@ -1361,16 +845,21 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         avatar_fetch_failed_description: `Failed to fetch the server avatar for export. Please try uploading an image instead.`,
         metadata_embed_failed_title: `🔴 Export Failed`,
         metadata_embed_failed_description: `Failed to embed personality data in the image. Please try again.`,
-        // Success
         success_title: `🟢 {character_name} Generated Successfully!`,
-        success_description: `I've generated a persona for **{character_name}**!\n**Attributes Preview:**\n{attribute_preview}\n**Sample Dialogues:**\n{dialogue_preview}`,
+        success_description: `I've generated a persona for **{character_name}**!
+**Attributes Preview:**
+{attribute_preview}
+**Sample Dialogues:**
+{dialogue_preview}`,
         success_next_steps_title: `Next Steps`,
-        success_next_steps_description: `1. Download the attached PNG file\n2. Use \`/persona import\` with the PNG to import this character\n3. Run \`/tool refresh\` on ongoing conversations to apply my new personality\n4. (Optional) Use \`/server avatar\` to change the avatar if desired`,
+        success_next_steps_description: `1. Download the attached PNG file
+2. Use \`/persona import\` with the PNG to import this character
+3. Run \`/tool refresh\` on ongoing conversations to apply my new personality
+4. (Optional) Use \`/server avatar\` to change the avatar if desired`,
         avatar_update_skipped_dm: `Please note that avatar and nickname updates are not available to import in Direct Messages.`,
       },
       create: {
         description: `Create a simple personality preset manually`,
-        // Modal fields
         modal: {
           title: `Create Persona`,
           character_name_label: `Character Name`,
@@ -1386,27 +875,21 @@ I have built-in features to help reduce costs from abusers or spammers in your s
           file_upload_label: `Character Image (Optional)`,
           file_upload_description: `Upload an image for the character export`,
         },
-        // Field labels for memory critical error preservation
         field_character_name: `Character Name`,
         field_character_desc: `Character Description`,
         field_example_user: `Example User Message`,
         field_example_bot: `Example Bot Reply`,
-        // Error messages
         invalid_image_title: `🔴 Invalid Image`,
         invalid_image_description: `Please upload a valid image file (PNG, JPG, JPEG, etc.).`,
-        image_download_failed_title: `🔴 Image Download Failed`,
-        image_download_failed_description: `Failed to download the attached image. Please try again.`,
         error_file_too_large: `Avatar image must be under 10 MB.`,
         error_download_timeout: `Avatar download timed out. Please try again.`,
         error_download_failed: `Failed to download avatar image.`,
-
         desc_too_long_title: `Description Too Long`,
         desc_too_long_description: `The character description is too long ({current_length} characters). Maximum allowed length is {max_allowed} characters.`,
         example_user_too_long_title: `Example User Message Too Long`,
         example_user_too_long_description: `The example user message is too long ({current_length} characters). Maximum allowed length is {max_allowed} characters.`,
         example_bot_too_long_title: `Example Bot Reply Too Long`,
         example_bot_too_long_description: `The example bot reply is too long ({current_length} characters). Maximum allowed length is {max_allowed} characters.`,
-
         validation_failed_title: `🔴 Validation Failed`,
         validation_failed_description: `The preset data failed validation. Please try again.`,
         image_processing_failed_title: `🔴 Image Processing Failed`,
@@ -1415,19 +898,20 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         avatar_fetch_failed_description: `Failed to fetch the server avatar for export. Please try uploading an image instead.`,
         metadata_embed_failed_title: `🔴 Export Failed`,
         metadata_embed_failed_description: `Failed to embed personality data in the image. Please try again.`,
-        // Success
         success_title: `🟢 {character_name} Created Successfully!`,
-        success_description: `Persona has been created for **{character_name}**!\n**Description:**\n{character_description}`,
+        success_description: `Persona has been created for **{character_name}**!
+**Description:**
+{character_description}`,
         success_dialogue_title: `Sample Dialogue`,
         success_next_steps_title: `Next Steps`,
-        success_next_steps_description: `1. Download the attached PNG file\n2. Use \`/persona import\` with the PNG to import this character\n3. Run \`/tool refresh\` on ongoing conversations to apply my new personality\n4. (Optional) Use \`/server avatar\` to change the avatar if desired`,
+        success_next_steps_description: `1. Download the attached PNG file
+2. Use \`/persona import\` with the PNG to import this character
+3. Run \`/tool refresh\` on ongoing conversations to apply my new personality
+4. (Optional) Use \`/server avatar\` to change the avatar if desired`,
         avatar_update_skipped_dm: `Please note that avatar and nickname updates are not available in Direct Messages.`,
       },
     },
-
-    // Help commands
     help: {
-      // /help features
       features: {
         description: `Shows what TomoriBot can do`,
         title: `TomoriBot Features (Version {version})`,
@@ -1498,57 +982,6 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - Available on Google, OpenRouter, and Z.ai providers (configure with \`/config model video\`)`,
         footer: `Not all features are available for all AI providers. Recommended: Google Gemini. You can also just ask me what I can do!`,
       },
-
-      // /help cost
-      cost: {
-        description: `Estimate API costs for paid AI providers`,
-        title: `Estimated API Costs`,
-        embed_description: `Here are **VERY ROUGH** estimated costs per trigger in a Discord channel when using paid AI providers. Costs are estimated using example **{provider}** costs (Input: {inputPrice}/M tokens, Output: {outputPrice}/M tokens)`,
-        current_context_description: `Estimated cost for your **current context only**. Input tokens are measured by the provider API using your current setup and recent channel history on **{provider}** model **{model}**. Output tokens remain estimated. Pricing used: Input {inputPrice}/M, Output {outputPrice}/M.`,
-        current_input_title: `Measured Input Tokens (Current Context)`,
-        current_input_value: `**Input:** {inputTokens} tokens\n**Input cost only:** ~{inputCost} per trigger`,
-        current_output_short_title: `Estimated Output: Short`,
-        current_output_typical_title: `Estimated Output: Typical`,
-        current_output_long_title: `Estimated Output: Long`,
-        current_output_band_value: `**Output estimate:** {outputTokens} tokens\n**Total estimate:** {totalTokens} tokens\n**Cost:** ~{costPerMessage} per trigger (~{costPer100} per 100 triggers)`,
-        current_footer: `Input token counts are provider-measured only for providers with live counting support. Output token counts are estimated only.`,
-        fallback_notice_title: `Live Counting Unavailable`,
-        fallback_notice_value: `Live provider token counting could not be used for your current setup, so this view is a rough fallback estimate.`,
-        minimum_scenario_title: `Minimum Scenario (Light Usage)`,
-        minimum_scenario_value: `**Context:** 1 user with 0 memories, 1 paragraph of persona, conversations are less than a sentence per message
-**Tokens:** {inputTokens} input + {outputTokens} output = {totalTokens} total
-**Cost:** ~{costPerMessage} per trigger (~{costPer100} per 100 triggers)`,
-        average_scenario_title: `Average Scenario (Moderate Usage)`,
-        average_scenario_value: `**Context:** 3 users with 10 memories each, ~16 paragraphs of persona (includes attributes & dialogues), conversations are 1-2 sentences per message
-**Tokens:** {inputTokens} input + {outputTokens} output = {totalTokens} total
-**Cost:** ~{costPerMessage} per trigger (~{costPer100} per 100 triggers)`,
-        maximum_scenario_title: `Maximum Scenario (Heavy Usage)`,
-        maximum_scenario_value: `**Context:** 5 users with 25 memories each, ~31 paragraphs of persona (includes attributes & dialogues), conversations are 2 paragraphs per message
-**Tokens:** {inputTokens} input + {outputTokens} output = {totalTokens} total
-**Cost:** ~{costPerMessage} per trigger (~{costPer100} per 100 triggers)`,
-        breakdown_title: `What Affects Cost?`,
-        breakdown_value: `**Input tokens (context sent to AI):**
-- Persona paragraphs (includes attributes & sample dialogues)
-- Server & personal memories
-- Enabled tools (if any)
-- User statuses & reminders
-- Recent conversation history (includes images, videos, stickers, emojis, embeds if provider supports)
-- Server emojis (10 constant)
-
-**Output tokens (AI response):**
-- Response length varies by query complexity
-- More detailed questions = longer responses = higher cost
-
-**Tips to reduce costs:**
-I have built-in features to help reduce costs from abusers or spammers in your server, but here are some additional tips:
-- Use fewer persona paragraphs (attributes & dialogues)
-- Keep memories concise
-- Use free AI providers (Google Gemini free tier)
-- Limit auto-trigger channels`,
-        footer: `Free providers like Google Gemini (free tier) and some OpenRouter models have no cost! NovelAI offers unlimited usage with a subscription. Use \`/help api-key\` to learn more.`,
-      },
-
-      // /help setup
       setup: {
         description: `Learn how to set up TomoriBot for the first time`,
         title: `Getting Started with TomoriBot`,
@@ -1590,8 +1023,6 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 
 Setting up TomoriBot means that you and your server members agree to its \`/legal terms\` and \`/legal privacy\` notices`,
       },
-
-      // /help matrix
       matrix: {
         description: `Learn how to set up and use the Matrix bridge`,
         title: `Matrix Bridge Guide`,
@@ -1624,8 +1055,6 @@ After the bot accepts an invite, it now posts a short reminder in the Matrix roo
 - Matrix encryption cannot be disabled later, so encrypted rooms must be replaced with a fresh unencrypted room
 - If a limitation is not listed above, assume it should work and report bugs in {supportServer}`,
       },
-
-      // /help data
       data: {
         description: `Learn about data management and privacy`,
         title: `Managing Your Data`,
@@ -1667,183 +1096,9 @@ Whenever I'm triggered, I fetch the **latest messages** in the text channel as w
 You may opt out of my Memory features by using the {personalPrivacy} command, as well as turn off my self-learning using the {configPermissions} command.`,
         footer: `Your chosen AI provider (Google, NovelAI, OpenRouter) processes your messages according to their own privacy policies. Never share personal information with me for privacy. For full details, see \`/legal privacy\` and \`/legal terms\``,
       },
-
-      // /help api-key
-      "api-key": {
-        description: `Learn how to set up API keys for AI providers`,
-        provider_description: `Choose your AI provider`,
-        provider_choice_brave: `Brave Search`,
-        provider_choice_google: `Google Gemini`,
-        provider_choice_deepseek: `DeepSeek`,
-        provider_choice_custom: `Custom Provider`,
-        provider_choice_nvidia: `NVIDIA NIM`,
-        provider_choice_novelai: `NovelAI`,
-        provider_choice_openrouter: `OpenRouter`,
-        provider_choice_zai: `Z.ai`,
-        provider_choice_zaicoding: `Z.ai (Coding)`,
-        provider_choice_vertex: `Google Vertex AI`,
-        provider_choice_anthropic: `Anthropic`,
-        provider_choice_elevenlabs: `ElevenLabs TTS`,
-        // Brave Search
-        brave_title: `Setting Up Brave Search API Key`,
-        brave_description: `Brave Search is optional and only enhances my search capabilities. It does NOT power my AI as that's handled by your main provider.
-- Enables image, video, and news search
-- Provides real-time information from the internet
-- Enhances my ability to answer current questions`,
-        brave_getting_key_title: `Getting Your API Key:`,
-        brave_getting_key_description: `1. Visit [Brave Search API](https://brave.com/search/api/)
-2. Sign up for a free account
-3. Navigate to your [API Keys](https://api-dashboard.search.brave.com/app/keys) section in the Dashboard
-4. Create a new API key
-5. Copy and input your API key using the {configBraveapiSet} command`,
-        brave_important_title: `Important Notes:`,
-        brave_important_description: `- This is separate from your main AI provider
-- Without Brave API key, I can still function and use built-in web search
-- Brave includes $5 in free monthly credits, but usage above that can be billed. If you only want the free tier, set a $5 usage limit in the [Brave usage limits dashboard](https://api-dashboard.search.brave.com/app/subscriptions/usage-limits)`,
-        brave_footer: `For setting up your main AI provider, use the other \`/help api-key\` options`,
-        // Google Gemini
-        google_title: `Setting Up Google Gemini API Key`,
-        google_description: `Google Gemini offers free and paid tiers with powerful AI models.
-- Free tier available
-- [Gemini Privacy Policy](https://ai.google.dev/gemini-api/terms)`,
-        google_getting_key_title: `Getting Your API Key:`,
-        google_getting_key_description: `1. Visit [Google AI Studio](https://aistudio.google.com/apikey)
-2. Click \`Create API Key\` on the top-right (create a new Project if needed)
-3. Copy this API key into {configSetup} or {configApikeySet}`,
-        google_footer: `After setting up this provider, you may change its default model with {configModel}`,
-        // DeepSeek
-        deepseek_title: `Setting Up DeepSeek API Key`,
-        deepseek_description: `DeepSeek is a pay-as-you-go text provider.
-- [DeepSeek API Docs](https://api-docs.deepseek.com/)`,
-        deepseek_getting_key_title: `Getting Your API Key:`,
-        deepseek_getting_key_description: `1. Visit [DeepSeek API Keys](https://platform.deepseek.com/api_keys)
-2. Sign in or create a DeepSeek platform account
-3. Create a new API key
-4. If needed, add credits in your DeepSeek platform account before use
-5. Copy this API key into {configSetup} or {configApikeySet}`,
-        deepseek_footer: `After setting up this provider, you may change its default model with {configModel}`,
-        // Custom Provider
-        custom_title: `Custom Provider Setup`,
-        custom_description: `Connect to any OpenAI-compatible endpoint: Ollama, vLLM, LiteLLM, OneAPI, KoboldCPP, and more.
-
-**Endpoint URL**
-Enter your base URL in the API Key field when selecting the Custom provider.
-Example: \`https://my-server.com/v1\`
-\`/chat/completions\` is appended automatically. Do not add it yourself.
-In production the URL must be **HTTPS** and publicly reachable (no localhost or private IPs).
-
-**Model Name**
-Set during the capabilities prompt after entering the URL. Enter the exact name your endpoint expects, e.g. \`gemma3:latest\` for Ollama or the model ID your proxy uses.
-Sent as the \`model\` field in every request.
-
-**API Key / Bearer Token**
-Optional. After setup, use \`/config api-key set\` or \`/config provider switch\` to store a Bearer token.
-If set, it is sent as \`Authorization: Bearer {token}\` with every request.
-Leave unset for endpoints that require no authentication (e.g. local Ollama).`,
-        // NVIDIA NIM
-        nvidia_title: `Setting Up NVIDIA NIM API Key`,
-        nvidia_description: `NVIDIA NIM provides hosted text, embedding, and image APIs through NVIDIA Build.`,
-        nvidia_getting_key_title: `Getting Your API Key:`,
-        nvidia_getting_key_description: `1. Visit [NVIDIA Build](https://build.nvidia.com/)
-2. Sign in or create an NVIDIA developer account
-3. Create or manage your API keys from the [API Keys page](https://build.nvidia.com/settings/api-keys)
-4. Copy this API key into {configSetup} or {configApikeySet}`,
-        nvidia_important_title: `Important Notes:`,
-        nvidia_important_description: `- Text and embeddings use NVIDIA's hosted \`integrate.api.nvidia.com\` surface
-- Native image generation uses NVIDIA's hosted \`ai.api.nvidia.com\` Stability endpoint`,
-        nvidia_footer: `After setting up this provider, you may change text, embedding, and image models with {configModel}, {configModelEmbedding}, and {configModelImage}`,
-        // Z.ai
-        zai_title: `Setting Up Z.ai API Key`,
-        zai_description: `Z.ai provides access to the GLM family through a general API and a separate coding endpoint.`,
-        zai_getting_key_title: `Getting Your API Key:`,
-        zai_getting_key_description: `1. Visit the [Z.ai Platform](https://z.ai)
-2. Sign in or create an account
-3. Navigate to API Keys in your dashboard
-4. Create a new API key
-5. Copy this API key into {configSetup} or {configApikeySet}`,
-        zai_important_title: `Important Notes:`,
-        zai_important_description: `- Use the general endpoint for normal chat, reasoning, and native image generation
-  - The dedicated Coding endpoint is separate and intended for coding-specific workflows`,
-        zai_footer: `After setting up this provider, you may change its default model with {configModel}`,
-        // NovelAI
-        novelai_title: `Setting Up NovelAI API Key`,
-        novelai_description: `NovelAI is a subscription-based service focused on creative storytelling and roleplay.
- - Unlimited uncensored messages
- - Currently only supports text generation (no vision or assistant features)
-- [NovelAI Terms of Service](https://novelai.net/terms)`,
-        novelai_getting_key_title: `Getting Your API Key:`,
-        novelai_getting_key_description: `1. Visit [NovelAI](https://novelai.net/stories)
-2. Navigate to settings through the ⚙️ icon on the top-left
-3. Go to \`Account\`
-4. Look for \`Get Persistent API Token\` (subscription required!)
-5. Copy this API key into {configSetup} or {configApikeySet}`,
-        novelai_footer: `After setting up this provider, you may change its default model with {configModel}`,
-        // OpenRouter
-        openrouter_title: `Setting Up OpenRouter API Key`,
-        openrouter_description: `OpenRouter provides access to multiple AI models from different providers on a pay-as-you-go basis.
- - Access to latest and most powerful AI models (some are free)
- - [OpenRouter Terms of Service](https://openrouter.ai/terms)`,
-        openrouter_getting_key_title: `Getting Your API Key:`,
-        openrouter_getting_key_description: `1. Visit [OpenRouter](https://openrouter.ai/settings/keys)
-2. Click \`Create API Key\`
-3. Copy this API key {configSetup} or {configApikeySet}`,
-        openrouter_important_title: `Important Notes:`,
-        openrouter_important_description: `- **Free models have strict rate limits**; paid models are usually more reliable
-- **Always check pricing** before selecting a model
-- Your OpenRouter account settings still apply here
-- If you need a model that is not listed, suggest it in {supportServer}`,
-        openrouter_footer: `After setting up this provider, you may change its default model with {configModel}`,
-        // Vertex AI
-        vertex_title: `Setting Up Google Vertex AI`,
-        vertex_description: `Google Vertex AI provides enterprise-grade access to Gemini models through Google Cloud.
-- Uses Application Default Credentials (ADC) for authentication — no API key to manage
-- Supports chat, tool calling, streaming, structured output, compaction, embeddings, and preset generation
-- Best for self-hosted or trusted deployments where the bot runs with a GCP identity
-- [Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)`,
-        vertex_getting_key_title: `Configuration:`,
-        vertex_getting_key_description: `1. Ensure you have a Google Cloud project with the Vertex AI API enabled
-2. Set up Application Default Credentials on the host machine:
-   - **Service account**: Attach a service account to your VM/container with Vertex AI access
-   - **Local dev**: Run \`gcloud auth application-default login\`
-   - **Env var**: Set \`GOOGLE_APPLICATION_CREDENTIALS\` to your service account key file
-3. Enter your configuration as \`{project_id}::{location}\` using {configSetup} or {configApikeySet}
-   - Example: \`my-gcp-project::us-central1\``,
-        vertex_important_title: `Important Notes:`,
-        vertex_important_description: `- The stored value is **configuration** (project + location), not a credential secret
-- All Vertex requests use the host's ADC identity — there is no per-server credential isolation
-- This provider is intended for self-hosted or trusted private deployments
-- Supports chat, tool calling, streaming, structured output, compaction, embeddings, and preset generation`,
-        vertex_footer: `After setting up this provider, you may change its default model with {configModel}`,
-        // Anthropic
-        anthropic_title: `Setting Up Anthropic API Key`,
-        anthropic_description: `Anthropic provides direct access to Claude models with high-quality reasoning and creative capabilities.
-- Supports chat, tool calling, streaming, structured output, compaction, and preset generation
-- Claude models support vision (image inputs) and extended thinking for complex reasoning
-- Pay-as-you-go pricing with no subscription required
-- [Anthropic API Documentation](https://docs.anthropic.com/en/docs)`,
-        anthropic_getting_key_title: `Getting Your API Key:`,
-        anthropic_getting_key_description: `1. Visit [Anthropic Console](https://console.anthropic.com/settings/keys)
-2. Sign in or create an Anthropic account
-3. Create a new API key
-4. Copy this API key into {configSetup} or {configApikeySet}`,
-        anthropic_model_notes_title: `Model Notes:`,
-        anthropic_model_notes_description: `- \`claude-sonnet-4-6\` is the default model — best balance of quality, speed, and cost
-- \`claude-haiku-4-5\` is fast and cost-efficient for general tasks
-- \`claude-opus-4-6\` is the highest quality model with extended thinking for complex reasoning
-- You can switch between available Claude models after setup with {configModel}`,
-        anthropic_pricing_title: `Pricing:`,
-        anthropic_pricing_description: `- Pricing is per-token, varies by model
-- Check [Anthropic Pricing](https://www.anthropic.com/pricing) for current rates
-- Sonnet offers the best value for most use cases`,
-        anthropic_footer: `After setting up this provider, you may change its default model with {configModel}`,
-      },
-
-      // /help elevenlabs
       elevenlabs: {
         description: `Learn how to set up ElevenLabs text-to-speech`,
         title: `Setting Up ElevenLabs TTS`,
-        what_is_title: `What is ElevenLabs?`,
-        what_is_description: `ElevenLabs is an optional text-to-speech (TTS) provider.`,
         getting_key_title: `Getting Your API Key:`,
         getting_key_description: `1. Visit [ElevenLabs](https://elevenlabs.io/app/settings/api-keys)
 2. Sign up or sign in to your account
@@ -1860,8 +1115,6 @@ Leave unset for endpoints that require no authentication (e.g. local Ollama).`,
 - Remove your API key anytime using {optionalkeyElevenlabsRemove}`,
         footer: `Remove your API key anytime using {optionalkeyElevenlabsRemove}`,
       },
-
-      // /help memory
       memory: {
         description: `Learn about TomoriBot's memory system`,
         title: `How My Memory Works`,
@@ -1903,11 +1156,8 @@ Leave unset for endpoints that require no authentication (e.g. local Ollama).`,
 - Clear your user-specific STM with {personalStmClear}
 - STM expires automatically over time`,
       },
-
-      // /help customization
       customization: {
         description: `Learn how to customize TomoriBot's personality and behavior`,
-        // Embed 1: Overview + Personas
         embed1_title: `Customizing TomoriBot`,
         embed1_description: `TomoriBot is highly customizable! This is about **how I behave** (personality, tone, settings). For **what I remember** (facts, memories), see {helpMemory} instead!`,
         embed1_personas_title: `Personality Personas`,
@@ -1929,7 +1179,6 @@ Leave unset for endpoints that require no authentication (e.g. local Ollama).`,
 - Behavior and tone settings
 - Alter personas: separate characters with their own triggers, webhook avatar, and personality`,
         embed1_footer: `Next: Teaching Commands`,
-        // Embed 2: Teaching System
         embed2_title: `Teaching Commands`,
         embed2_description: `Fine-tune my personality and knowledge:
 
@@ -1956,7 +1205,6 @@ Use \`{user}\` and \`{bot}\` placeholders in your examples:
 - Add variety to help me learn better
 - Use placeholders so dialogues work for everyone when sharing me with \`/persona export\``,
         embed2_footer: `Next: Configuration`,
-        // Embed 3: Configuration & Management
         embed3_title: `Configuration & Management`,
         embed3_description: `**Remove personality customizations:**
 - {personaAttributeRemove} - Remove specific personality attributes
@@ -1987,7 +1235,6 @@ Documents:
 - {memoryDocumentAdd} - Upload a document for me to reference
 - {memoryDocumentRemove} - Remove an uploaded document`,
         embed3_footer: `Next: Bot Settings`,
-        // Embed 4: Advanced Settings
         embed4_title: `Advanced Settings`,
         embed4_description: `**Personal bot settings:**
 AI Settings:
@@ -2022,7 +1269,6 @@ Personalization:
 Document Knowledge Base:
 - {configModelEmbedding} - Configure an embedding model for document uploads and RAG`,
         embed4_footer: `If you have any more questions, join the support server with /support discord`,
-        // Embed 5: Pro Tips
         embed5_title: `Pro Tips`,
         embed5_description: `- Start with a persona (default or generated) as a foundation
 - Use \`/persona attribute add\` for quick personality tweaks
@@ -2034,8 +1280,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
 - Test changes by chatting, iterate until it feels right
 - Export your persona to back it up or share with other servers!`,
       },
-
-      // /help updates
       updates: {
         description: `View the latest TomoriBot release notes`,
         title: `TomoriBot {version} Released!`,
@@ -2044,25 +1288,40 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         fetch_error_title: `Unable to Fetch Latest Release`,
         fetch_error_description: `Something went wrong while fetching the latest release information from GitHub. Please try again later or check the [GitHub Releases](https://github.com/Bredrumb/TomoriBot/releases) page directly.`,
       },
-
-      // /help mcp
       mcp: {
         description: `Learn how to add and manage MCP tool servers`,
         title: `MCP Server Setup Guide`,
         description_text: `MCP (Model Context Protocol) servers extend Tomori's capabilities with external tools. Here's how to get started.`,
         online_title: `Adding an Online MCP`,
-        online_description: `Any publicly hosted MCP server with an HTTPS endpoint can be added, Smithery.ai is one example source.\n\n**Using Smithery.ai:**\n**1.** Visit [smithery.ai](https://smithery.ai), create an account, and generate an API key from your profile.\n**2.** Browse the catalog and open an MCP you want. Copy the **connection URL** shown on its page (e.g. \`https://youtube.run.tools\`).\n**3.** Run {configMcpAdd}. Paste the connection URL into the **URL** field. In the **Auth Token** field, paste your Smithery API key.\n\n**Using other sources:**\nIf an MCP server requires no authentication, leave the **Auth Token** field blank. Some servers may use a different auth format — check the server's documentation for details.\n\nYour auth token is encrypted at rest and never shown in plain text after saving.`,
+        online_description: `Any publicly hosted MCP server with an HTTPS endpoint can be added, Smithery.ai is one example source.
+
+**Using Smithery.ai:**
+**1.** Visit [smithery.ai](https://smithery.ai), create an account, and generate an API key from your profile.
+**2.** Browse the catalog and open an MCP you want. Copy the **connection URL** shown on its page (e.g. \`https://youtube.run.tools\`).
+**3.** Run {configMcpAdd}. Paste the connection URL into the **URL** field. In the **Auth Token** field, paste your Smithery API key.
+
+**Using other sources:**
+If an MCP server requires no authentication, leave the **Auth Token** field blank. Some servers may use a different auth format — check the server's documentation for details.
+
+Your auth token is encrypted at rest and never shown in plain text after saving.`,
         local_title: `Adding a Local MCP (Self-Hosted Only)`,
-        local_description: `Local MCP servers are **only supported on self-hosted TomoriBot instances**. The public hosted bot requires HTTPS and blocks local/private addresses for security.\n\nIf you are running your own instance, point the URL to your local server (e.g. \`http://localhost:3000/sse\`). No auth token is needed for local servers.`,
+        local_description: `Local MCP servers are **only supported on self-hosted TomoriBot instances**. The public hosted bot requires HTTPS and blocks local/private addresses for security.
+
+If you are running your own instance, point the URL to your local server (e.g. \`http://localhost:3000/sse\`). No auth token is needed for local servers.`,
         removing_title: `Removing an MCP Server`,
         removing_description: `Use {configMcpRemove} to unregister a server at any time. Removing it immediately disconnects the server and frees up a slot for a new one.`,
         security_title: `Security Warning`,
-        security_description: `**Only add MCP servers you trust.**\n\nA malicious MCP server can:\n- **Prompt-inject** me by sending hidden instructions that override her behavior\n- **Exfiltrate data** that users pass to its tools (messages, file content, etc.)\n- Return **harmful or false results** that Tomori will relay to your server\n\nTreat MCP servers with the same caution as browser extensions or third-party apps. If in doubt, do not add it.`,
+        security_description: `**Only add MCP servers you trust.**
+
+A malicious MCP server can:
+- **Prompt-inject** me by sending hidden instructions that override her behavior
+- **Exfiltrate data** that users pass to its tools (messages, file content, etc.)
+- Return **harmful or false results** that Tomori will relay to your server
+
+Treat MCP servers with the same caution as browser extensions or third-party apps. If in doubt, do not add it.`,
         footer: `Always review an MCP's described tools before adding it.`,
       },
     },
-
-    // Legal commands
     legal: {
       privacy: {
         description: `View TomoriBot's Privacy Policy`,
@@ -2083,31 +1342,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         link_title: `Full AGPLv3 License`,
       },
     },
-
-    // NovelAI image generation commands
     novelai: {
-      "character-reference": {
-        description: `Upload or clear a NovelAI character reference image for yourself or a persona.`,
-        target_description: `Choose whether to update your own profile or a server persona.`,
-        target_choice_me: `Me`,
-        target_choice_persona: `Persona`,
-        image_description: `Reference image to store. Leave empty to clear the current image.`,
-        persona_select_title: `Select Persona`,
-        invalid_image_title: `Invalid Image`,
-        invalid_image_description: `Please upload an image attachment for the character reference.`,
-        download_failed_title: `Download Failed`,
-        download_failed_description: `Failed to download the selected image attachment. Please try again.`,
-        conversion_failed_title: `Image Conversion Failed`,
-        conversion_failed_description: `I couldn't convert that image to PNG for storage. Please try a different image.`,
-        success_title: `Character Reference Updated`,
-        success_me_description: `Updated your NovelAI character reference image.`,
-        success_persona_description: `Updated the NovelAI character reference image for **{persona_name}**.`,
-        cleared_title: `Character Reference Cleared`,
-        cleared_me_description: `Cleared your NovelAI character reference image.`,
-        cleared_persona_description: `Cleared the NovelAI character reference image for **{persona_name}**.`,
-      },
       tags: {
-        description: `Manage NovelAI tag configuration for server, persona, and user profiles.`,
         style: {
           description: `Configure server-wide NovelAI style tags for image generation.`,
           modal_title: `Style Tags`,
@@ -2121,9 +1357,15 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           tag_too_long_title: `Tag Too Long`,
           tag_too_long_description: `Each style tag must be {max_length} characters or less.`,
           success_title: `Style Tags Updated`,
-          success_description: `Updated server-wide style tags:\n\`\`\`\n{tag_list}\n\`\`\``,
+          success_description: `Updated server-wide style tags:
+\`\`\`
+{tag_list}
+\`\`\``,
           cleared_title: `Style Tags Reset`,
-          cleared_description: `Reset server-wide style tags to the defaults:\n\`\`\`\n{tag_list}\n\`\`\``,
+          cleared_description: `Reset server-wide style tags to the defaults:
+\`\`\`
+{tag_list}
+\`\`\``,
         },
         negative: {
           description: `Configure server-wide NovelAI negative tags for image generation.`,
@@ -2138,9 +1380,15 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           tag_too_long_title: `Tag Too Long`,
           tag_too_long_description: `Each negative tag must be {max_length} characters or less.`,
           success_title: `Negative Tags Updated`,
-          success_description: `Updated server-wide negative tags:\n\`\`\`\n{tag_list}\n\`\`\``,
+          success_description: `Updated server-wide negative tags:
+\`\`\`
+{tag_list}
+\`\`\``,
           cleared_title: `Negative Tags Reset`,
-          cleared_description: `Reset server-wide negative tags to the defaults:\n\`\`\`\n{tag_list}\n\`\`\``,
+          cleared_description: `Reset server-wide negative tags to the defaults:
+\`\`\`
+{tag_list}
+\`\`\``,
         },
         me: {
           description: `Configure your personal NovelAI character tags.`,
@@ -2155,7 +1403,10 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           tag_too_long_title: `Tag Too Long`,
           tag_too_long_description: `Each character tag must be {max_length} characters or less.`,
           success_title: `Character Tags Updated`,
-          success_description: `Updated your NovelAI character tags:\n\`\`\`\n{tag_list}\n\`\`\``,
+          success_description: `Updated your NovelAI character tags:
+\`\`\`
+{tag_list}
+\`\`\``,
           cleared_title: `Character Tags Cleared`,
           cleared_description: `Cleared your personal NovelAI character tags.`,
         },
@@ -2175,7 +1426,10 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           tag_too_long_title: `Tag Too Long`,
           tag_too_long_description: `Each tag must be {max_length} characters or less.`,
           success_title: `Character Tags Updated`,
-          success_description: `Updated character tags for **{persona_name}**:\n\`\`\`\n{tag_list}\n\`\`\``,
+          success_description: `Updated character tags for **{persona_name}**:
+\`\`\`
+{tag_list}
+\`\`\``,
           cleared_title: `Character Tags Cleared`,
           cleared_description: `Cleared all character tags for **{persona_name}**.`,
         },
@@ -2203,23 +1457,17 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           prompt_label: `Prompt Tags`,
           prompt_modal_description: `Imageboard-style tags for the main scene.`,
           prompt_placeholder: `e.g. 1girl, solo, cafe, window light, detailed eyes`,
-          prompt_description: `Imageboard-style tags for the scene (e.g., 1girl, solo, cafe, window light, detailed eyes).`,
           negative_tags_label: `Extra Negative Tags`,
           negative_tags_modal_description: `Optional extra negatives for this generation only.`,
           negative_tags_placeholder: `e.g. blurry, text, watermark, extra fingers`,
-          orientation_description: `Choose portrait, landscape, or square framing.`,
           orientation_label: `Orientation`,
           orientation_modal_description: `Choose the image framing.`,
           orientation_choice_portrait: `Portrait`,
           orientation_choice_landscape: `Landscape`,
           orientation_choice_square: `Square`,
-          negative_tags_description: `Optional extra negative tags to append for this generation only.`,
           character_reference_label: `Character Reference`,
           character_reference_modal_description: `Optional reference image for a single character.`,
-          character_reference_description: `Optional reference image to guide a single character's appearance on V4 models.`,
           success_title: `NovelAI Image Generated`,
-          success_notice_title: `Image Posted`,
-          success_notice_description: `Generated the NovelAI image and posted it in the channel.`,
           field_prompt: `Prompt Tags`,
           field_model: `Model`,
           field_generation_time: `Generation Time`,
@@ -2238,7 +1486,10 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           rate_limit_error_title: `NovelAI Rate Limited`,
           rate_limit_error_description: `NovelAI rate-limited the image request. Wait a moment and try again.`,
           error_title: `NovelAI Image Generation Failed`,
-          error_description: `NovelAI could not generate the image.\n\`\`\`\n{error}\n\`\`\``,
+          error_description: `NovelAI could not generate the image.
+\`\`\`
+{error}
+\`\`\``,
         },
         model: {
           description: `Choose which NovelAI diffusion model the NovelAI image tool should use for this server.`,
@@ -2256,7 +1507,12 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           already_selected_title: `Model Already Selected`,
           already_selected_description: `NovelAI image model mode is already **{mode}**.`,
           success_title: `NovelAI Image Model Updated`,
-          success_description: `NovelAI image model behavior for this server:\n\`\`\`\nMode: {mode}\nEffective model: {effective_model}\nSource: {source}\n\`\`\``,
+          success_description: `NovelAI image model behavior for this server:
+\`\`\`
+Mode: {mode}
+Effective model: {effective_model}
+Source: {source}
+\`\`\``,
           source_override: `NovelAI model override`,
           source_shared: `Shared image model (/config model image)`,
           source_default: `NovelAI default model`,
@@ -2268,8 +1524,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           sampler_description: `Choose a sampler to change it. Leave it unselected to keep the current value.`,
           sampler_placeholder_current: `Current override: {sampler}`,
           sampler_placeholder_default: `No override set`,
-          sampler_option_env_default_label: `Use Default`,
-          sampler_option_env_default_desc: `Clear the server override for sampler.`,
           option_default_suffix: ` (Default)`,
           sampler_option_k_euler_ancestral: `Euler Ancestral`,
           sampler_option_k_euler: `Euler`,
@@ -2287,8 +1541,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           noise_schedule_description: `Choose a noise schedule to change it. Leave it unselected to keep the current value.`,
           noise_schedule_placeholder_current: `Current override: {noise_schedule}`,
           noise_schedule_placeholder_default: `No override set`,
-          noise_schedule_option_default_label: `Use Default`,
-          noise_schedule_option_default_desc: `Clear the server override for noise schedule.`,
           noise_schedule_option_karras: `Karras`,
           noise_schedule_option_exponential: `Exponential`,
           noise_schedule_option_polyexponential: `Polyexponential`,
@@ -2306,14 +1558,20 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           invalid_cfg_rescale_title: `Invalid Prompt Guidance Rescale`,
           invalid_cfg_rescale_description: `Prompt Guidance Rescale must be a number between {min} and {max}.`,
           success_title: `Image Generation Params Updated`,
-          success_description: `Effective NovelAI image generation parameters for this server:\n\`\`\`\nSampler: {sampler}\nSteps: {steps}\nPrompt Guidance: {scale}\nNoise schedule: {noise_schedule}\nPrompt Guidance Rescale: {cfg_rescale}\n\`\`\``,
+          success_description: `Effective NovelAI image generation parameters for this server:
+\`\`\`
+Sampler: {sampler}
+Steps: {steps}
+Prompt Guidance: {scale}
+Noise schedule: {noise_schedule}
+Prompt Guidance Rescale: {cfg_rescale}
+\`\`\``,
         },
       },
       attg: {
         description: `Configure Author/Title/Tags/Genre/Stars metadata for NovelAI Kayra and Erato prompts.`,
         modal_title: `ATTG Configuration`,
         persona_select_title: `Select a Persona`,
-        persona_select_description: `Choose which persona to configure ATTG metadata for.`,
         author_label: `Author`,
         author_placeholder: `e.g. Jane Doe`,
         title_label: `Title`,
@@ -2324,7 +1582,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         genre_placeholder: `e.g. fantasy, slice of life`,
         stars_label: `Stars (Erato only)`,
         stars_placeholder: `1-5`,
-        stars_description: `Quality rating for Erato model prompts (1-5). Leave empty to clear.`,
         invalid_stars_title: `Invalid Stars Value`,
         invalid_stars_description: `Stars must be a whole number between 1 and 5, or left empty.`,
         success_title: `ATTG Metadata Updated`,
@@ -2333,8 +1590,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         cleared_description: `Cleared all ATTG metadata for **{persona_name}**.`,
       },
     },
-
-    // Bot manual control commands
     bot: {
       generate: {
         description: `Quick manual bot generation commands that act on the current channel scene.`,
@@ -2344,8 +1599,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           missing_permissions_description: `I need permission to view this channel, read message history, send messages, and attach files before I can generate a scene image here.`,
           cooldown_active: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot generate image\` again. This cooldown is shared with message triggers and other manual /bot actions.`,
           channel_not_whitelisted: `This server has whitelist restrictions active. \`/bot generate image\` can only be used in whitelisted channels by members with whitelisted roles.`,
-          no_messages_title: `No Scene Context Found`,
-          no_messages_description: `I couldn't find enough recent channel context to plan a scene image here. Send a few messages first, then try \`/bot generate image\` again.`,
           no_backend_title: `No Image Backend Available`,
           no_backend_description: `I couldn't find a usable image backend for this server right now. Configure **{current_provider}** with a valid image model, or add a NovelAI optional key if you want to use the NovelAI renderer instead.`,
           planner_unavailable_title: `No Planning Model Available`,
@@ -2401,11 +1654,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         embed_hide_notice: `Tip: You can hide this embed by enabling the "Hide Response Embeds" permission via \`/config bot-permissions\`.`,
         use_reasoning_label: `Use Reasoning`,
         use_reasoning_description: `Toggle advanced reasoning mode using the smartest available model.`,
-        use_reasoning_placeholder: `Select reasoning mode...`,
-        use_reasoning_yes: `Yes`,
-        use_reasoning_yes_description: `Use the smartest reasoning model for a more thorough response.`,
-        use_reasoning_no: `No`,
-        use_reasoning_no_description: `Use the standard model for a normal response.`,
         no_smart_model_title: `No Reasoning Model Found`,
         no_smart_model_description: `No reasoning model found for your current AI provider. Please switch to a provider that supports reasoning models using \`/config api-key set\`.`,
         no_messages_title: `No Messages Found`,
@@ -2424,14 +1672,11 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         description: `Impersonate personas, users, or inject system prompts.`,
         target_description: `Choose who or what to impersonate.`,
         target_persona: `Persona`,
-        target_me: `Me`,
         target_user: `User`,
         target_system: `System`,
         user_select_title: `Select User`,
         user_select_description: `Choose a user to impersonate.`,
         user_select_placeholder: `Select a user to impersonate...`,
-
-        // Persona impersonation
         persona_modal_title: `Impersonate Persona`,
         persona_select_label: `Choose Persona`,
         persona_select_placeholder: `Select persona to impersonate...`,
@@ -2443,8 +1688,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         persona_impersonation_notice_footer: `Impersonation by {user}`,
         user_impersonation_notice_description: `Hide this embed via \`/config bot-permissions\`. To teach me how to impersonate you, set \`/personal impersonate prompt\`.`,
         user_impersonation_notice_footer: `{user} triggered a {target} impersonation`,
-
-        // User impersonation
         me_success_title: `User Impersonation Triggered`,
         me_success_description: `Generated message as {user}.`,
         no_messages_title: `No Messages Found`,
@@ -2453,17 +1696,13 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         cooldown_active_user: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot impersonate user\` again. This cooldown is shared with message triggers and \`/bot respond\`.`,
         channel_not_whitelisted: `This server has whitelist restrictions active. \`/bot impersonate me\` can only be used in whitelisted channels by members with whitelisted roles.`,
         channel_not_whitelisted_user: `This server has whitelist restrictions active. \`/bot impersonate user\` can only be used in whitelisted channels by members with whitelisted roles.`,
-
-        // System impersonation
         system_modal_title: `System Prompt Injection`,
         system_content_label: `System Prompt`,
         system_content_placeholder: `Enter system instructions...`,
-        system_title: `System Message`, // This is the embed title that triggers detection
+        system_title: `System Message`,
         system_injected_footer: `Injected by {user}`,
         system_success_title: `System Prompt Injected`,
         system_success_description: `System prompt has been injected into the conversation. The bot will see this instruction in subsequent messages.`,
-
-        // Errors
         missing_permissions_title: `Missing Permissions`,
         missing_permissions_description: `I don't have permission to send messages or manage webhooks in this channel.`,
         webhook_error_title: `Webhook Error`,
@@ -2472,7 +1711,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         no_personas_description: `No personas are configured for this server. Use \`/config setup\` first.`,
       },
     },
-
     conditioning: {
       description: `Manage persistent reward and punishment conditioning memories.`,
       reward: {
@@ -2486,21 +1724,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         reason_line: `Reason: \`\`{reason}\`\``,
         reward_footer: `❤️ {bot} will remember this. Use /conditioning to manage.`,
         punish_footer: `💀 {bot} will remember this. Use /conditioning to manage.`,
-        type_reward: `reward conditioning`,
-        type_punish: `punishment conditioning`,
-      },
-      toggle: {
-        description: `Enable or disable conditioning prompt injection for all personas in this server.`,
-        type_description: `Which conditioning type to manage.`,
-        type_choice_reward: `Rewards`,
-        type_choice_punish: `Punishments`,
-        enabled_description: `Whether this conditioning type should be injected into prompt context.`,
-        already_title: `No Change Needed`,
-        already_enabled_description: `Server-wide {type_label} is already enabled for all personas.`,
-        already_disabled_description: `Server-wide {type_label} is already disabled for all personas. New records are still stored.`,
-        success_title: `Conditioning Updated`,
-        enabled_success_description: `Enabled stored {type_label} prompt injection for all {persona_count} personas in this server.`,
-        disabled_success_description: `Disabled stored {type_label} prompt injection for all {persona_count} personas in this server. New records will still be stored.`,
       },
       manage: {
         description: `Manage injected conditioning history across all personas in this server.`,
@@ -2511,7 +1734,10 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         too_many_title: `Too Many Entries`,
         too_many_description: `Found {total_entries} entries across {total_pages} pages. The current limit is {max_pages} pages.`,
         select_page_title: `Select a Conditioning Page`,
-        select_page_description: `Select which page of injected conditioning entries to manage.\nEntries: {total_entries}\nPages: {total_pages}\nEach entry shows the persona and whether it is a reward or punishment record.`,
+        select_page_description: `Select which page of injected conditioning entries to manage.
+Entries: {total_entries}
+Pages: {total_pages}
+Each entry shows the persona and whether it is a reward or punishment record.`,
         checkbox_label: `Conditioning Entries`,
         checkbox_label_continued: `Conditioning Entries (Continued)`,
         checkbox_description: `Leave an entry checked to keep it. Uncheck it to delete that injected conditioning group.`,
@@ -2525,8 +1751,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         success_description: `Removed {reward_groups} reward groups and {punish_groups} punishment groups across {persona_count} persona(s) ({deleted_rows} stored rows deleted).`,
       },
     },
-
-    // Reward commands
     reward: {
       description: `Reward me with fun interactions.`,
       headpat: {
@@ -2558,7 +1782,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         history_label: `Tickle`,
       },
     },
-
     punish: {
       description: `Punish me with playful interactions.`,
       spank: {
@@ -2590,34 +1813,46 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         history_label: `Squeeze`,
       },
     },
-
-    // Support commands
     support: {
       discord: {
         description: `Get the official Discord server link for bug reports, feedback, and community chat.`,
         title: `Join the TomoriBot Discord Server!`,
-        description_text: `Need help with TomoriBot or want to hang out with the community?\n\n🔗 **Discord Server**: https://discord.gg/bjCfHm9QsB\n- Report bugs and issues\n- Share feedback and suggestions\n- Interact with other users of TomoriBot\n- Stay updated on new features`,
+        description_text: `Need help with TomoriBot or want to hang out with the community?
+
+🔗 **Discord Server**: https://discord.gg/bjCfHm9QsB
+- Report bugs and issues
+- Share feedback and suggestions
+- Interact with other users of TomoriBot
+- Stay updated on new features`,
       },
     },
-
-    // Contribute commands
     contribute: {
       github: {
         description: `Get the GitHub repository link and learn how to contribute to TomoriBot.`,
         title: `Contribute to TomoriBot!`,
-        description_text: `Want to help make TomoriBot better?\n\n🔗 **GitHub Repository**: https://github.com/Bredrumb/TomoriBot\n- Star the repository on GitHub ⭐\n- Submit bug reports and feature requests\n- Contribute code improvements and new features\n- Help translate TomoriBot to other languages`,
+        description_text: `Want to help make TomoriBot better?
+
+🔗 **GitHub Repository**: https://github.com/Bredrumb/TomoriBot
+- Star the repository on GitHub ⭐
+- Submit bug reports and feature requests
+- Contribute code improvements and new features
+- Help translate TomoriBot to other languages`,
       },
     },
-
-    // Donate commands
     donate: {
       kofi: {
         description: `Support TomoriBot development through Ko-fi donations.`,
         title: `Support TomoriBot Development!`,
-        description_text: `Love using TomoriBot? Help support ongoing development!\n\n🔗 **Ko-fi**: https://ko-fi.com/bredrumb\nYour donations help:\n- Keep TomoriBot running and maintained\n- Add new features and improvements\n- Support server costs\n- Buy TomoriBot shawarmas`,
+        description_text: `Love using TomoriBot? Help support ongoing development!
+
+🔗 **Ko-fi**: https://ko-fi.com/bredrumb
+Your donations help:
+- Keep TomoriBot running and maintained
+- Add new features and improvements
+- Support server costs
+- Buy TomoriBot shawarmas`,
       },
     },
-
     nsfw: {
       description: `Age-restricted commands and settings.`,
       jailbreaks: {
@@ -2634,88 +1869,15 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         success_description: `Updated your jailbreak strategy settings. **{enabled_count}** option(s) are currently enabled.`,
       },
     },
-
-    // Configuration commands (Admin only)
     config: {
       options: {
-        // General options for config subcommands
-        add: `Add`,
-        remove: `Remove`,
         enable: `Enable`,
         disable: `Disable`,
       },
-      // API Key management (subcommand group)
       "api-key": {
         description: `Manage AI provider API keys`,
-        set: {
-          description: `Set the API key for your chosen AI provider.`,
-          modal_title: `Set API Key`,
-          provider_label: `AI Provider`,
-          provider_description: `Choose the AI provider for your API key`,
-          provider_placeholder: `Select a provider...`,
-          api_key_label: `API Key or Endpoint URL`,
-          api_key_description: `This key will be securely stored. Use the '/help api-key' command for instructions in getting one. Tip: Use /config provider switch for saved config persistence.`,
-          api_key_description_with_custom: `API Key, or OpenAI endpoint URL if using Custom (e.g., http://localhost:11434/v1)`,
-          api_key_placeholder: `Do NOT share this key with anyone`,
-          bearer_token_label: `Bearer Token (Optional)`,
-          bearer_token_description: `Auth token for Custom endpoints. Sent as Authorization: Bearer header.`,
-          bearer_token_placeholder: `Leave blank for no authentication`,
-          no_providers_title: `No Providers Available`,
-          no_providers_description: `No AI providers are available in the database. Please report through \`/support discord\`.`,
-          invalid_key_title: `Invalid API Key Format`,
-          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid key.`,
-          validating_key: `Validating API key...`,
-          unsupported_provider_title: `Unsupported Provider`,
-          unsupported_provider_description: `The provider "{provider}" is not currently supported for API key validation.`,
-          validation_error_title: `Validation Error`,
-          validation_error_description: `An error occurred while validating the API key. Please try again.`,
-          key_validation_failed_title: `API Key Validation Failed`,
-          key_validation_failed_description: `The provided API key is not valid for {provider}. Please check the key and try again.`,
-          no_default_model_title: `No Default Model Found`,
-          no_default_model_description: `Could not find a default model for the {provider} provider. Please report this issue through \`/support discord\`.`,
-          success_title: `API Key Set`,
-          success_description: `The {provider} API key has been successfully validated, encrypted, and saved.`,
-          success_with_model_description: `The {provider} API key has been successfully validated, encrypted, and saved. Your model has been automatically changed to \`{model_name}\` (the default for this provider).`,
-          custom_success_with_model_description: `Your custom OpenAI-compatible endpoint has been saved successfully. I will use \`{model_name}\` when sending requests to this endpoint.`,
-          novelai_success_with_model_description: `The NovelAI API key has been successfully validated, encrypted, and saved. Your model has been automatically changed to \`{model_name}\`. ⚠️ **Emoji and sticker usage have been automatically disabled** to keep NovelAI's context lean and stable. You can re-enable them anytime with \`/config bot-permissions\`.`,
-        },
-        delete: {
-          description: `Remove the currently configured AI provider API key.`,
-          no_key_title: `No API Key Set`,
-          no_key_description: `There is no API key currently configured to remove.`,
-          success_title: `API Key Removed`,
-          success_description: `The AI provider API key has been successfully removed. My chat functions are disabled until a new key is set.`,
-        },
-        rotation: {
-          description: `Manage API key rotation for load balancing and failover.`,
-          action_description: `Choose an action: add a key or purge all keys`,
-          action_add: `Add Key`,
-          action_purge: `Purge All Keys`,
-          action_choice_purge: `Purge All Keys`,
-          key_description: `The API key to add to the rotation pool (required for add action)`,
-          // Validation errors
-          no_main_key_title: `No Main API Key`,
-          no_main_key_description: `You must set a main API key using \`/config api-key set\` before adding rotation keys.`,
-          custom_provider_title: `Not Supported`,
-          custom_provider_description: `API key rotation is not supported for custom providers.`,
-          key_required_title: `Key Required`,
-          key_required_description: `Please provide an API key when using the "add" action.`,
-          // Success messages
-          add_success_title: `Rotation Key Added`,
-          add_success_description: `Successfully added a new API key to the rotation pool. You now have **{count}** rotation key(s) for {provider}. Keys will be used in round-robin order with automatic failover.`,
-          purge_success_title: `Rotation Keys Purged`,
-          purge_success_description: `Successfully removed **{count}** key(s) from the rotation pool. Only your main API key will be used.`,
-          // Info messages
-          no_keys_title: `No Rotation Keys`,
-          no_keys_description: `There are no rotation keys to purge. Only your main API key is configured.`,
-        },
       },
-      // Custom provider configuration
       custom: {
-        // Endpoint URL field help text (shown instead of API key for custom provider)
-        endpoint_url_label: `Endpoint URL`,
-        endpoint_url_description: `Enter your OpenAI-compatible endpoint URL (e.g., https://my-llm-server.com/v1 or http://localhost:11434/v1 in dev)`,
-        endpoint_url_placeholder: `https://my-llm-server.com/v1`,
         endpoint_url_invalid_title: `Invalid Endpoint URL`,
         endpoint_url_invalid_description: `Please enter a valid HTTP or HTTPS URL for your custom endpoint.`,
         endpoint_url_protocol_description: `URL must use HTTP or HTTPS protocol.`,
@@ -2724,13 +1886,9 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         endpoint_url_localhost_blocked_description: `Localhost endpoints are not allowed in production. Use a publicly accessible HTTPS endpoint.`,
         endpoint_url_dns_failed_description: `Could not resolve hostname \`{hostname}\`. Ensure the server is publicly accessible and the URL is correct.`,
         endpoint_url_private_address_description: `\`{address}\` is a private or reserved IP address. Use a publicly accessible HTTPS endpoint.`,
-        // Model name configuration
         model_name_label: `Model Name (Required)`,
-        model_name_description: `Required. Enter the exact upstream model name your endpoint expects (for example, "gpt-5.4", "gpt-5.3-codex", or "gemma3:latest").`,
         model_name_placeholder: `e.g., gpt-5.4 or gemma3:latest`,
         model_name_required_description: `Set the exact model name before confirming. For ChatMock use something like \`gpt-5.4\`; for Ollama use the exact installed model tag such as \`gemma3:latest\`.`,
-        // Capabilities modal
-        modal_capabilities_title: `Configure Model Capabilities`,
         capabilities_prompt: `Set the exact model name your endpoint expects, then configure the capabilities for that model and click **Confirm**:`,
         capability_tools_label: `Function Calling (Tools)?`,
         capability_tools_yes: `Supports Function Calling`,
@@ -2744,14 +1902,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         capability_structoutput_label: `Structured Output?`,
         capability_structoutput_yes: `Supports Structured Output`,
         capability_structoutput_no: `No Structured Output`,
-        // Success/error messages
-        setup_success_title: `Custom Endpoint Configured`,
-        setup_success_description: `Your custom OpenAI-compatible endpoint has been configured successfully.`,
         capabilities_timeout: `Model capabilities configuration timed out. Please try again.`,
-        // Provider description shown in select menus
-        provider_description: `Connect to any OpenAI-compatible endpoint (Ollama, vLLM, etc.)`,
       },
-      // Provider configuration persistence — switch/remove saved provider configs
       provider: {
         description: `Manage saved provider configurations`,
         switch: {
@@ -2761,7 +1913,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           provider_description: `Choose the provider to switch to. Providers marked (saved) have stored configs.`,
           provider_placeholder: `Select a provider...`,
           api_key_label: `API Key or Endpoint URL (Optional)`,
-          api_key_description: `Leave blank to restore a saved key, or enter a new key to override it.`,
           api_key_description_with_custom: `Leave blank to restore, or enter an OpenAI endpoint URL for a new custom setup.`,
           api_key_placeholder: `Leave blank to use saved key`,
           bearer_token_label: `Bearer Token (Optional)`,
@@ -2769,42 +1920,12 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           bearer_token_placeholder: `Leave blank for no authentication`,
           save_current_label: `Save Current Config?`,
           save_current_description: `Save your current provider settings so you can restore them later.`,
-          save_yes_label: `Yes`,
-          save_no_label: `No`,
           saved_indicator: `(saved)`,
-          // Error states
           first_time_no_key_title: `API Key Required`,
           first_time_no_key_description: `No saved config exists for **{provider}**. Please provide an API key when switching to a new provider for the first time.`,
-          // Success states
           success_title: `Provider Switched`,
           success_description: `Switched to **{provider}**. Your model is now \`{model_name}\`.`,
           success_restored_description: `Switched to **{provider}** with restored settings. Your model is now \`{model_name}\`.{restored_details}`,
-          // Config category labels for restored config summary
-          restored_label: `Restored`,
-          no_restores_label: `No Restores Found`,
-          carried_over_note: `*All other settings are carried over from current config.*`,
-          restore_more_suffix: `(+{count} more)`,
-          skipped_overrides_note: `⚠️ {count} override(s) skipped — channel, persona, or model no longer exists.`,
-          config_label_chat_model: `Chat Model`,
-          config_label_vision_model: `Vision Model`,
-          config_label_image_model: `Image Model`,
-          config_label_embedding_model: `Embedding Model`,
-          config_label_sampler_settings: `Sampler Settings`,
-          config_label_fallback_models: `Fallback Models ({count})`,
-          config_label_channel_overrides: `Channel Overrides ({count})`,
-          config_label_persona_overrides: `Persona Overrides ({count})`,
-          config_label_fallback_models_none: `Fallback Models`,
-          config_label_channel_overrides_none: `Channel Overrides`,
-          config_label_persona_overrides_none: `Persona Overrides`,
-          config_label_custom_endpoint: `Custom Endpoint`,
-          sampler_preset_label: `Preset`,
-          sampler_temperature_label: `Temperature`,
-          sampler_top_p_label: `Top P`,
-          sampler_top_k_label: `Top K`,
-          sampler_frequency_penalty_label: `Frequency Penalty`,
-          sampler_presence_penalty_label: `Presence Penalty`,
-          sampler_min_p_label: `Min P`,
-          sampler_logit_biases_label: `Logit Biases`,
           success_novelai_description: `Switched to **{provider}**. Your model is now \`{model_name}\`. ⚠️ **Emoji and sticker usage have been automatically disabled** to keep NovelAI's context lean. Re-enable anytime with \`/config bot-permissions\`.`,
           success_zai_description: `Switched to **{provider}**. Your model is now \`{model_name}\`.`,
         },
@@ -2821,53 +1942,12 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       },
       "tool-notices": {
         description: `Manage which tool notice embeds stay visible in chat.`,
-        visibility: {
-          description: `Choose which tool notice embeds remain visible in chat.`,
-          modal_title: `Tool Notice Visibility`,
-          checkbox_label: `Visible tool notices`,
-          checkbox_label_continued: `Visible tool notices (Continued)`,
-          checkbox_description: `Checked notices stay in chat. Unchecked notices are hidden and rerouted to thoughtlogs when allowed.`,
-          no_changes_title: `No Changes`,
-          no_changes_description: `Tool notice visibility is already set to those choices.`,
-          success_title: `Tool Notice Visibility Updated`,
-          success_description: `Hidden now ({hidden_count}): {hidden_list}\nRestored now ({restored_count}): {restored_list}`,
-          too_many_title: `Too Many Notice Types`,
-          too_many_description: `There are {count} tool notice types configured, which exceeds the modal limit of {max_entries} entries across {max_groups} groups.`,
-          notice_web_search_label: `Web Search`,
-          notice_web_search_description: `Show "Searching on the web..." notices.`,
-          notice_image_search_label: `Image Search`,
-          notice_image_search_description: `Show image search progress notices.`,
-          notice_video_search_label: `Video Search`,
-          notice_video_search_description: `Show video search progress notices.`,
-          notice_news_search_label: `News Search`,
-          notice_news_search_description: `Show news search progress notices.`,
-          notice_web_fetch_label: `Web Fetch`,
-          notice_web_fetch_description: `Show webpage reading and fetch notices.`,
-          notice_document_reading_label: `Document Reading`,
-          notice_document_reading_description: `Show document reading notices.`,
-          notice_image_generation_label: `Image Generation`,
-          notice_image_generation_description: `Show image generation notices.`,
-          notice_video_generation_label: `Video Generation`,
-          notice_video_generation_description: `Show video generation notices.`,
-          notice_image_editing_label: `Image Editing`,
-          notice_image_editing_description: `Show image editing or inpaint notices.`,
-          notice_image_analysis_label: `Image Analysis`,
-          notice_image_analysis_description: `Show image analysis notices.`,
-          notice_gif_processing_label: `GIF Processing`,
-          notice_gif_processing_description: `Show GIF processing notices.`,
-          notice_youtube_processing_label: `YouTube Processing`,
-          notice_youtube_processing_description: `Show YouTube watching notices.`,
-          notice_mcp_tool_call_label: `MCP Tool Calls`,
-          notice_mcp_tool_call_description: `Show generic MCP tool invocation notices.`,
-        },
       },
       humanizer: {
         description: `Set how 'human-like' my responses should be. For custom prompts, use /config system-prompt set.`,
-        // value_description: `The level of humanization (0=None, 1=Prompt, 2=Typing/Chunking, 3=Lowercase/No Punctuation).`,
         modal_title: `Set Humanizer Degree`,
         select_label: `Humanizer Level`,
         select_description: `Choose response style (default: 1 Light).`,
-        select_placeholder: `Choose a level...`,
         choice_none: `0: None (Raw AI Output)`,
         choice_light: `1: Light (Default, System Prompt)`,
         choice_medium: `2: Medium (Typing Simulation)`,
@@ -2876,7 +1956,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         desc_light: `Injects your system prompt (/config system-prompt) into every request. No typing simulation.`,
         desc_medium: `Light features + typing indicators and random thinking pauses between messages.`,
         desc_heavy: `All features + sentence-level message splitting and casual text style (lowercase, reduced punctuation).`,
-        // invalid_value_title: `Invalid Value`,
         invalid_value_description: `Humanizer degree must be between {min} and {max}.`,
         already_set_title: `Humanizer Already Set`,
         already_set_description: `The humanizer degree is already set to \`{value}\`.`,
@@ -2884,75 +1963,12 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         success_description: `Humanizer degree changed from \`{previous_value}\` to \`{value}\`.`,
       },
       cooldown: {
-        description: `Set both cooldown type and duration for message triggers.`,
-        cooldown_type_description: `How cooldowns apply (off, per-user, per-channel, server-wide).`,
-        cooldown_length_description: `Cooldown duration in seconds (1-86400).`,
-        cooldown_type_choice_0: `Off`,
-        cooldown_type_choice_1: `Per-User`,
-        cooldown_type_choice_2: `Per-Channel`,
-        cooldown_type_choice_3: `Server-Wide`,
-        cooldown_type_choice_4: `Strict Server-Wide`,
-        invalid_type_title: `Invalid Cooldown Type`,
-        invalid_type_description: `The selected cooldown type is invalid. Please choose a valid option.`,
-        invalid_length_title: `Invalid Duration`,
-        invalid_length_description: `Duration must be between {min} and {max} seconds (24 hours).`,
-        already_set_title: `Already Set`,
-        already_set_description: `Cooldown settings are already **{type}** with **{length}** seconds.`,
-        success_title: `Cooldown Updated`,
-        success_description: `Cooldown updated from **{previous_type}**, **{previous_length}** seconds to **{type}**, **{length}** seconds.`,
-        success_disabled_title: `Cooldowns Disabled`,
-        success_disabled_description: `Cooldown updated from **{previous_type}**, **{previous_length}** seconds to **{type}**, **{length}** seconds. Message trigger cooldowns are now disabled.`,
         type: {
-          description: `Set the cooldown type for message triggers.`,
-          modal_title: `Cooldown Type`,
-          select_label: `Type`,
-          select_description: `Choose how cooldowns apply`,
-          select_placeholder: `Select cooldown type...`,
           choice_off: `Off`,
           choice_per_user: `Per-User`,
           choice_per_channel: `Per-Channel`,
           choice_server_wide: `Server-Wide`,
           choice_strict_server_wide: `Strict Server-Wide`,
-          desc_off: `No cooldown on message triggers`,
-          desc_per_user: `Each user has their own cooldown (managers exempt)`,
-          desc_per_channel: `Each channel has its own cooldown (managers exempt)`,
-          desc_server_wide: `Everyone waits (managers exempt)`,
-          desc_strict_server_wide: `Everyone waits (no exceptions)`,
-          invalid_value_description: `Invalid cooldown type selected. Please choose a valid option.`,
-          success_title: `Cooldown Type Updated`,
-          success_description: `Cooldown type changed from **{previous_value}** to **{value}**.`,
-          success_disabled_title: `Cooldowns Disabled`,
-          success_disabled_description: `Cooldown type changed from **{previous_value}** to **{value}**. Message trigger cooldowns are now disabled.`,
-          already_set_title: `Already Set`,
-          already_set_description: `Cooldown type is already set to **{value}**.`,
-        },
-        length: {
-          description: `Set the cooldown duration for message triggers.`,
-          seconds_description: `Duration in seconds (1-86400)`,
-          success_title: `Cooldown Duration Updated`,
-          success_description: `Cooldown duration set to **{length}** seconds.`,
-          success_disabled_title: `Duration Set (Cooldowns Off)`,
-          success_disabled_description: `Duration set to **{length}** seconds, but cooldowns are currently **disabled**. Use \`/config cooldown\` to enable.`,
-          already_set_title: `Already Set`,
-          already_set_description: `Cooldown duration is already **{length}** seconds.`,
-          invalid_range_title: `Invalid Duration`,
-          invalid_range_description: `Duration must be between {min} and {max} seconds (24 hours).`,
-        },
-      },
-      "self-reply-limit": {
-        description: `Manage self-reply chains for persona triggering (default: 3).`,
-        limit_description: `Number of self replies allowed (0-10, 0 disables, default: 3).`,
-        limit: {
-          description: `Set the max self replies in a chain (default: 3).`,
-          limit_description: `Number of self replies allowed (0-10, 0 disables, default: 3).`,
-          invalid_range_title: `Invalid Limit`,
-          invalid_range_description: `Limit must be between {min} and {max}.`,
-          already_set_title: `Already Set`,
-          already_set_description: `Self-reply limit is already set to **{limit}**.`,
-          success_title: `Self-Reply Limit Updated`,
-          success_description: `Self-reply chain limit set to **{limit}**.`,
-          success_disabled_title: `Self-Reply Disabled`,
-          success_disabled_description: `Self-reply chain is now disabled.`,
         },
       },
       sendlimit: {
@@ -2966,44 +1982,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         success_description: `Responses will now be limited to **{limit}** message(s). Responses will stop at natural sentence boundaries when the limit is reached.`,
         success_disabled_title: `Send Limit Disabled`,
         success_disabled_description: `Send message limit removed. Responses will no longer be capped.`,
-      },
-      "self-debug": {
-        description: `Toggle whether I load my own diagnostic embeds into context.`,
-        set_description: `Enable or disable self-debug embed ingestion.`,
-        already_set_title: `Self-Debug Already Set`,
-        already_enabled_description: `Self-debug is already **enabled**.`,
-        already_disabled_description: `Self-debug is already **disabled**.`,
-        success_title: `Self-Debug Updated`,
-        enabled_success: `Self-debug is now **enabled**. I will load my error and diagnostic embeds into context as [System: ...] messages.`,
-        disabled_success: `Self-debug is now **disabled**. My error and diagnostic embeds will no longer be loaded into context.`,
-      },
-      "message-fetch-limit": {
-        description: `Set recent messages fetched for context (20-100, default: 80).`,
-        limit_description: `Recent messages to fetch for context (20-100, default: 80).`,
-        limit: {
-          description: `Set max recent messages fetched for context (default: 80).`,
-          limit_description: `Recent messages to fetch for context (20-100, default: 80).`,
-          invalid_range_title: `Invalid Limit`,
-          invalid_range_description: `Limit must be between {min} and {max}.`,
-          already_set_title: `Already Set`,
-          already_set_description: `Message fetch limit is already set to **{limit}**.`,
-          success_title: `Message Fetch Limit Updated`,
-          success_description: `I will now fetch up to **{limit}** recent messages for context.`,
-        },
-      },
-      "persona-trigger-limit": {
-        description: `Manage personas triggered per message (default: 3).`,
-        limit_description: `Max triggered personas per message (1-10, default: 3).`,
-        limit: {
-          description: `Set max personas triggered per message (default: 3).`,
-          limit_description: `Max triggered personas per message (1-10, default: 3).`,
-          invalid_range_title: `Invalid Limit`,
-          invalid_range_description: `Limit must be between {min} and {max}.`,
-          already_set_title: `Already Set`,
-          already_set_description: `Multi-trigger limit is already set to **{limit}**.`,
-          success_title: `Multi-Trigger Limit Updated`,
-          success_description: `Per-message persona trigger limit set to **{limit}**.`,
-        },
       },
       voice: {
         description: `Manage persona voice settings.`,
@@ -3062,19 +2040,20 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           validation_error_description: `An error occurred while validating API key compatibility. Please try again.`,
           success_title: `Model Updated`,
           success_description: `I will now use the \`{model_name}\` model (previously \`{previous_model}\`).`,
-          // Custom provider reconfiguration messages
           custom_updated_title: `Custom Model Capabilities Updated`,
-          custom_updated_description: `Your custom model has been reconfigured.\n\n**Model Name:** \`{model_name}\`\n**Enabled Capabilities:** {capabilities}`,
-          // Scope option labels and success messages (scope = global | channel | persona)
+          custom_updated_description: `Your custom model has been reconfigured.
+
+**Model Name:** \`{model_name}\`
+**Enabled Capabilities:** {capabilities}`,
           scope_description: `Set the scope for this model change (global, channel, or persona).`,
           scope_global: `Global (server default)`,
           scope_channel: `Channel (this channel only)`,
           scope_persona: `Persona (specific persona only)`,
           scope_set_channel_success: `Model for {channel} set to **{model}**`,
           scope_set_persona_success: `Model for **{persona}** set to **{model}**`,
-          // Other-model configuration
-          other_model_prompt_title: `Configure Custom OpenRouter Model`,
-          other_model_prompt_description: `You've selected **other-model**.\n\nClick the button below and enter your OpenRouter model codename (e.g., \`xai/grok-2\`, \`openrouter/free\`, \`nvidia/nemotron-4-340b-instruct\`).`,
+          other_model_prompt_description: `You've selected **other-model**.
+
+Click the button below and enter your OpenRouter model codename (e.g., \`xai/grok-2\`, \`openrouter/free\`, \`nvidia/nemotron-4-340b-instruct\`).`,
           other_model_modal_title: `Enter OpenRouter Model`,
           other_model_model_label: `OpenRouter Model Codename`,
           other_model_model_placeholder: `xai/grok-2`,
@@ -3083,7 +2062,9 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           other_model_validation_failed_title: `Model Not Found`,
           other_model_validation_failed_description: `Could not find \`{model_name}\` on OpenRouter. Check the model ID is correct and try again.`,
           other_model_configured_title: `Custom Model Configured`,
-          other_model_configured_description: `Your custom OpenRouter model is now set to \`{model_name}\`.\n\n**Detected Capabilities:** {capabilities}`,
+          other_model_configured_description: `Your custom OpenRouter model is now set to \`{model_name}\`.
+
+**Detected Capabilities:** {capabilities}`,
         },
         embedding: {
           description: `Change the embedding model used for document retrieval.`,
@@ -3121,7 +2102,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           primary_conflict_title: `Invalid Selection`,
           primary_conflict_description: `One or more selected fallback models matches the server's primary model \`{model}\`. Please choose different models.`,
           success_title: `Fallback Models Updated`,
-          success_description: `Fallback order:\n{model_list}`,
+          success_description: `Fallback order:
+{model_list}`,
           cleared_title: `Fallback Models Cleared`,
           cleared_description: `No fallback models are configured for this server.`,
         },
@@ -3173,8 +2155,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           invalid_model_description: `The selected vision model is not valid or available.`,
           already_selected_title: `Model Already Selected`,
           already_selected_description: `Already using \`{model_name}\` as the vision model.`,
-          not_needed_title: `Vision Model Not Needed`,
-          not_needed_description: `Your current chat model (\`{model_name}\`) already supports image vision. A separate vision model is only useful for non-vision chat models.`,
           success_title: `Vision Model Updated`,
           success_description: `Non-vision chat models will now use \`{model_name}\` to analyze images via the \`analyze_image\` tool.`,
           success_no_tools_description: `Vision model set to \`{model_name}\`, but your current chat model (\`{chat_model}\`) does not support **tool calling**. The vision model requires the \`analyze_image\` tool to work — switch to a chat model with tool support, or it won't be able to use it.`,
@@ -3194,7 +2174,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         new_name_input_label: `New Name`,
         new_name_input_description: `Enter the new name (2-32 characters).`,
         new_name_input_placeholder: `Enter a new persona name...`,
-        option_description: `My new name (2-32 characters).`,
         invalid_length_title: `Invalid Name Length`,
         invalid_length: `Name must be between 2 and 32 characters.`,
         already_set_title: `Name Already Set`,
@@ -3224,7 +2203,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         preset_placeholder: `Choose a personality...`,
         humanizer_label: `Humanizer Degree`,
         humanizer_description: `How 'human-like' should I reply?`,
-        humanizer_placeholder: `Select humanization level...`,
         humanizer_option_none_label: `None`,
         humanizer_option_none_desc: `No system prompt. Raw AI output with no behavioral guidance.`,
         humanizer_option_light_label: `Light`,
@@ -3279,121 +2257,12 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           already_set_title: `Temperature Already Set`,
           already_set_description: `The temperature is already set to \`{temperature}\`.`,
           success_title: `Temperature Updated`,
-          success_description: `LLM temperature changed from \`{previous_temperature}\` to \`{temperature}\`.\n**Supported by:** {supported_providers}`,
-        },
-        "top-p": {
-          description: `Set top-P nucleus sampling threshold (default: 0.95).`,
-          value_description: `Probability mass to sample from (0.0=very restricted, 1.0=full distribution). Default: 0.95.`,
-          invalid_value_title: `Invalid Top-P Value`,
-          invalid_value_description: `Top-P must be between {min} and {max}.`,
-          already_set_title: `Top-P Already Set`,
-          already_set_description: `Top-P is already set to \`{top_p}\`.`,
-          success_title: `Top-P Updated`,
-          success_description: `Top-P changed from \`{previous_top_p}\` to \`{top_p}\`.\n**Supported by:** {supported_providers}`,
-        },
-        "top-k": {
-          description: `Set top-K candidate token limit (default: 0).`,
-          value_description: `Number of top tokens to sample from (0=disabled, max 40). Default: 0.`,
-          invalid_value_title: `Invalid Top-K Value`,
-          invalid_value_description: `Top-K must be between {min} and {max}.`,
-          already_set_title: `Top-K Already Set`,
-          already_set_description: `Top-K is already set to \`{top_k}\`.`,
-          success_title: `Top-K Updated`,
-          success_description: `Top-K changed from \`{previous_top_k}\` to \`{top_k}\`.\n**Supported by:** {supported_providers}`,
-        },
-        "frequency-penalty": {
-          description: `Set frequency penalty for repeated tokens (default: 0.0).`,
-          value_description: `Penalty for frequent tokens (-2.0 to 2.0; exact 2.0 saves as 1.99). Default: 0.0.`,
-          invalid_value_title: `Invalid Frequency Penalty`,
-          invalid_value_description: `Frequency penalty must be between {min} and {max}.`,
-          already_set_title: `Frequency Penalty Already Set`,
-          already_set_description: `Frequency penalty is already set to \`{frequency_penalty}\`.`,
-          success_title: `Frequency Penalty Updated`,
-          success_description: `Frequency penalty changed from \`{previous_frequency_penalty}\` to \`{frequency_penalty}\`.\n**Supported by:** {supported_providers}`,
-        },
-        "presence-penalty": {
-          description: `Set presence penalty for repeated topics (default: 0.0).`,
-          value_description: `Penalty for repeated topics (-2.0 to 2.0; exact 2.0 saves as 1.99). Default: 0.0.`,
-          invalid_value_title: `Invalid Presence Penalty`,
-          invalid_value_description: `Presence penalty must be between {min} and {max}.`,
-          already_set_title: `Presence Penalty Already Set`,
-          already_set_description: `Presence penalty is already set to \`{presence_penalty}\`.`,
-          success_title: `Presence Penalty Updated`,
-          success_description: `Presence penalty changed from \`{previous_presence_penalty}\` to \`{presence_penalty}\`.\n**Supported by:** {supported_providers}`,
-        },
-        "min-p": {
-          description: `Set min-P minimum probability threshold (default: 0.0).`,
-          value_description: `Minimum token probability relative to top token (0.0=disabled, 1.0=most restricted). Default: 0.0.`,
-          invalid_value_title: `Invalid Min-P Value`,
-          invalid_value_description: `Min-P must be between {min} and {max}.`,
-          already_set_title: `Min-P Already Set`,
-          already_set_description: `Min-P is already set to \`{min_p}\`.`,
-          success_title: `Min-P Updated`,
-          success_description: `Min-P changed from \`{previous_min_p}\` to \`{min_p}\`.\n**Supported by:** {supported_providers}`,
+          success_description: `LLM temperature changed from \`{previous_temperature}\` to \`{temperature}\`.
+**Supported by:** {supported_providers}`,
         },
       },
       "logit-bias": {
         description: `Manage saved logit bias entries for supported models.`,
-        add: {
-          description: `Add comma-separated logit bias entries with one shared bias value.`,
-          modal_title: `Add Logit Bias`,
-          terms_label: `Words / Token IDs`,
-          terms_description: `Comma-separated values. Words are tokenized for the active model and refreshed again when the model changes. Example: Sorry, apology, 50256`,
-          terms_placeholder: `e.g. Sorry, apology, 50256`,
-          bias_label: `Bias Value`,
-          bias_description: `Number from -100 to 100. Example: -100`,
-          bias_placeholder: `e.g. -100`,
-          empty_terms_title: `No Entries Provided`,
-          empty_terms_description: `Please enter at least one comma-separated word or token ID.`,
-          term_too_long_title: `Entry Too Long`,
-          term_too_long_description: `Each entry must be at most {max_length} characters long.`,
-          invalid_bias_title: `Invalid Bias Value`,
-          invalid_bias_description: `Bias must be a number between {min} and {max}.`,
-          already_set_title: `No Logit Bias Changes`,
-          already_set_description: `All provided entries already exist with that same bias value.`,
-          success_title: `Logit Bias Updated`,
-          success_description: `Added **{added_count}** new entry(s) and updated **{updated_count}** existing entry(s).\nTotal saved: **{total_count}**\nRuntime-ready for the current model: **{runtime_ready_count}**`,
-        },
-        remove: {
-          description: `Remove saved logit bias entries.`,
-          clearall_description: `Clear all saved logit bias entries without opening the modal.`,
-          modal_title: `Remove Logit Bias`,
-          checkbox_label: `Logit Bias Entries`,
-          checkbox_label_continued: `Logit Bias Entries (Continued)`,
-          checkbox_description: `Uncheck any entries you want to remove.`,
-          none_title: `No Logit Bias Entries`,
-          none_description: `This server has no saved logit bias entries.`,
-          select_page_title: `Select Logit Bias Page`,
-          select_page_description: `This server has **{total_entries}** saved logit bias entries across **{total_pages}** pages. Choose a page to edit.`,
-          too_many_title: `Too Many Logit Bias Pages`,
-          too_many_description: `This server has **{total_entries}** saved logit bias entries across **{total_pages}** pages. The current page selector supports up to **{max_pages}** pages.`,
-          no_removals_title: `No Logit Bias Entries Removed`,
-          no_removals_description: `No entries were unchecked. Saved logit bias entries remain unchanged.`,
-          success_title: `Logit Bias Entries Updated`,
-          success_description: `Removed **{removed_count}** entry(s). **{remaining_count}** entry(s) remain saved.`,
-          clearall_success_title: `Logit Bias Cleared`,
-          clearall_success_description: `Cleared all saved logit bias entries (**{removed_count}** removed).`,
-        },
-        upload: {
-          description: `Upload SillyTavern-style logit bias JSON entries.`,
-          file_description: `A .json file containing logit bias objects with text and value fields.`,
-          invalid_file_title: `Invalid File`,
-          invalid_format: `The attachment must be a JSON file.`,
-          file_too_large_title: `File Too Large`,
-          file_too_large_description: `The uploaded file must be {max_size} MB or smaller.`,
-          download_failed_title: `Download Failed`,
-          download_failed_description: `I could not download the uploaded file. Please try again.`,
-          invalid_json_title: `Invalid JSON`,
-          invalid_json_description: `The uploaded file is not valid JSON.`,
-          invalid_schema_title: `Invalid Logit Bias Format`,
-          invalid_schema_description: `Expected a SillyTavern-style entry or array of entries with \`text\` and \`value\`. Bias must be between {min} and {max}, and text must be at most {max_length} characters.`,
-          no_entries_title: `No Entries Found`,
-          no_entries_description: `The uploaded file did not contain any valid logit bias entries.`,
-          already_set_title: `No Logit Bias Changes`,
-          already_set_description: `All uploaded entries already exist with the same saved bias values.`,
-          success_title: `Logit Bias Imported`,
-          success_description: `Added **{added_count}** new entry(s) and updated **{updated_count}** existing entry(s).\nTotal saved: **{total_count}**\nRuntime-ready for the current model: **{runtime_ready_count}**`,
-        },
       },
       timezone: {
         description: `Set your server's timezone offset from UTC (default: 0 / UTC).`,
@@ -3407,173 +2276,89 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       },
       permissions: {
         description: `Configure my core behavior permissions on this server.`,
-        option_description: `The specific permission to configure.`,
         selfteaching_option: `Self-Teaching`,
         personalization_option: `Personalization (Memories/Nicknames)`,
         emojiusage_option: `Emoji Usage`,
         stickerusage_option: `Sticker Usage`,
-        websearch_option: "Web Search Permission",
-        managemessage_option: "Manage Messages",
-        imagegen_option: "Image Generation",
-        videogen_option: "Video Generation",
-        hiderespondembed_option: "Hide Response Embeds",
-        hideimpersonationembeds_option: "Hide Impersonation Embeds",
-        voicemessage_option: "Voice Messages (ElevenLabs)",
-        permission_choice_selfteaching: `Self-Teaching`,
-        permission_choice_personalization: `Personalization (Memories/Nicknames)`,
-        permission_choice_emojiusage: `Emoji Usage`,
-        permission_choice_stickerusage: `Sticker Usage`,
-        permission_choice_websearch: "Web Search Permission",
-        permission_choice_managemessage: "Manage Messages",
-        permission_choice_imagegen: "Image Generation",
-        permission_choice_videogen: "Video Generation",
-        permission_choice_hiderespondembed: "Hide Response Embeds",
-        // Short option descriptions shown inside the select menu dropdown
-        selfteaching_desc: "Learn from server conversations",
-        personalization_desc: "Personal memories & nicknames",
-        emojiusage_desc: "Use emojis in responses",
-        stickerusage_desc: "Send sticker reactions",
-        websearch_desc: "Browse the web for information",
-        managemessage_desc: "Allow pinning any recent message and editing/deleting recent bot or character messages",
-        imagegen_desc: "Generate images on request",
-        videogen_desc: "Generate short videos on request",
-        hiderespondembed_desc: "Hide /bot respond success embed",
-        hideimpersonationembeds_desc: "Hide persona impersonation notices",
-        voicemessage_desc: "Send ElevenLabs TTS voice messages",
-        // Checkbox select menu UI strings
-        select_placeholder: "Select permissions to enable...",
-        checkbox_label_continued: "Permissions (Continued)",
-        select_embed_title: "Configure Permissions",
-        select_embed_description: "Select which permissions to enable. Checked = active, unchecked = disabled.",
-        no_changes_title: "No Changes Made",
-        no_changes_description: "All permissions are already at the selected values.",
-        timed_out_title: "Selection Timed Out",
-        timed_out_description: "The permission menu timed out. No changes were applied.",
-        set_description: `Enable or disable this permission for me.`,
-        already_set_title: `Permission Already Set`,
-        already_enabled_description: `The permission \`{permission_type}\` is already **enabled**.`,
-        already_disabled_description: `The permission \`{permission_type}\` is already **disabled**.`,
+        websearch_option: `Web Search Permission`,
+        managemessage_option: `Manage Messages`,
+        imagegen_option: `Image Generation`,
+        videogen_option: `Video Generation`,
+        hiderespondembed_option: `Hide Response Embeds`,
+        hideimpersonationembeds_option: `Hide Impersonation Embeds`,
+        voicemessage_option: `Voice Messages (ElevenLabs)`,
+        selfteaching_desc: `Learn from server conversations`,
+        personalization_desc: `Personal memories & nicknames`,
+        emojiusage_desc: `Use emojis in responses`,
+        stickerusage_desc: `Send sticker reactions`,
+        websearch_desc: `Browse the web for information`,
+        managemessage_desc: `Allow pinning any recent message and editing/deleting recent bot or character messages`,
+        imagegen_desc: `Generate images on request`,
+        videogen_desc: `Generate short videos on request`,
+        hiderespondembed_desc: `Hide /bot respond success embed`,
+        hideimpersonationembeds_desc: `Hide persona impersonation notices`,
+        voicemessage_desc: `Send ElevenLabs TTS voice messages`,
+        select_placeholder: `Select permissions to enable...`,
+        checkbox_label_continued: `Permissions (Continued)`,
+        select_embed_title: `Configure Permissions`,
+        select_embed_description: `Select which permissions to enable. Checked = active, unchecked = disabled.`,
+        no_changes_title: `No Changes Made`,
+        no_changes_description: `All permissions are already at the selected values.`,
         success_title: `Permissions Updated`,
-        success_description: `Updated **{count}** permission(s).\n`,
-        enabled_success: `My permission for \`{permission_type}\` is now **enabled**.`,
-        disabled_success: `My permission for \`{permission_type}\` is now **disabled**.`,
+        success_description: `Updated **{count}** permission(s).
+`,
       },
-
-      // System prompt management
       "system-prompt": {
         description: `Manage custom system prompt for personality instructions`,
-        set: {
-          description: `Set a custom system prompt to guide my behavior`,
-        },
-        remove: {
-          description: `Remove custom system prompt and use default system prompt`,
-        },
-        change: {
-          description: `Set a custom system prompt to guide my behavior`,
-        },
-        clear: {
-          description: `Remove custom system prompt and use default system prompt`,
-        },
-        preset: {
-          description: `Apply a preset system prompt`,
-        },
       },
       prompt: {
-        description: `Manage custom system prompt for personality instructions`,
         change: {
-          description: `Set a custom system prompt to guide my behavior`,
           modal_title: `Set Custom System Prompt`,
           part1_label: `System Prompt (Part 1/4)`,
-          part1_description: `Main instructions. Split into 4 inputs because Discord limits each modal text field. Use {bot} for my name, {user} for the triggering user`,
           part1_placeholder: `e.g., {bot} is friendly and helpful...`,
           part2_label: `System Prompt (Part 2/4) - Optional`,
-          part2_description: `Continuation of instructions because Discord modal text inputs have length limits (optional)`,
           part2_placeholder: `Additional instructions...`,
           part3_label: `System Prompt (Part 3/4) - Optional`,
-          part3_description: `Continuation of instructions because Discord modal text inputs have length limits (optional)`,
           part3_placeholder: `More instructions...`,
           part4_label: `System Prompt (Part 4/4) - Optional`,
-          part4_description: `Continuation of instructions because Discord modal text inputs have length limits (optional)`,
           part4_placeholder: `Final instructions...`,
           empty_prompt_title: `Empty System Prompt`,
           empty_prompt_description: `The system prompt cannot be empty. Please provide at least some instructions in Part 1.`,
           success_title: `System Prompt Updated`,
-          success_description: `Custom system prompt has been set successfully:\n\`\`\`\n{preview}...\n\`\`\``,
+          success_description: `Custom system prompt has been set successfully:
+\`\`\`
+{preview}...
+\`\`\``,
         },
         clear: {
-          description: `Remove custom system prompt and use default system prompt`,
           no_custom_prompt_title: `No Custom Prompt Set`,
-          no_custom_prompt_description: `There is no custom system prompt configured. Currently using the default prompt:\n\`\`\`\n{defaultPrompt}\n\`\`\``,
+          no_custom_prompt_description: `There is no custom system prompt configured. Currently using the default prompt:
+\`\`\`
+{defaultPrompt}
+\`\`\``,
           success_title: `System Prompt Cleared`,
-          success_description: `Custom system prompt has been cleared. Now using the default prompt:\n\`\`\`\n{defaultPrompt}\n\`\`\``,
+          success_description: `Custom system prompt has been cleared. Now using the default prompt:
+\`\`\`
+{defaultPrompt}
+\`\`\``,
         },
         preset: {
-          description: `Apply a preset system prompt`,
           modal_title: `Select System Prompt Preset`,
           selection_label: `Choose a preset`,
           selection_placeholder: `Pick a preset prompt style...`,
           success_title: `✓ Preset Applied`,
-          success_description: `System prompt preset applied: **{presetName}**\nPreview:\n\`\`\`\n{preview}...\n\`\`\``,
+          success_description: `System prompt preset applied: **{presetName}**
+Preview:
+\`\`\`
+{preview}...
+\`\`\``,
           no_presets_title: `No Presets Available`,
           no_presets_description: `No system prompt presets found. Please contact the bot administrator.`,
           invalid_preset_title: `Invalid Preset`,
           invalid_preset_description: `The selected preset could not be found. Please try again.`,
         },
       },
-
-      // Random Trigger management (timer-based probabilistic auto-trigger)
-      "random-trigger": {
-        add: {
-          description: `Add a probabilistic timer-based auto-trigger for a channel.`,
-          channel_description: `The channel where spontaneous messages will be sent.`,
-          timer_hours_description: `How often to roll the dice (in hours, minimum 1).`,
-          random_offset_range_description: `Optional +/- random offset range in hours for each timer reset (minimum 0).`,
-          chance_description: `Probability of firing each roll (1–100%).`,
-          silence_threshold_description: `Skip if channel had activity within this many hours (optional).`,
-          failure_threshold_description: `Force-fire after this many consecutive dice misses, resetting the counter (optional).`,
-          modal_title: `Configure Random Trigger`,
-          persona_select_label: `Persona`,
-          persona_select_description: `Which persona will speak. "Random" picks one each time.`,
-          persona_select_placeholder: `Select a persona...`,
-          persona_random_label: `Random (pick each time)`,
-          respond_to_self_label: `Respond to Self`,
-          respond_to_self_description: `Fire even if this persona spoke last?`,
-          respond_to_self_yes: `Yes`,
-          respond_to_self_no: `No`,
-          prompt_label: `Custom Prompt (Optional)`,
-          prompt_description: `Extra instructions injected for this trigger's messages.`,
-          prompt_placeholder: `e.g., Start a topic about the weather...`,
-          cap_reached_title: `Trigger Limit Reached`,
-          cap_reached_description: `This server has reached the maximum of {max} random triggers. Remove one first.`,
-          override_title: `Trigger Updated`,
-          override_description: `A trigger already existed for {persona} in {channel}, and it has been updated with the new settings.`,
-          success_title: `Random Trigger Added`,
-          success_description: `I will check {channel} every **{timer_hours}h** with a **{chance}%** chance of speaking as **{persona}**.{offset_suffix}{silence_suffix}{failure_suffix}`,
-          success_offset_suffix: ` Each reset adds a random offset of up to **+/-{random_offset_range}h**.`,
-          success_silence_suffix: ` Skipped if active within **{silence_threshold}h**.`,
-          success_failure_suffix: ` Force-fires after **{failure_threshold}** consecutive misses.`,
-        },
-        remove: {
-          description: `Remove an existing random trigger from this server.`,
-          modal_title: `Remove Random Triggers`,
-          checkbox_label: `Random Triggers`,
-          checkbox_label_continued: `Random Triggers (Continued)`,
-          checkbox_description: `Uncheck any random triggers you want to remove.`,
-          select_label: `Trigger to Remove`,
-          select_description: `Select the random trigger you want to delete.`,
-          select_placeholder: `Select a trigger...`,
-          none_title: `No Triggers Found`,
-          none_description: `This server has no random triggers configured.`,
-          no_removals_title: `No Random Triggers Removed`,
-          no_removals_description: `No random triggers were unchecked. Random triggers remain unchanged.`,
-          success_title: `Random Triggers Updated`,
-          success_description: `Removed the following random triggers.\n{triggers_removed}`,
-        },
-      },
-
-      // Model override removal (subcommand group)
       remove: {
-        description: `Remove overrides and fallbacks from the server configuration.`,
         modeloverride: {
           description: `Remove channel and persona model overrides.`,
           modal_title: `Remove Model Overrides`,
@@ -3590,7 +2375,8 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           no_removals_title: `No Model Overrides Removed`,
           no_removals_description: `No overrides were unchecked. Model overrides remain unchanged.`,
           success_title: `Model Overrides Updated`,
-          success_description: `Removed the following model overrides.\n{removed_overrides}`,
+          success_description: `Removed the following model overrides.
+{removed_overrides}`,
         },
         modelfallback: {
           description: `Remove models from the fallback chain.`,
@@ -3602,20 +2388,15 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           no_removals_title: `No Fallback Models Removed`,
           no_removals_description: `No fallback models were unchecked. The fallback chain remains unchanged.`,
           success_title: `Fallback Chain Updated`,
-          success_description: `Removed the following fallback model(s): {models_removed}\n{remaining_count} fallback(s) remaining.`,
+          success_description: `Removed the following fallback model(s): {models_removed}
+{remaining_count} fallback(s) remaining.`,
         },
       },
       "model-override": {
         description: `Manage channel and persona model overrides.`,
-        remove: {
-          description: `Remove channel and persona model overrides.`,
-        },
       },
       "model-fallback": {
         description: `Manage fallback chain models.`,
-        remove: {
-          description: `Remove models from the fallback chain.`,
-        },
       },
       mcp: {
         description: `Manage remote MCP (Model Context Protocol) tool servers`,
@@ -3630,7 +2411,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           auth_token_placeholder: `Bearer token or Smithery API key (leave blank if none)`,
           server_type_label: `Server Type (Optional)`,
           server_type_description: `What this server replaces (disables matching built-in tools)`,
-          server_type_placeholder: `Select a server type...`,
           none_option: `General Purpose`,
           none_option_description: `No built-in tools will be disabled`,
           web_search_option: `Web Search`,
@@ -3652,11 +2432,17 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           limit_reached_title: `Server Limit Reached`,
           limit_reached_description: `This guild has reached the maximum of {max} MCP servers. Remove an existing server before adding a new one.`,
           connection_failed_title: `Connection Failed`,
-          connection_failed_description: `Could not connect to the MCP server.\n**Error:** {error}`,
+          connection_failed_description: `Could not connect to the MCP server.
+**Error:** {error}`,
           duplicate_name_title: `Duplicate Name`,
           duplicate_name_description: `An MCP server named "{name}" already exists in this guild.`,
           success_title: `MCP Server Added`,
-          success_description: `**{name}** has been registered successfully.\n**URL:** \`{url}\`\n**Tools discovered:** {tool_count} ({tool_names})\n\nOnly add MCP servers you trust.\nA malicious server may send misleading instructions, collect data sent to its tools, or return harmful or false results.`,
+          success_description: `**{name}** has been registered successfully.
+**URL:** \`{url}\`
+**Tools discovered:** {tool_count} ({tool_names})
+
+Only add MCP servers you trust.
+A malicious server may send misleading instructions, collect data sent to its tools, or return harmful or false results.`,
         },
         remove: {
           description: `Remove a registered MCP server from this guild.`,
@@ -3668,17 +2454,18 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           too_many_description: `This guild has **{count}** registered MCP servers. Discord only allows **{max_groups}** checkbox groups (**{max_entries}** total options) per modal.`,
           no_removals_title: `No MCP Servers Removed`,
           no_removals_description: `No MCP servers were unchecked. Registered servers remain unchanged.`,
-          not_found_title: `Server Not Found`,
-          not_found_description: `No MCP server named "{name}" was found in this guild.`,
           success_title: `MCP Servers Updated`,
-          success_description: `Removed and disconnected the following MCP servers.\n{servers_removed}`,
+          success_description: `Removed and disconnected the following MCP servers.
+{servers_removed}`,
         },
         list: {
           description: `List all registered MCP servers for this guild.`,
           empty_title: `No MCP Servers`,
           empty_description: `This guild has no registered MCP servers. Use \`/config mcp add\` to register one.`,
           title: `Registered MCP Servers`,
-          header_description: `**{count}** server(s) registered:\n\n{servers}`,
+          header_description: `**{count}** server(s) registered:
+
+{servers}`,
         },
         toggle: {
           description: `Enable or disable a registered MCP server.`,
@@ -3688,13 +2475,10 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           select_placeholder: `Select a server to toggle...`,
           state_label: `Enable or Disable`,
           state_description: `Choose whether to enable or disable the server`,
-          state_placeholder: `Select a state...`,
           currently_enabled: `Enabled`,
           currently_disabled: `Disabled`,
           enable_option: `Enable`,
           enable_option_description: `Enable this MCP server for tool calling`,
-          disable_option: `Disable`,
-          disable_option_description: `Disable this MCP server and disconnect it`,
           not_found_title: `Server Not Found`,
           not_found_description: `No MCP server named "{name}" was found in this guild.`,
           enabled_success_title: `MCP Server Enabled`,
@@ -3704,103 +2488,21 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         },
       },
     },
-
     "optional-key": {
       description: `Manage optional service API keys`,
       brave: {
         description: `Manage Brave Search API key`,
-        set: {
-          description: `Set the Brave Search API key for this server.`,
-          key_description: `Your Brave Search API key.`,
-          invalid_key_title: `Invalid API Key Format`,
-          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid key.`,
-          validating_key: `Validating Brave Search API key...`,
-          validation_error_title: `API Key Validation Error`,
-          validation_error_description: `An error occurred while validating the Brave Search API key. Please try again or check your connection.`,
-          key_validation_failed_title: `Brave API Key Validation Failed`,
-          key_validation_failed_description: `The provided Brave Search API key is not valid. Please check the key and try again.`,
-          success_title: `Brave API Key Set`,
-          success_description: `The Brave Search API key has been successfully validated, encrypted, and saved.`,
-        },
-        remove: {
-          description: `Remove the currently configured Brave Search API key.`,
-          no_key_title: `No Brave API Key Set`,
-          no_key_description: `There is no Brave Search API key currently configured to remove.`,
-          success_title: `Brave API Key Removed`,
-          success_description: `The Brave Search API key has been successfully removed.`,
-        },
       },
       google: {
         description: `Manage supplementary Google API key (for image inpainting)`,
-        set: {
-          description: `Set a Google API key for AI image segmentation. Not needed if Google is already your AI provider.`,
-          key_description: `Your Google API key.`,
-          invalid_key_title: `Invalid API Key Format`,
-          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid Google API key.`,
-          key_validation_failed_title: `Google API Key Validation Failed`,
-          key_validation_failed_description: `The provided Google API key is not valid. Please check the key and try again.`,
-          success_title: `Google API Key Set`,
-          success_description: `The Google API key has been saved for AI image segmentation (inpainting). If your main provider is already Google, this key takes priority over it for segmentation.`,
-        },
-        remove: {
-          description: `Remove the currently configured Google API key.`,
-          no_key_title: `No Google API Key Set`,
-          no_key_description: `There is no Google API key currently configured to remove.`,
-          success_title: `Google API Key Removed`,
-          success_description: `The Google API key has been successfully removed.`,
-        },
       },
       novelai: {
         description: `Manage supplementary NovelAI API key (for image generation)`,
-        set: {
-          description: `Set a NovelAI API key for image generation. Not needed if NovelAI is already your AI provider.`,
-          key_description: `Your NovelAI API key.`,
-          disable_other_imggen_description: `If true, hides the standard image generation tool so only NovelAI image gen is available.`,
-          invalid_key_title: `Invalid API Key Format`,
-          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid NovelAI API key.`,
-          key_validation_failed_title: `NovelAI API Key Validation Failed`,
-          key_validation_failed_description: `The provided NovelAI API key is not valid. Please check the key and ensure you have an active subscription.`,
-          success_title: `NovelAI API Key Set`,
-          success_description: `The NovelAI API key has been successfully validated, encrypted, and saved. NovelAI image generation is now available regardless of your active LLM provider.`,
-          success_exclusive_description: `The NovelAI API key has been successfully validated, encrypted, and saved. NovelAI image generation is now the exclusive image generation tool for this server.`,
-        },
-        remove: {
-          description: `Remove the currently configured NovelAI API key.`,
-          no_key_title: `No NovelAI API Key Set`,
-          no_key_description: `There is no NovelAI API key currently configured to remove.`,
-          success_title: `NovelAI API Key Removed`,
-          success_description: `The NovelAI API key and exclusive image generation setting have been removed.`,
-        },
       },
       elevenlabs: {
         description: `Manage supplementary ElevenLabs API key (for speech and voice)`,
-        set: {
-          description: `Set an ElevenLabs API key for speech transcription and persona voice output.`,
-          key_description: `Your ElevenLabs API key.`,
-          invalid_key_title: `Invalid API Key Format`,
-          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid ElevenLabs API key.`,
-          key_validation_failed_title: `ElevenLabs API Key Validation Failed`,
-          key_validation_failed_description: `The provided ElevenLabs API key is not valid. Please check the key and try again.`,
-          success_title: `ElevenLabs API Key Set`,
-          success_description: `The ElevenLabs API key has been successfully validated, encrypted, and saved. Voice transcription and persona voice output are now available where configured.`,
-          success_voices_title: `Premade Voices (Free Tier)`,
-          success_voices_description: `Premade voices work on the free plan. Browse the full list at [ElevenLabs Premade Voices](https://elevenlabs-sdk.mintlify.app/voices/premade-voices), then use {configVoiceElevenlabs} to assign one to each persona.`,
-          success_custom_voices_title: `Library & Custom Voices (Paid)`,
-          success_custom_voices_description: `Library voices and custom/cloned voices both require a paid ElevenLabs plan. Once added to your account, they will appear automatically in {configVoiceElevenlabs}.`,
-          success_transcript_mode_title: `Voice Transcript Mode`,
-          success_transcript_mode_description: `Use {configVoiceTranscripts} to post voice message transcripts as visible chat messages via webhook which saves re-processing credits and lets everyone see what was said.`,
-        },
-        remove: {
-          description: `Remove the currently configured ElevenLabs API key.`,
-          no_key_title: `No ElevenLabs API Key Set`,
-          no_key_description: `There is no ElevenLabs API key currently configured to remove.`,
-          success_title: `ElevenLabs API Key Removed`,
-          success_description: `The ElevenLabs API key has been successfully removed.`,
-        },
       },
     },
-
-    // Server configuration commands (admin-only)
     server: {
       config: {
         description: `Manage server configuration data.`,
@@ -3836,110 +2538,20 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           no_changes_title: `No STMs Cleared`,
           no_changes_description: `All active STM entries were left checked, so nothing was cleared.`,
           success_title: `Server STMs Cleared`,
-          success_description: `Cleared **{cleared_count}** server-shared STM entries:\n{cleared_entries}`,
+          success_description: `Cleared **{cleared_count}** server-shared STM entries:
+{cleared_entries}`,
           unscoped_label: `Unscoped STM`,
           no_summary: `No summary`,
           more_cleared: `- ...and {count} more`,
         },
       },
-      "private-channels": {
-        description: `Manage private channels where STMs are isolated and thought logs are suppressed`,
-        modal_title: `Manage Private Channels`,
-        checkbox_label: `Private Channels`,
-        checkbox_label_continued: `Private Channels (Continued)`,
-        checkbox_description: `Checked channels stay private. Unchecked channels are removed from the private-channel set.`,
-        no_channels_title: `No Eligible Channels`,
-        no_channels_description: `There are no text channels available to manage in this server.`,
-        select_page_title: `Manage Private Channels`,
-        select_page_description: `This server has **{channel_count}** eligible text channel(s) across **{total_pages}** page(s).\nCurrently private: **{selected_count}**.`,
-        done_button: `Done`,
-        too_many_pages_title: `Too Many Channels`,
-        too_many_pages_description: `This server has **{channel_count}** eligible text channel(s). This checklist flow supports up to **{max_pages}** pages per launch.`,
-        no_changes_title: `No Private Channel Changes`,
-        no_changes_description: `The private-channel checklist was left unchanged.`,
-        success_title: `Private Channels Updated`,
-        success_description: `Enabled privacy on **{enabled_count}** channel(s): {enabled_channels}\nDisabled privacy on **{disabled_count}** channel(s): {disabled_channels}\n**{selected_count}** channel(s) are currently private.`,
-      },
-      "crosschannel-blocklist": {
-        description: `Manage the channel blocklist for tool-driven cross-channel messages`,
-        modal_title: `Cross-Channel Blocklist`,
-        checkbox_label: `Blocked Channels`,
-        checkbox_label_continued: `Blocked Channels (Continued)`,
-        checkbox_description: `Checked channels cannot receive tool-driven cross-channel messages.`,
-        option_description_category: `Category: {category_name}`,
-        channel_label_forum: `{channel_name} [Forum]`,
-        channel_label_media: `{channel_name} [Media]`,
-        no_channels_title: `No Eligible Channels`,
-        no_channels_description: `There are no text, announcement, forum, or media channels available to manage in this server.`,
-        select_page_title: `Manage Cross-Channel Blocklist`,
-        select_page_description: `This server has **{channel_count}** eligible channels across **{total_pages}** page(s).\nCurrently blocked: **{blocked_count}**.\nChoose a page to review, or press Done when finished.`,
-        done_button: `Done`,
-        too_many_pages_title: `Too Many Channels`,
-        too_many_pages_description: `This server has **{channel_count}** eligible channels. This checklist flow supports up to **{max_pages}** pages per launch.`,
-        no_changes_title: `No Blocklist Changes`,
-        no_changes_description: `The cross-channel blocklist was left unchanged.`,
-        success_title: `Cross-Channel Blocklist Updated`,
-        success_description: `Enabled blocking on **{enabled_count}** channel(s): {enabled_channels}\nDisabled blocking on **{disabled_count}** channel(s): {disabled_channels}\n**{blocked_count}** channel(s) are currently blocked.`,
-      },
-      "rp-channels": {
-        description: `Manage RP channels where emojis and stickers are always suppressed`,
-        modal_title: `Manage RP Channels`,
-        checkbox_label: `RP Channels`,
-        checkbox_label_continued: `RP Channels (Continued)`,
-        checkbox_description: `Checked channels stay in the RP-channel set. Unchecked channels are removed from it.`,
-        no_channels_title: `No Eligible Channels`,
-        no_channels_description: `There are no text channels available to manage in this server.`,
-        select_page_title: `Manage RP Channels`,
-        select_page_description: `This server has **{channel_count}** eligible text channel(s) across **{total_pages}** page(s).\nCurrently marked as RP: **{selected_count}**.`,
-        done_button: `Done`,
-        too_many_pages_title: `Too Many Channels`,
-        too_many_pages_description: `This server has **{channel_count}** eligible text channel(s). This checklist flow supports up to **{max_pages}** pages per launch.`,
-        no_changes_title: `No RP Channel Changes`,
-        no_changes_description: `The RP-channel checklist was left unchanged.`,
-        success_title: `RP Channels Updated`,
-        success_description: `Enabled RP mode on **{enabled_count}** channel(s): {enabled_channels}\nDisabled RP mode on **{disabled_count}** channel(s): {disabled_channels}\n**{selected_count}** channel(s) are currently marked as RP.`,
-      },
-      // Auto-chat configuration (subcommand group)
       "auto-trigger": {
         description: `Manage auto-chat settings`,
-        channels: {
-          description: `Manage the full set of channels where I will automatically chat.`,
-          modal_title: `Manage Auto-Trigger Channels`,
-          checkbox_label: `Auto-Trigger Channels`,
-          checkbox_label_continued: `Auto-Trigger Channels (Continued)`,
-          checkbox_description: `Checked channels stay in the auto-trigger set. Unchecked channels are removed from it.`,
-          no_channels_title: `No Eligible Channels`,
-          no_channels_description: `There are no text channels available to manage in this server.`,
-          select_page_title: `Manage Auto-Trigger Channels`,
-          select_page_description: `This server has **{channel_count}** eligible text channel(s) across **{total_pages}** page(s).\nCurrently enabled: **{selected_count}**.`,
-          done_button: `Done`,
-          too_many_pages_title: `Too Many Channels`,
-          too_many_pages_description: `This server has **{channel_count}** eligible text channel(s). This checklist flow supports up to **{max_pages}** pages per launch.`,
-          no_changes_title: `No Auto-Trigger Channel Changes`,
-          no_changes_description: `The auto-trigger channel checklist was left unchanged.`,
-          success_title: `Auto-Trigger Channels Updated`,
-          success_description: `Enabled auto-trigger on **{enabled_count}** channel(s): {enabled_channels}\nDisabled auto-trigger on **{disabled_count}** channel(s): {disabled_channels}\n**{selected_count}** channel(s) are currently enabled.`,
-        },
-        threshold: {
-          description: `Set the shared auto-chat range for configured auto-chat channels.`,
-          threshold_description: `Minimum messages before auto-chat, or 0 for always-reply mode.`,
-          max_description: `Optional maximum messages before auto-chat. Leave empty to use the same value.`,
-          invalid_range_title: `Invalid Threshold`,
-          invalid_range_specific_description: `Use \`{always}\` for always-reply mode, or choose a range where both values are between \`{min}\` and \`{max}\` and max is at least min.`,
-          success_title: `Auto-Chat Threshold Set`,
-          success_description: `I will now automatically chat after \`{threshold}\` messages in designated channels.`,
-          success_range_title: `Auto-Chat Range Set`,
-          success_range_description: `I will now automatically chat after a random \`{min}\`-\`{max}\` messages in designated channels.`,
-          success_always_title: `Auto-Chat Always-Reply Mode Set`,
-          success_always_description: `Auto-chat threshold set to \`{threshold}\`. Configured auto-chat channels will now behave like always-reply for qualifying messages. Remove a channel to disable it there.`,
-        },
       },
-      // Trigger word management (subcommand group)
       trigger: {
         description: `Manage trigger words`,
         add: {
           description: `Add trigger words for a persona.`,
-          word_description: `The word to add as a trigger.`,
           modal_title: `Add Trigger Words`,
           persona_select_label: `Persona`,
           persona_select_description: `Choose the persona to add triggers to.`,
@@ -3967,9 +2579,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           description: `Remove a word that makes me respond when mentioned.`,
           no_triggers_title: `No Trigger Words`,
           no_triggers_description: `There are no custom trigger words set to remove. Add some with \`/server trigger add\`.`,
-          select_title: `Remove Trigger Word`,
           select_description: `Select the trigger word you want to remove`,
-          trigger_words_label: `Trigger Words`,
           modal_title: `Remove Trigger Words`,
           checkbox_label: `Trigger Words`,
           checkbox_label_continued: `Trigger Words (Continued)`,
@@ -3984,78 +2594,9 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       },
       "user-blacklist": {
         description: `Manage the personalization blacklist for this server.`,
-        add: {
-          description: `Add a member to the personalization blacklist.`,
-          member_description: `The member to add to the blacklist.`,
-          personalization_disabled_title: `Personalization Disabled`,
-          personalization_disabled_description: `Personalization is currently disabled server-wide. Enable it first with \`/config bot-permissions\`.`,
-          already_blacklisted_title: `Already Blacklisted`,
-          already_blacklisted_description: `\`{user_name}\` is already on the personalization blacklist.`,
-          cannot_blacklist_bot_title: `Cannot Blacklist Bots`,
-          cannot_blacklist_bot_description: `\`{user_name}\` is a bot and cannot be added to the personalization blacklist.`,
-          success_title: `Member Blacklisted`,
-          success_description: `Added \`{user_name}\` to the personalization blacklist. Their personal memories and nickname won't be used.`,
-        },
-        remove: {
-          description: `Review currently blacklisted members and uncheck the ones you want to remove.`,
-          none_title: `No Blacklisted Members`,
-          none_description: `There are no blacklisted members to manage right now.`,
-          modal_title: `Manage User Blacklist`,
-          checkbox_label: `Blacklisted Members`,
-          checkbox_label_continued: `Blacklisted Members (Continued)`,
-          checkbox_description: `Checked members stay blacklisted. Unchecked members are removed from the blacklist.`,
-          select_page_title: `Manage User Blacklist`,
-          select_page_description: `This server has **{user_count}** blacklisted member(s) across **{total_pages}** page(s).\nCurrently blacklisted: **{selected_count}**.`,
-          done_button: `Done`,
-          too_many_pages_title: `Too Many Blacklisted Members`,
-          too_many_pages_description: `This server has **{user_count}** blacklisted member(s). This checklist flow supports up to **{max_pages}** pages per launch.`,
-          no_changes_title: `No Blacklist Changes`,
-          no_changes_description: `The user blacklist was left unchanged.`,
-          success_title: `User Blacklist Updated`,
-          success_description: `Removed **{removed_count}** member(s) from the blacklist: {removed_users}\n**{selected_count}** member(s) remain blacklisted.`,
-        },
       },
       "welcome-channel": {
         description: `Configure automated welcome greetings for new members.`,
-        shared: {
-          modal_title: `Configure Welcome Greeting`,
-          persona_select_label: `Greet Persona`,
-          persona_select_description: `Choose which persona should greet new members. Random picks one each time.`,
-          persona_select_placeholder: `Select a persona...`,
-          persona_random_label: `Random (Choose Each Join)`,
-          main_persona_description: `Main Persona`,
-          alter_persona_description: `Alter Persona`,
-          prompt_label: `Additional Prompt`,
-          prompt_description: `How should I greet new users?`,
-          prompt_placeholder: `Greet users by...`,
-          empty_prompt_title: `Additional Prompt Required`,
-          empty_prompt_description: `Please enter how I should greet new users.`,
-        },
-        set: {
-          description: `Set the channel used for automated welcome greetings.`,
-          channel_description: `The text channel where new members should be greeted.`,
-          success_title: `Welcome Channel Updated`,
-          success_description: `I will now greet new members in {channel} using **{persona}**.`,
-        },
-        remove: {
-          description: `Remove the configured welcome channel and stop automated greetings.`,
-          success_title: `Welcome Channel Removed`,
-          success_description: `I will no longer send automated welcome greetings for new members.`,
-          not_configured_title: `Welcome Channel Not Configured`,
-          not_configured_description: `This server does not currently have a welcome channel configured.`,
-        },
-      },
-      "thought-logs-channel": {
-        description: `Set or clear the server's thought-log channel.`,
-        channel_description: `Text channel for reasoning summaries. Pick the same channel again to disable it.`,
-        invalid_channel_title: `Invalid Channel`,
-        invalid_channel_description: `Please choose a server text channel.`,
-        set_title: `Thought Logs Enabled`,
-        set_description: `Thought logs will now be posted in {channel}.`,
-        updated_title: `Thought Logs Updated`,
-        updated_description: `Thought logs will now be posted in {channel}.`,
-        cleared_title: `Thought Logs Disabled`,
-        cleared_description: `Thought logs will no longer be posted.`,
       },
       whitelist: {
         description: `Manage trigger whitelist (channels + roles; channels can inherit or override the global cooldown)`,
@@ -4073,11 +2614,17 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           invalid_length_title: `Invalid Cooldown Length`,
           invalid_length_description: `Cooldown length must be between **{min}** and **{max}** seconds.`,
           success_inherit_title: `Channel Whitelisted`,
-          success_inherit_description: `Channel **{channel_name}** whitelisted and set to inherit this server's global cooldown.\n\n**Note:** When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.`,
+          success_inherit_description: `Channel **{channel_name}** whitelisted and set to inherit this server's global cooldown.
+
+**Note:** When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.`,
           success_title: `Channel Whitelisted`,
-          success_description: `Channel **{channel_name}** whitelisted with a channel-specific **{cooldown_type}** cooldown of **{cooldown_length}** seconds.\n\n**Note:** When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.`,
+          success_description: `Channel **{channel_name}** whitelisted with a channel-specific **{cooldown_type}** cooldown of **{cooldown_length}** seconds.
+
+**Note:** When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.`,
           success_instant_title: `Channel Whitelisted (Instant)`,
-          success_instant_description: `Channel **{channel_name}** whitelisted with a channel-specific **{cooldown_type}** override (0 seconds = instant, no cooldown).\n\n**Note:** When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.`,
+          success_instant_description: `Channel **{channel_name}** whitelisted with a channel-specific **{cooldown_type}** override (0 seconds = instant, no cooldown).
+
+**Note:** When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.`,
         },
         role: {
           description: `Add or remove whitelisted roles that can trigger the bot`,
@@ -4112,7 +2659,9 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           no_removals_title: `No Whitelist Entries Removed`,
           no_removals_description: `No whitelist entries were unchecked. The whitelist remains unchanged.`,
           success_title: `Whitelist Updated`,
-          success_description: `Removed the following whitelist entries.\n**Channels:** {channels_removed}\n**Roles:** {roles_removed}`,
+          success_description: `Removed the following whitelist entries.
+**Channels:** {channels_removed}
+**Roles:** {roles_removed}`,
         },
       },
       cooldown: {
@@ -4145,49 +2694,34 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         imagegen: {
           description: `Configure daily image generation quotas for this server.`,
           unlimited: `Unlimited`,
-          daily_user_quota_description: `Set the daily image generation limit per user.`,
           daily_user_quota_limit_description: `Daily images per user (0=unlimited, 1-100, default: 10).`,
           daily_user_quota_success_title: `User Quota Updated`,
           daily_user_quota_success_description: `Daily user quota set to **{limit}** images per day.`,
-          serverwide_quota_description: `Set the total server-wide image generation limit.`,
           serverwide_quota_limit_description: `Total server images (0=unlimited, 1-99999, default: 0).`,
-          serverwide_quota_success_title: `Server-wide Quota Updated`,
           serverwide_quota_success_description: `Server-wide quota set to **{limit}** images per period.`,
-          serverwide_quota_resets_in_description: `Set how many days before server-wide quota resets.`,
           serverwide_quota_resets_in_days_description: `Days before reset (1-365, default: 365).`,
-          serverwide_quota_resets_in_success_title: `Quota Reset Period Updated`,
           serverwide_quota_resets_in_success_description: `Server-wide quota will now reset every **{days}** days.`,
         },
         textgen: {
           description: `Configure text generation trigger quotas for this server.`,
           unlimited: `Unlimited`,
-          daily_user_quota_description: `Set the daily text generation trigger limit per user.`,
           daily_user_quota_limit_description: `Daily text triggers per user (0=unlimited, 1-100, default: 0).`,
           daily_user_quota_success_title: `User Quota Updated`,
           daily_user_quota_success_description: `Daily user quota set to **{limit}** text trigger(s) per day.`,
-          serverwide_quota_description: `Set the total server-wide text generation trigger limit.`,
           serverwide_quota_limit_description: `Total server text triggers (0=unlimited, 1-99999, default: 0).`,
-          serverwide_quota_success_title: `Server-wide Quota Updated`,
           serverwide_quota_success_description: `Server-wide quota set to **{limit}** text trigger(s) per period.`,
-          serverwide_quota_resets_in_description: `Set how many days before server-wide text quota resets.`,
           serverwide_quota_resets_in_days_description: `Days before reset (1-365, default: 365).`,
-          serverwide_quota_resets_in_success_title: `Quota Reset Period Updated`,
           serverwide_quota_resets_in_success_description: `Server-wide text quota will now reset every **{days}** days.`,
         },
         videogen: {
           description: `Configure video generation quotas for this server.`,
           unlimited: `Unlimited`,
-          daily_user_quota_description: `Set the daily video generation limit per user.`,
           daily_user_quota_limit_description: `Daily videos per user (0=unlimited, 1-100, default: 3).`,
           daily_user_quota_success_title: `User Quota Updated`,
           daily_user_quota_success_description: `Daily user quota set to **{limit}** videos per day.`,
-          serverwide_quota_description: `Set the total server-wide video generation limit.`,
           serverwide_quota_limit_description: `Total server videos (0=unlimited, 1-99999, default: 0).`,
-          serverwide_quota_success_title: `Server-wide Quota Updated`,
           serverwide_quota_success_description: `Server-wide quota set to **{limit}** videos per period.`,
-          serverwide_quota_resets_in_description: `Set how many days before server-wide video quota resets.`,
           serverwide_quota_resets_in_days_description: `Days before reset (1-365, default: 365).`,
-          serverwide_quota_resets_in_success_title: `Quota Reset Period Updated`,
           serverwide_quota_resets_in_success_description: `Server-wide video quota will now reset every **{days}** days.`,
         },
         reset: {
@@ -4211,36 +2745,6 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           success_server_videogen_description: `Reset the server-wide video generation quota pool.`,
         },
       },
-      "member-permissions": {
-        description: `Configure what non-admin members can teach me.`,
-        option_description: `The type of memory members can teach.`,
-        servermemories_option: `Server Memories`,
-        attributelist_option: `Attribute List`,
-        sampledialogues_option: `Sample Dialogues`,
-        permission_choice_servermemories: `Server Memories`,
-        permission_choice_attributelist: `Attribute List`,
-        permission_choice_sampledialogues: `Sample Dialogues`,
-        // Short descriptions shown in the select menu dropdown
-        servermemories_desc: "Add/remove server-wide memories",
-        attributelist_desc: "Add/remove personality attributes",
-        sampledialogues_desc: "Add/remove sample dialogue pairs",
-        // Checkbox select menu UI strings
-        select_placeholder: "Select what members can teach...",
-        select_embed_title: "Member Teaching Permissions",
-        select_embed_description: "Select which things non-admin members can **teach** me. Checked = allowed.",
-        no_changes_title: "No Changes Made",
-        no_changes_description: "All permissions are already at the selected values.",
-        timed_out_title: "Selection Timed Out",
-        timed_out_description: "The permission menu timed out. No changes were applied.",
-        set_description: `Enable or disable this permission for members.`,
-        success_title: `Member Permissions Updated`,
-        success_description: `Updated **{count}** permission(s)\n`,
-        enabled_success: `Members can now teach: \`{permission_type}\`.`,
-        disabled_success: `Members can no longer teach: \`{permission_type}\`.`,
-        already_set_title: `Permission Already Set`,
-        already_enabled_description: `Members are already allowed to teach \`{permission_type}\`.`,
-        already_disabled_description: `Members are already prevented from teaching \`{permission_type}\`.`,
-      },
       avatar: {
         description: `Set or remove avatar for a selected persona on this server.`,
         image_description: `Image to set as avatar (leave empty to remove the selected persona avatar).`,
@@ -4258,27 +2762,21 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
         removed_alter_description: `Successfully reset avatar for persona "{persona_name}".`,
         invalid_image_title: `Invalid Image`,
         invalid_image_description: `Please provide a valid image file.`,
-        file_too_large_title: `File Too Large`,
         file_too_large_description: `The image file is too large. Maximum file size is 8MB.`,
-        invalid_format_title: `Invalid Format`,
         invalid_format_description: `Please provide a PNG, JPG, JPEG, or GIF image file.`,
         conversion_error_title: `Conversion Error`,
         conversion_error_description: `Failed to process the image. Please try a different image file.`,
         api_error_title: `API Error`,
         api_error_description: `Failed to update the avatar through Discord's API. This is often caused by changing avatars too quickly (rate limits). Please wait and try again.`,
-
         error_download_timeout: `Avatar download timed out after 15 seconds. Please try again.`,
         error_api_timeout: `Discord API call timed out after 15 seconds. Please try again.`,
       },
-      // Initialize subcommand group
       initialize: {
         description: `Initialize server features with AI analysis`,
         expressions: {
           description: `Analyze and classify all custom emojis and stickers using AI vision`,
-          // Success messages
           success_title: `Expressions Initialized`,
           success_description: `Successfully analyzed and classified {emoji_count} emojis and {sticker_count} stickers ({total} total).`,
-          // Error messages
           model_incompatible_title: `Incompatible Model`,
           model_incompatible_description: `Your current model ({model_name}) does not support {missing_capability}. Please switch to a model with both IMAGE VISION and STRUCTURED OUTPUT capabilities using \`/config model text\`.`,
           already_initialized_title: `Nothing to Initialize`,
@@ -4291,16 +2789,10 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
           llm_error_description: `The AI model encountered an error while analyzing expressions. Please try again later.`,
           validation_error_title: `Invalid AI Response`,
           validation_error_description: `The AI returned an invalid response format. This may be a model issue.`,
-          // Progress messages
-          progress_fetching: `Fetching uninitialized expressions...`,
-          progress_building: `Found {emoji_count} emojis and {sticker_count} stickers to analyze...`,
           progress_analyzing: `Analyzing {total} images...`,
           progress_analyzing_batch: `Analyzing {batch_size} of {total_uninitialized} images (processing in batches, please re-run this command to process remaining expressions)`,
-          progress_analyzing_gemini_batch: `Analyzing {batch_size} of {total_uninitialized} images (Gemini processes in batches, please re-run this command after to process remaining expressions)`,
-          progress_saving: `Saving results to database...`,
         },
       },
-      // Matrix bridge management
       matrix: {
         link: {
           description: `Link a Discord channel to a Matrix room for bidirectional relay`,
@@ -4335,8 +2827,6 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
         disabled_description: `**{persona_name}** will now only reply when triggered by a trigger word, mention, or reply.`,
       },
     },
-
-    // Personal user configuration commands
     personal: {
       description: `Manage your personal settings`,
       config: {
@@ -4360,44 +2850,28 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
       },
       privacy: {
         description: `Control personal memory storage and privacy settings`,
-
-        // Modal UI
         modal_title: `Privacy Settings`,
         select_label: `Privacy Level`,
         select_description: `Choose how much privacy protection you want`,
-        select_placeholder: `Select privacy level...`,
-
-        // Level 0 (MINIMAL privacy - full features)
         choice_minimal: `None`,
         desc_minimal: `Full personalization: memories, status, custom nickname, can trigger bot.`,
-
-        // Level 1 (PARTIAL privacy)
         choice_partial: `Partial`,
         desc_partial: `Messages visible but no personal memories/status shown to AI.`,
-
-        // Level 2 (FULL privacy - maximum protection)
         choice_full: `Full`,
         desc_full: `Maximum privacy: completely invisible, no messages, memories, or bot triggering.`,
-
-        // Success/error messages
         success_title: `Privacy Settings Updated`,
         success_description: `Your privacy level has been changed from \`{previous_value}\` to \`{value}\`.
 
 You can change this anytime using \`/personal privacy\`.`,
-
         already_set_title: `No Changes Made`,
         already_set_description: `Your privacy level is already set to \`{value}\`.`,
-
         invalid_value_description: `Invalid privacy level selected. Please try again.`,
       },
-
       language: {
         description: `Set your preferred language for my interface.`,
         value_description: `Choose your preferred language for interfaces.`,
         choice_english: `English`,
         choice_japanese: `Japanese`,
-        "value_choice_en-US": `English`,
-        value_choice_ja: `Japanese`,
         invalid_value_title: `Invalid Language`,
         invalid_value_description: `Language must be one of: {supported}.`,
         already_set_title: `Language Already Set`,
@@ -4405,7 +2879,6 @@ You can change this anytime using \`/personal privacy\`.`,
         success_title: `Language Updated`,
         success_description: `Your interface language changed from \`{previous_value}\` to \`{value}\`.`,
       },
-
       nickname: {
         description: `Change the name I use to refer to you.`,
         option_description: `The nickname I should use for you (2-32 characters).`,
@@ -4415,9 +2888,8 @@ You can change this anytime using \`/personal privacy\`.`,
         success_description: `I'll call you '{new_nickname}' from now on! (previously '{old_nickname}').`,
         success_but_disabled_description: `I'll remember to call you '{new_nickname}'! (previously '{old_nickname}').
 
-**Warning:** Personalization is currently disabled on this server, so I won't use this nickname here. I'll still use it on other servers where personalization is enabled.`, // Natural line break
+**Warning:** Personalization is currently disabled on this server, so I won't use this nickname here. I'll still use it on other servers where personalization is enabled.`,
       },
-
       impersonate: {
         description: `Manage user impersonation settings.`,
         prompt: {
@@ -4436,7 +2908,6 @@ You can change this anytime using \`/personal privacy\`.`,
           already_cleared_description: `You don't currently have a user impersonation prompt set.`,
         },
       },
-
       stm: {
         description: `Configure STM (short-term memory) settings`,
         option_description: `Which STM setting to configure`,
@@ -4453,22 +2924,9 @@ You can change this anytime using \`/personal privacy\`.`,
         },
       },
     },
-
     "scheduled-task": {
       description: `Manage scheduled tasks and reminders.`,
-      remove: {
-        description: `Remove a scheduled task or reminder.`,
-        modal_title: `Remove Scheduled Task`,
-        select_label: `Scheduled Task to Remove`,
-        select_description: `Choose which scheduled task or reminder to remove`,
-        select_placeholder: `Select a scheduled task...`,
-        no_entries_title: `No Scheduled Tasks`,
-        no_entries: `There are no scheduled tasks or reminders to remove. Set one by asking me to remind you or schedule a task.`,
-        success_title: `Scheduled Task Removed`,
-        success_description: `Successfully removed: "{reminder_purpose}"`,
-      },
     },
-
     memory: {
       description: `Manage stored memories and documents.`,
       document: {
@@ -4522,7 +2980,9 @@ You can change this anytime using \`/personal privacy\`.`,
           progress_embedding: `Generating embeddings for {fact_count} facts...`,
           success_title: `History Extracted`,
           success_description: `Extracted **{fact_count}** facts from **{message_count}** messages and stored as **{name}** ({chunk_count} chunks) for {scope}.`,
-          success_automatic_description: `Extracted **{fact_count}** facts from **{message_count}** messages.\n\n{persona_list}`,
+          success_automatic_description: `Extracted **{fact_count}** facts from **{message_count}** messages.
+
+{persona_list}`,
           success_automatic_persona_line: `**{persona_name}**: stored as **{doc_name}** ({chunk_count} chunks)`,
           success_automatic_global_fallback: `No personas detected. Stored as **{name}** for serverwide scope.`,
           scope_label_persona: `persona "{persona_name}"`,
@@ -4596,8 +3056,6 @@ You can change this anytime using \`/personal privacy\`.`,
         },
       },
     },
-
-    // Commands for teaching Tomori
     teach: {
       sampledialogue: {
         description: `Add a sample user/bot dialogue pair to as an example for how I should respond.`,
@@ -4643,7 +3101,7 @@ You can change this anytime using \`/personal privacy\`.`,
 > {user_input}
 
 **Me:**
-> {bot_input}`, // Natural line breaks here
+> {bot_input}`,
         batch_success_title: `Sample Dialogues Added`,
         batch_success_description: `Added {added_count} sample dialogue pairs.`,
       },
@@ -4657,7 +3115,6 @@ You can change this anytime using \`/personal privacy\`.`,
         persona_select_placeholder: `Select a persona...`,
         main_persona_description: `Main Persona`,
         alter_persona_description: `Alter Persona`,
-        modal_description: `A personality trait that I have for this server. Use \`{bot}\` as a placeholder for my name`,
         attribute_input_label: `New Attribute`,
         attribute_input_description: `Optional single attribute. Leave blank when importing from .txt.`,
         attribute_input_placeholder: `{bot} likes mango floats`,
@@ -4684,18 +3141,12 @@ You can change this anytime using \`/personal privacy\`.`,
       },
       document: {
         description: `Upload a document for me to reference using Retrieval-Augmented Generation.`,
-        scope_description: `Choose whether this document is persona-only (default) or shared server-wide.`,
-        scope_choice_persona: `Persona`,
-        scope_choice_serverwide: `Serverwide`,
         persona_modal_title: `Select Persona`,
         persona_select_label: `Persona`,
         persona_select_description: `Choose which persona this document is for.`,
         persona_select_placeholder: `Select a persona...`,
         main_persona_description: `Main Persona`,
         alter_persona_description: `Alter Persona`,
-        persona_description: `Target persona nickname when scope is Persona (defaults to main persona).`,
-        name_description: `Name this document (must be unique within the selected scope).`,
-        file_description: `Upload a document file (.txt, .md, .pdf).`,
         rag_disabled_title: `Document RAG Disabled`,
         rag_disabled_description: `Document retrieval is disabled by default in local instances. Set \`ACTIVATE_LOCAL_RAG=true\` in .env to enable it locally.`,
         teaching_disabled_title: `Document Teaching Disabled`,
@@ -4711,7 +3162,6 @@ You can change this anytime using \`/personal privacy\`.`,
         limit_exceeded_title: `Document Limit Reached`,
         limit_exceeded_description: `This scope ({scope}) already has {current_count} documents (max {max_allowed}). Remove some with \`/memory document remove\` before adding new ones.`,
         invalid_file_title: `Invalid File`,
-        invalid_format: `Please upload a .txt, .md, or .pdf file.`,
         file_too_large_title: `File Too Large`,
         file_too_large_description: `Maximum file size is {max_size} MB.`,
         download_failed_title: `Download Failed`,
@@ -4726,47 +3176,8 @@ You can change this anytime using \`/personal privacy\`.`,
         server_chunk_limit_description: `This scope ({scope}) would exceed the chunk limit of {max_chunks}. Remove some documents first.`,
         success_title: `Document Added`,
         success_description: `Stored **{name}** with {chunk_count} chunks for {scope}.`,
-        persona_scope_mismatch: `The persona option can only be used when scope is set to Persona.`,
         scope_label_persona: `persona "{persona_name}"`,
         scope_label_serverwide: `serverwide scope`,
-      },
-      history: {
-        description: `Extract knowledge from this channel's message history using AI.`,
-        name_description: `Name for the generated document (must be unique within the selected scope).`,
-        scope_description: `Choose knowledge scope: persona (default), automatic (detect personas), or global.`,
-        scope_choice_persona: `Persona`,
-        scope_choice_automatic: `Automatic`,
-        scope_choice_global: `Global`,
-        rag_disabled_title: `Document RAG Disabled`,
-        rag_disabled_description: `Document retrieval is disabled by default in local instances. Set \`ACTIVATE_LOCAL_RAG=true\` in .env to enable it locally.`,
-        no_permission_title: `Permission Denied`,
-        no_permission_description: `You need the **Manage Server** permission to extract channel history.`,
-        model_incompatible_title: `Model Incompatible`,
-        model_incompatible_description: `The current model does not support structured output, which is required for history extraction. Please switch to a compatible model using \`/config model text\`.`,
-        no_embedding_model_title: `No Embedding Model Set`,
-        no_embedding_model_description: `An embedding model is not configured. Please set one using \`/config model embedding\`.`,
-        no_api_key_title: `No API Key Set`,
-        no_api_key_description: `An API key is required to extract and embed history. Please use \`/config api-key set\`.`,
-        no_messages_title: `No Messages Found`,
-        no_messages_description: `No messages were found in this channel to extract knowledge from.`,
-        no_facts_extracted_title: `No Facts Extracted`,
-        no_facts_extracted_description: `The AI could not extract any meaningful facts from the channel history. This can happen if the conversation is too short or consists only of trivial messages.`,
-        duplicate_title: `Document Name Already Exists`,
-        duplicate_description: `A document named \`{name}\` already exists in this scope. Please choose a different name.`,
-        limit_exceeded_title: `Document Limit Reached`,
-        limit_exceeded_description: `This scope ({scope}) already has {current_count} documents (max {max_allowed}). Remove some with \`/memory document remove\` or \`/memory history remove\` before adding new ones.`,
-        server_chunk_limit_title: `Server Chunk Limit Reached`,
-        server_chunk_limit_description: `This scope ({scope}) would exceed the chunk limit of {max_chunks}. Remove some documents first.`,
-        progress_fetching: `Fetching channel messages...`,
-        progress_extracting: `Extracting knowledge from {message_count} messages (window {current}/{total})...`,
-        progress_embedding: `Generating embeddings for {fact_count} facts...`,
-        success_title: `History Extracted`,
-        success_description: `Extracted **{fact_count}** facts from **{message_count}** messages and stored as **{name}** ({chunk_count} chunks) for {scope}.`,
-        success_automatic_description: `Extracted **{fact_count}** facts from **{message_count}** messages.\n\n{persona_list}`,
-        success_automatic_persona_line: `**{persona_name}**: stored as **{doc_name}** ({chunk_count} chunks)`,
-        success_automatic_global_fallback: `No personas detected. Stored as **{name}** for serverwide scope.`,
-        scope_label_persona: `persona "{persona_name}"`,
-        scope_label_global: `serverwide scope`,
       },
       personaprompt: {
         description: `Set a persona-specific prompt appended after sysprompt`,
@@ -4797,16 +3208,12 @@ You can change this anytime using \`/personal privacy\`.`,
         description: `Manage my memories`,
         personal: {
           description: `Add a personal memory of you I can remember across any server.`,
-          scope_description: `Memory scope: persona-only (default) or global across all personas/servers`,
-          scope_choice_persona: `Persona memories (default)`,
-          scope_choice_global: `Global memories (all personas/servers)`,
           modal_title: `Add Personal Memory`,
           persona_select_label: `Persona`,
           persona_select_description: `Choose which persona this memory is for.`,
           persona_select_placeholder: `Select a persona...`,
           main_persona_description: `Main Persona`,
           alter_persona_description: `Alter Persona`,
-          modal_description: `A memory of you that I remember no matter the server.`,
           memory_input_label: `New Personal Memory`,
           memory_input_description: `Optional single memory. Leave blank when importing from .txt.`,
           memory_input_placeholder: `{user} likes mango floats`,
@@ -4832,13 +3239,13 @@ You can change this anytime using \`/personal privacy\`.`,
           batch_success_description: `Successfully added {added_count} memories to your personal memories.`,
           success_but_disabled_description: `Successfully added '{memory}' to your personal memories.
 
-**Warning:** Personalization is currently disabled on this server, so this memory won't be used here. It will still be available on other servers where personalization is enabled.`, // Natural line break
+**Warning:** Personalization is currently disabled on this server, so this memory won't be used here. It will still be available on other servers where personalization is enabled.`,
           batch_success_but_disabled_description: `Successfully added {added_count} memories to your personal memories.
 
 **Warning:** Personalization is currently disabled on this server, so these memories won't be used here. They will still be available on other servers where personalization is enabled.`,
           success_but_blacklisted_description: `Successfully added '{memory}' to your personal memories.
 
-**Warning:** You are currently blacklisted from personalization features on this server, so this memory won't be used here. It will still be available on other servers where you are not blacklisted.`, // Natural line break
+**Warning:** You are currently blacklisted from personalization features on this server, so this memory won't be used here. It will still be available on other servers where you are not blacklisted.`,
           batch_success_but_blacklisted_description: `Successfully added {added_count} memories to your personal memories.
 
 **Warning:** You are currently blacklisted from personalization features on this server, so these memories won't be used here. They will still be available on other servers where you are not blacklisted.`,
@@ -4855,7 +3262,6 @@ You can change this anytime using \`/personal privacy\`.`,
           persona_select_placeholder: `Select a persona...`,
           main_persona_description: `Main Persona`,
           alter_persona_description: `Alter Persona`,
-          modal_description: `A memory that I remember for this server only.`,
           memory_input_label: `New Server Memory`,
           memory_input_description: `Optional single memory. Leave blank when importing from .txt.`,
           memory_input_placeholder: `This server's members like mango floats`,
@@ -4882,8 +3288,6 @@ You can change this anytime using \`/personal privacy\`.`,
         },
       },
     },
-
-    // Commands for making Tomori forget things
     forget: {
       sampledialogue: {
         description: `Remove a sample user/bot dialogue pair from my memory.`,
@@ -4893,8 +3297,6 @@ You can change this anytime using \`/personal privacy\`.`,
         select_placeholder: `Select a dialogue...`,
         no_dialogues_title: `No Sample Dialogues`,
         no_dialogues: `There are no sample dialogues stored to remove. Add some with \`/persona sample-dialogue add\`.`,
-        select_title: `Remove Sample Dialogue`,
-        dialogue_label: `Dialogue Pair`,
         success_title: `Sample Dialogue Removed`,
         success_description: `Successfully removed the dialogue pair: User: "{input}" → Bot: "{output}"`,
       },
@@ -4906,16 +3308,11 @@ You can change this anytime using \`/personal privacy\`.`,
         select_placeholder: `Select an attribute...`,
         no_attributes_title: `No Attributes`,
         no_attributes: `There are no personality attributes to remove. Add some with \`/persona attribute add\`.`,
-        select_title: `Remove Attribute`,
-        attribute_label: `Attribute`,
         success_title: `Attribute Removed`,
         success_description: `Successfully removed the attribute: "{attribute}"`,
       },
       document: {
         description: `Remove a document from the server knowledge base.`,
-        scope_description: `Choose whether to remove from a persona scope or serverwide scope.`,
-        scope_choice_persona: `Persona`,
-        scope_choice_serverwide: `Serverwide`,
         modal_title: `Remove Document`,
         select_label: `Document to Remove`,
         select_description: `Choose which document to remove`,
@@ -4927,22 +3324,6 @@ You can change this anytime using \`/personal privacy\`.`,
         success_title: `Document Removed`,
         success_description: `Successfully removed the document: "{name}"`,
       },
-      history: {
-        description: `Remove a history-extracted document from the server knowledge base.`,
-        scope_description: `Choose whether to remove from a persona scope or serverwide scope.`,
-        scope_choice_persona: `Persona`,
-        scope_choice_serverwide: `Serverwide`,
-        modal_title: `Remove History Document`,
-        select_label: `Document to Remove`,
-        select_description: `Choose which history document to remove`,
-        select_placeholder: `Select a document...`,
-        rag_disabled_title: `Document RAG Disabled`,
-        rag_disabled_description: `Document retrieval is disabled by default in local instances. Set \`ACTIVATE_LOCAL_RAG=true\` in .env to enable it locally.`,
-        none_title: `No History Documents`,
-        none_description: `There are no history-extracted documents to remove in this scope. Extract some with \`/memory history import\`.`,
-        success_title: `History Document Removed`,
-        success_description: `Successfully removed the history document: "{name}"`,
-      },
       personaprompt: {
         description: `Clear a persona-specific prompt`,
         no_permission_title: `🔴 Permission Denied`,
@@ -4950,38 +3331,21 @@ You can change this anytime using \`/personal privacy\`.`,
         success_title: `Persona Prompt Cleared`,
         success_description: `Cleared persona prompt for "{persona_name}".`,
       },
-      reminder: {
-        description: `Remove a reminder.`,
-        modal_title: `Remove Reminder`,
-        select_label: `Reminder to Remove`,
-        select_description: `Choose which reminder to remove`,
-        select_placeholder: `Select a reminder...`,
-        no_reminders_title: `No Reminders`,
-        no_reminders: `There are no reminders to remove. Set one by asking me to remind you.`,
-        success_title: `Reminder Removed`,
-        success_description: `Successfully removed the reminder: "{reminder_purpose}"`,
-      },
       memory: {
-        description: `Manage my memories`,
         personal: {
           description: `Remove a personal memory.`,
-          scope_description: `Memory scope: persona-only (default) or global across all personas/servers`,
-          scope_choice_persona: `Persona memories (default)`,
-          scope_choice_global: `Global memories (all personas/servers)`,
           modal_title: `Remove Personal Memory`,
           select_label: `Memory to Remove`,
           select_description: `Choose which personal memory to remove`,
           select_placeholder: `Select a memory...`,
           no_memories_title: `No Personal Memories`,
           no_memories: `You don't have any personal memories stored. Add some with \`/memory personal add\`.`,
-          select_title: `Remove Personal Memory`,
-          memory_label: `Personal Memory`,
           success_title: `Personal Memory Removed`,
           success_description: `Successfully removed the personal memory: "{memory}"`,
           warning_disabled_title: `Personalization Disabled`,
           warning_disabled_description: `The memory was successfully removed.
 
-**Warning:** Personalization is currently disabled on this server, so this change won't affect my behavior here. It will still be reflected on other servers where personalization is enabled.`, // Natural line break
+**Warning:** Personalization is currently disabled on this server, so this change won't affect my behavior here. It will still be reflected on other servers where personalization is enabled.`,
         },
         server: {
           description: `Remove a server memory from my knowledge.`,
@@ -4993,149 +3357,107 @@ You can change this anytime using \`/personal privacy\`.`,
           no_memories: `There are no server memories stored for this server. Add some with \`/memory server add\`.`,
           no_owned_memories: `You don't own any server memories that can be removed.`,
           memory_not_found: `The selected memory could not be found.`,
-          select_title: `Remove Server Memory`,
-          memory_label: `Server Memory`,
           success_title: `Server Memory Removed`,
           success_description: `Successfully removed the server memory: "{memory}"`,
         },
       },
     },
-
     generate: {
       image: {
-        // Command
-        description: "Generate an AI image using Google Gemini or OpenRouter",
-
-        // Modal
+        description: `Generate an AI image using Google Gemini or OpenRouter`,
         modal: {
-          title: "Generate Image",
-          prompt_label: "Image Prompt",
-          prompt_description: "Describe the image you want to generate",
-          prompt_placeholder: "A cute short-haired elven anime girl eating a banana, manga style",
-          image_upload_label: "Reference Image (Optional)",
-          image_upload_2_label: "Reference Image 2 (Optional)",
-          image_upload_3_label: "Reference Image 3 (Optional)",
-          image_upload_description: "Upload a reference image for image-to-image generation",
-          aspect_ratio_label: "Aspect Ratio",
-          aspect_ratio_description: "Select the desired aspect ratio",
-          aspect_ratio_placeholder: "Choose aspect ratio...",
+          title: `Generate Image`,
+          prompt_label: `Image Prompt`,
+          prompt_description: `Describe the image you want to generate`,
+          prompt_placeholder: `A cute short-haired elven anime girl eating a banana, manga style`,
+          image_upload_label: `Reference Image (Optional)`,
+          image_upload_2_label: `Reference Image 2 (Optional)`,
+          image_upload_3_label: `Reference Image 3 (Optional)`,
+          image_upload_description: `Upload a reference image for image-to-image generation`,
+          aspect_ratio_label: `Aspect Ratio`,
+          aspect_ratio_description: `Select the desired aspect ratio`,
         },
-
-        // Success embed
-        success_title: "🟢 Image Generated Successfully!",
-        success_description: "Your AI-generated image is ready!",
-        field_prompt: "Prompt",
-        field_model: "Model",
-        field_generation_time: "Generation Time",
-        field_aspect_ratio: "Aspect Ratio",
-
-        // Provider-specific warnings
-        zai_no_img2img_warning:
-          "Z.ai does not support image-to-image generation. Your reference images were ignored, but the image will still be generated from your text prompt.",
-        nvidia_no_img2img_warning:
-          "NVIDIA NIM does not support image-to-image generation. Your reference images were ignored, but the image will still be generated from your text prompt.",
-
-        // Errors
-        disabled_title: "🔴 Image Generation Disabled",
-        disabled_description:
-          "Image generation is disabled on this server. A server member with `Manage Server` permissions can enable it using `/config bot-permissions`.",
-        wrong_provider_title: "🔴 Unsupported Provider",
-        wrong_provider_description:
-          "Image generation requires a provider with native image generation support. Your current provider is **{current_provider}**.",
-        no_api_key_title: "🔴 No API Key",
-        no_api_key_description: "No API key configured. Please use `/config api-key set`.",
-        api_key_decrypt_failed_title: "🔴 API Key Error",
-        api_key_decrypt_failed_description:
-          "Failed to decrypt API key. Please reconfigure using `/config api-key set`.",
-        no_diffusion_model_title: "🔴 No Image Model",
-        no_diffusion_model_description: "No diffusion model configured for your provider.",
-        error_billing_title: "🔴 Billing Required",
-        error_billing_description: "Your API key requires billing to be enabled for image generation.",
-        error_safety_title: "🔴 Content Blocked",
-        error_safety_description: "Your prompt was blocked by safety filters. Please try a different prompt.",
-        error_generation_failed_title: "🔴 Generation Failed",
-        error_generation_failed_description: "Failed to generate image: {error}",
-        invalid_image_title: "🔴 Invalid Image",
-        invalid_image_description: "Please upload valid image files (PNG, JPG, etc.).",
-        // Quota errors
-        quota_exceeded_title: "🔴 Image Quota Exceeded",
-        quota_exceeded_description: "You have reached your image generation quota. {reset_info}",
-        user_quota_exceeded_description: "You have reached your daily image generation quota. {reset_info}",
-        serverwide_quota_exceeded_description:
-          "This server has reached its image generation quota for this period. {reset_info}",
-        quota_resets_in_hours: "Quota resets in {hours} hour(s).",
-        quota_resets_in_days: "Quota resets in {days} day(s).",
-        quota_exceeded_footer: "This quota is configured by this server's managers via `/server quota`.",
+        success_title: `🟢 Image Generated Successfully!`,
+        field_prompt: `Prompt`,
+        field_model: `Model`,
+        field_generation_time: `Generation Time`,
+        field_aspect_ratio: `Aspect Ratio`,
+        zai_no_img2img_warning: `Z.ai does not support image-to-image generation. Your reference images were ignored, but the image will still be generated from your text prompt.`,
+        nvidia_no_img2img_warning: `NVIDIA NIM does not support image-to-image generation. Your reference images were ignored, but the image will still be generated from your text prompt.`,
+        disabled_title: `🔴 Image Generation Disabled`,
+        disabled_description: `Image generation is disabled on this server. A server member with \`Manage Server\` permissions can enable it using \`/config bot-permissions\`.`,
+        wrong_provider_title: `🔴 Unsupported Provider`,
+        wrong_provider_description: `Image generation requires a provider with native image generation support. Your current provider is **{current_provider}**.`,
+        no_api_key_title: `🔴 No API Key`,
+        no_api_key_description: `No API key configured. Please use \`/config api-key set\`.`,
+        api_key_decrypt_failed_title: `🔴 API Key Error`,
+        api_key_decrypt_failed_description: `Failed to decrypt API key. Please reconfigure using \`/config api-key set\`.`,
+        no_diffusion_model_title: `🔴 No Image Model`,
+        no_diffusion_model_description: `No diffusion model configured for your provider.`,
+        error_billing_title: `🔴 Billing Required`,
+        error_billing_description: `Your API key requires billing to be enabled for image generation.`,
+        error_safety_title: `🔴 Content Blocked`,
+        error_safety_description: `Your prompt was blocked by safety filters. Please try a different prompt.`,
+        error_generation_failed_title: `🔴 Generation Failed`,
+        error_generation_failed_description: `Failed to generate image: {error}`,
+        invalid_image_title: `🔴 Invalid Image`,
+        invalid_image_description: `Please upload valid image files (PNG, JPG, etc.).`,
+        quota_exceeded_title: `🔴 Image Quota Exceeded`,
+        quota_exceeded_description: `You have reached your image generation quota. {reset_info}`,
+        user_quota_exceeded_description: `You have reached your daily image generation quota. {reset_info}`,
+        serverwide_quota_exceeded_description: `This server has reached its image generation quota for this period. {reset_info}`,
+        quota_resets_in_hours: `Quota resets in {hours} hour(s).`,
+        quota_resets_in_days: `Quota resets in {days} day(s).`,
+        quota_exceeded_footer: `This quota is configured by this server's managers via \`/server quota\`.`,
       },
       video: {
-        // Command
-        description: "Generate an AI video using Google Veo, OpenRouter, or Z.ai",
-
-        // Modal
+        description: `Generate an AI video using Google Veo, OpenRouter, or Z.ai`,
         modal: {
-          title: "Generate Video",
-          prompt_label: "Video Prompt",
-          prompt_description: "Describe the video you want to generate",
-          prompt_placeholder: "A serene sunrise over a mountain lake with gentle ripples on the water",
-          image_upload_label: "Reference Image (Optional)",
-          image_upload_description: "Upload a reference image for image-to-video generation",
-          aspect_ratio_label: "Aspect Ratio",
-          aspect_ratio_description: "Select the desired aspect ratio",
+          title: `Generate Video`,
+          prompt_label: `Video Prompt`,
+          prompt_description: `Describe the video you want to generate`,
+          prompt_placeholder: `A serene sunrise over a mountain lake with gentle ripples on the water`,
+          image_upload_label: `Reference Image (Optional)`,
+          image_upload_description: `Upload a reference image for image-to-video generation`,
+          aspect_ratio_label: `Aspect Ratio`,
+          aspect_ratio_description: `Select the desired aspect ratio`,
         },
-
-        // Success embed
-        success_title: "🟢 Video Generated Successfully!",
-        success_description: "Generated with `{model}` in {elapsed}s.\n**Prompt:** {prompt}",
-
-        // Progress embed
-        generating_title: "🎬 Generating Video...",
-        generating_description:
-          "Your video is being generated. This process typically takes 1-3 minutes. Please wait...",
-
-        // Errors
-        disabled_title: "🔴 Video Generation Disabled",
-        disabled_description:
-          "Video generation is disabled on this server. A server member with `Manage Server` permissions can enable it using `/config bot-permissions`.",
-        wrong_provider_title: "🔴 Unsupported Provider",
-        wrong_provider_description:
-          "Video generation requires Google, OpenRouter, or Z.ai. Your current provider is **{current_provider}**.",
-        no_api_key_title: "🔴 No API Key",
-        no_api_key_description: "No API key configured. Please use `/config api-key set`.",
-        api_key_decrypt_failed_title: "🔴 API Key Error",
-        api_key_decrypt_failed_description:
-          "Failed to decrypt API key. Please reconfigure using `/config api-key set`.",
-        no_video_model_title: "🔴 No Video Model",
-        no_video_model_description:
-          "No video model configured for your provider. Use `/config model video` to set one.",
-        error_title: "🔴 Video Generation Failed",
-        unsupported_provider_description: "Video generation is not supported for provider **{provider}**.",
-        no_data_description: "No video data was received from the API. The generation may have been blocked or failed.",
-        file_too_large_title: "🔴 Video Too Large",
-        file_too_large_description:
-          "The generated video ({size_mb} MB) exceeds Discord's 25 MB file size limit. Try a shorter prompt or different aspect ratio.",
-        invalid_image_title: "🔴 Invalid Image",
-        invalid_image_description: "The uploaded reference image could not be processed. Please try a different image.",
-        timeout_description:
-          "Video generation timed out. The provider may be experiencing high load. Please try again later.",
-        blocked_description:
-          "Video generation was blocked by the provider's content safety filter. Please try a different prompt.",
-        generic_error_description: "An unexpected error occurred during video generation. Please try again later.",
-
-        // Quota errors
-        quota_exceeded_title: "🔴 Video Quota Exceeded",
-        quota_exceeded_description: "You have reached your video generation quota. {reset_info}",
-        user_quota_exceeded_description: "You have reached your daily video generation quota. {reset_info}",
-        serverwide_quota_exceeded_description:
-          "This server has reached its video generation quota for this period. {reset_info}",
-        quota_resets_in_hours: "Quota resets in {hours} hour(s).",
-        quota_resets_in_days: "Quota resets in {days} day(s).",
-        quota_exceeded_footer: "This quota is configured by this server's managers via `/server quota`.",
+        success_title: `🟢 Video Generated Successfully!`,
+        success_description: `Generated with \`{model}\` in {elapsed}s.
+**Prompt:** {prompt}`,
+        generating_title: `🎬 Generating Video...`,
+        generating_description: `Your video is being generated. This process typically takes 1-3 minutes. Please wait...`,
+        disabled_title: `🔴 Video Generation Disabled`,
+        disabled_description: `Video generation is disabled on this server. A server member with \`Manage Server\` permissions can enable it using \`/config bot-permissions\`.`,
+        wrong_provider_title: `🔴 Unsupported Provider`,
+        wrong_provider_description: `Video generation requires Google, OpenRouter, or Z.ai. Your current provider is **{current_provider}**.`,
+        no_api_key_title: `🔴 No API Key`,
+        no_api_key_description: `No API key configured. Please use \`/config api-key set\`.`,
+        api_key_decrypt_failed_title: `🔴 API Key Error`,
+        api_key_decrypt_failed_description: `Failed to decrypt API key. Please reconfigure using \`/config api-key set\`.`,
+        no_video_model_title: `🔴 No Video Model`,
+        no_video_model_description: `No video model configured for your provider. Use \`/config model video\` to set one.`,
+        error_title: `🔴 Video Generation Failed`,
+        unsupported_provider_description: `Video generation is not supported for provider **{provider}**.`,
+        no_data_description: `No video data was received from the API. The generation may have been blocked or failed.`,
+        file_too_large_title: `🔴 Video Too Large`,
+        file_too_large_description: `The generated video ({size_mb} MB) exceeds Discord's 25 MB file size limit. Try a shorter prompt or different aspect ratio.`,
+        invalid_image_title: `🔴 Invalid Image`,
+        invalid_image_description: `The uploaded reference image could not be processed. Please try a different image.`,
+        timeout_description: `Video generation timed out. The provider may be experiencing high load. Please try again later.`,
+        blocked_description: `Video generation was blocked by the provider's content safety filter. Please try a different prompt.`,
+        generic_error_description: `An unexpected error occurred during video generation. Please try again later.`,
+        quota_exceeded_title: `🔴 Video Quota Exceeded`,
+        quota_exceeded_description: `You have reached your video generation quota. {reset_info}`,
+        user_quota_exceeded_description: `You have reached your daily video generation quota. {reset_info}`,
+        serverwide_quota_exceeded_description: `This server has reached its video generation quota for this period. {reset_info}`,
+        quota_resets_in_hours: `Quota resets in {hours} hour(s).`,
+        quota_resets_in_days: `Quota resets in {days} day(s).`,
+        quota_exceeded_footer: `This quota is configured by this server's managers via \`/server quota\`.`,
       },
     },
   },
-
   events: {
-    // Messages for when the bot is added to a server
     addBot: {
       rejoin_title: `I'm Back!`,
       rejoin_description: `Looks like I was re-added to this server. My previous settings and personality are still intact! You can manage me using the \`/config\`, \`/persona\`, \`/memory\`, and \`/server\` commands. You can also export or reset your data anytime with \`/memory personal export\`, \`/memory server export\`, \`/personal config\`, and \`/server config\`.
@@ -5151,36 +3473,24 @@ You can change this anytime using \`/personal privacy\`.`,
 			**By using me, you agree to these [Terms of Service](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/terms-of-service.md) and [Privacy Policy](https://github.com/Bredrumb/TomoriBot/blob/main/legal/en-US/privacy-policy.md).** View them anytime with \`/legal terms\` and \`/legal privacy\`.`,
     },
   },
-
-  // Reminder system messages
   reminders: {
-    // Confirmation embed when reminder is set
     reminder_set_title: `⏰ {persona_nickname} Set a Reminder`,
     reminder_set_description: `I'll remind {user_nickname} about "**{reminder_purpose}**" at \`{reminder_time}\``,
     reminder_set_footer: `A mention will be sent after {time_remaining} from now. Delete reminders with \`/scheduled-task remove\`.`,
     reminder_set_footer_recurring: `First mention in {time_remaining}. Repeats every {repetition_interval_hours} hour(s). Delete reminders with \`/scheduled-task remove\`.`,
-
-    // Recurring task setup (self reminders)
     recurring_task_set_title: `🔁 {persona_nickname} Set Up a Recurring Task`,
     recurring_task_set_description: `I'll run "**{reminder_purpose}**" starting at \`{reminder_time}\`, then repeat every {repetition_interval_hours} hour(s).`,
     recurring_task_set_footer: `You can delete reminders using \`/scheduled-task remove\`.`,
-
-    // One-time task setup (self reminders, non-recurring)
     task_set_title: `✅ {persona_nickname} Set Up a Task`,
     task_set_description: `I'll execute "**{reminder_purpose}**" at \`{reminder_time}\``,
     task_set_footer: `The task will run in {time_remaining}. Delete reminders with \`/scheduled-task remove\`.`,
-
-    // Fallback info embed when AI generation fails - shows the raw reminder/task content
     reminder_triggered_title: `🔵 Reminder Triggered`,
     task_triggered_title: `🔵 Task Triggered`,
     triggered_description: `{reminder_purpose}`,
     triggered_footer: `An error occurred during generation, so the raw reminder has been sent instead`,
   },
-
-  // Tool messages
   tools: {
     generate_image: {
-      // Quota error messages
       quota_exceeded_generic: `Image generation quota has been exceeded.`,
       user_quota_exceeded: `You have reached your daily image generation quota. {reset_info}`,
       serverwide_quota_exceeded: `This server has reached its image generation quota for this period. {reset_info}`,
@@ -5206,20 +3516,7 @@ You can change this anytime using \`/personal privacy\`.`,
       invalid_character_identity: `Invalid character identity: {id}. Use persona:<id>, a short numeric persona ID, or a Discord user snowflake.`,
     },
   },
-
-  // Matrix bridge - concise summaries of Discord embeds relayed to Matrix rooms.
-  // Discord embeds cannot be rendered natively in Matrix, so tool-result embeds are
-  // converted to short bracketed notices that convey the key information inline.
   matrix: {
-    embed: {
-      server_memory_learned: `[🧠 I learned "{memory}"]`,
-      personal_memory_learned: `[💡 I learned something personal: "{memory}"]`,
-      server_memory_updated: `[📝 I updated a memory: "{memory}"]`,
-      personal_memory_updated: `[📝 I updated a personal memory: "{memory}"]`,
-      reminder_set: `[⏰ {description}]`,
-      task_set: `[✅ {description}]`,
-      recurring_task_set: `[🔁 {description}]`,
-    },
     notices: {
       invited: `TomoriBot joined this room.
 

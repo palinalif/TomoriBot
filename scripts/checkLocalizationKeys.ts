@@ -101,6 +101,14 @@ function extractKeysFromLocaleObject(obj: unknown, prefix = ""): Set<string> {
     return keys;
   }
 
+  // Arrays are treated as opaque leaf values (e.g. base_trigger_words: ["tomori", "tomo"]).
+  // Recursing into them would generate spurious keys like "general.defaults.base_trigger_words.0"
+  // that can never be statically referenced, causing them to be flagged as unused.
+  if (Array.isArray(obj)) {
+    if (prefix) keys.add(prefix);
+    return keys;
+  }
+
   if (typeof obj === "object" && obj !== null) {
     for (const [key, value] of Object.entries(obj)) {
       const currentPath = prefix ? `${prefix}.${key}` : key;
@@ -238,12 +246,19 @@ function isValidLocalizationKey(key: string): boolean {
     if (pattern.test(key)) return false;
   }
 
-  // Should start with common locale prefixes
+  // Must start with a known top-level locale prefix
+  // This list is derived from the top-level keys in the locale files —
+  // update it whenever a new top-level namespace is added to the locale object
   const validPrefixes = [
     "commands",
     "general",
     "events",
     "genai",
+    "rate_limit",
+    "reminders",
+    "tools",
+    "matrix",
+    // Legacy / sub-namespace prefixes still referenced in source
     "functions",
     "errors",
     "tool",
@@ -306,6 +321,9 @@ function extractStringValues(obj: unknown, prefix = ""): Map<string, string> {
     }
     return values;
   }
+
+  // Arrays are opaque leaf values — skip recursion to avoid index keys like "key.0", "key.1"
+  if (Array.isArray(obj)) return values;
 
   if (typeof obj === "object" && obj !== null) {
     for (const [key, value] of Object.entries(obj)) {
@@ -569,8 +587,9 @@ function extractDynamicTemplateKeys(content: string, availableKeys: Set<string>)
 }
 
 /**
- * Extracts keys from localizer() calls with template literals
+ * Extracts keys from localizer() / localizeWithAliases() calls with template literals
  * Handles patterns like: localizer(locale, `genai.google.${messageKey}`)
+ * Also handles: localizeWithAliases(locale, `commands.${categoryName}.description`)
  * @param content - The file content to analyze
  * @param availableKeys - Set of all available locale keys to match against
  * @returns Array of matched keys
@@ -578,9 +597,11 @@ function extractDynamicTemplateKeys(content: string, availableKeys: Set<string>)
 function extractLocalizerTemplateKeys(content: string, availableKeys: Set<string>): string[] {
   const matchedKeys: string[] = [];
 
-  // Pattern: localizer() with template literal as second argument
+  // Pattern: localizer() or localizeWithAliases() with template literal as second argument
   // Matches: localizer(locale, `genai.google.${messageKey}`)
-  const localizerTemplatePattern = /localizer\s*\([^,]+,\s*`([a-zA-Z][a-zA-Z0-9._]*)\$\{([^}]+)\}([a-zA-Z0-9._]*)`\)/g;
+  //          localizeWithAliases(locale, `commands.${categoryName}.description`)
+  const localizerTemplatePattern =
+    /(?:localizer|localizeWithAliases)\s*\([^,]+,\s*`([a-zA-Z][a-zA-Z0-9._]*)\$\{([^}]+)\}([a-zA-Z0-9._]*)`\)/g;
 
   let match = localizerTemplatePattern.exec(content);
   while (match !== null) {
@@ -591,22 +612,25 @@ function extractLocalizerTemplateKeys(content: string, availableKeys: Set<string
     // Extract the variable name (strip any property access)
     const variableName = variable.split(/[.[]/)[0];
 
-    // Look for string literal assignments to this variable in the same file
-    // Patterns like: messageKey = "429_default_message"
-    const assignmentPattern = new RegExp(`${variableName}\\s*=\\s*["'\`]([a-zA-Z0-9._]+)["'\`]`, "g");
+    // Look for string literal values for this variable via assignments AND strict equality comparisons
+    // Patterns like: messageKey = "429_default_message" OR conditioningType === "reward"
+    const valuePattern = new RegExp(
+      `(?:${variableName}\\s*(?:=|===)\\s*["'\`]([a-zA-Z0-9._]+)["'\`]|["'\`]([a-zA-Z0-9._]+)["'\`]\\s*===\\s*${variableName})`,
+      "g",
+    );
 
-    let assignmentMatch = assignmentPattern.exec(content);
-    while (assignmentMatch !== null) {
-      const assignedValue = assignmentMatch[1];
-      // Construct the full key
-      const fullKey = `${prefix}${assignedValue}${suffix}`;
-
-      // Check if this constructed key exists in available keys
-      if (availableKeys.has(fullKey)) {
-        matchedKeys.push(fullKey);
+    let valueMatch = valuePattern.exec(content);
+    while (valueMatch !== null) {
+      // Group 1: var = "value" or var === "value"; Group 2: "value" === var
+      const resolvedValue = valueMatch[1] ?? valueMatch[2];
+      if (resolvedValue) {
+        const fullKey = `${prefix}${resolvedValue}${suffix}`;
+        if (availableKeys.has(fullKey)) {
+          matchedKeys.push(fullKey);
+        }
       }
 
-      assignmentMatch = assignmentPattern.exec(content);
+      valueMatch = valuePattern.exec(content);
     }
 
     match = localizerTemplatePattern.exec(content);
@@ -701,6 +725,94 @@ function extractErrorCodeKeys(content: string, availableKeys: Set<string>): stri
 }
 
 /**
+ * Keys that are provably used at runtime but cannot be detected by static regex analysis
+ * because their values come from TypeScript type constraints or object key enumeration.
+ * Example: `commands.conditioning.shared.${type}_footer` where type ∈ ConditioningType
+ * which is a Zod enum — the values come from a Record<ConditioningType, ...> object
+ * whose keys cannot be reliably traced back to the template variable without type inference.
+ */
+const KNOWN_DYNAMIC_LOCALE_KEYS = new Set([
+  "commands.conditioning.shared.punish_footer",
+  "commands.conditioning.shared.reward_footer",
+]);
+
+/**
+ * Detects getLocaleSubKeys(locale, "prefix") calls and marks all available keys
+ * under that prefix as referenced. This function enumerates locale sub-keys at
+ * runtime so all child keys under the prefix are implicitly used.
+ * @param availableKeys - Set of all available locale keys
+ * @returns Array of matched keys under referenced prefixes
+ */
+async function extractGetLocaleSubKeysUsage(availableKeys: Set<string>): Promise<string[]> {
+  const matchedKeys: string[] = [];
+  const srcPath = join(process.cwd(), "src");
+  const getSubKeysPattern = /getLocaleSubKeys\s*\([^,]+,\s*["']([a-zA-Z0-9._]+)["']\)/g;
+
+  const glob = new Glob("**/*.ts");
+  for await (const file of glob.scan(srcPath)) {
+    if (file.includes("locales/")) continue;
+    const filePath = join(srcPath, file);
+    try {
+      const content = await readFile(filePath, "utf-8");
+      let match = getSubKeysPattern.exec(content);
+      while (match !== null) {
+        const prefix = match[1]; // e.g., "commands.reward"
+        // All keys starting with "prefix." are dynamically enumerated
+        for (const key of availableKeys) {
+          if (key.startsWith(`${prefix}.`)) {
+            matchedKeys.push(key);
+          }
+        }
+        match = getSubKeysPattern.exec(content);
+      }
+    } catch {
+      // skip unreadable files
+    }
+  }
+
+  return matchedKeys;
+}
+
+/**
+ * Marks commands.{category}.description and commands.{category}.{group}.description
+ * keys as referenced, because commandLoader.ts dynamically builds these keys from the
+ * src/commands/ directory structure (using path.basename) rather than string literals.
+ * @param availableKeys - Set of all available locale keys
+ * @returns Array of matched description keys derived from the filesystem layout
+ */
+async function extractCommandDescriptionKeys(availableKeys: Set<string>): Promise<string[]> {
+  const matchedKeys: string[] = [];
+  const commandsPath = join(process.cwd(), "src", "commands");
+
+  try {
+    const { readdir } = await import("node:fs/promises");
+    const categories = await readdir(commandsPath, { withFileTypes: true });
+
+    for (const cat of categories) {
+      if (!cat.isDirectory()) continue;
+      const catName = cat.name;
+
+      // 1. Top-level command description: commands.{category}.description
+      const catDescKey = `commands.${catName}.description`;
+      if (availableKeys.has(catDescKey)) matchedKeys.push(catDescKey);
+
+      // 2. Subcommand group descriptions: commands.{category}.{group}.description
+      const catPath = join(commandsPath, catName);
+      const subEntries = await readdir(catPath, { withFileTypes: true });
+      for (const sub of subEntries) {
+        if (!sub.isDirectory()) continue;
+        const groupDescKey = `commands.${catName}.${sub.name}.description`;
+        if (availableKeys.has(groupDescKey)) matchedKeys.push(groupDescKey);
+      }
+    }
+  } catch (error) {
+    log.warn("Failed to scan command directories for description keys", error);
+  }
+
+  return matchedKeys;
+}
+
+/**
  * Extracts localization keys referenced in TypeScript source files
  * @param availableKeys - Set of all available locale keys for dynamic key matching
  * @returns Map of referenced keys to files that reference them
@@ -713,8 +825,8 @@ async function extractReferencedKeys(availableKeys: Set<string>): Promise<Map<st
   const patterns = [
     // titleKey, descriptionKey, nameKey, labelKey, etc.
     /(?:titleKey|descriptionKey|nameKey|labelKey|modalTitleKey|itemLabelKey):\s*["']([a-zA-Z0-9._]+)["']/g,
-    // localizer function calls
-    /localizer\s*\(\s*["'][^"']*["']\s*,\s*["']([a-zA-Z0-9._]+)["']/g,
+    // localizer() calls — first arg can be a string literal ("en-US") OR a variable (locale)
+    /localizer\s*\(\s*(?:"[^"]*"|'[^']*'|\w+)\s*,\s*["']([a-zA-Z0-9._]+)["']/g,
     // Quoted strings that look like localization keys (dot-separated paths)
     /["']([a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9_]*){2,})["']/g,
     // Direct key references in ternary operators and assignments
@@ -848,6 +960,17 @@ async function analyzeLocalizationKeys(): Promise<AnalysisResult> {
   const commandDescriptionViolations = await checkCommandDescriptionLengths(localeKeys);
   const referencedKeysMap = await extractReferencedKeys(availableKeys);
   const referencedKeys = new Set(referencedKeysMap.keys());
+
+  // 1. Add keys discovered via getLocaleSubKeys() runtime enumeration
+  const subKeyMatches = await extractGetLocaleSubKeysUsage(availableKeys);
+  for (const key of subKeyMatches) referencedKeys.add(key);
+
+  // 2. Add keys derived from filesystem-based commandLoader patterns
+  const commandDescKeys = await extractCommandDescriptionKeys(availableKeys);
+  for (const key of commandDescKeys) referencedKeys.add(key);
+
+  // 3. Add keys that are provably used but cannot be detected statically
+  for (const key of KNOWN_DYNAMIC_LOCALE_KEYS) referencedKeys.add(key);
 
   // Find missing keys (referenced but not available)
   const missingKeys: KeyUsage[] = [];
