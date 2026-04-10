@@ -139,8 +139,9 @@ export default {
       footer: `Provider: {provider} | Model: {model}`,
     },
     message_interaction: {
+      reply_context_author: `Replying to {user}`,
       reply_context_description: `{message_url}`,
-      reply_context_footer: `Replying to {user}`,
+      reply_context_footer: `Replying to {user} • {message_url}`,
     },
     text_quota_exceeded_title: `🔴 Text Quota Exceeded`,
     text_quota_exceeded_description: `You have reached your text generation quota. {reset_info}`,

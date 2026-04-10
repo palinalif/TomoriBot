@@ -113,7 +113,7 @@ export class InteractWithRecentMessageTool extends BaseTool {
       content: {
         type: "string",
         description:
-          "Required interaction content. For `react`, provide the emoji. For `reply`, provide the reply text.",
+          "Required interaction content. For `react`, provide the emoji, it can be a custom emoji. For `reply`, provide the reply text.",
       },
     },
     required: ["action", "message_id", "content"],
@@ -485,6 +485,11 @@ export class InteractWithRecentMessageTool extends BaseTool {
             threadId: webhookReplyContext.threadId,
           },
         );
+
+        if (context.streamContext?.replyNoticeState) {
+          context.streamContext.replyNoticeState.attempted = true;
+          context.streamContext.replyNoticeState.sent = true;
+        }
       } else {
         sentMessage = await targetMessage.reply({
           content: sanitizedReplyContent,
@@ -508,6 +513,7 @@ export class InteractWithRecentMessageTool extends BaseTool {
           preview: normalizePreview(sanitizedReplyContent),
           used_webhook_context: Boolean(webhookReplyContext && context.personaUsername),
         },
+        endTurn: true,
       };
     } catch (error) {
       log.error(`InteractWithRecentMessageTool: Failed to reply to message ${targetMessage.id}`, error as Error);

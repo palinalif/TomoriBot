@@ -381,9 +381,12 @@ function matchesLocalizedReplyContextTemplate(
 ): boolean {
   for (const locale of getSupportedLocales()) {
     const template = localizer(locale, templateKey, placeholderValues);
-    const placeholderValue = Object.values(placeholderValues)[0];
-    const [prefix, suffix = ""] = template.split(placeholderValue);
-    if (text.startsWith(prefix) && text.endsWith(suffix)) {
+    let pattern = escapeRegExp(template);
+    for (const placeholderValue of Object.values(placeholderValues)) {
+      pattern = pattern.replaceAll(escapeRegExp(placeholderValue), ".+?");
+    }
+
+    if (new RegExp(`^${pattern}$`).test(text)) {
       return true;
     }
   }
@@ -393,6 +396,7 @@ function matchesLocalizedReplyContextTemplate(
 
 function extractReplyContextTargetFromEmbed(embed: Embed): { channelId: string; messageId: string } | null {
   const description = embed.description?.trim() ?? "";
+  const authorName = embed.author?.name?.trim() ?? "";
   const footerText = embed.footer?.text?.trim() ?? "";
   const hasReplyDescription = matchesLocalizedReplyContextTemplate(
     description,
@@ -401,15 +405,23 @@ function extractReplyContextTargetFromEmbed(embed: Embed): { channelId: string; 
       message_url: REPLY_CONTEXT_URL_SENTINEL,
     },
   );
+  const hasReplyAuthor = matchesLocalizedReplyContextTemplate(
+    authorName,
+    "genai.message_interaction.reply_context_author",
+    {
+      user: REPLY_CONTEXT_USER_SENTINEL,
+    },
+  );
   const hasReplyFooter = matchesLocalizedReplyContextTemplate(
     footerText,
     "genai.message_interaction.reply_context_footer",
     {
       user: REPLY_CONTEXT_USER_SENTINEL,
+      message_url: REPLY_CONTEXT_URL_SENTINEL,
     },
   );
 
-  if (!hasReplyDescription && !hasReplyFooter) {
+  if (!hasReplyDescription && !hasReplyAuthor && !hasReplyFooter) {
     return null;
   }
 

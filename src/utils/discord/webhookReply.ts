@@ -9,23 +9,21 @@ export function getReplyContextAuthorName(message: Message): string {
 }
 
 export function buildReplyContextEmbed(targetMessage: Message, locale: string): EmbedBuilder {
+  const authorIconUrl = targetMessage.author.displayAvatarURL({
+    size: 64,
+    extension: "png",
+    forceStatic: true,
+  });
+
   return new EmbedBuilder()
     .setColor(ColorCode.INFO)
     .setURL(targetMessage.url)
-    .setDescription(
-      localizer(locale, "genai.message_interaction.reply_context_description", {
-        message_url: targetMessage.url,
-      }),
-    )
-    .setFooter({
-      text: localizer(locale, "genai.message_interaction.reply_context_footer", {
+    .setAuthor({
+      name: localizer(locale, "genai.message_interaction.reply_context_author", {
         user: getReplyContextAuthorName(targetMessage),
       }),
-      iconURL: targetMessage.author.displayAvatarURL({
-        size: 64,
-        extension: "png",
-        forceStatic: true,
-      }),
+      url: targetMessage.url,
+      iconURL: authorIconUrl,
     });
 }
 
@@ -39,20 +37,26 @@ export async function sendWebhookReplyWithContext(
     threadId?: string;
   },
 ): Promise<Message> {
-  return await sendWebhookMessageWithIdentity(
-    webhook,
-    {
-      content,
-      embeds: [buildReplyContextEmbed(targetMessage, locale)],
-      allowedMentions: {
-        parse: ["users", "roles"],
-        repliedUser: false,
+  const replyNoticeMessage = await sendWebhookReplyNotice(webhook, targetMessage, locale, identity, options);
+
+  try {
+    return await sendWebhookMessageWithIdentity(
+      webhook,
+      {
+        content,
+        allowedMentions: {
+          parse: ["users", "roles"],
+          repliedUser: false,
+        },
+        ...(options?.threadId ? { threadId: options.threadId } : {}),
       },
-      ...(options?.threadId ? { threadId: options.threadId } : {}),
-    },
-    identity,
-    options?.threadId ?? webhook.channelId ?? webhook.id,
-  );
+      identity,
+      options?.threadId ?? webhook.channelId ?? webhook.id,
+    );
+  } catch (error) {
+    await webhook.deleteMessage(replyNoticeMessage.id, options?.threadId).catch(() => undefined);
+    throw error;
+  }
 }
 
 export async function sendWebhookReplyNotice(
