@@ -10,7 +10,14 @@ export default {
     defaults: {
       bot_name: `Tomori`,
     },
+    cooldown_title: `⌛ Please wait!`,
+    cooldown: `You need to wait {seconds} seconds before using a \`/{category}\` command again.`,
     message_cooldown_title: `⌛ Please wait!`,
+    message_cooldown: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before triggering **{botName}** again.`,
+    message_cooldown_footer_per_user: `Server Setting: Per-User Cooldown`,
+    message_cooldown_footer_per_channel: `Server Setting: Per-Channel Cooldown`,
+    message_cooldown_footer_server_wide: `Server Setting: Server-Wide Cooldown`,
+    message_cooldown_footer_strict: `Server Setting: Strict Server-Wide Cooldown`,
     interaction: {
       cancel_title: `🔴 Command Cancelled`,
       cancel_description: `The command has been cancelled.`,
@@ -136,6 +143,9 @@ export default {
       reply_context_footer: `Replying to {user}`,
     },
     text_quota_exceeded_title: `🔴 Text Quota Exceeded`,
+    text_quota_exceeded_description: `You have reached your text generation quota. {reset_info}`,
+    text_user_quota_exceeded_description: `You have reached your daily text generation quota. {reset_info}`,
+    text_serverwide_quota_exceeded_description: `This server has reached its text generation quota for this period. {reset_info}`,
     text_quota_resets_in_hours: `Quota resets in {hours} hour(s).`,
     text_quota_resets_in_days: `Quota resets in {days} day(s).`,
     text_quota_exceeded_footer: `This quota is configured by this server's managers via \`/server quota\`.`,
@@ -300,8 +310,58 @@ The selected model requires allowing data for paid model training, but your Open
     },
     "st-preset": {
       description: `Manage SillyTavern presets`,
+      upload: {
+        description: `Upload a SillyTavern preset JSON file`,
+        file_description: `The SillyTavern preset .json file to upload`,
+        invalid_file_title: `Invalid File`,
+        file_too_large_title: `File Too Large`,
+        file_too_large_description: `The preset file must be under {max_size} MB.`,
+        download_failed: `Failed to download the attachment. Please try again.`,
+        invalid_json: `The file could not be parsed as valid JSON.`,
+        not_a_preset: `This doesn't look like a SillyTavern preset — no \`prompts\` array found.`,
+        no_nodes: `No usable prompt nodes were found in this preset.`,
+        success_title: `Preset Uploaded`,
+        success_description: `**{name}** has been imported.
+
+• **{total}** total nodes
+• **{markers}** structural markers
+• **{toggleable}** toggleable nodes (**{enabled}** enabled)
+{notes}
+Use \`/st-preset node toggle\` to adjust which nodes are active.
+Use \`/st-preset remove\` to revert to default behavior.`,
+        note_comment_only: `
+> **{count}** comment-only node(s) are visible in \`/st-preset node toggle\` but are never injected into the prompt.`,
+        note_disabled_by_preset: `> **{count}** node(s) are disabled by default in this preset. Use \`/st-preset node toggle\` to enable them.
+`,
+      },
+      remove: {
+        description: `Remove the active SillyTavern preset`,
+        no_preset_title: `No Active Preset`,
+        no_preset_description: `There is no active SillyTavern preset on this server. Nothing to remove.`,
+        failed_title: `Removal Failed`,
+        failed_description: `Failed to remove the preset. Please try again.`,
+        success_title: `Preset Removed`,
+        success_description: `**{name}** has been removed. Context assembly has reverted to the default behavior.`,
+      },
       node: {
         description: `Manage preset prompt nodes`,
+        toggle: {
+          description: `Toggle preset prompt nodes on or off`,
+          no_preset_title: `No Preset Found`,
+          no_preset_description: `No active SillyTavern preset found for this server. Upload one with \`/st-preset upload\` first.`,
+          no_nodes_title: `No Toggleable Nodes`,
+          no_nodes_description: `This preset has no toggleable prompt nodes.`,
+          select_page_title: `Select Page`,
+          select_page_description: `**{preset_name}** has **{total_nodes}** toggleable nodes across **{total_pages}** pages.
+Select a page to view and toggle nodes:`,
+          group_description: `Check to enable, uncheck to disable`,
+          done_button: `Done`,
+          no_changes: `No changes made`,
+          result_title: `Node Toggle Results`,
+          result_description: `**{enabled}** / **{total}** nodes enabled.
+
+{changes}`,
+        },
       },
     },
     tool: {
@@ -365,6 +425,50 @@ I have built-in features to help reduce costs from abusers or spammers in your s
 - Limit auto-trigger channels`,
           footer: `Free providers like Google Gemini (free tier) and some OpenRouter models have no cost! NovelAI offers unlimited usage with a subscription. Use \`/help api-key\` to learn more.`,
         },
+      },
+      compact: {
+        description: `Summarize the recent conversation into a compact system memory.`,
+        channel_description: `Optional channel to post the summary in (defaults to this channel).`,
+        modal: {
+          title: `Compact Summary`,
+          type_label: `Summary Type`,
+          type_description: `Choose the summary format to generate.`,
+          type_choice_conversation: `Conversation`,
+          type_choice_roleplay: `Roleplay`,
+          refresh_label: `Refresh Context?`,
+          refresh_description: `If Yes, messages above the summary will be ignored.`,
+          analyze_images_label: `Analyze Images?`,
+          analyze_images_description: `Include image analysis for attachments, emojis, and stickers.`,
+          additional_instructions_label: `Additional Instructions`,
+          additional_instructions_placeholder: `Optional: add extra guidance for the summary output.`,
+        },
+        processing_title: `⏳ Building Summary`,
+        processing_description: `I'm compacting the recent conversation now...`,
+        success_title: `✅ Summary Posted`,
+        success_description: `Your compact summary has been posted in this channel.`,
+        success_description_redirect: `Your compact summary has been posted in {channel}.`,
+        failed_title: `Summary Failed`,
+        failed_description: `I couldn't generate the summary: {error}`,
+        provider_unsupported_title: `Provider Not Supported`,
+        provider_unsupported_description: `The current provider ({provider}) does not support compact summaries. Please switch to a compatible provider.`,
+        model_incompatible_title: `Model Incompatible`,
+        model_incompatible_description: `The current model ({model_name}) does not support structured output (STRUCT) required for roleplay summaries.`,
+        image_vision_required_title: `Image Vision Required`,
+        image_vision_required_description: `The current model ({model_name}) cannot analyze images. Please choose a vision-capable model or disable image analysis.`,
+        summary_title: `🧠 Compact Summary`,
+        summary_title_refreshed: `🧹 Compact Summary (Refreshed)`,
+        roleplay_scene_title: `🎭 Roleplay Scene Summary`,
+        roleplay_scene_title_refreshed: `🧹 Roleplay Scene Summary (Refreshed)`,
+        roleplay_scene_synopsis_header: `Synopsis of the current story:`,
+        roleplay_character_title_prefix: `🎭 Character Summary:`,
+        roleplay_labels: {
+          current_goals: `Immediate Goals of`,
+          emotional_status: `Current Emotional Status of`,
+          physical_status: `Current Physical Status of`,
+          appearance_clothing: `Appearance/Clothing of`,
+          inventory: `Inventory of`,
+        },
+        refresh_footer: `Context refreshed starting with this embed.`,
       },
       refresh: {
         description: `Clears the recent conversation history.`,
@@ -496,6 +600,17 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_persona_server_memories_with_count: `Persona Server Memories ({current} out of {max} slots used)`,
         field_blacklisted_members_with_count: `{current} members`,
       },
+      comment: {
+        description: `Send a comment embed visible in chat but invisible in context.`,
+        modal_title: `Create Comment`,
+        content_label: `Comment Content`,
+        content_placeholder: `Type your comment here...`,
+        invalid_channel_title: `Invalid Channel`,
+        invalid_channel_description: `This command can only be used in text channels.`,
+        footer: `Comment by {user}, invisible in context`,
+        success_title: `Comment Posted`,
+        success_description: `Your comment has been posted in this channel.`,
+      },
       delete: {
         description: `Delete turns or other channel content.`,
         turn: {
@@ -567,12 +682,15 @@ Memories imported: {memories_count}
         invalid_file_description: `The import file format is invalid or incompatible.`,
         no_permission_title: `🔴 Permission Denied`,
         no_permission_description: `You need the **Manage Server** permission to import server data.`,
+        error_invalid_memory: `Invalid memory content: {details}`,
         error_update_failed: `Failed to update user data in database`,
         error_import_failed: `Failed to import data`,
         error_no_server_data: `Server not found in database. Please run /config setup first.`,
+        error_invalid_server_memory: `Invalid server memory content: {details}`,
         error_invalid_config: `Invalid configuration fields in import data`,
         error_no_users: `No users found in database. Cannot attribute server memories.`,
         error_not_json: `Import file must contain a valid JSON object`,
+        error_incompatible_version: `Incompatible import version. Expected {expected}, got {actual}`,
         error_invalid_personal_format: `Invalid personal import file format`,
         error_invalid_server_format: `Invalid server import file format`,
         error_invalid_personal_memories_format: `Invalid personal memories import file format`,
@@ -584,6 +702,8 @@ Memories imported: {memories_count}
       delete: {
         confirmation_required_title: `Confirmation Required`,
         confirmation_required_description: `You must confirm deletion by selecting the confirmation option.`,
+        success_personal_settings_title: `🟢 Personal Settings Reset`,
+        success_personal_settings_description: `Your personal settings have been reset to defaults.`,
         success_server_config_title: `🟢 Server Config Reset`,
         success_server_config_description: `Server configuration has been reset to defaults.`,
         no_data_title: `🟡️ No Data Found`,
@@ -612,6 +732,15 @@ Memories imported: {memories_count}
         },
         remove: {
           description: `Remove a persona prompt.`,
+        },
+      },
+      "sample-dialogue": {
+        description: `Add a sample user/bot dialogue pair to as an example for how I should respond.`,
+        add: {
+          description: `Add a sample user/bot dialogue pair to as an example for how I should respond.`,
+        },
+        remove: {
+          description: `Remove a sample user/bot dialogue pair from my memory.`,
         },
       },
       name_conflict_title: `🔴 Persona Name Conflict`,
@@ -1096,6 +1225,141 @@ Whenever I'm triggered, I fetch the **latest messages** in the text channel as w
 You may opt out of my Memory features by using the {personalPrivacy} command, as well as turn off my self-learning using the {configPermissions} command.`,
         footer: `Your chosen AI provider (Google, NovelAI, OpenRouter) processes your messages according to their own privacy policies. Never share personal information with me for privacy. For full details, see \`/legal privacy\` and \`/legal terms\``,
       },
+      "api-key": {
+        description: `Learn how to set up API keys for AI providers`,
+        provider_description: `Choose your AI provider`,
+        provider_choice_brave: `Brave Search`,
+        provider_choice_google: `Google Gemini`,
+        provider_choice_deepseek: `DeepSeek`,
+        provider_choice_custom: `Custom Provider`,
+        provider_choice_nvidia: `NVIDIA NIM`,
+        provider_choice_novelai: `NovelAI`,
+        provider_choice_openrouter: `OpenRouter`,
+        provider_choice_zai: `Z.ai`,
+        provider_choice_vertex: `Google Vertex AI`,
+        provider_choice_elevenlabs: `ElevenLabs TTS`,
+        brave_title: `Setting Up Brave Search API Key`,
+        brave_description: `Brave Search is optional and only enhances my search capabilities. It does NOT power my AI as that's handled by your main provider.
+- Enables image, video, and news search
+- Provides real-time information from the internet
+- Enhances my ability to answer current questions`,
+        brave_getting_key_title: `Getting Your API Key:`,
+        brave_getting_key_description: `1. Visit [Brave Search API](https://brave.com/search/api/)
+2. Sign up for a free account
+3. Navigate to your [API Keys](https://api-dashboard.search.brave.com/app/keys) section in the Dashboard
+4. Create a new API key
+5. Copy and input your API key using the {configBraveapiSet} command`,
+        brave_important_title: `Important Notes:`,
+        brave_important_description: `- This is separate from your main AI provider
+- Without Brave API key, I can still function and use built-in web search
+- Brave includes $5 in free monthly credits, but usage above that can be billed. If you only want the free tier, set a $5 usage limit in the [Brave usage limits dashboard](https://api-dashboard.search.brave.com/app/subscriptions/usage-limits)`,
+        brave_footer: `For setting up your main AI provider, use the other \`/help api-key\` options`,
+        google_title: `Setting Up Google Gemini API Key`,
+        google_description: `Google Gemini offers free and paid tiers with powerful AI models.
+- Free tier available
+- [Gemini Privacy Policy](https://ai.google.dev/gemini-api/terms)`,
+        google_getting_key_title: `Getting Your API Key:`,
+        google_getting_key_description: `1. Visit [Google AI Studio](https://aistudio.google.com/apikey)
+2. Click \`Create API Key\` on the top-right (create a new Project if needed)
+3. Copy this API key into {configSetup} or {configApikeySet}`,
+        google_footer: `After setting up this provider, you may change its default model with {configModel}`,
+        deepseek_title: `Setting Up DeepSeek API Key`,
+        deepseek_description: `DeepSeek is a pay-as-you-go text provider.
+- [DeepSeek API Docs](https://api-docs.deepseek.com/)`,
+        deepseek_getting_key_title: `Getting Your API Key:`,
+        deepseek_getting_key_description: `1. Visit [DeepSeek API Keys](https://platform.deepseek.com/api_keys)
+2. Sign in or create a DeepSeek platform account
+3. Create a new API key
+4. If needed, add credits in your DeepSeek platform account before use
+5. Copy this API key into {configSetup} or {configApikeySet}`,
+        deepseek_footer: `After setting up this provider, you may change its default model with {configModel}`,
+        custom_title: `Custom Provider Setup`,
+        custom_description: `Connect to any OpenAI-compatible endpoint: Ollama, vLLM, LiteLLM, OneAPI, KoboldCPP, and more.
+
+**Endpoint URL**
+Enter your base URL in the API Key field when selecting the Custom provider.
+Example: \`https://my-server.com/v1\`
+\`/chat/completions\` is appended automatically. Do not add it yourself.
+In production the URL must be **HTTPS** and publicly reachable (no localhost or private IPs).
+
+**Model Name**
+Set during the capabilities prompt after entering the URL. Enter the exact name your endpoint expects, e.g. \`gemma3:latest\` for Ollama or the model ID your proxy uses.
+Sent as the \`model\` field in every request.
+
+**API Key / Bearer Token**
+Optional. After setup, use \`/config api-key set\` or \`/config provider switch\` to store a Bearer token.
+If set, it is sent as \`Authorization: Bearer {token}\` with every request.
+Leave unset for endpoints that require no authentication (e.g. local Ollama).`,
+        nvidia_title: `Setting Up NVIDIA NIM API Key`,
+        nvidia_description: `NVIDIA NIM provides hosted text, embedding, and image APIs through NVIDIA Build.`,
+        nvidia_getting_key_title: `Getting Your API Key:`,
+        nvidia_getting_key_description: `1. Visit [NVIDIA Build](https://build.nvidia.com/)
+2. Sign in or create an NVIDIA developer account
+3. Create or manage your API keys from the [API Keys page](https://build.nvidia.com/settings/api-keys)
+4. Copy this API key into {configSetup} or {configApikeySet}`,
+        nvidia_important_title: `Important Notes:`,
+        nvidia_important_description: `- Text and embeddings use NVIDIA's hosted \`integrate.api.nvidia.com\` surface
+- Native image generation uses NVIDIA's hosted \`ai.api.nvidia.com\` Stability endpoint`,
+        nvidia_footer: `After setting up this provider, you may change text, embedding, and image models with {configModel}, {configModelEmbedding}, and {configModelImage}`,
+        zai_title: `Setting Up Z.ai API Key`,
+        zai_description: `Z.ai provides access to the GLM family through a general API and a separate coding endpoint.`,
+        zai_getting_key_title: `Getting Your API Key:`,
+        zai_getting_key_description: `1. Visit the [Z.ai Platform](https://z.ai)
+2. Sign in or create an account
+3. Navigate to API Keys in your dashboard
+4. Create a new API key
+5. Copy this API key into {configSetup} or {configApikeySet}`,
+        zai_important_title: `Important Notes:`,
+        zai_important_description: `- Use the general endpoint for normal chat, reasoning, and native image generation
+  - The dedicated Coding endpoint is separate and intended for coding-specific workflows`,
+        zai_footer: `After setting up this provider, you may change its default model with {configModel}`,
+        novelai_title: `Setting Up NovelAI API Key`,
+        novelai_description: `NovelAI is a subscription-based service focused on creative storytelling and roleplay.
+ - Unlimited uncensored messages
+ - Currently only supports text generation (no vision or assistant features)
+- [NovelAI Terms of Service](https://novelai.net/terms)`,
+        novelai_getting_key_title: `Getting Your API Key:`,
+        novelai_getting_key_description: `1. Visit [NovelAI](https://novelai.net/stories)
+2. Navigate to settings through the ⚙️ icon on the top-left
+3. Go to \`Account\`
+4. Look for \`Get Persistent API Token\` (subscription required!)
+5. Copy this API key into {configSetup} or {configApikeySet}`,
+        novelai_footer: `After setting up this provider, you may change its default model with {configModel}`,
+        openrouter_title: `Setting Up OpenRouter API Key`,
+        openrouter_description: `OpenRouter provides access to multiple AI models from different providers on a pay-as-you-go basis.
+ - Access to latest and most powerful AI models (some are free)
+ - [OpenRouter Terms of Service](https://openrouter.ai/terms)`,
+        openrouter_getting_key_title: `Getting Your API Key:`,
+        openrouter_getting_key_description: `1. Visit [OpenRouter](https://openrouter.ai/settings/keys)
+2. Click \`Create API Key\`
+3. Copy this API key {configSetup} or {configApikeySet}`,
+        openrouter_important_title: `Important Notes:`,
+        openrouter_important_description: `- **Free models have strict rate limits**; paid models are usually more reliable
+- **Always check pricing** before selecting a model
+- Your OpenRouter account settings still apply here
+- If you need a model that is not listed, suggest it in {supportServer}`,
+        openrouter_footer: `After setting up this provider, you may change its default model with {configModel}`,
+        vertex_title: `Setting Up Google Vertex AI`,
+        vertex_description: `Google Vertex AI provides enterprise-grade access to Gemini models through Google Cloud.
+- Uses Application Default Credentials (ADC) for authentication — no API key to manage
+- Supports chat, tool calling, streaming, structured output, compaction, embeddings, and preset generation
+- Best for self-hosted or trusted deployments where the bot runs with a GCP identity
+- [Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)`,
+        vertex_getting_key_title: `Configuration:`,
+        vertex_getting_key_description: `1. Ensure you have a Google Cloud project with the Vertex AI API enabled
+2. Set up Application Default Credentials on the host machine:
+   - **Service account**: Attach a service account to your VM/container with Vertex AI access
+   - **Local dev**: Run \`gcloud auth application-default login\`
+   - **Env var**: Set \`GOOGLE_APPLICATION_CREDENTIALS\` to your service account key file
+3. Enter your configuration as \`{project_id}::{location}\` using {configSetup} or {configApikeySet}
+   - Example: \`my-gcp-project::us-central1\``,
+        vertex_important_title: `Important Notes:`,
+        vertex_important_description: `- The stored value is **configuration** (project + location), not a credential secret
+- All Vertex requests use the host's ADC identity — there is no per-server credential isolation
+- This provider is intended for self-hosted or trusted private deployments
+- Supports chat, tool calling, streaming, structured output, compaction, embeddings, and preset generation`,
+        vertex_footer: `After setting up this provider, you may change its default model with {configModel}`,
+      },
       elevenlabs: {
         description: `Learn how to set up ElevenLabs text-to-speech`,
         title: `Setting Up ElevenLabs TTS`,
@@ -1343,6 +1607,24 @@ Treat MCP servers with the same caution as browser extensions or third-party app
       },
     },
     novelai: {
+      "character-reference": {
+        description: `Upload or clear a NovelAI character reference image for yourself or a persona.`,
+        target_description: `Choose whether to update your own profile or a server persona.`,
+        image_description: `Reference image to store. Leave empty to clear the current image.`,
+        persona_select_title: `Select Persona`,
+        invalid_image_title: `Invalid Image`,
+        invalid_image_description: `Please upload an image attachment for the character reference.`,
+        download_failed_title: `Download Failed`,
+        download_failed_description: `Failed to download the selected image attachment. Please try again.`,
+        conversion_failed_title: `Image Conversion Failed`,
+        conversion_failed_description: `I couldn't convert that image to PNG for storage. Please try a different image.`,
+        success_title: `Character Reference Updated`,
+        success_me_description: `Updated your NovelAI character reference image.`,
+        success_persona_description: `Updated the NovelAI character reference image for **{persona_name}**.`,
+        cleared_title: `Character Reference Cleared`,
+        cleared_me_description: `Cleared your NovelAI character reference image.`,
+        cleared_persona_description: `Cleared the NovelAI character reference image for **{persona_name}**.`,
+      },
       tags: {
         style: {
           description: `Configure server-wide NovelAI style tags for image generation.`,
@@ -1876,6 +2158,63 @@ Your donations help:
       },
       "api-key": {
         description: `Manage AI provider API keys`,
+        set: {
+          description: `Set the API key for your chosen AI provider.`,
+          modal_title: `Set API Key`,
+          provider_label: `AI Provider`,
+          provider_description: `Choose the AI provider for your API key`,
+          provider_placeholder: `Select a provider...`,
+          api_key_label: `API Key or Endpoint URL`,
+          api_key_description: `This key will be securely stored. Use the '/help api-key' command for instructions in getting one. Tip: Use /config provider switch for saved config persistence.`,
+          api_key_description_with_custom: `API Key, or OpenAI endpoint URL if using Custom (e.g., http://localhost:11434/v1)`,
+          api_key_placeholder: `Do NOT share this key with anyone`,
+          bearer_token_label: `Bearer Token (Optional)`,
+          bearer_token_description: `Auth token for Custom endpoints. Sent as Authorization: Bearer header.`,
+          bearer_token_placeholder: `Leave blank for no authentication`,
+          no_providers_title: `No Providers Available`,
+          no_providers_description: `No AI providers are available in the database. Please report through \`/support discord\`.`,
+          invalid_key_title: `Invalid API Key Format`,
+          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid key.`,
+          unsupported_provider_title: `Unsupported Provider`,
+          unsupported_provider_description: `The provider "{provider}" is not currently supported for API key validation.`,
+          validation_error_title: `Validation Error`,
+          validation_error_description: `An error occurred while validating the API key. Please try again.`,
+          key_validation_failed_title: `API Key Validation Failed`,
+          key_validation_failed_description: `The provided API key is not valid for {provider}. Please check the key and try again.`,
+          no_default_model_title: `No Default Model Found`,
+          no_default_model_description: `Could not find a default model for the {provider} provider. Please report this issue through \`/support discord\`.`,
+          success_title: `API Key Set`,
+          success_description: `The {provider} API key has been successfully validated, encrypted, and saved.`,
+          success_with_model_description: `The {provider} API key has been successfully validated, encrypted, and saved. Your model has been automatically changed to \`{model_name}\` (the default for this provider).`,
+          custom_success_with_model_description: `Your custom OpenAI-compatible endpoint has been saved successfully. I will use \`{model_name}\` when sending requests to this endpoint.`,
+          novelai_success_with_model_description: `The NovelAI API key has been successfully validated, encrypted, and saved. Your model has been automatically changed to \`{model_name}\`. ⚠️ **Emoji and sticker usage have been automatically disabled** to keep NovelAI's context lean and stable. You can re-enable them anytime with \`/config bot-permissions\`.`,
+        },
+        delete: {
+          description: `Remove the currently configured AI provider API key.`,
+          no_key_title: `No API Key Set`,
+          no_key_description: `There is no API key currently configured to remove.`,
+          success_title: `API Key Removed`,
+          success_description: `The AI provider API key has been successfully removed. My chat functions are disabled until a new key is set.`,
+        },
+        rotation: {
+          description: `Manage API key rotation for load balancing and failover.`,
+          action_description: `Choose an action: add a key or purge all keys`,
+          action_add: `Add Key`,
+          action_purge: `Purge All Keys`,
+          key_description: `The API key to add to the rotation pool (required for add action)`,
+          no_main_key_title: `No Main API Key`,
+          no_main_key_description: `You must set a main API key using \`/config api-key set\` before adding rotation keys.`,
+          custom_provider_title: `Not Supported`,
+          custom_provider_description: `API key rotation is not supported for custom providers.`,
+          key_required_title: `Key Required`,
+          key_required_description: `Please provide an API key when using the "add" action.`,
+          add_success_title: `Rotation Key Added`,
+          add_success_description: `Successfully added a new API key to the rotation pool. You now have **{count}** rotation key(s) for {provider}. Keys will be used in round-robin order with automatic failover.`,
+          purge_success_title: `Rotation Keys Purged`,
+          purge_success_description: `Successfully removed **{count}** key(s) from the rotation pool. Only your main API key will be used.`,
+          no_keys_title: `No Rotation Keys`,
+          no_keys_description: `There are no rotation keys to purge. Only your main API key is configured.`,
+        },
       },
       custom: {
         endpoint_url_invalid_title: `Invalid Endpoint URL`,
@@ -1942,6 +2281,46 @@ Your donations help:
       },
       "tool-notices": {
         description: `Manage which tool notice embeds stay visible in chat.`,
+        visibility: {
+          description: `Choose which tool notice embeds remain visible in chat.`,
+          modal_title: `Tool Notice Visibility`,
+          checkbox_label: `Visible tool notices`,
+          checkbox_label_continued: `Visible tool notices (Continued)`,
+          checkbox_description: `Checked notices stay in chat. Unchecked notices are hidden and rerouted to thoughtlogs when allowed.`,
+          no_changes_title: `No Changes`,
+          no_changes_description: `Tool notice visibility is already set to those choices.`,
+          success_title: `Tool Notice Visibility Updated`,
+          success_description: `Hidden now ({hidden_count}): {hidden_list}
+Restored now ({restored_count}): {restored_list}`,
+          too_many_title: `Too Many Notice Types`,
+          too_many_description: `There are {count} tool notice types configured, which exceeds the modal limit of {max_entries} entries across {max_groups} groups.`,
+          notice_web_search_label: `Web Search`,
+          notice_web_search_description: `Show "Searching on the web..." notices.`,
+          notice_image_search_label: `Image Search`,
+          notice_image_search_description: `Show image search progress notices.`,
+          notice_video_search_label: `Video Search`,
+          notice_video_search_description: `Show video search progress notices.`,
+          notice_news_search_label: `News Search`,
+          notice_news_search_description: `Show news search progress notices.`,
+          notice_web_fetch_label: `Web Fetch`,
+          notice_web_fetch_description: `Show webpage reading and fetch notices.`,
+          notice_document_reading_label: `Document Reading`,
+          notice_document_reading_description: `Show document reading notices.`,
+          notice_image_generation_label: `Image Generation`,
+          notice_image_generation_description: `Show image generation notices.`,
+          notice_video_generation_label: `Video Generation`,
+          notice_video_generation_description: `Show video generation notices.`,
+          notice_image_editing_label: `Image Editing`,
+          notice_image_editing_description: `Show image editing or inpaint notices.`,
+          notice_image_analysis_label: `Image Analysis`,
+          notice_image_analysis_description: `Show image analysis notices.`,
+          notice_gif_processing_label: `GIF Processing`,
+          notice_gif_processing_description: `Show GIF processing notices.`,
+          notice_youtube_processing_label: `YouTube Processing`,
+          notice_youtube_processing_description: `Show YouTube watching notices.`,
+          notice_mcp_tool_call_label: `MCP Tool Calls`,
+          notice_mcp_tool_call_description: `Show generic MCP tool invocation notices.`,
+        },
       },
       humanizer: {
         description: `Set how 'human-like' my responses should be. For custom prompts, use /config system-prompt set.`,
@@ -1971,6 +2350,20 @@ Your donations help:
           choice_strict_server_wide: `Strict Server-Wide`,
         },
       },
+      "self-reply-limit": {
+        description: `Manage self-reply chains for persona triggering (default: 3).`,
+        limit_description: `Number of self replies allowed (0-10, 0 disables, default: 3).`,
+        limit: {
+          invalid_range_title: `Invalid Limit`,
+          invalid_range_description: `Limit must be between {min} and {max}.`,
+          already_set_title: `Already Set`,
+          already_set_description: `Self-reply limit is already set to **{limit}**.`,
+          success_title: `Self-Reply Limit Updated`,
+          success_description: `Self-reply chain limit set to **{limit}**.`,
+          success_disabled_title: `Self-Reply Disabled`,
+          success_disabled_description: `Self-reply chain is now disabled.`,
+        },
+      },
       sendlimit: {
         description: `Limit the number of messages I send per response (default: 0 = unlimited).`,
         limit_description: `Max messages per response (0-40, 0 disables, default: 0).`,
@@ -1982,6 +2375,40 @@ Your donations help:
         success_description: `Responses will now be limited to **{limit}** message(s). Responses will stop at natural sentence boundaries when the limit is reached.`,
         success_disabled_title: `Send Limit Disabled`,
         success_disabled_description: `Send message limit removed. Responses will no longer be capped.`,
+      },
+      "self-debug": {
+        description: `Toggle whether I load my own diagnostic embeds into context.`,
+        set_description: `Enable or disable self-debug embed ingestion.`,
+        already_set_title: `Self-Debug Already Set`,
+        already_enabled_description: `Self-debug is already **enabled**.`,
+        already_disabled_description: `Self-debug is already **disabled**.`,
+        success_title: `Self-Debug Updated`,
+        enabled_success: `Self-debug is now **enabled**. I will load my error and diagnostic embeds into context as [System: ...] messages.`,
+        disabled_success: `Self-debug is now **disabled**. My error and diagnostic embeds will no longer be loaded into context.`,
+      },
+      "message-fetch-limit": {
+        description: `Set recent messages fetched for context (20-100, default: 80).`,
+        limit_description: `Recent messages to fetch for context (20-100, default: 80).`,
+        limit: {
+          invalid_range_title: `Invalid Limit`,
+          invalid_range_description: `Limit must be between {min} and {max}.`,
+          already_set_title: `Already Set`,
+          already_set_description: `Message fetch limit is already set to **{limit}**.`,
+          success_title: `Message Fetch Limit Updated`,
+          success_description: `I will now fetch up to **{limit}** recent messages for context.`,
+        },
+      },
+      "persona-trigger-limit": {
+        description: `Manage personas triggered per message (default: 3).`,
+        limit_description: `Max triggered personas per message (1-10, default: 3).`,
+        limit: {
+          invalid_range_title: `Invalid Limit`,
+          invalid_range_description: `Limit must be between {min} and {max}.`,
+          already_set_title: `Already Set`,
+          already_set_description: `Multi-trigger limit is already set to **{limit}**.`,
+          success_title: `Multi-Trigger Limit Updated`,
+          success_description: `Per-message persona trigger limit set to **{limit}**.`,
+        },
       },
       voice: {
         description: `Manage persona voice settings.`,
@@ -2260,9 +2687,127 @@ Click the button below and enter your OpenRouter model codename (e.g., \`xai/gro
           success_description: `LLM temperature changed from \`{previous_temperature}\` to \`{temperature}\`.
 **Supported by:** {supported_providers}`,
         },
+        "top-p": {
+          description: `Set top-P nucleus sampling threshold (default: 0.95).`,
+          value_description: `Probability mass to sample from (0.0=very restricted, 1.0=full distribution). Default: 0.95.`,
+          invalid_value_title: `Invalid Top-P Value`,
+          invalid_value_description: `Top-P must be between {min} and {max}.`,
+          already_set_title: `Top-P Already Set`,
+          already_set_description: `Top-P is already set to \`{top_p}\`.`,
+          success_title: `Top-P Updated`,
+          success_description: `Top-P changed from \`{previous_top_p}\` to \`{top_p}\`.
+**Supported by:** {supported_providers}`,
+        },
+        "top-k": {
+          description: `Set top-K candidate token limit (default: 0).`,
+          value_description: `Number of top tokens to sample from (0=disabled, max 40). Default: 0.`,
+          invalid_value_title: `Invalid Top-K Value`,
+          invalid_value_description: `Top-K must be between {min} and {max}.`,
+          already_set_title: `Top-K Already Set`,
+          already_set_description: `Top-K is already set to \`{top_k}\`.`,
+          success_title: `Top-K Updated`,
+          success_description: `Top-K changed from \`{previous_top_k}\` to \`{top_k}\`.
+**Supported by:** {supported_providers}`,
+        },
+        "frequency-penalty": {
+          description: `Set frequency penalty for repeated tokens (default: 0.0).`,
+          value_description: `Penalty for frequent tokens (-2.0 to 2.0; exact 2.0 saves as 1.99). Default: 0.0.`,
+          invalid_value_title: `Invalid Frequency Penalty`,
+          invalid_value_description: `Frequency penalty must be between {min} and {max}.`,
+          already_set_title: `Frequency Penalty Already Set`,
+          already_set_description: `Frequency penalty is already set to \`{frequency_penalty}\`.`,
+          success_title: `Frequency Penalty Updated`,
+          success_description: `Frequency penalty changed from \`{previous_frequency_penalty}\` to \`{frequency_penalty}\`.
+**Supported by:** {supported_providers}`,
+        },
+        "presence-penalty": {
+          description: `Set presence penalty for repeated topics (default: 0.0).`,
+          value_description: `Penalty for repeated topics (-2.0 to 2.0; exact 2.0 saves as 1.99). Default: 0.0.`,
+          invalid_value_title: `Invalid Presence Penalty`,
+          invalid_value_description: `Presence penalty must be between {min} and {max}.`,
+          already_set_title: `Presence Penalty Already Set`,
+          already_set_description: `Presence penalty is already set to \`{presence_penalty}\`.`,
+          success_title: `Presence Penalty Updated`,
+          success_description: `Presence penalty changed from \`{previous_presence_penalty}\` to \`{presence_penalty}\`.
+**Supported by:** {supported_providers}`,
+        },
+        "min-p": {
+          description: `Set min-P minimum probability threshold (default: 0.0).`,
+          value_description: `Minimum token probability relative to top token (0.0=disabled, 1.0=most restricted). Default: 0.0.`,
+          invalid_value_title: `Invalid Min-P Value`,
+          invalid_value_description: `Min-P must be between {min} and {max}.`,
+          already_set_title: `Min-P Already Set`,
+          already_set_description: `Min-P is already set to \`{min_p}\`.`,
+          success_title: `Min-P Updated`,
+          success_description: `Min-P changed from \`{previous_min_p}\` to \`{min_p}\`.
+**Supported by:** {supported_providers}`,
+        },
       },
       "logit-bias": {
         description: `Manage saved logit bias entries for supported models.`,
+        add: {
+          description: `Add comma-separated logit bias entries with one shared bias value.`,
+          modal_title: `Add Logit Bias`,
+          terms_label: `Words / Token IDs`,
+          terms_description: `Comma-separated values. Words are tokenized for the active model and refreshed again when the model changes. Example: Sorry, apology, 50256`,
+          terms_placeholder: `e.g. Sorry, apology, 50256`,
+          bias_label: `Bias Value`,
+          bias_description: `Number from -100 to 100. Example: -100`,
+          bias_placeholder: `e.g. -100`,
+          empty_terms_title: `No Entries Provided`,
+          empty_terms_description: `Please enter at least one comma-separated word or token ID.`,
+          term_too_long_title: `Entry Too Long`,
+          term_too_long_description: `Each entry must be at most {max_length} characters long.`,
+          invalid_bias_title: `Invalid Bias Value`,
+          invalid_bias_description: `Bias must be a number between {min} and {max}.`,
+          already_set_title: `No Logit Bias Changes`,
+          already_set_description: `All provided entries already exist with that same bias value.`,
+          success_title: `Logit Bias Updated`,
+          success_description: `Added **{added_count}** new entry(s) and updated **{updated_count}** existing entry(s).
+Total saved: **{total_count}**
+Runtime-ready for the current model: **{runtime_ready_count}**`,
+        },
+        remove: {
+          description: `Remove saved logit bias entries.`,
+          clearall_description: `Clear all saved logit bias entries without opening the modal.`,
+          modal_title: `Remove Logit Bias`,
+          checkbox_label: `Logit Bias Entries`,
+          checkbox_label_continued: `Logit Bias Entries (Continued)`,
+          checkbox_description: `Uncheck any entries you want to remove.`,
+          none_title: `No Logit Bias Entries`,
+          none_description: `This server has no saved logit bias entries.`,
+          select_page_title: `Select Logit Bias Page`,
+          select_page_description: `This server has **{total_entries}** saved logit bias entries across **{total_pages}** pages. Choose a page to edit.`,
+          too_many_title: `Too Many Logit Bias Pages`,
+          too_many_description: `This server has **{total_entries}** saved logit bias entries across **{total_pages}** pages. The current page selector supports up to **{max_pages}** pages.`,
+          no_removals_title: `No Logit Bias Entries Removed`,
+          no_removals_description: `No entries were unchecked. Saved logit bias entries remain unchanged.`,
+          success_title: `Logit Bias Entries Updated`,
+          success_description: `Removed **{removed_count}** entry(s). **{remaining_count}** entry(s) remain saved.`,
+          clearall_success_title: `Logit Bias Cleared`,
+          clearall_success_description: `Cleared all saved logit bias entries (**{removed_count}** removed).`,
+        },
+        upload: {
+          description: `Upload SillyTavern-style logit bias JSON entries.`,
+          file_description: `A .json file containing logit bias objects with text and value fields.`,
+          invalid_file_title: `Invalid File`,
+          file_too_large_title: `File Too Large`,
+          file_too_large_description: `The uploaded file must be {max_size} MB or smaller.`,
+          download_failed_title: `Download Failed`,
+          download_failed_description: `I could not download the uploaded file. Please try again.`,
+          invalid_json_title: `Invalid JSON`,
+          invalid_json_description: `The uploaded file is not valid JSON.`,
+          invalid_schema_title: `Invalid Logit Bias Format`,
+          invalid_schema_description: `Expected a SillyTavern-style entry or array of entries with \`text\` and \`value\`. Bias must be between {min} and {max}, and text must be at most {max_length} characters.`,
+          no_entries_title: `No Entries Found`,
+          no_entries_description: `The uploaded file did not contain any valid logit bias entries.`,
+          already_set_title: `No Logit Bias Changes`,
+          already_set_description: `All uploaded entries already exist with the same saved bias values.`,
+          success_title: `Logit Bias Imported`,
+          success_description: `Added **{added_count}** new entry(s) and updated **{updated_count}** existing entry(s).
+Total saved: **{total_count}**
+Runtime-ready for the current model: **{runtime_ready_count}**`,
+        },
       },
       timezone: {
         description: `Set your server's timezone offset from UTC (default: 0 / UTC).`,
@@ -2356,6 +2901,53 @@ Preview:
           no_presets_description: `No system prompt presets found. Please contact the bot administrator.`,
           invalid_preset_title: `Invalid Preset`,
           invalid_preset_description: `The selected preset could not be found. Please try again.`,
+        },
+      },
+      "random-trigger": {
+        add: {
+          description: `Add a probabilistic timer-based auto-trigger for a channel.`,
+          channel_description: `The channel where spontaneous messages will be sent.`,
+          timer_hours_description: `How often to roll the dice (in hours, minimum 1).`,
+          random_offset_range_description: `Optional +/- random offset range in hours for each timer reset (minimum 0).`,
+          chance_description: `Probability of firing each roll (1–100%).`,
+          silence_threshold_description: `Skip if channel had activity within this many hours (optional).`,
+          failure_threshold_description: `Force-fire after this many consecutive dice misses, resetting the counter (optional).`,
+          modal_title: `Configure Random Trigger`,
+          persona_select_label: `Persona`,
+          persona_select_placeholder: `Select a persona...`,
+          persona_random_label: `Random (pick each time)`,
+          respond_to_self_label: `Respond to Self`,
+          respond_to_self_description: `Fire even if this persona spoke last?`,
+          respond_to_self_yes: `Yes`,
+          prompt_label: `Custom Prompt (Optional)`,
+          prompt_description: `Extra instructions injected for this trigger's messages.`,
+          prompt_placeholder: `e.g., Start a topic about the weather...`,
+          cap_reached_title: `Trigger Limit Reached`,
+          cap_reached_description: `This server has reached the maximum of {max} random triggers. Remove one first.`,
+          override_title: `Trigger Updated`,
+          override_description: `A trigger already existed for {persona} in {channel}, and it has been updated with the new settings.`,
+          success_title: `Random Trigger Added`,
+          success_description: `I will check {channel} every **{timer_hours}h** with a **{chance}%** chance of speaking as **{persona}**.{offset_suffix}{silence_suffix}{failure_suffix}`,
+          success_offset_suffix: ` Each reset adds a random offset of up to **+/-{random_offset_range}h**.`,
+          success_silence_suffix: ` Skipped if active within **{silence_threshold}h**.`,
+          success_failure_suffix: ` Force-fires after **{failure_threshold}** consecutive misses.`,
+        },
+        remove: {
+          description: `Remove an existing random trigger from this server.`,
+          modal_title: `Remove Random Triggers`,
+          checkbox_label: `Random Triggers`,
+          checkbox_label_continued: `Random Triggers (Continued)`,
+          checkbox_description: `Uncheck any random triggers you want to remove.`,
+          select_label: `Trigger to Remove`,
+          select_description: `Select the random trigger you want to delete.`,
+          select_placeholder: `Select a trigger...`,
+          none_title: `No Triggers Found`,
+          none_description: `This server has no random triggers configured.`,
+          no_removals_title: `No Random Triggers Removed`,
+          no_removals_description: `No random triggers were unchecked. Random triggers remain unchanged.`,
+          success_title: `Random Triggers Updated`,
+          success_description: `Removed the following random triggers.
+{triggers_removed}`,
         },
       },
       remove: {
@@ -2492,15 +3084,91 @@ A malicious server may send misleading instructions, collect data sent to its to
       description: `Manage optional service API keys`,
       brave: {
         description: `Manage Brave Search API key`,
+        set: {
+          description: `Set the Brave Search API key for this server.`,
+          key_description: `Your Brave Search API key.`,
+          invalid_key_title: `Invalid API Key Format`,
+          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid key.`,
+          key_validation_failed_title: `Brave API Key Validation Failed`,
+          key_validation_failed_description: `The provided Brave Search API key is not valid. Please check the key and try again.`,
+          success_title: `Brave API Key Set`,
+          success_description: `The Brave Search API key has been successfully validated, encrypted, and saved.`,
+        },
+        remove: {
+          description: `Remove the currently configured Brave Search API key.`,
+          no_key_title: `No Brave API Key Set`,
+          no_key_description: `There is no Brave Search API key currently configured to remove.`,
+          success_title: `Brave API Key Removed`,
+          success_description: `The Brave Search API key has been successfully removed.`,
+        },
       },
       google: {
         description: `Manage supplementary Google API key (for image inpainting)`,
+        set: {
+          description: `Set a Google API key for AI image segmentation. Not needed if Google is already your AI provider.`,
+          key_description: `Your Google API key.`,
+          invalid_key_title: `Invalid API Key Format`,
+          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid Google API key.`,
+          key_validation_failed_title: `Google API Key Validation Failed`,
+          key_validation_failed_description: `The provided Google API key is not valid. Please check the key and try again.`,
+          success_title: `Google API Key Set`,
+          success_description: `The Google API key has been saved for AI image segmentation (inpainting). If your main provider is already Google, this key takes priority over it for segmentation.`,
+        },
+        remove: {
+          description: `Remove the currently configured Google API key.`,
+          no_key_title: `No Google API Key Set`,
+          no_key_description: `There is no Google API key currently configured to remove.`,
+          success_title: `Google API Key Removed`,
+          success_description: `The Google API key has been successfully removed.`,
+        },
       },
       novelai: {
         description: `Manage supplementary NovelAI API key (for image generation)`,
+        set: {
+          description: `Set a NovelAI API key for image generation. Not needed if NovelAI is already your AI provider.`,
+          key_description: `Your NovelAI API key.`,
+          disable_other_imggen_description: `If true, hides the standard image generation tool so only NovelAI image gen is available.`,
+          invalid_key_title: `Invalid API Key Format`,
+          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid NovelAI API key.`,
+          key_validation_failed_title: `NovelAI API Key Validation Failed`,
+          key_validation_failed_description: `The provided NovelAI API key is not valid. Please check the key and ensure you have an active subscription.`,
+          success_title: `NovelAI API Key Set`,
+          success_description: `The NovelAI API key has been successfully validated, encrypted, and saved. NovelAI image generation is now available regardless of your active LLM provider.`,
+          success_exclusive_description: `The NovelAI API key has been successfully validated, encrypted, and saved. NovelAI image generation is now the exclusive image generation tool for this server.`,
+        },
+        remove: {
+          description: `Remove the currently configured NovelAI API key.`,
+          no_key_title: `No NovelAI API Key Set`,
+          no_key_description: `There is no NovelAI API key currently configured to remove.`,
+          success_title: `NovelAI API Key Removed`,
+          success_description: `The NovelAI API key and exclusive image generation setting have been removed.`,
+        },
       },
       elevenlabs: {
         description: `Manage supplementary ElevenLabs API key (for speech and voice)`,
+        set: {
+          description: `Set an ElevenLabs API key for speech transcription and persona voice output.`,
+          key_description: `Your ElevenLabs API key.`,
+          invalid_key_title: `Invalid API Key Format`,
+          invalid_key_description: `The provided API key seems too short or invalid. Please provide a valid ElevenLabs API key.`,
+          key_validation_failed_title: `ElevenLabs API Key Validation Failed`,
+          key_validation_failed_description: `The provided ElevenLabs API key is not valid. Please check the key and try again.`,
+          success_title: `ElevenLabs API Key Set`,
+          success_description: `The ElevenLabs API key has been successfully validated, encrypted, and saved. Voice transcription and persona voice output are now available where configured.`,
+          success_voices_title: `Premade Voices (Free Tier)`,
+          success_voices_description: `Premade voices work on the free plan. Browse the full list at [ElevenLabs Premade Voices](https://elevenlabs-sdk.mintlify.app/voices/premade-voices), then use {configVoiceElevenlabs} to assign one to each persona.`,
+          success_custom_voices_title: `Library & Custom Voices (Paid)`,
+          success_custom_voices_description: `Library voices and custom/cloned voices both require a paid ElevenLabs plan. Once added to your account, they will appear automatically in {configVoiceElevenlabs}.`,
+          success_transcript_mode_title: `Voice Transcript Mode`,
+          success_transcript_mode_description: `Use {configVoiceTranscripts} to post voice message transcripts as visible chat messages via webhook which saves re-processing credits and lets everyone see what was said.`,
+        },
+        remove: {
+          description: `Remove the currently configured ElevenLabs API key.`,
+          no_key_title: `No ElevenLabs API Key Set`,
+          no_key_description: `There is no ElevenLabs API key currently configured to remove.`,
+          success_title: `ElevenLabs API Key Removed`,
+          success_description: `The ElevenLabs API key has been successfully removed.`,
+        },
       },
     },
     server: {
@@ -2545,8 +3213,109 @@ A malicious server may send misleading instructions, collect data sent to its to
           more_cleared: `- ...and {count} more`,
         },
       },
+      "private-channels": {
+        description: `Manage private channels where STMs are isolated and thought logs are suppressed`,
+        modal_title: `Manage Private Channels`,
+        checkbox_label: `Private Channels`,
+        checkbox_label_continued: `Private Channels (Continued)`,
+        checkbox_description: `Checked channels stay private. Unchecked channels are removed from the private-channel set.`,
+        no_channels_title: `No Eligible Channels`,
+        no_channels_description: `There are no text channels available to manage in this server.`,
+        select_page_title: `Manage Private Channels`,
+        select_page_description: `This server has **{channel_count}** eligible text channel(s) across **{total_pages}** page(s).
+Currently private: **{selected_count}**.`,
+        done_button: `Done`,
+        too_many_pages_title: `Too Many Channels`,
+        too_many_pages_description: `This server has **{channel_count}** eligible text channel(s). This checklist flow supports up to **{max_pages}** pages per launch.`,
+        no_changes_title: `No Private Channel Changes`,
+        no_changes_description: `The private-channel checklist was left unchanged.`,
+        success_title: `Private Channels Updated`,
+        success_description: `Enabled privacy on **{enabled_count}** channel(s): {enabled_channels}
+Disabled privacy on **{disabled_count}** channel(s): {disabled_channels}
+**{selected_count}** channel(s) are currently private.`,
+      },
+      "crosschannel-blocklist": {
+        description: `Manage the channel blocklist for tool-driven cross-channel messages`,
+        modal_title: `Cross-Channel Blocklist`,
+        checkbox_label: `Blocked Channels`,
+        checkbox_label_continued: `Blocked Channels (Continued)`,
+        checkbox_description: `Checked channels cannot receive tool-driven cross-channel messages.`,
+        option_description_category: `Category: {category_name}`,
+        channel_label_forum: `{channel_name} [Forum]`,
+        channel_label_media: `{channel_name} [Media]`,
+        no_channels_title: `No Eligible Channels`,
+        no_channels_description: `There are no text, announcement, forum, or media channels available to manage in this server.`,
+        select_page_title: `Manage Cross-Channel Blocklist`,
+        select_page_description: `This server has **{channel_count}** eligible channels across **{total_pages}** page(s).
+Currently blocked: **{blocked_count}**.
+Choose a page to review, or press Done when finished.`,
+        done_button: `Done`,
+        too_many_pages_title: `Too Many Channels`,
+        too_many_pages_description: `This server has **{channel_count}** eligible channels. This checklist flow supports up to **{max_pages}** pages per launch.`,
+        no_changes_title: `No Blocklist Changes`,
+        no_changes_description: `The cross-channel blocklist was left unchanged.`,
+        success_title: `Cross-Channel Blocklist Updated`,
+        success_description: `Enabled blocking on **{enabled_count}** channel(s): {enabled_channels}
+Disabled blocking on **{disabled_count}** channel(s): {disabled_channels}
+**{blocked_count}** channel(s) are currently blocked.`,
+      },
+      "rp-channels": {
+        description: `Manage RP channels where emojis and stickers are always suppressed`,
+        modal_title: `Manage RP Channels`,
+        checkbox_label: `RP Channels`,
+        checkbox_label_continued: `RP Channels (Continued)`,
+        checkbox_description: `Checked channels stay in the RP-channel set. Unchecked channels are removed from it.`,
+        no_channels_title: `No Eligible Channels`,
+        no_channels_description: `There are no text channels available to manage in this server.`,
+        select_page_title: `Manage RP Channels`,
+        select_page_description: `This server has **{channel_count}** eligible text channel(s) across **{total_pages}** page(s).
+Currently marked as RP: **{selected_count}**.`,
+        done_button: `Done`,
+        too_many_pages_title: `Too Many Channels`,
+        too_many_pages_description: `This server has **{channel_count}** eligible text channel(s). This checklist flow supports up to **{max_pages}** pages per launch.`,
+        no_changes_title: `No RP Channel Changes`,
+        no_changes_description: `The RP-channel checklist was left unchanged.`,
+        success_title: `RP Channels Updated`,
+        success_description: `Enabled RP mode on **{enabled_count}** channel(s): {enabled_channels}
+Disabled RP mode on **{disabled_count}** channel(s): {disabled_channels}
+**{selected_count}** channel(s) are currently marked as RP.`,
+      },
       "auto-trigger": {
         description: `Manage auto-chat settings`,
+        channels: {
+          description: `Manage the full set of channels where I will automatically chat.`,
+          modal_title: `Manage Auto-Trigger Channels`,
+          checkbox_label: `Auto-Trigger Channels`,
+          checkbox_label_continued: `Auto-Trigger Channels (Continued)`,
+          checkbox_description: `Checked channels stay in the auto-trigger set. Unchecked channels are removed from it.`,
+          no_channels_title: `No Eligible Channels`,
+          no_channels_description: `There are no text channels available to manage in this server.`,
+          select_page_title: `Manage Auto-Trigger Channels`,
+          select_page_description: `This server has **{channel_count}** eligible text channel(s) across **{total_pages}** page(s).
+Currently enabled: **{selected_count}**.`,
+          done_button: `Done`,
+          too_many_pages_title: `Too Many Channels`,
+          too_many_pages_description: `This server has **{channel_count}** eligible text channel(s). This checklist flow supports up to **{max_pages}** pages per launch.`,
+          no_changes_title: `No Auto-Trigger Channel Changes`,
+          no_changes_description: `The auto-trigger channel checklist was left unchanged.`,
+          success_title: `Auto-Trigger Channels Updated`,
+          success_description: `Enabled auto-trigger on **{enabled_count}** channel(s): {enabled_channels}
+Disabled auto-trigger on **{disabled_count}** channel(s): {disabled_channels}
+**{selected_count}** channel(s) are currently enabled.`,
+        },
+        threshold: {
+          description: `Set the shared auto-chat range for configured auto-chat channels.`,
+          threshold_description: `Minimum messages before auto-chat, or 0 for always-reply mode.`,
+          max_description: `Optional maximum messages before auto-chat. Leave empty to use the same value.`,
+          invalid_range_title: `Invalid Threshold`,
+          invalid_range_specific_description: `Use \`{always}\` for always-reply mode, or choose a range where both values are between \`{min}\` and \`{max}\` and max is at least min.`,
+          success_title: `Auto-Chat Threshold Set`,
+          success_description: `I will now automatically chat after \`{threshold}\` messages in designated channels.`,
+          success_range_title: `Auto-Chat Range Set`,
+          success_range_description: `I will now automatically chat after a random \`{min}\`-\`{max}\` messages in designated channels.`,
+          success_always_title: `Auto-Chat Always-Reply Mode Set`,
+          success_always_description: `Auto-chat threshold set to \`{threshold}\`. Configured auto-chat channels will now behave like always-reply for qualifying messages. Remove a channel to disable it there.`,
+        },
       },
       trigger: {
         description: `Manage trigger words`,
@@ -2594,9 +3363,80 @@ A malicious server may send misleading instructions, collect data sent to its to
       },
       "user-blacklist": {
         description: `Manage the personalization blacklist for this server.`,
+        add: {
+          description: `Add a member to the personalization blacklist.`,
+          member_description: `The member to add to the blacklist.`,
+          personalization_disabled_title: `Personalization Disabled`,
+          personalization_disabled_description: `Personalization is currently disabled server-wide. Enable it first with \`/config bot-permissions\`.`,
+          already_blacklisted_title: `Already Blacklisted`,
+          already_blacklisted_description: `\`{user_name}\` is already on the personalization blacklist.`,
+          cannot_blacklist_bot_title: `Cannot Blacklist Bots`,
+          cannot_blacklist_bot_description: `\`{user_name}\` is a bot and cannot be added to the personalization blacklist.`,
+          success_title: `Member Blacklisted`,
+          success_description: `Added \`{user_name}\` to the personalization blacklist. Their personal memories and nickname won't be used.`,
+        },
+        remove: {
+          description: `Review currently blacklisted members and uncheck the ones you want to remove.`,
+          none_title: `No Blacklisted Members`,
+          none_description: `There are no blacklisted members to manage right now.`,
+          modal_title: `Manage User Blacklist`,
+          checkbox_label: `Blacklisted Members`,
+          checkbox_label_continued: `Blacklisted Members (Continued)`,
+          checkbox_description: `Checked members stay blacklisted. Unchecked members are removed from the blacklist.`,
+          select_page_title: `Manage User Blacklist`,
+          select_page_description: `This server has **{user_count}** blacklisted member(s) across **{total_pages}** page(s).
+Currently blacklisted: **{selected_count}**.`,
+          done_button: `Done`,
+          too_many_pages_title: `Too Many Blacklisted Members`,
+          too_many_pages_description: `This server has **{user_count}** blacklisted member(s). This checklist flow supports up to **{max_pages}** pages per launch.`,
+          no_changes_title: `No Blacklist Changes`,
+          no_changes_description: `The user blacklist was left unchanged.`,
+          success_title: `User Blacklist Updated`,
+          success_description: `Removed **{removed_count}** member(s) from the blacklist: {removed_users}
+**{selected_count}** member(s) remain blacklisted.`,
+        },
       },
       "welcome-channel": {
         description: `Configure automated welcome greetings for new members.`,
+        shared: {
+          modal_title: `Configure Welcome Greeting`,
+          persona_select_label: `Greet Persona`,
+          persona_select_description: `Choose which persona should greet new members. Random picks one each time.`,
+          persona_select_placeholder: `Select a persona...`,
+          persona_random_label: `Random (Choose Each Join)`,
+          main_persona_description: `Main Persona`,
+          alter_persona_description: `Alter Persona`,
+          prompt_label: `Additional Prompt`,
+          prompt_description: `How should I greet new users?`,
+          prompt_placeholder: `Greet users by...`,
+          empty_prompt_title: `Additional Prompt Required`,
+          empty_prompt_description: `Please enter how I should greet new users.`,
+        },
+        set: {
+          description: `Set the channel used for automated welcome greetings.`,
+          channel_description: `The text channel where new members should be greeted.`,
+          success_title: `Welcome Channel Updated`,
+          success_description: `I will now greet new members in {channel} using **{persona}**.`,
+        },
+        remove: {
+          description: `Remove the configured welcome channel and stop automated greetings.`,
+          success_title: `Welcome Channel Removed`,
+          success_description: `I will no longer send automated welcome greetings for new members.`,
+          not_configured_title: `Welcome Channel Not Configured`,
+          not_configured_description: `This server does not currently have a welcome channel configured.`,
+        },
+      },
+      "thought-logs-channel": {
+        description: `Set or clear the server's thought-log channel.`,
+        channel_description: `Text channel for reasoning summaries. Pick the same channel again to disable it.`,
+        invalid_channel_title: `Invalid Channel`,
+        invalid_channel_description: `Please choose a server text channel.`,
+        set_title: `Thought Logs Enabled`,
+        set_description: `Thought logs will now be posted in {channel}.`,
+        updated_title: `Thought Logs Updated`,
+        updated_description: `Thought logs will now be posted in {channel}.`,
+        cleared_title: `Thought Logs Disabled`,
+        cleared_description: `Thought logs will no longer be posted.`,
       },
       whitelist: {
         description: `Manage trigger whitelist (channels + roles; channels can inherit or override the global cooldown)`,
@@ -2744,6 +3584,23 @@ A malicious server may send misleading instructions, collect data sent to its to
           success_server_textgen_description: `Reset the server-wide text generation trigger quota pool.`,
           success_server_videogen_description: `Reset the server-wide video generation quota pool.`,
         },
+      },
+      "member-permissions": {
+        description: `Configure what non-admin members can teach me.`,
+        servermemories_option: `Server Memories`,
+        attributelist_option: `Attribute List`,
+        sampledialogues_option: `Sample Dialogues`,
+        servermemories_desc: `Add/remove server-wide memories`,
+        attributelist_desc: `Add/remove personality attributes`,
+        sampledialogues_desc: `Add/remove sample dialogue pairs`,
+        select_placeholder: `Select what members can teach...`,
+        select_embed_title: `Member Teaching Permissions`,
+        select_embed_description: `Select which things non-admin members can **teach** me. Checked = allowed.`,
+        no_changes_title: `No Changes Made`,
+        no_changes_description: `All permissions are already at the selected values.`,
+        success_title: `Member Permissions Updated`,
+        success_description: `Updated **{count}** permission(s)
+`,
       },
       avatar: {
         description: `Set or remove avatar for a selected persona on this server.`,
@@ -2926,6 +3783,17 @@ You can change this anytime using \`/personal privacy\`.`,
     },
     "scheduled-task": {
       description: `Manage scheduled tasks and reminders.`,
+      remove: {
+        description: `Remove a scheduled task or reminder.`,
+        modal_title: `Remove Scheduled Task`,
+        select_label: `Scheduled Task to Remove`,
+        select_description: `Choose which scheduled task or reminder to remove`,
+        select_placeholder: `Select a scheduled task...`,
+        no_entries_title: `No Scheduled Tasks`,
+        no_entries: `There are no scheduled tasks or reminders to remove. Set one by asking me to remind you or schedule a task.`,
+        success_title: `Scheduled Task Removed`,
+        success_description: `Successfully removed: "{reminder_purpose}"`,
+      },
     },
     memory: {
       description: `Manage stored memories and documents.`,

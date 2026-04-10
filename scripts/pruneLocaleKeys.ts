@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { writeFile } from "node:fs/promises";
 import { Glob } from "bun";
+import { analyzeLocalizationKeys } from "./checkLocalizationKeys";
 
 /**
  * Lightweight logger (no DB dependency)
@@ -96,32 +97,12 @@ function serializeToTypeScript(obj: unknown, indent = 0): string {
 
 /**
  * Loads the list of unused keys using the same analysis logic as checkLocalizationKeys.ts.
- * Shells out to the checker script so we always use the canonical detection algorithm.
+ * Reuses the checker in-process so sandboxed runs do not depend on spawning Bun.
  */
 async function loadUnusedKeys(): Promise<string[]> {
   log.info("Running locale analysis to identify unused keys…");
-
-  const result = await Bun.spawn(["bun", "run", "scripts/checkLocalizationKeys.ts", "--list-unused"], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  const raw = await new Response(result.stdout).text();
-  await result.exited;
-
-  // Parse the indented key list — lines with two leading spaces are key entries
-  const keys: string[] = [];
-  for (const line of raw.split("\n")) {
-    const trimmed = line.trimStart();
-    // Skip section headers (##) and blank lines
-    if (trimmed.startsWith("##") || trimmed.startsWith("=") || trimmed.startsWith("🗑") || !trimmed) continue;
-    // Key lines: original line starts with exactly two spaces
-    if (line.startsWith("  ") && !line.startsWith("   ")) {
-      keys.push(trimmed);
-    }
-  }
-
-  return keys;
+  const results = await analyzeLocalizationKeys();
+  return results.unusedKeys.map(({ key }) => key);
 }
 
 /**

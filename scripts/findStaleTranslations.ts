@@ -57,6 +57,58 @@ function looksLikeEnglish(value: string): boolean {
   return latinCount > 0 && cjkCount === 0;
 }
 
+/**
+ * Identifies values that are intentionally shared between English and Japanese:
+ * brand names, emojis/placeholders-only templates, technical option IDs, and
+ * sample placeholders such as URLs, model IDs, or prompt tag examples.
+ */
+function isIntentionallySharedTranslation(key: string, value: string): boolean {
+  const stripped = value
+    .replace(/\{[^}]+\}/g, "")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, "")
+    .replace(/[^a-zA-Z\u3000-\u9FFF\uFF00-\uFFEF]/g, "")
+    .trim();
+
+  if (stripped.length === 0) {
+    return true;
+  }
+
+  if (
+    /^commands\.help\.api-key\.provider_choice_/.test(key) &&
+    key !== "commands.help.api-key.provider_choice_custom"
+  ) {
+    return true;
+  }
+
+  if (key === "commands.bot.generate.image.modal.backend_novelai_label") {
+    return true;
+  }
+
+  if (
+    /^commands\.novelai\.image\.params\.sampler_option_/.test(key) ||
+    key === "commands.novelai.image.params.noise_schedule_option_karras"
+  ) {
+    return true;
+  }
+
+  if (key.endsWith("_placeholder")) {
+    const placeholderPatterns = [
+      /^https?:\/\/\S+$/i,
+      /^[a-z0-9][a-z0-9._/-]*$/i,
+      /^[0-9]+(?:\s*-\s*[0-9]+)?$/,
+      /^[a-z0-9_:-]+(?:,\s*[a-z0-9_:-]+)+$/i,
+      /^[a-z0-9_][a-z0-9_-]*(?:\s+[a-z0-9_][a-z0-9_-]*)*(?:,\s*[a-z0-9_][a-z0-9_-]*(?:\s+[a-z0-9_][a-z0-9_-]*)*)+$/i,
+    ];
+
+    if (placeholderPatterns.some((pattern) => pattern.test(value))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export interface StaleEntry {
   key: string;
   en: string;
@@ -84,6 +136,9 @@ async function findStaleTranslations(): Promise<StaleEntry[]> {
     if (!jaValue) continue; // missing keys are a parity issue, not a staleness issue
 
     if (jaValue === enValue) {
+      if (isIntentionallySharedTranslation(key, jaValue)) {
+        continue;
+      }
       stale.push({ key, en: enValue, ja: jaValue, reason: "identical" });
     } else if (looksLikeEnglish(jaValue)) {
       stale.push({ key, en: enValue, ja: jaValue, reason: "likely_english" });

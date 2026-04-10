@@ -229,7 +229,7 @@ function isValidLocalizationKey(key: string): boolean {
   const falsePositives = [
     // URLs and domains
     /^https?:\/\//i,
-    /\.com|\.org|\.net|\.io|\.dev/i,
+    /^(?:[a-z0-9-]+\.)+(?:com|org|net|io|dev)(?:\/|$)/i,
     // File extensions
     /\.(js|ts|json|css|html|md|txt|yml|yaml)$/i,
     // Version numbers
@@ -238,8 +238,9 @@ function isValidLocalizationKey(key: string): boolean {
     /^node:|^@\w+/,
     // Error codes
     /^\d{3}_/,
-    // Database/SQL patterns - match only when multiple keywords appear together (more likely to be actual SQL)
-    /(?:SELECT|INSERT|UPDATE|DELETE)[\s\S]*(?:FROM|WHERE|INTO|SET)/i,
+    // Database/SQL patterns - require whole SQL keywords so locale keys like
+    // "commands.data.delete.success_personal_settings_title" are not rejected.
+    /\b(?:SELECT|INSERT|UPDATE|DELETE)\b[\s\S]*\b(?:FROM|WHERE|INTO|SET)\b/i,
   ];
 
   for (const pattern of falsePositives) {
@@ -271,7 +272,7 @@ function isValidLocalizationKey(key: string): boolean {
   if (validPrefixes.includes(firstSegment)) return true;
 
   // If it has 3+ segments and looks like a locale key structure, allow it
-  return segments.length >= 3 && /^[a-zA-Z][a-zA-Z0-9_]*$/.test(firstSegment);
+  return segments.length >= 3 && /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(firstSegment);
 }
 
 /**
@@ -302,7 +303,7 @@ function isModalDescriptionKey(key: string): boolean {
 function isCommandDescriptionKey(key: string): boolean {
   // Pattern: commands.*.*.command_description or commands.*.*.*.command_description
   // Examples: commands.help.memory.command_description, commands.teach.memory.personal.command_description
-  return /^commands\.[a-z]+(\.[a-z]+)+\.command_description$/.test(key);
+  return /^commands\.[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+\.command_description$/.test(key);
 }
 
 /**
@@ -551,7 +552,7 @@ function extractDynamicTemplateKeys(content: string, availableKeys: Set<string>)
   // Pattern to find template literals with locale key prefixes
   // Matches patterns like: `commands.server.avatar.${errorKey}`
   const templatePattern =
-    /(?:titleKey|descriptionKey|nameKey|labelKey|modalTitleKey|itemLabelKey):\s*`([a-zA-Z][a-zA-Z0-9._]*)\$\{([^}]+)\}([a-zA-Z0-9._]*)`/g;
+    /(?:titleKey|descriptionKey|nameKey|labelKey|modalTitleKey|itemLabelKey):\s*`([a-zA-Z][a-zA-Z0-9._-]*)\$\{([^}]+)\}([a-zA-Z0-9._-]*)`/g;
 
   let match = templatePattern.exec(content);
   while (match !== null) {
@@ -564,7 +565,7 @@ function extractDynamicTemplateKeys(content: string, availableKeys: Set<string>)
 
     // Look for string assignments to this variable in the same file
     // Patterns like: errorKey = "invalid_image_description"
-    const assignmentPattern = new RegExp(`${variableName}\\s*=\\s*["']([a-zA-Z0-9._]+)["']`, "g");
+    const assignmentPattern = new RegExp(`${variableName}\\s*=\\s*["']([a-zA-Z0-9._-]+)["']`, "g");
 
     let assignmentMatch = assignmentPattern.exec(content);
     while (assignmentMatch !== null) {
@@ -601,7 +602,7 @@ function extractLocalizerTemplateKeys(content: string, availableKeys: Set<string
   // Matches: localizer(locale, `genai.google.${messageKey}`)
   //          localizeWithAliases(locale, `commands.${categoryName}.description`)
   const localizerTemplatePattern =
-    /(?:localizer|localizeWithAliases)\s*\([^,]+,\s*`([a-zA-Z][a-zA-Z0-9._]*)\$\{([^}]+)\}([a-zA-Z0-9._]*)`\)/g;
+    /(?:localizer|localizeWithAliases)\s*\([^,]+,\s*`([a-zA-Z][a-zA-Z0-9._-]*)\$\{([^}]+)\}([a-zA-Z0-9._-]*)`\)/g;
 
   let match = localizerTemplatePattern.exec(content);
   while (match !== null) {
@@ -615,7 +616,7 @@ function extractLocalizerTemplateKeys(content: string, availableKeys: Set<string
     // Look for string literal values for this variable via assignments AND strict equality comparisons
     // Patterns like: messageKey = "429_default_message" OR conditioningType === "reward"
     const valuePattern = new RegExp(
-      `(?:${variableName}\\s*(?:=|===)\\s*["'\`]([a-zA-Z0-9._]+)["'\`]|["'\`]([a-zA-Z0-9._]+)["'\`]\\s*===\\s*${variableName})`,
+      `(?:${variableName}\\s*(?:=|===)\\s*["'\`]([a-zA-Z0-9._-]+)["'\`]|["'\`]([a-zA-Z0-9._-]+)["'\`]\\s*===\\s*${variableName})`,
       "g",
     );
 
@@ -651,7 +652,7 @@ function extractErrorCodeKeys(content: string, availableKeys: Set<string>): stri
 
   // Pattern 1: Template literals with variable + suffix
   // Matches: `${errorCode}_default_message` or `${statusCode}_error_title`
-  const templateWithSuffixPattern = /`\$\{([^}]+)\}([a-zA-Z0-9._]+)`/g;
+  const templateWithSuffixPattern = /`\$\{([^}]+)\}([a-zA-Z0-9._-]+)`/g;
 
   let match = templateWithSuffixPattern.exec(content);
   while (match !== null) {
@@ -687,7 +688,7 @@ function extractErrorCodeKeys(content: string, availableKeys: Set<string>): stri
 
   // Pattern 2: Template literals with prefix + variable
   // Matches: `genai.google.${errorCode}_default_message`
-  const templateWithPrefixPattern = /`([a-zA-Z][a-zA-Z0-9._]*)\$\{([^}]+)\}([a-zA-Z0-9._]*)`/g;
+  const templateWithPrefixPattern = /`([a-zA-Z][a-zA-Z0-9._-]*)\$\{([^}]+)\}([a-zA-Z0-9._-]*)`/g;
 
   let prefixMatch = templateWithPrefixPattern.exec(content);
   while (prefixMatch !== null) {
@@ -725,6 +726,31 @@ function extractErrorCodeKeys(content: string, availableKeys: Set<string>): stri
 }
 
 /**
+ * Extracts locale keys that are embedded in pipe-delimited payload strings.
+ * Handles patterns like:
+ *   "commands.data.import.error_incompatible_version|1.0|unknown"
+ *   `commands.data.import.error_incompatible_version|${expected}|${actual}`
+ * @param content - The file content to analyze
+ * @param availableKeys - Set of all available locale keys to match against
+ * @returns Array of matched keys
+ */
+function extractPipeEncodedLocaleKeys(content: string, availableKeys: Set<string>): string[] {
+  const matchedKeys: string[] = [];
+  const pipePattern = /[`"']([a-zA-Z][a-zA-Z0-9_-]*(?:\.[a-zA-Z][a-zA-Z0-9_-]*){1,})\|/g;
+
+  let match = pipePattern.exec(content);
+  while (match !== null) {
+    const key = match[1];
+    if (availableKeys.has(key)) {
+      matchedKeys.push(key);
+    }
+    match = pipePattern.exec(content);
+  }
+
+  return matchedKeys;
+}
+
+/**
  * Keys that are provably used at runtime but cannot be detected by static regex analysis
  * because their values come from TypeScript type constraints or object key enumeration.
  * Example: `commands.conditioning.shared.${type}_footer` where type ∈ ConditioningType
@@ -746,7 +772,7 @@ const KNOWN_DYNAMIC_LOCALE_KEYS = new Set([
 async function extractGetLocaleSubKeysUsage(availableKeys: Set<string>): Promise<string[]> {
   const matchedKeys: string[] = [];
   const srcPath = join(process.cwd(), "src");
-  const getSubKeysPattern = /getLocaleSubKeys\s*\([^,]+,\s*["']([a-zA-Z0-9._]+)["']\)/g;
+  const getSubKeysPattern = /getLocaleSubKeys\s*\([^,]+,\s*["']([a-zA-Z0-9._-]+)["']\)/g;
 
   const glob = new Glob("**/*.ts");
   for await (const file of glob.scan(srcPath)) {
@@ -777,10 +803,10 @@ async function extractGetLocaleSubKeysUsage(availableKeys: Set<string>): Promise
  * Marks commands.{category}.description and commands.{category}.{group}.description
  * keys as referenced, because commandLoader.ts dynamically builds these keys from the
  * src/commands/ directory structure (using path.basename) rather than string literals.
- * @param availableKeys - Set of all available locale keys
+ * @param _availableKeys - Unused; retained for backwards-compatible call sites
  * @returns Array of matched description keys derived from the filesystem layout
  */
-async function extractCommandDescriptionKeys(availableKeys: Set<string>): Promise<string[]> {
+async function extractCommandDescriptionKeys(_availableKeys: Set<string>): Promise<string[]> {
   const matchedKeys: string[] = [];
   const commandsPath = join(process.cwd(), "src", "commands");
 
@@ -794,7 +820,7 @@ async function extractCommandDescriptionKeys(availableKeys: Set<string>): Promis
 
       // 1. Top-level command description: commands.{category}.description
       const catDescKey = `commands.${catName}.description`;
-      if (availableKeys.has(catDescKey)) matchedKeys.push(catDescKey);
+      matchedKeys.push(catDescKey);
 
       // 2. Subcommand group descriptions: commands.{category}.{group}.description
       const catPath = join(commandsPath, catName);
@@ -802,7 +828,7 @@ async function extractCommandDescriptionKeys(availableKeys: Set<string>): Promis
       for (const sub of subEntries) {
         if (!sub.isDirectory()) continue;
         const groupDescKey = `commands.${catName}.${sub.name}.description`;
-        if (availableKeys.has(groupDescKey)) matchedKeys.push(groupDescKey);
+        matchedKeys.push(groupDescKey);
       }
     }
   } catch (error) {
@@ -824,20 +850,21 @@ async function extractReferencedKeys(availableKeys: Set<string>): Promise<Map<st
   // Regex patterns for finding localization keys
   const patterns = [
     // titleKey, descriptionKey, nameKey, labelKey, etc.
-    /(?:titleKey|descriptionKey|nameKey|labelKey|modalTitleKey|itemLabelKey):\s*["']([a-zA-Z0-9._]+)["']/g,
+    /(?:titleKey|descriptionKey|nameKey|labelKey|modalTitleKey|itemLabelKey):\s*["']([a-zA-Z0-9._-]+)["']/g,
     // localizer() calls — first arg can be a string literal ("en-US") OR a variable (locale)
-    /localizer\s*\(\s*(?:"[^"]*"|'[^']*'|\w+)\s*,\s*["']([a-zA-Z0-9._]+)["']/g,
-    // Quoted strings that look like localization keys (dot-separated paths)
-    /["']([a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9_]*){2,})["']/g,
+    /localizer\s*\(\s*(?:"[^"]*"|'[^']*'|\w+)\s*,\s*["']([a-zA-Z0-9._-]+)["']/g,
+    // Quoted strings that look like localization keys (dot-separated paths).
+    // Allow 2-segment keys like "general.cancel" in addition to deeper paths.
+    /["']([a-zA-Z][a-zA-Z0-9_-]*(?:\.[a-zA-Z][a-zA-Z0-9_-]*){1,})["']/g,
     // Direct key references in ternary operators and assignments
-    /[?:]\s*["']([a-zA-Z0-9._]+)["']/g,
+    /[?:]\s*["']([a-zA-Z0-9._-]+)["']/g,
   ];
 
   try {
     const glob = new Glob("**/*.ts");
     for await (const file of glob.scan(srcPath)) {
-      // Skip locale files and handleCommands.ts (contains command path identifiers, not locale keys)
-      if (file.includes("locales/") || file.includes("handleCommands.ts")) {
+      // Skip locale files; other source files may still contain valid locale keys.
+      if (file.includes("locales/")) {
         continue;
       }
 
@@ -846,7 +873,7 @@ async function extractReferencedKeys(availableKeys: Set<string>): Promise<Map<st
         const content = await readFile(filePath, "utf-8");
 
         // Apply all patterns to find keys
-        for (const pattern of patterns) {
+        for (const [patternIndex, pattern] of patterns.entries()) {
           let match: RegExpExecArray | null;
           pattern.lastIndex = 0; // Reset regex state
           match = pattern.exec(content);
@@ -856,6 +883,15 @@ async function extractReferencedKeys(availableKeys: Set<string>): Promise<Map<st
 
             // Skip if in a Set declaration
             if (isInSetDeclaration(content, matchIndex)) {
+              match = pattern.exec(content);
+              continue;
+            }
+
+            // The generic catch-all patterns intentionally allow 2-segment keys so
+            // leaf keys like "general.cancel" are detected, but they also see parent
+            // prefixes like "commands.reward" in getLocaleSubKeys() calls. Keep those
+            // generic patterns limited to known leaf keys when only 2 segments exist.
+            if (patternIndex >= 2 && key.split(".").length === 2 && !availableKeys.has(key)) {
               match = pattern.exec(content);
               continue;
             }
@@ -892,6 +928,15 @@ async function extractReferencedKeys(availableKeys: Set<string>): Promise<Map<st
         // Extract error code pattern keys
         const errorCodeKeys = extractErrorCodeKeys(content, availableKeys);
         for (const key of errorCodeKeys) {
+          if (!referencedKeys.has(key)) {
+            referencedKeys.set(key, new Set());
+          }
+          referencedKeys.get(key)?.add(file);
+        }
+
+        // Extract pipe-encoded locale keys
+        const pipeEncodedKeys = extractPipeEncodedLocaleKeys(content, availableKeys);
+        for (const key of pipeEncodedKeys) {
           if (!referencedKeys.has(key)) {
             referencedKeys.set(key, new Set());
           }
@@ -952,7 +997,7 @@ function checkLocaleParity(localeKeys: Map<string, Set<string>>): LocaleParityIs
 /**
  * Main analysis function
  */
-async function analyzeLocalizationKeys(): Promise<AnalysisResult> {
+export async function analyzeLocalizationKeys(): Promise<AnalysisResult> {
   const { availableKeys, localeKeys } = await loadAvailableKeys();
   const parityIssues = checkLocaleParity(localeKeys);
   const modalTitleViolations = await checkModalTitleLengths(localeKeys);
