@@ -25,6 +25,8 @@ bun install
 cp .env.example .env
 ```
 
+`.env.example` is intentionally minimal and only includes the required local setup values.
+
 Minimum required values for local development:
 
 ```env
@@ -42,6 +44,7 @@ Notes:
 
 - Runtime uses `RUN_ENV` (not `NODE_ENV`) for production/dev branching.
 - In production mode (`RUN_ENV=production`), secrets are fetched from AWS Secrets Manager (`tomoribot/production`) unless `TEST_PRODUCTION=true`.
+- Additional tuning and feature flags live in `.env.optional.example`. Copy only the values you actually want into `.env`.
 
 ## 3. Prepare PostgreSQL
 

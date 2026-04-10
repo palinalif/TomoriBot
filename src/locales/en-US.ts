@@ -1689,8 +1689,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         brave_description: `Brave Search is optional and only enhances my search capabilities. It does NOT power my AI as that's handled by your main provider.
 - Enables image, video, and news search
 - Provides real-time information from the internet
-- Enhances my ability to answer current questions
-- Free Tier includes 2,000 queries per month`,
+- Enhances my ability to answer current questions`,
         brave_getting_key_title: `Getting Your API Key:`,
         brave_getting_key_description: `1. Visit [Brave Search API](https://brave.com/search/api/)
 2. Sign up for a free account
@@ -1699,7 +1698,8 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 5. Copy and input your API key using the {configBraveapiSet} command`,
         brave_important_title: `Important Notes:`,
         brave_important_description: `- This is separate from your main AI provider
-- Without Brave API key, I can still function and use built-in web search`,
+- Without Brave API key, I can still function and use built-in web search
+- Brave includes $5 in free monthly credits, but usage above that can be billed. If you only want the free tier, set a $5 usage limit in the [Brave usage limits dashboard](https://api-dashboard.search.brave.com/app/subscriptions/usage-limits)`,
         brave_footer: `For setting up your main AI provider, use the other \`/help api-key\` options`,
         // Google Gemini
         google_title: `Setting Up Google Gemini API Key`,

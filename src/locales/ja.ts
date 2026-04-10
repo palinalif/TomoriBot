@@ -1688,8 +1688,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         brave_description: `Brave Searchはオプションで、検索機能を強化するだけです。これは私のAIを動かすものではありません（それはメインプロバイダーが担当します）。
 - 画像、動画、ニュース検索を有効化
 - インターネットからリアルタイム情報を提供
-- 最新の質問に答える能力を強化
-- 無料プランには月2,000クエリが含まれます`,
+- 最新の質問に答える能力を強化`,
         brave_getting_key_title: `APIキーの取得：`,
         brave_getting_key_description: `1. [Brave Search API](https://brave.com/search/api/)にアクセス
 2. 無料アカウントに登録
@@ -1698,7 +1697,8 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 5. {configBraveapiSet}コマンドでAPIキーをコピーして入力`,
         brave_important_title: `重要な注意事項：`,
         brave_important_description: `- これはメインAIプロバイダーとは別です
-- Brave APIキーがなくても、組み込みウェブ検索で機能します`,
+- Brave APIキーがなくても、組み込みウェブ検索で機能します
+- Braveでは毎月5ドル分の無料クレジットが含まれますが、それを超えると課金される場合があります。無料枠だけ使いたい場合は、[Braveの使用量上限ダッシュボード](https://api-dashboard.search.brave.com/app/subscriptions/usage-limits)で使用量上限を5ドルに設定してください`,
         brave_footer: `メインAIプロバイダーの設定については、他の\`/help api-key\`オプションを確認してください`,
         // Google Gemini
         google_title: `Google Gemini APIキーの設定`,

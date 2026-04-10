@@ -367,27 +367,33 @@ Before running TomoriBot, ensure you have the following installed:
 
 ### Configuration
 
-**Create environment file** `.env` and then fill in the required variables:
-   ```
-    # Discord Bot Configuration (Required)
-    DISCORD_TOKEN=your_discord_bot_token_here
-    # Make sure your Discord bot has the following Privileged Gateway Intents:
-    # GuildMembers, MessageContent, GuildPresences
+**Create your local environment file** by copying `.env.example` to `.env`, then fill in the required values:
 
-    # Security (Required)
-    CRYPTO_SECRET=your_32_character_crypto_secret_here
+```sh
+cp .env.example .env
+```
 
-    # Database Configuration (Required)
-    POSTGRES_HOST=localhost
-    POSTGRES_PORT=5432
-    POSTGRES_USER=your_username
-    POSTGRES_PASSWORD=your_password
-    POSTGRES_DB=your_dbname
+`.env.example` now contains only the minimum local setup values:
 
-    # Bot Configuration (Optional)
-    DEFAULT_BOTNAME=Tomori
-    BASE_TRIGGER_WORDS=tomori,tomo,トモリ,ともり
-   ```
+```
+# Discord Bot Configuration (Required)
+DISCORD_TOKEN=your_discord_bot_token_here
+# Make sure your Discord bot has the following Privileged Gateway Intents:
+# GuildMembers, MessageContent, GuildPresences
+
+# Security (Required)
+CRYPTO_SECRET=your_32_character_crypto_secret_here
+
+# Database Configuration (Required)
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=your_username
+POSTGRES_PASSWORD=your_password
+POSTGRES_DB=tomodb
+
+# Runtime Configuration (Default is development)
+RUN_ENV=development
+```
 
 **Required Variables:**
 - **DISCORD_TOKEN**: Your Discord bot authentication token from the [Discord Developer Portal](https://discord.com/developers/applications)
@@ -398,7 +404,7 @@ Before running TomoriBot, ensure you have the following installed:
 - **POSTGRES_PASSWORD**: PostgreSQL database password
 - **POSTGRES_DB**: PostgreSQL database name
 
-To find all additional optional variables you can adjust, check out the `.env.example` file in the repository.
+If you want to tune optional limits, integrations, or provider-specific settings, copy the entries you need from `.env.optional.example` into your real `.env`.
 
 ### Running TomoriBot
 
@@ -517,10 +523,12 @@ docker compose up -d
 
 If you prefer containerized deployment, you can use Docker Compose instead of manual setup:
 
-**Required .env variables for Docker Compose:**
+**Required `.env` variables for Docker Compose:**
 - `DISCORD_TOKEN` - Your Discord bot token
 - `CRYPTO_SECRET` - 32-character encryption key
 - `POSTGRES_PASSWORD` - Database password (other DB settings are auto-configured)
+
+For Docker Compose, start from `.env.example`, then add `POSTGRES_PASSWORD` if you have not already set it. Optional Docker or runtime tuning values can still be copied from `.env.optional.example`.
 
 ```sh
 # Build TomoriBot's container (first time or after code changes)

@@ -30,7 +30,7 @@ This document captures coding rules that should stay stable across features and 
 const VALUE = Number.parseInt(process.env.CONFIG_VAR || "10", 10);
 ```
 
-- Add new env vars to `.env.example` with a clear comment.
+- Add required setup vars to `.env.example` and optional/tuning vars to `.env.optional.example`, each with a clear comment.
 
 ## Database and Migrations
 

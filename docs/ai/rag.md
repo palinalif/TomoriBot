@@ -137,7 +137,7 @@ Rules:
 
 ## Limits and Guardrails
 
-Limits live in `.env.example` and are enforced at upload time:
+Limits live in `.env.optional.example` and are enforced at upload time:
 - `MAX_DOCUMENT_SIZE_MB`
 - `MAX_DOCUMENT_TEXT_LENGTH`
 - `DOCUMENT_CHUNK_SIZE`

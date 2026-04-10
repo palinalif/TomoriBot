@@ -168,4 +168,4 @@ The current bounding-box-to-ellipse approach trades precision for stability. An 
 | `src/utils/image/segmentationService.ts` | Gemini API call, bounding box mask construction, debug overlay |
 | `src/tools/functionCalls/generateImageNaiTool.ts` | NAI infill payload, inpaint mode orchestration, model detection |
 | `src/utils/image/imageExtractor.ts` | Discord message image extraction |
-| `.env.example` | All configurable env vars documented |
+| `.env.optional.example` | Optional inpainting and related runtime env vars documented |

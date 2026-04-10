@@ -131,7 +131,7 @@ The reward/punish enable flags are still stored per persona in `persona_configs`
 - `CONDITIONING_REASON_MAX_LENGTH`
 - `CONDITIONING_CONTEXT_MAX_GROUPS_PER_TYPE`
 
-These are documented in `.env.example`.
+These are documented in `.env.optional.example`.
 
 ## Related Files
 
