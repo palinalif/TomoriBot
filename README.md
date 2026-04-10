@@ -57,6 +57,14 @@ You can [invite the public TomoriBot](https://discord.com/oauth2/authorize?clien
 
 After adding her to your server through either method above, run the `/config setup` command for instructions. Then you can simply say her name (or @ mention her) in order to get a response. 
 
+If you're enjoying TomoriBot, please consider giving her a ⭐ on GitHub or supporting development through Ko-fi!
+
+<div align="center">
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/J3J71O7NE6)
+
+</div>
+
 ## Feature Showcase
 
 
