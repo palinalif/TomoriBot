@@ -28,7 +28,8 @@ docker-pip-cache/
 docker-npm-cache/
 
 # Other folders
-.plans/
+.plans/*
+plans/
 .deprecated/
 .vscode/
 .temp/

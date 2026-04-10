@@ -1,4 +1,4 @@
-import type { Client, PresenceStatus } from "discord.js";
+import type { Client, GuildTextBasedChannel, PresenceStatus } from "discord.js";
 import { GatewayIntentBits } from "discord.js";
 import { sql } from "../db/client"; // Import SQL client for database queries
 import {
@@ -55,6 +55,7 @@ import {
 } from "@/utils/conditioning/conditioning";
 import { createToolPromptMacroResolver, type ToolPromptMacroResolver } from "@/utils/tools/toolPromptMacros";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
+import { formatChannelReferenceLabel } from "@/utils/discord/targetResolver";
 
 /**
  * Maps userId -> nickname for the current mention replacement operation.
@@ -281,7 +282,7 @@ export async function convertMentions(
             const guild = client.guilds.cache.get(serverId);
             const channel = guild?.channels.cache.get(id) || (await client.channels.fetch(id).catch(() => null));
             if (channel?.isTextBased() && !channel.isDMBased()) {
-              return `#${channel.name}`;
+              return await formatChannelReferenceLabel(channel as GuildTextBasedChannel);
             }
           } catch (error) {
             log.error(`Error resolving channel mention ${id} in convertMentions:`, error, {

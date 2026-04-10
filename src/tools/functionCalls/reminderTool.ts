@@ -70,7 +70,7 @@ export class ReminderTool extends BaseTool {
       target_channel: {
         type: "string",
         description:
-          "OPTIONAL: Channel or active thread name where this task should trigger. Useful for cross-channel tasks. The channel must exist in the current server. If omitted, the current channel is used.",
+          "OPTIONAL: Channel or active thread name where this task should trigger. Useful for cross-channel tasks. The channel must exist in the current server. You can also pass a Discord channel/thread ID if a prior clarification exposed one. If omitted, the current channel is used.",
       },
     },
     required: ["reminder_purpose", "repetition_interval_hours"],
@@ -281,9 +281,12 @@ export class ReminderTool extends BaseTool {
 
       const channelResolution = await resolveChannelTarget(requestedTargetChannel, context);
       if (channelResolution.status === "ambiguous") {
+        const clarificationHint = channelResolution.candidates.some((candidate) => candidate.channelId)
+          ? " Retry with the exact thread ID if needed."
+          : "";
         return {
           success: false,
-          error: `Multiple channels or threads match "${requestedTargetChannel}". Please clarify which one you mean: ${channelResolution.candidates.map((candidate) => candidate.label).join(", ")}.`,
+          error: `Multiple channels or threads match "${requestedTargetChannel}". Please clarify which one you mean.${clarificationHint} ${channelResolution.candidates.map((candidate) => candidate.label).join(", ")}.`,
           data: {
             status: "reminder_creation_failed_ambiguous_channel",
             reason: "Multiple channels or threads matched the requested target.",

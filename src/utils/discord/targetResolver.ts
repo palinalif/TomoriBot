@@ -42,6 +42,7 @@ export type AmbiguousChannelTarget = {
   candidates: Array<{
     label: string;
     channelName: string;
+    channelId?: string;
   }>;
 };
 
@@ -432,6 +433,44 @@ function formatChannelCandidateLabel(channel: GuildTextBasedChannel): string {
   return `#${channel.name}`;
 }
 
+export async function formatChannelReferenceLabel(channel: GuildTextBasedChannel): Promise<string> {
+  const baseLabel = formatChannelCandidateLabel(channel);
+  if (!isThreadLike(channel) || !("guild" in channel)) {
+    return baseLabel;
+  }
+
+  const activeThreads = await getActiveThreadTargets(channel.guild);
+  const duplicateCount = activeThreads.filter((thread) => formatChannelCandidateLabel(thread) === baseLabel).length;
+  return duplicateCount > 1 ? `${baseLabel} (ID: ${channel.id})` : baseLabel;
+}
+
+function buildAmbiguousChannelCandidates(
+  candidates: Array<{
+    label: string;
+    channelName: string;
+    channel: GuildTextBasedChannel;
+  }>,
+): Array<{
+  label: string;
+  channelName: string;
+  channelId?: string;
+}> {
+  const labelCounts = new Map<string, number>();
+  for (const candidate of candidates) {
+    labelCounts.set(candidate.label, (labelCounts.get(candidate.label) ?? 0) + 1);
+  }
+
+  return candidates.slice(0, 3).map((candidate) => {
+    const shouldExposeChannelId = isThreadLike(candidate.channel) && (labelCounts.get(candidate.label) ?? 0) > 1;
+
+    return {
+      label: shouldExposeChannelId ? `${candidate.label} (ID: ${candidate.channel.id})` : candidate.label,
+      channelName: candidate.channelName,
+      channelId: shouldExposeChannelId ? candidate.channel.id : undefined,
+    };
+  });
+}
+
 async function getActiveThreadTargets(guild: Guild): Promise<GuildTextBasedChannel[]> {
   const activeThreads = await guild.channels.fetchActiveThreads().catch(() => null);
   if (!activeThreads) {
@@ -500,10 +539,7 @@ export async function resolveChannelTarget(input: string, context: ToolContext):
     return {
       status: "ambiguous",
       input: rawInput,
-      candidates: exactChannelMatches.slice(0, 3).map((candidate) => ({
-        label: candidate.label,
-        channelName: candidate.channelName,
-      })),
+      candidates: buildAmbiguousChannelCandidates(exactChannelMatches),
     };
   }
 
@@ -531,10 +567,7 @@ export async function resolveChannelTarget(input: string, context: ToolContext):
     return {
       status: "ambiguous",
       input: rawInput,
-      candidates: exactThreadMatches.slice(0, 3).map((candidate) => ({
-        label: candidate.label,
-        channelName: candidate.channelName,
-      })),
+      candidates: buildAmbiguousChannelCandidates(exactThreadMatches),
     };
   }
 
@@ -561,10 +594,7 @@ export async function resolveChannelTarget(input: string, context: ToolContext):
     return {
       status: "ambiguous",
       input: rawInput,
-      candidates: normalizedMatches.slice(0, 3).map((candidate) => ({
-        label: candidate.label,
-        channelName: candidate.channelName,
-      })),
+      candidates: buildAmbiguousChannelCandidates(normalizedMatches),
     };
   }
 

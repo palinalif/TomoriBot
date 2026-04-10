@@ -115,7 +115,7 @@ export class CrossChannelMessageTool extends BaseTool {
       target_channel: {
         type: "string",
         description:
-          "Name of the target channel or active thread in the current server. Accepts natural channel names like 'general', '#general', or an exact active thread title. If the name is ambiguous, the tool will ask for clarification instead of guessing.",
+          "Name of the target channel or active thread in the current server. Accepts natural channel names like 'general', '#general', an exact active thread title, or a Discord channel/thread ID supplied by a prior clarification. If the name is ambiguous, the tool will ask for clarification instead of guessing.",
       },
       task: {
         type: "string",
@@ -237,9 +237,12 @@ export class CrossChannelMessageTool extends BaseTool {
 
     const channelResolution = await resolveChannelTarget(requestedChannel, context);
     if (channelResolution.status === "ambiguous") {
+      const clarificationHint = channelResolution.candidates.some((candidate) => candidate.channelId)
+        ? " Retry with the exact thread ID if needed."
+        : "";
       return {
         success: false,
-        error: `Multiple channels or threads match "${requestedChannel}". Please clarify which one you mean: ${channelResolution.candidates.map((candidate) => candidate.label).join(", ")}.`,
+        error: `Multiple channels or threads match "${requestedChannel}". Please clarify which one you mean.${clarificationHint} ${channelResolution.candidates.map((candidate) => candidate.label).join(", ")}.`,
         data: {
           status: "cross_channel_failed_ambiguous_channel",
           reason: "Multiple channels or threads matched the requested target.",

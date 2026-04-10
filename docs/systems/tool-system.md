@@ -42,11 +42,11 @@ Current `cross_channel_message` runtime notes:
 - can target another text channel immediately without scheduling
 - target selection is now name-first through `target_channel`; exact active thread titles are supported alongside channel names
 - deprecated `channel_id` / `channel_name` inputs are still accepted at execution time for backward compatibility, but they are no longer advertised to the model
-- ambiguous channel or thread names return a clarification failure instead of guessing
+- ambiguous channel or thread names return a clarification failure instead of guessing; when duplicate active thread titles still collide after parent-name labeling, the clarification includes the thread snowflake so the next tool call can target it directly
 - thread permission checks use `SendMessagesInThreads` instead of `SendMessages`
 - the `/server crosschannel-blocklist` setting blocks tool-driven visits into listed channels, and blocked forum/media parents also block thread targets under them
 - tool-driven cross-channel dispatch now preserves the active sender identity, including alter personas and `/bot impersonate` user impersonation turns, for both the target-channel visit and optional boomerang follow-up
-- Discord channel/thread links in prompt context are normalized into plain readable `#name` text
+- Discord channel/thread links in prompt context are normalized into readable labels; when an active thread label would still be ambiguous, the prompt-visible label includes `(ID: <thread snowflake>)`
 - tool-driven cross-channel visits now hide `cross_channel_message` for the dispatched turn itself and for the boomerang follow-up turn, preventing nested re-dispatch loops
 - boomerang return context now assumes the original assignment is already in history and asks for a concise report-back instead of restating the task
 
@@ -75,7 +75,7 @@ Current name-resolution notes for built-in tools:
 - user resolution order is: current-conversation aliases, exact guild display name, exact DB nickname intersected with guild membership, exact global name, exact username
 - channel resolution is exact text-channel name, exact active thread title, then unique normalized match across both sets
 - matching is exact plus unique normalized only; V1 intentionally avoids fuzzy matching
-- ambiguous results never auto-pick and instead return candidate labels for clarification
+- ambiguous results never auto-pick and instead return candidate labels for clarification; duplicate thread labels expose the thread snowflake in that clarification so the model can retry with an exact ID
 - if a Discord user resolves successfully but has no Tomori user row yet, reminder/personal-memory tools fail with a human-readable "Tomori doesn't know this user yet" style error
 - bridge users can still be resolved by name from current conversation metadata, but avatar tools reject them and personal-memory creation/update does not create bridge-scoped personal memories
 - message-targeted tools such as `read_document`, `manage_message`, `interact_with_recent_message`, `analyze_image`, `process_gif`, and edit/inpaint reference flows still target Discord messages internally, but the prompt-visible arguments are opaque `media_N` / `ref_N` handles rather than raw snowflakes
