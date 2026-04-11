@@ -2971,6 +2971,33 @@ Prompt Guidance Rescale: {cfg_rescale}
           invalid_preset_description: `選択されたプリセットが見つかりませんでした。もう一度お試しください。`,
         },
       },
+      "context-note": {
+        description: `会話履歴に注入するリマインダーを管理します`,
+        set: {
+          description: `会話履歴の特定の深さに短いリマインダーを設定します`,
+          scope_description: `リマインダーの保存先（特定のペルソナまたはサーバー全体）`,
+          persona_option: `ペルソナ（特定のペルソナに紐付け）`,
+          global_option: `グローバル（ペルソナに設定がない場合のサーバー全体のフォールバック）`,
+          modal_title: `コンテキストリマインダーを設定`,
+          text_label: `リマインダー`,
+          text_placeholder: `空白にすると削除されます。ドリフトを防ぐために会話履歴に挿入される短いプロンプト。`,
+          depth_label: `深さ（0 = 返信に最も近い、最大100）`,
+          depth_placeholder: `0 = 最新メッセージの直前`,
+          success_set_title: `コンテキストリマインダーを更新しました`,
+          success_set_description: `**スコープ：** {scope}
+**深さ：** 最下部から {depth} メッセージ
+**プレビュー：**
+\`\`\`
+{preview}
+\`\`\``,
+          success_removed_title: `コンテキストリマインダーを削除しました`,
+          success_removed_description: `**{scope}** のコンテキストリマインダーをクリアしました。`,
+          invalid_depth_title: `無効な深さ`,
+          invalid_depth_description: `深さは **0** から **100** の整数で指定してください。`,
+          no_personas_title: `ペルソナが見つかりません`,
+          no_personas_description: `このサーバーにはまだペルソナが設定されていません。先に \`/config setup\` を使用してください。`,
+        },
+      },
       "random-trigger": {
         add: {
           description: `チャンネルに確率的なタイマーベースの自動トリガーを追加します。`,
@@ -3361,7 +3388,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
           single_enabled_label: `自動トリガーを有効化`,
           single_enabled_description: `このチャンネルで自動トリガーを有効または無効にします。`,
           single_persona_label: `自動トリガーペルソナ`,
-          single_persona_description: `このチャンネルで自動トリガーとチャンネル限定の常時応答に使うペルソナを選択します。トリガーワードは通常どおり動作します。`,
+          single_persona_description: `このチャンネルで自動トリガーとチャンネル限定の常時応答に使うペルソナを選択します。`,
           single_persona_placeholder: `現在: {persona}`,
           main_persona_description: `メインペルソナ`,
           alter_persona_description: `オルタペルソナ`,

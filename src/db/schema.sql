@@ -2095,3 +2095,18 @@ DROP TRIGGER IF EXISTS update_saved_provider_configs_timestamp ON saved_provider
 CREATE TRIGGER update_saved_provider_configs_timestamp
   BEFORE UPDATE ON saved_provider_configs
   FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+-- ============================================================
+-- Context Note / Author's Note (April 2026)
+-- Short reminder string injected into conversation history at a
+-- user-specified depth from the bottom to reduce context drift.
+-- Persona value wins at inference; server (global) value is the fallback.
+-- depth=0 means "at the very bottom" (after all fetched messages).
+-- depth=N means N messages above the bottom; clamped to top if N > total.
+-- ============================================================
+-- Per-persona note (on tomoris)
+SELECT add_column_if_not_exists('tomoris', 'context_note', 'TEXT', 'NULL');
+SELECT add_column_if_not_exists('tomoris', 'context_note_depth', 'INTEGER', '0');
+-- Server-wide / global fallback note (on tomori_configs)
+SELECT add_column_if_not_exists('tomori_configs', 'context_note', 'TEXT', 'NULL');
+SELECT add_column_if_not_exists('tomori_configs', 'context_note_depth', 'INTEGER', '0');

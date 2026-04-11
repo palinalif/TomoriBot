@@ -2952,6 +2952,33 @@ Preview:
           invalid_preset_description: `The selected preset could not be found. Please try again.`,
         },
       },
+      "context-note": {
+        description: `Manage a reminder injected into the conversation to keep me on track`,
+        set: {
+          description: `Set a short reminder injected at a specific depth in conversation history`,
+          scope_description: `Where to store the reminder — a specific persona or the whole server`,
+          persona_option: `Persona (bind to a specific persona)`,
+          global_option: `Global (server-wide fallback when persona has none)`,
+          modal_title: `Set Context Reminder`,
+          text_label: `Reminder`,
+          text_placeholder: `Leave blank to remove. Short prompt inserted into chat history to reduce drift.`,
+          depth_label: `Depth (0 = closest to reply, max 100)`,
+          depth_placeholder: `0 = just before the latest message`,
+          success_set_title: `Context Reminder Updated`,
+          success_set_description: `**Scope:** {scope}
+**Depth:** {depth} message(s) from bottom
+**Preview:**
+\`\`\`
+{preview}
+\`\`\``,
+          success_removed_title: `Context Reminder Removed`,
+          success_removed_description: `The **{scope}** context reminder has been cleared.`,
+          invalid_depth_title: `Invalid Depth`,
+          invalid_depth_description: `Depth must be a whole number between **0** and **100**.`,
+          no_personas_title: `No Personas Found`,
+          no_personas_description: `No personas are set up on this server yet. Use \`/config setup\` first.`,
+        },
+      },
       "random-trigger": {
         add: {
           description: `Add a probabilistic timer-based auto-trigger for a channel.`,
@@ -3332,7 +3359,7 @@ Disabled RP mode on **{disabled_count}** channel(s): {disabled_channels}
       "auto-trigger": {
         description: `Manage auto-chat settings`,
         channels: {
-          description: `Manage the full set of channels where I will automatically chat, or target one channel to pick its persona.`,
+          description: `Manage auto-trigger channels and optional per-channel persona assignment.`,
           channel_description: `Optional single text channel to configure. Leave empty to open the bulk channel checklist.`,
           modal_title: `Manage Auto-Trigger Channels`,
           checkbox_label: `Auto-Trigger Channels`,
@@ -3342,7 +3369,7 @@ Disabled RP mode on **{disabled_count}** channel(s): {disabled_channels}
           single_enabled_label: `Enable Auto-Trigger`,
           single_enabled_description: `Turn auto-trigger on or off for this channel.`,
           single_persona_label: `Auto-Trigger Persona`,
-          single_persona_description: `Pick which persona auto-trigger and channel-scoped always-reply should use here. Trigger words still work normally.`,
+          single_persona_description: `Pick which persona auto-trigger and channel-scoped always-reply should use here.`,
           single_persona_placeholder: `Current: {persona}`,
           main_persona_description: `Main Persona`,
           alter_persona_description: `Alter Persona`,

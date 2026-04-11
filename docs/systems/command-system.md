@@ -268,7 +268,7 @@ Rules:
 ## Representative Command Groups
 
 - `bot`: respond, generate(image), kill, impersonate
-- `config`: setup, model(text/image/embedding), api-key(set/delete/rotation), system-prompt(set/remove/preset), params(*), timezone, message-fetch-limit, bot-permissions
+- `config`: setup, model(text/image/embedding), api-key(set/delete/rotation), system-prompt(set/remove/preset), context-note(set), params(*), timezone, message-fetch-limit, bot-permissions
 - `nsfw`: jailbreaks
 - `optional-key`: google/set/remove, brave/set/remove, elevenlabs/set/remove, novelai/set/remove
 - `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(channels/threshold), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove), member-permissions, always-reply, thought-logs-channel

@@ -129,6 +129,35 @@ If the preset is deactivated or deleted, context assembly immediately reverts to
 
 See [ST Preset System — Context Assembly Override](../integrations/sillytavern-preset-system.md#context-assembly-override-phase-3) for the full algorithm with a worked before/after example.
 
+## Author's Note (Context Note) Injection
+
+TomoriBot supports a user-configurable **author's note** injected into the conversation history block at a specified depth. This is the TomoriBot equivalent of the author's note feature in NovelAI/SillyTavern — a short reminder string placed near the model's most recent attention to reduce context drift.
+
+### Storage and Fallback
+
+Two storage scopes exist, set via `/config context-note set`:
+
+| Scope | Table | Column |
+|---|---|---|
+| Per-persona | `tomoris` | `context_note`, `context_note_depth` |
+| Global (server-wide) | `tomori_configs` | `context_note`, `context_note_depth` |
+
+At inference, the **active persona's note takes priority** over the global note. If the active persona has no note (column is `NULL`), the global note is used as a fallback. If neither is set, no injection occurs.
+
+### Depth Semantics
+
+`depth` is an integer from `0` to `100` (Discord's message-fetch max):
+
+- `depth=0` → injected **after** all fetched history messages (the most recent position)
+- `depth=N` → injected before the message at position `totalMessages - N` from the start
+- `depth >= totalMessages` → clamped to the **top** of the conversation history
+
+### Injection Format
+
+The note is emitted as a `"user"` role context item with `[System: Author's note — <text>]` formatting, matching the existing convention for system annotations in the dialogue stream (short-term memory summaries, users-in-conversation headers, etc.). No new `authorType` was added.
+
+**Implementation location:** `buildContextNative()` in `src/utils/text/contextBuilder.ts` — the pre-loop setup computes `contextNoteTargetIndex`, and the in-loop guard emits the note at that index. A post-loop fallback handles `depth=0`.
+
 ## Key Behaviors
 
 ### User Impersonation Bypass

@@ -89,6 +89,8 @@ export const tomoriSchema = z.object({
   nai_attg_tags: z.string().nullable().optional(), // Added March 2026 - ATTG: Genre/style tags
   nai_attg_genre: z.string().nullable().optional(), // Added March 2026 - ATTG: Genre categories
   nai_attg_stars: z.number().int().min(1).max(5).nullable().optional(), // Added March 2026 - ATTG: Quality stars (Erato only)
+  context_note: z.string().nullable().optional(), // Added April 2026 - Author's note injected into conversation history at inference
+  context_note_depth: z.number().int().min(0).max(100).default(0), // Added April 2026 - Depth from bottom (0=lowest, 100=max)
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
@@ -322,6 +324,8 @@ export const tomoriConfigSchema = z.object({
   videogen_enabled: z.boolean().default(true), // Added January 2026 - Reserved for future video generation
   timezone_offset: z.number().int().min(-12).max(14).default(0),
   system_prompt: z.string().nullable(), // Added December 2025 - Custom system prompt for personality instructions
+  context_note: z.string().nullable().optional(), // Added April 2026 - Global author's note injected into conversation history (persona note takes precedence)
+  context_note_depth: z.number().int().min(0).max(100).default(0), // Added April 2026 - Depth from bottom (0=lowest, 100=max)
   cooldown_type: z.nativeEnum(CooldownType).default(CooldownType.OFF), // Added January 2026 - Message trigger cooldown type
   cooldown_length: z.number().int().min(1).max(86400).default(5), // Added January 2026 - Cooldown duration in seconds
   custom_endpoint_url: z.string().nullable().optional(), // Added January 2026 - Custom OpenAI-compatible endpoint URL (non-production only)

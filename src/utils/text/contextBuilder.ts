@@ -2287,6 +2287,23 @@ async function buildContextNative({
     mediaWindowCutoff,
   );
 
+  // Author's note injection setup (April 2026)
+  // Resolve effective note: active persona's note wins; falls back to server-global note.
+  // tomoriState here is the full TomoriState (TomoriRow + config) loaded above at line ~1134.
+  const effectiveContextNote = tomoriState?.context_note?.trim() || tomoriConfig.context_note?.trim() || null;
+  const effectiveContextNoteDepth = effectiveContextNote
+    ? tomoriState?.context_note?.trim()
+      ? (tomoriState.context_note_depth ?? 0)
+      : (tomoriConfig.context_note_depth ?? 0)
+    : 0;
+
+  // targetIndex: the history index at which to inject the note BEFORE that message.
+  // depth=0 → targetIndex = totalMessages (i.e. never fires inside the loop → emitted after).
+  // depth=N → inject before the message at index (totalMessages - N), clamped to 0.
+  // depth >= totalMessages → inject at the very top of the history (index 0).
+  const contextNoteTargetIndex = effectiveContextNote ? Math.max(0, totalMessages - effectiveContextNoteDepth) : -1;
+  let contextNoteEmitted = false;
+
   const botNameLower = botName.toLowerCase();
   for (const [index, msg] of simplifiedMessageHistory.entries()) {
     const isPersonaMessage = msg.authorType === "persona" && !!msg.personaName;
@@ -2306,6 +2323,20 @@ async function buildContextNative({
     } else {
       // Normal role assignment
       role = isCurrentPersonaMessage ? "model" : "user";
+    }
+
+    // Inject author's note block BEFORE this message when we've reached the target depth.
+    // Uses a "user" turn with [System: ...] formatting so it sits naturally in the dialogue
+    // stream without being attributed to any speaker — matching the pattern for other system
+    // annotations (short-term memory, users-in-conversation, etc.).
+    if (!contextNoteEmitted && effectiveContextNote && index === contextNoteTargetIndex) {
+      pushDialogueHistoryContextItem(
+        contextItems,
+        "user",
+        [{ type: "text", text: `[System: ${effectiveContextNote}]` }],
+        "context_note_injection",
+      );
+      contextNoteEmitted = true;
     }
 
     const parts: ContextPart[] = [];
@@ -2612,6 +2643,18 @@ async function buildContextNative({
       pushDialogueHistoryContextItem(contextItems, "user", detachedSystemParts, msg.id);
       pushDialogueHistoryContextItem(contextItems, role, parts, msg.id);
     }
+  }
+
+  // Emit author's note AFTER all messages when depth=0 (targetIndex = totalMessages,
+  // so the in-loop guard never fires) or as a safety net if the loop was empty.
+  if (!contextNoteEmitted && effectiveContextNote) {
+    pushDialogueHistoryContextItem(
+      contextItems,
+      "user",
+      [{ type: "text", text: `[System: ${effectiveContextNote}]` }],
+      "context_note_injection",
+    );
+    contextNoteEmitted = true;
   }
 
   // Inject user impersonation system prompt as the LAST message (February 2026)

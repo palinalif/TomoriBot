@@ -105,6 +105,10 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `tomori_configs.llm_logit_biases` stores server-wide logit-bias entries as raw text/token-ID input plus tokenizer-specific cached resolutions. Raw text stays canonical so entries can be refreshed when `llm_id` changes.
 - `tomori_configs.videogen_enabled` gates both slash-command and tool-driven video generation exposure.
 - `tomori_configs.video_model_id` stores the active server-scoped video generation model selection.
+- `tomori_configs.context_note` stores the server-wide author's note injected into conversation history at inference time. Acts as a fallback when the active persona has no persona-specific note.
+- `tomori_configs.context_note_depth` stores the injection depth for the global note: `0` = bottom of fetched history (most recent), `N` = N messages from the bottom, clamped to top if it exceeds the actual count.
+- `tomoris.context_note` stores a per-persona author's note. Takes priority over `tomori_configs.context_note` at inference when non-null.
+- `tomoris.context_note_depth` stores the injection depth for the persona-specific note, using the same semantics as `tomori_configs.context_note_depth`.
 
 ### NovelAI profile tags
 

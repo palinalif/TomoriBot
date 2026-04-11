@@ -8,11 +8,17 @@ export function getReplyContextAuthorName(message: Message): string {
 }
 
 export function buildReplyContextEmbed(targetMessage: Message, locale: string): EmbedBuilder {
-  const authorIconUrl = targetMessage.author.displayAvatarURL({
-    size: 64,
-    extension: "png",
-    forceStatic: true,
-  });
+  const authorIconUrl =
+    targetMessage.member?.displayAvatarURL({
+      size: 64,
+      extension: "png",
+      forceStatic: true,
+    }) ??
+    targetMessage.author.displayAvatarURL({
+      size: 64,
+      extension: "png",
+      forceStatic: true,
+    });
 
   return new EmbedBuilder().setURL(targetMessage.url).setAuthor({
     name: localizer(locale, "genai.message_interaction.reply_context_author", {
