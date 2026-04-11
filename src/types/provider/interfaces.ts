@@ -13,6 +13,7 @@ import type {
   DMChannel,
   AnyThreadChannel,
 } from "discord.js";
+import type { SupportedParamValue } from "@/constants/supportedParams";
 import type { TomoriState } from "../db/schema";
 import type { StructuredContextItem } from "../misc/context";
 import type { StreamingContext } from "../tool/interfaces";
@@ -21,7 +22,7 @@ import type { ProviderError } from "../stream/interfaces";
 export type ProviderApiFamily = "google-genai" | "openrouter" | "novelai" | "openai-compatible" | "anthropic";
 
 /** LLM generation parameters that providers may support via DB config. */
-export type SupportedParam = "temperature" | "topP" | "topK" | "frequencyPenalty" | "presencePenalty" | "minP";
+export type SupportedParam = SupportedParamValue;
 
 export interface ProviderFeatureSupport {
   nativeImageGeneration: boolean;
@@ -94,6 +95,7 @@ export interface ProviderConfig {
   model: string;
   apiKey: string;
   temperature: number;
+  disabledParams?: SupportedParam[];
   maxOutputTokens?: number;
   tools?: Array<Record<string, unknown>>;
   logitBias?: Record<string, number>;

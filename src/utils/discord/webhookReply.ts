@@ -1,6 +1,5 @@
 import { EmbedBuilder, type Message, type Webhook } from "discord.js";
 import { stripBridgePrefix } from "@/utils/bridge";
-import { ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 import { sendWebhookMessageWithIdentity, type ResolvedWebhookIdentity } from "@/utils/discord/webhookManager";
 
@@ -15,16 +14,13 @@ export function buildReplyContextEmbed(targetMessage: Message, locale: string): 
     forceStatic: true,
   });
 
-  return new EmbedBuilder()
-    .setColor(ColorCode.INFO)
-    .setURL(targetMessage.url)
-    .setAuthor({
-      name: localizer(locale, "genai.message_interaction.reply_context_author", {
-        user: getReplyContextAuthorName(targetMessage),
-      }),
-      url: targetMessage.url,
-      iconURL: authorIconUrl,
-    });
+  return new EmbedBuilder().setURL(targetMessage.url).setAuthor({
+    name: localizer(locale, "genai.message_interaction.reply_context_author", {
+      user: getReplyContextAuthorName(targetMessage),
+    }),
+    url: targetMessage.url,
+    iconURL: authorIconUrl,
+  });
 }
 
 export async function sendWebhookReplyWithContext(

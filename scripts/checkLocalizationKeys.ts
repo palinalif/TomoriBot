@@ -588,6 +588,41 @@ function extractDynamicTemplateKeys(content: string, availableKeys: Set<string>)
 }
 
 /**
+ * Resolves simple string assignments for a variable in the current file.
+ * Supports both direct string literals and concatenated string literals like:
+ *   const keyBase = "commands.config" + ".provider.switch";
+ * This specifically protects dynamic locale namespaces used by commands like
+ * /config provider switch, where `${keyBase}.restored_label` would otherwise
+ * look unused and get pruned even though it is rendered at runtime.
+ */
+function resolveAssignedStringValues(content: string, variableName: string): string[] {
+  const resolvedValues = new Set<string>();
+
+  const directAssignmentPattern = new RegExp(`${variableName}\\s*=\\s*["']([a-zA-Z0-9._-]+)["']`, "g");
+  let directMatch = directAssignmentPattern.exec(content);
+  while (directMatch !== null) {
+    resolvedValues.add(directMatch[1]);
+    directMatch = directAssignmentPattern.exec(content);
+  }
+
+  const concatAssignmentPattern = new RegExp(
+    `${variableName}\\s*=\\s*((?:["'][^"']*["']\\s*\\+\\s*)+["'][^"']*["'])`,
+    "g",
+  );
+  let concatMatch = concatAssignmentPattern.exec(content);
+  while (concatMatch !== null) {
+    const expression = concatMatch[1];
+    const parts = Array.from(expression.matchAll(/["']([^"']*)["']/g)).map((part) => part[1]);
+    if (parts.length > 0) {
+      resolvedValues.add(parts.join(""));
+    }
+    concatMatch = concatAssignmentPattern.exec(content);
+  }
+
+  return Array.from(resolvedValues);
+}
+
+/**
  * Extracts keys from localizer() / localizeWithAliases() calls with template literals
  * Handles patterns like: localizer(locale, `genai.google.${messageKey}`)
  * Also handles: localizeWithAliases(locale, `commands.${categoryName}.description`)
@@ -601,8 +636,12 @@ function extractLocalizerTemplateKeys(content: string, availableKeys: Set<string
   // Pattern: localizer() or localizeWithAliases() with template literal as second argument
   // Matches: localizer(locale, `genai.google.${messageKey}`)
   //          localizeWithAliases(locale, `commands.${categoryName}.description`)
+  //          localizer(locale, `${keyBase}.restored_label`)
+  //          localizer(locale, `${keyBase}.restore_more_suffix`, { count: hiddenCount })
+  // Keep this pattern broad enough to allow extra args after the template key;
+  // provider-switch summary labels pass description vars as a third argument.
   const localizerTemplatePattern =
-    /(?:localizer|localizeWithAliases)\s*\([^,]+,\s*`([a-zA-Z][a-zA-Z0-9._-]*)\$\{([^}]+)\}([a-zA-Z0-9._-]*)`\)/g;
+    /(?:localizer|localizeWithAliases)\s*\([^,]+,\s*`([a-zA-Z][a-zA-Z0-9._-]*)?\$\{([^}]+)\}([a-zA-Z0-9._-]*)`/g;
 
   let match = localizerTemplatePattern.exec(content);
   while (match !== null) {
@@ -620,12 +659,19 @@ function extractLocalizerTemplateKeys(content: string, availableKeys: Set<string
       "g",
     );
 
+    for (const assignedValue of resolveAssignedStringValues(content, variableName)) {
+      const fullKey = `${prefix ?? ""}${assignedValue}${suffix}`;
+      if (availableKeys.has(fullKey)) {
+        matchedKeys.push(fullKey);
+      }
+    }
+
     let valueMatch = valuePattern.exec(content);
     while (valueMatch !== null) {
       // Group 1: var = "value" or var === "value"; Group 2: "value" === var
       const resolvedValue = valueMatch[1] ?? valueMatch[2];
       if (resolvedValue) {
-        const fullKey = `${prefix}${resolvedValue}${suffix}`;
+        const fullKey = `${prefix ?? ""}${resolvedValue}${suffix}`;
         if (availableKeys.has(fullKey)) {
           matchedKeys.push(fullKey);
         }

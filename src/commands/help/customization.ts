@@ -7,6 +7,7 @@ import { log, ColorCode } from "@/utils/misc/logger";
 import { replySummaryEmbed } from "@/utils/discord/interactionHelper";
 import { sendStandardEmbed } from "@/utils/discord/embedHelper";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
+import { isGuildMessageCommandChannel } from "@/utils/discord/guildMessageChannel";
 
 /**
  * Configure the /help customization subcommand
@@ -120,13 +121,7 @@ export async function execute(
 
     // Get channel for follow-up embeds
     const channel = interaction.channel;
-    if (
-      !channel ||
-      channel.partial ||
-      (channel.type !== ChannelType.GuildText &&
-        channel.type !== ChannelType.GuildNews &&
-        channel.type !== ChannelType.DM)
-    ) {
+    if (!channel || channel.partial || (channel.type !== ChannelType.DM && !isGuildMessageCommandChannel(channel))) {
       log.warn("Invalid channel type for /help customization follow-up embeds");
       return;
     }

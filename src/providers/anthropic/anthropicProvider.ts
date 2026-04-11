@@ -64,6 +64,7 @@ import { DISCORD_STREAMING_CONSTANTS } from "@/types/stream/types";
 import type { StreamingContext } from "@/types/tool/interfaces";
 import { type ToolStateForContext, getAvailableToolsWithMCP } from "@/tools/toolRegistry";
 import { log } from "@/utils/misc/logger";
+import { buildActiveSamplingParams, getActiveTemperature } from "@/utils/provider/samplingControl";
 
 const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6";
 const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
@@ -266,6 +267,7 @@ export class AnthropicProvider
    * Create provider-specific configuration from TomoriState.
    */
   async createConfig(tomoriState: TomoriState, apiKey: string): Promise<AnthropicProviderConfig> {
+    const samplingParams = buildActiveSamplingParams(tomoriState.config);
     const config: AnthropicProviderConfig = {
       model: tomoriState.llm.llm_codename,
       apiKey,
@@ -273,15 +275,9 @@ export class AnthropicProvider
       seesImages: tomoriState.llm.sees_images,
       isReasoning: tomoriState.llm.is_reasoning,
       thinkingBudget: ANTHROPIC_THINKING_BUDGET,
-      // Temperature is handled conditionally in the stream adapter
-      // (omitted for reasoning models)
       temperature: tomoriState.config.llm_temperature,
-      ...(tomoriState.config.llm_top_p < 1.0 && {
-        topP: tomoriState.config.llm_top_p,
-      }),
-      ...(tomoriState.config.llm_top_k > 0 && {
-        topK: tomoriState.config.llm_top_k,
-      }),
+      disabledParams: tomoriState.config.llm_disabled_params ?? [],
+      ...samplingParams,
     };
 
     if (tomoriState.llm.has_tools) {
@@ -457,7 +453,7 @@ export class AnthropicProvider
 
     return await generatePresetFromPromptAnthropic(request.apiKey, request.params, request.locale, {
       model: request.tomoriState.llm.llm_codename,
-      temperature: request.tomoriState.config.llm_temperature,
+      temperature: getActiveTemperature(request.tomoriState.config),
       tools,
       toolContext: request.toolContext,
       maxToolRounds: request.maxToolRounds,

@@ -821,7 +821,7 @@ export async function applyNaiPreset(
   const llm_temperature = invertNaiTemperature(naiTemp, model);
   const llm_top_k = typeof params.top_k === "number" ? Math.round(params.top_k) : 0;
   const llm_top_p = typeof params.top_p === "number" ? params.top_p : 1.0;
-  const llm_min_p = typeof params.min_p === "number" ? params.min_p : 0.0;
+  const llm_min_p = typeof params.min_p === "number" ? params.min_p : 0.05;
 
   // 2. Write to DB, linking the preset name for non-schema field lookup at generation time.
   return updateTomoriConfig(serverId, {
@@ -1795,6 +1795,7 @@ export async function upsertSavedProviderConfig(serverId: number, config: SavedP
     const channelOverridesJson = JSON.stringify(config.channel_llm_overrides ?? []);
     const personaOverridesJson = JSON.stringify(config.persona_llm_overrides ?? []);
     const logitBiasesJson = JSON.stringify(config.llm_logit_biases ?? []);
+    const disabledParamsLiteral = `{${(config.llm_disabled_params ?? []).map((param) => `"${param.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
 
     const rows = await sql`
 			INSERT INTO saved_provider_configs (
@@ -1806,7 +1807,7 @@ export async function upsertSavedProviderConfig(serverId: number, config: SavedP
 				fallback_llm_ids, channel_llm_overrides, persona_llm_overrides,
 				llm_temperature, llm_top_p, llm_top_k,
 				llm_frequency_penalty, llm_presence_penalty, llm_min_p,
-				llm_logit_biases
+				llm_logit_biases, llm_disabled_params
 			) VALUES (
 				${serverId}, ${provider}, ${config.api_key}, ${config.key_version},
 				${config.llm_id}, ${config.diffusion_model_id}, ${config.embedding_model_id},
@@ -1816,7 +1817,7 @@ export async function upsertSavedProviderConfig(serverId: number, config: SavedP
 				${fallbackJson}::jsonb, ${channelOverridesJson}::jsonb, ${personaOverridesJson}::jsonb,
 				${config.llm_temperature ?? null}, ${config.llm_top_p ?? null}, ${config.llm_top_k ?? null},
 				${config.llm_frequency_penalty ?? null}, ${config.llm_presence_penalty ?? null}, ${config.llm_min_p ?? null},
-				${logitBiasesJson}::jsonb
+				${logitBiasesJson}::jsonb, ${disabledParamsLiteral}::text[]
 			)
 			ON CONFLICT (server_id, provider) DO UPDATE SET
 				api_key = EXCLUDED.api_key,
@@ -1839,7 +1840,8 @@ export async function upsertSavedProviderConfig(serverId: number, config: SavedP
 				llm_frequency_penalty = EXCLUDED.llm_frequency_penalty,
 				llm_presence_penalty = EXCLUDED.llm_presence_penalty,
 				llm_min_p = EXCLUDED.llm_min_p,
-				llm_logit_biases = EXCLUDED.llm_logit_biases
+				llm_logit_biases = EXCLUDED.llm_logit_biases,
+				llm_disabled_params = EXCLUDED.llm_disabled_params
 			RETURNING *
 		`;
 

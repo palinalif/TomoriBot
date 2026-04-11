@@ -1,9 +1,8 @@
-import type { Client, ChatInputCommandInteraction, TextChannel, UserSelectMenuInteraction } from "discord.js";
+import type { Client, ChatInputCommandInteraction, UserSelectMenuInteraction } from "discord.js";
 import {
   MessageFlags,
   type SlashCommandSubcommandBuilder,
   EmbedBuilder,
-  ChannelType,
   ActionRowBuilder,
   UserSelectMenuBuilder,
   ComponentType,
@@ -17,6 +16,11 @@ import {
   resolvePersonaWebhookIdentity,
   sendWebhookMessageWithIdentity,
 } from "@/utils/discord/webhookManager";
+import {
+  isGuildMessageCommandChannel,
+  resolveGuildWebhookTargetChannel,
+  resolveGuildWebhookThreadId,
+} from "@/utils/discord/guildMessageChannel";
 import type { SelectOption } from "@/types/discord/modal";
 import type { UserRow } from "@/types/db/schema";
 import tomoriChat from "@/events/messageCreate/tomoriChat";
@@ -140,7 +144,7 @@ async function handlePersonaImpersonation(
   }
 
   // Narrow channel type to TextChannel
-  if (interaction.channel.type !== ChannelType.GuildText) {
+  if (!isGuildMessageCommandChannel(interaction.channel)) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.bot.impersonate.missing_permissions_title",
       descriptionKey: "commands.bot.impersonate.missing_permissions_description",
@@ -151,7 +155,7 @@ async function handlePersonaImpersonation(
   }
 
   const serverId = interaction.guild.id;
-  const channel = interaction.channel as TextChannel;
+  const channel = interaction.channel;
 
   // 1. Load all personas (main + alters) - keep this under 3 seconds
   const allPersonas = await loadAllPersonasForServer(serverId);
@@ -263,7 +267,18 @@ async function handlePersonaImpersonation(
       });
     } else {
       // Alter persona: Send via webhook with embeds
-      const { webhook, errorReason } = await getOrCreateWebhook(channel);
+      const webhookTargetChannel = resolveGuildWebhookTargetChannel(channel);
+      const webhookThreadId = resolveGuildWebhookThreadId(channel);
+      if (!webhookTargetChannel) {
+        await replyInfoEmbed(modalResult.interaction, locale, {
+          titleKey: "commands.bot.impersonate.missing_permissions_title",
+          descriptionKey: "commands.bot.impersonate.missing_permissions_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+
+      const { webhook, errorReason } = await getOrCreateWebhook(webhookTargetChannel);
       if (!webhook) {
         await replyInfoEmbed(modalResult.interaction, locale, {
           titleKey: "commands.bot.impersonate.webhook_error_title",
@@ -280,6 +295,7 @@ async function handlePersonaImpersonation(
         {
           content: messageContent,
           embeds,
+          ...(webhookThreadId ? { threadId: webhookThreadId } : {}),
         },
         identity,
       );
@@ -334,7 +350,7 @@ async function handleUserImpersonation(
   }
 
   // Narrow channel type to TextChannel
-  if (interaction.channel.type !== ChannelType.GuildText) {
+  if (!isGuildMessageCommandChannel(interaction.channel)) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.bot.impersonate.missing_permissions_title",
       descriptionKey: "commands.bot.impersonate.missing_permissions_description",
@@ -344,7 +360,7 @@ async function handleUserImpersonation(
     return;
   }
 
-  const channel = interaction.channel as TextChannel;
+  const channel = interaction.channel;
   const commandTarget = invokedTarget;
   const cooldownActiveKey =
     invokedTarget === "me"
@@ -592,7 +608,7 @@ async function handleSystemImpersonation(interaction: ChatInputCommandInteractio
   }
 
   // Narrow channel type to TextChannel
-  if (interaction.channel.type !== ChannelType.GuildText) {
+  if (!isGuildMessageCommandChannel(interaction.channel)) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.bot.impersonate.missing_permissions_title",
       descriptionKey: "commands.bot.impersonate.missing_permissions_description",
@@ -602,7 +618,7 @@ async function handleSystemImpersonation(interaction: ChatInputCommandInteractio
     return;
   }
 
-  const channel = interaction.channel as TextChannel;
+  const channel = interaction.channel;
 
   // 1. Show modal for system prompt content
   // DO NOT defer before modal - Pattern 3

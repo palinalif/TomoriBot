@@ -76,6 +76,8 @@ export async function execute(
       SET
         llm_temperature = 1.2,
         llm_top_p = 0.95,
+        llm_min_p = 0.05,
+        llm_disabled_params = ARRAY[]::text[],
         humanizer_degree = 1,
         timezone_offset = 0,
         message_fetch_limit = 80,
@@ -110,6 +112,8 @@ export async function execute(
           SET
             llm_temperature = 1.2,
             llm_top_p = 0.95,
+            llm_min_p = 0.05,
+            llm_disabled_params = ARRAY[]::text[],
             humanizer_degree = 1,
             timezone_offset = 0,
             message_fetch_limit = 80,

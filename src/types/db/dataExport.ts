@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SUPPORTED_PARAM_VALUES } from "@/constants/supportedParams";
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
 import { logitBiasEntrySchema } from "@/types/provider/logitBias";
 
@@ -90,7 +91,8 @@ export const serverConfigExportSchema = z.object({
   llm_top_k: z.number().int().min(0).max(40).default(0),
   llm_frequency_penalty: z.number().min(-2.0).max(2.0).default(0.0),
   llm_presence_penalty: z.number().min(-2.0).max(2.0).default(0.0),
-  llm_min_p: z.number().min(0.0).max(1.0).default(0.0),
+  llm_min_p: z.number().min(0.0).max(1.0).default(0.05),
+  llm_disabled_params: z.array(z.enum(SUPPORTED_PARAM_VALUES)).default([]),
   llm_logit_biases: z.preprocess(
     (val) => (typeof val === "string" ? JSON.parse(val) : val),
     z.array(logitBiasEntrySchema).default([]),

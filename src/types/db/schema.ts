@@ -1,5 +1,6 @@
 import { StickerFormatType } from "discord.js";
 import { z } from "zod";
+import { SUPPORTED_PARAM_VALUES, isSupportedParamValue, type SupportedParamValue } from "@/constants/supportedParams";
 import { TOOL_NOTICE_KEYS, isToolNoticeKey, type ToolNoticeKey } from "@/constants/toolNotices";
 import { DEFAULT_NAI_NEGATIVE_TAGS, DEFAULT_NAI_STYLE_TAGS } from "@/utils/image/naiTagDefaults";
 import { logitBiasEntrySchema, normalizeLogitBiasEntries } from "@/types/provider/logitBias";
@@ -217,7 +218,25 @@ function normalizeToolNoticeHiddenKeys(value: unknown): ToolNoticeKey[] {
   return source.filter((item): item is ToolNoticeKey => typeof item === "string" && isToolNoticeKey(item));
 }
 
+function normalizeDisabledLlmParams(value: unknown): SupportedParamValue[] {
+  let source: unknown = value;
+  if (typeof source === "string") {
+    try {
+      source = JSON.parse(source);
+    } catch {
+      return [];
+    }
+  }
+
+  if (!Array.isArray(source)) {
+    return [];
+  }
+
+  return source.filter((item): item is SupportedParamValue => typeof item === "string" && isSupportedParamValue(item));
+}
+
 const toolNoticeKeySchema = z.enum(TOOL_NOTICE_KEYS);
+const supportedParamSchema = z.enum(SUPPORTED_PARAM_VALUES);
 
 export const tomoriConfigSchema = z.object({
   tomori_config_id: z.number().optional(),
@@ -241,7 +260,11 @@ export const tomoriConfigSchema = z.object({
   llm_top_k: z.number().int().min(0).max(40).default(0), // Added February 2026 - Top-K sampling (0=disabled)
   llm_frequency_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Frequency penalty (0.0=neutral)
   llm_presence_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Presence penalty (0.0=neutral)
-  llm_min_p: z.number().min(0.0).max(1.0).default(0.0), // Added February 2026 - Min-P sampling (0.0=disabled)
+  llm_min_p: z.number().min(0.0).max(1.0).default(0.05), // Added February 2026 - Min-P sampling (0.05=default)
+  llm_disabled_params: z.preprocess(
+    (value) => normalizeDisabledLlmParams(value),
+    z.array(supportedParamSchema).default([]),
+  ), // Added April 2026 - Parameter names omitted from provider payloads
   llm_logit_biases: z.preprocess(
     (value) => normalizeLogitBiasEntries(value),
     z.array(logitBiasEntrySchema).default([]),
@@ -924,6 +947,10 @@ export const savedProviderConfigSchema = z.object({
   llm_frequency_penalty: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
   llm_presence_penalty: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
   llm_min_p: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
+  llm_disabled_params: z.preprocess(
+    (value) => normalizeDisabledLlmParams(value),
+    z.array(supportedParamSchema).default([]),
+  ), // Added April 2026 - Omitted parameter snapshot
   llm_logit_biases: z.preprocess(
     (value) => normalizeLogitBiasEntries(value),
     z.array(logitBiasEntrySchema).default([]),

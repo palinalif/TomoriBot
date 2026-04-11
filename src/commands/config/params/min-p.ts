@@ -12,10 +12,10 @@ import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../ty
 import { sql } from "@/utils/db/client";
 import { getProviderDisplayNamesForParam } from "../../../utils/provider/providerInfoRegistry";
 
-// Neutral value: 0.0 = disabled (no minimum probability cutoff)
+// Shared default: 0.05, with 0.0 available to disable min-P explicitly.
 const MIN_P_MIN = 0.0;
 const MIN_P_MAX = 1.0;
-const MIN_P_DEFAULT = 0.0;
+const MIN_P_DEFAULT = 0.05;
 
 // Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>

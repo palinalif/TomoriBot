@@ -278,6 +278,9 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
     const toolNoticeHiddenKeysLiteral = config.tool_notice_hidden_keys
       ? `{${config.tool_notice_hidden_keys.map((key: string) => `"${key.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`
       : null;
+    const disabledParamsLiteral = config.llm_disabled_params
+      ? `{${config.llm_disabled_params.map((param: string) => `"${param.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`
+      : null;
     const logitBiasesJson = JSON.stringify(config.llm_logit_biases ?? []);
 
     let updateRows = await sql<Array<{ tomori_config_id: number }>>`
@@ -289,6 +292,7 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 				llm_frequency_penalty = ${config.llm_frequency_penalty},
 				llm_presence_penalty = ${config.llm_presence_penalty},
 				llm_min_p = ${config.llm_min_p},
+				llm_disabled_params = COALESCE(${disabledParamsLiteral}::text[], llm_disabled_params, ARRAY[]::text[]),
 				llm_logit_biases = ${logitBiasesJson}::jsonb,
 				humanizer_degree = ${config.humanizer_degree},
 				timezone_offset = ${config.timezone_offset},
@@ -329,6 +333,7 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 						llm_frequency_penalty = ${config.llm_frequency_penalty},
 						llm_presence_penalty = ${config.llm_presence_penalty},
 						llm_min_p = ${config.llm_min_p},
+						llm_disabled_params = COALESCE(${disabledParamsLiteral}::text[], llm_disabled_params, ARRAY[]::text[]),
 						llm_logit_biases = ${logitBiasesJson}::jsonb,
 						humanizer_degree = ${config.humanizer_degree},
 						timezone_offset = ${config.timezone_offset},

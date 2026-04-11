@@ -41,6 +41,7 @@ import { formatBooleanLocalized } from "@/utils/text/stringHelper";
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
 import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
 import { formatLlmDisplayLabel } from "@/utils/provider/modelDisplay";
+import { SUPPORTED_PARAM_STATUS_FIELD_KEYS, SUPPORTED_PARAM_VALUES } from "@/constants/supportedParams";
 
 // Constants
 const MAX_ITEMS_DISPLAY = 5; // Max channel/member items before switching to count-only
@@ -98,6 +99,18 @@ function truncateText(input: string, maxLength: number): string {
 
 function formatQuotaLimitValue(locale: string, limit: number): string {
   return limit === 0 ? localizer(locale, "commands.tool.status.field_quota_unlimited") : String(limit);
+}
+
+function formatOmittedSamplingParams(
+  disabledParams: TomoriConfigRow["llm_disabled_params"] | null | undefined,
+  locale: string,
+): string {
+  const omittedParams = SUPPORTED_PARAM_VALUES.filter((param) => disabledParams?.includes(param));
+  if (omittedParams.length === 0) {
+    return localizer(locale, "commands.choices.none");
+  }
+
+  return omittedParams.map((param) => `\`${localizer(locale, SUPPORTED_PARAM_STATUS_FIELD_KEYS[param])}\``).join(", ");
 }
 
 /**
@@ -670,6 +683,11 @@ export async function execute(
               nameKey: "commands.tool.status.field_presence_penalty",
               value: String(config.llm_presence_penalty),
               inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_omitted_params",
+              value: formatOmittedSamplingParams(config.llm_disabled_params, locale),
+              inline: false,
             },
             {
               nameKey: "commands.tool.status.field_humanizer",

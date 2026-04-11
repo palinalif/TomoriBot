@@ -31,6 +31,7 @@ Provider folders under `src/providers/`:
 - `nvidia` (`NvidiaProvider`)
 - `zai` (`ZaiProvider`)
 - `zaicoding` (`ZaicodingProvider`)
+- `anthropic` (`AnthropicProvider`)
 
 ## Provider Factory
 
@@ -56,6 +57,7 @@ Static provider metadata is defined in each provider folder:
 - `src/providers/nvidia/providerInfo.ts`
 - `src/providers/zai/providerInfo.ts`
 - `src/providers/zaicoding/providerInfo.ts`
+- `src/providers/anthropic/providerInfo.ts`
 
 OpenAI-compatible family internals shared by `custom`, `deepseek`, `nvidia`, `zai`, and `zaicoding` live in:
 
@@ -140,6 +142,19 @@ Rule:
 - conversation compaction and roleplay compaction work through the custom endpoint using the effective configured model name
 - persona preset generation works through the custom endpoint when the configured model supports structured output, and optional web search works when the model supports tools
 - `/config logit-bias` entries are stored in config snapshots, but Tomori does not currently auto-tokenize plain text for custom endpoints
+
+## Anthropic Provider Notes
+
+`anthropic` uses Anthropic's native Messages API directly for Claude models.
+
+- chat models are streamed through the provider-owned SSE adapter
+- reasoning models enable `thinking: { type: "enabled", budget_tokens: 8192 }` and omit `temperature`
+- sampler omission is user-configurable with `/config params manage`
+- Anthropic models that reject sending `temperature` and `top_p` together still only receive one sampling control at a time at the API boundary:
+  - if `top_p` is customized away from the shared default while temperature remains at the shared default, Tomori sends `top_p`
+  - otherwise Tomori prefers `temperature` and omits `top_p`
+- `top_k` remains independent and can still be sent with either of the above
+- `/tool estimate cost` uses Anthropic's dedicated `/v1/messages/count_tokens` endpoint
 
 ## DeepSeek Provider Notes
 

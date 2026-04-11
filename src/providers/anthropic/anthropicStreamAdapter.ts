@@ -17,6 +17,7 @@ import { ContextItemTag, type StructuredContextItem } from "../../types/misc/con
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { fetchAndOptimizeImage } from "../../utils/image/imageProcessor";
+import { isParamDisabled, selectAnthropicSamplingParams } from "@/utils/provider/samplingControl";
 import { buildProviderStopStrings } from "../utils/stopStrings";
 import type {
   ProcessedChunk,
@@ -123,7 +124,6 @@ const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_API_VERSION = "2023-06-01";
 const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
 const DEFAULT_THINKING_BUDGET = 8192;
-
 // Tags that should be extracted to the top-level system parameter
 const SYSTEM_INSTRUCTION_TAGS: ContextItemTag[] = [
   ContextItemTag.SYSTEM_HUMANIZER_RULES,
@@ -203,15 +203,27 @@ export class AnthropicStreamAdapter implements StreamProvider {
       log.info(`AnthropicStreamAdapter: Extended thinking enabled with budget ${thinkingBudget}`);
     } else {
       // 7. Add sampling parameters (only for non-reasoning models)
-      if (config.temperature !== undefined && config.temperature !== null) {
-        requestBody.temperature = config.temperature;
+      const samplingSelection = selectAnthropicSamplingParams({
+        temperature: config.temperature,
+        topP: anthropicConfig.topP,
+        disabledParams: config.disabledParams ?? [],
+      });
+      if (samplingSelection.logMessage) {
+        const logger = samplingSelection.logLevel === "warn" ? log.warn : log.info;
+        logger(samplingSelection.logMessage);
+      }
+      if (samplingSelection.temperature !== undefined) {
+        requestBody.temperature = samplingSelection.temperature;
+      }
+      if (samplingSelection.topP !== undefined) {
+        requestBody.top_p = samplingSelection.topP;
       }
 
-      if (anthropicConfig.topP !== undefined && anthropicConfig.topP < 1.0) {
-        requestBody.top_p = anthropicConfig.topP;
-      }
-
-      if (anthropicConfig.topK !== undefined && anthropicConfig.topK > 0) {
+      if (
+        anthropicConfig.topK !== undefined &&
+        anthropicConfig.topK > 0 &&
+        !isParamDisabled(config.disabledParams ?? [], "topK")
+      ) {
         requestBody.top_k = anthropicConfig.topK;
       }
     }
@@ -677,6 +689,14 @@ export class AnthropicStreamAdapter implements StreamProvider {
   createErrorDescription(error: ProviderError, locale: string): string | null {
     const errorCode = error.code;
     let message = error.userMessage;
+    const isTemperatureTopPConflict =
+      errorCode === "invalid_request_error" &&
+      typeof error.userMessage === "string" &&
+      error.userMessage.includes("`temperature` and `top_p` cannot both be specified");
+
+    if (isTemperatureTopPConflict) {
+      message = localizer(locale, "genai.anthropic.temperature_top_p_conflict_message");
+    }
 
     if (!message) {
       // Fall back to locale-based messages

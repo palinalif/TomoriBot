@@ -22,5 +22,5 @@ export const customProviderInfo: ProviderInfo = {
     conversationCompaction: true,
     historyExtraction: true,
   },
-  supportedParams: [] as const,
+  supportedParams: ["temperature", "topP", "topK", "frequencyPenalty", "presencePenalty", "minP"] as const,
 };

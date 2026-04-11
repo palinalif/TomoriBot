@@ -356,6 +356,7 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   imagegen_enabled BOOLEAN DEFAULT true,
   videogen_enabled BOOLEAN DEFAULT true,
   tool_notice_hidden_keys TEXT[] DEFAULT '{}',
+  llm_disabled_params TEXT[] DEFAULT '{}',
   humanizer_degree INT DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -623,8 +624,10 @@ SELECT add_column_if_not_exists('tomori_configs', 'llm_top_k', 'INTEGER', '0');
 SELECT add_column_if_not_exists('tomori_configs', 'llm_frequency_penalty', 'REAL', '0.0');
 -- llm_presence_penalty: Penalize already-used topics (-2.0 to 2.0, 0.0=neutral)
 SELECT add_column_if_not_exists('tomori_configs', 'llm_presence_penalty', 'REAL', '0.0');
--- llm_min_p: Minimum probability threshold sampling (0.0=neutral/disabled, 1.0=most restricted)
-SELECT add_column_if_not_exists('tomori_configs', 'llm_min_p', 'REAL', '0.0');
+-- llm_min_p: Minimum probability threshold sampling (0.05=default, 1.0=most restricted)
+SELECT add_column_if_not_exists('tomori_configs', 'llm_min_p', 'REAL', '0.05');
+-- llm_disabled_params: Parameter names omitted from outbound provider payloads
+SELECT add_column_if_not_exists('tomori_configs', 'llm_disabled_params', 'TEXT[]', 'ARRAY[]::TEXT[]');
 -- llm_logit_biases: Stored OpenAI-style logit bias entries [{id, text, value}, ...]
 SELECT add_column_if_not_exists('tomori_configs', 'llm_logit_biases', 'JSONB', '''[]''::JSONB');
 
@@ -647,6 +650,9 @@ END $$;
 ALTER TABLE tomori_configs ADD CONSTRAINT tomori_configs_llm_temperature_check
     CHECK (llm_temperature >= 0.0 AND llm_temperature <= 2.0);
 ALTER TABLE tomori_configs ALTER COLUMN llm_temperature SET DEFAULT 1.0;
+
+-- Migration: update llm_min_p default from 0.0 to 0.05 (April 2026)
+ALTER TABLE tomori_configs ALTER COLUMN llm_min_p SET DEFAULT 0.05;
 
 -- Add foreign key constraint if the column was just created
 DO $$
@@ -2048,6 +2054,7 @@ CREATE TABLE IF NOT EXISTS saved_provider_configs (
   channel_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- Snapshot: [{channel_disc_id, llm_id}, ...]
   persona_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- Snapshot: [{tomori_id, llm_id}, ...]
   llm_logit_biases JSONB DEFAULT '[]'::JSONB, -- Snapshot: [{id, text, value}, ...]
+  llm_disabled_params TEXT[] DEFAULT '{}',    -- Snapshot: params omitted for this provider
   saved_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(server_id, provider),
@@ -2076,6 +2083,7 @@ SELECT add_column_if_not_exists('saved_provider_configs', 'llm_frequency_penalty
 SELECT add_column_if_not_exists('saved_provider_configs', 'llm_presence_penalty', 'REAL', 'NULL');
 SELECT add_column_if_not_exists('saved_provider_configs', 'llm_min_p', 'REAL', 'NULL');
 SELECT add_column_if_not_exists('saved_provider_configs', 'llm_logit_biases', 'JSONB', '''[]''::JSONB');
+SELECT add_column_if_not_exists('saved_provider_configs', 'llm_disabled_params', 'TEXT[]', 'ARRAY[]::TEXT[]');
 
 -- Migration: add video_model_id column to saved_provider_configs (April 2026)
 SELECT add_column_if_not_exists('saved_provider_configs', 'video_model_id', 'INTEGER', 'NULL');

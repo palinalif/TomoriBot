@@ -41,6 +41,7 @@ import { loadDefaultModelForProvider, loadAvailableModelsForProvider } from "@/u
 import { getNovelaiToolAdapter } from "./novelaiToolAdapter";
 import { usesOpenAIEndpoint, validateNovelAIApiKey } from "./novelaiService";
 import { novelaiProviderInfo } from "./providerInfo";
+import { getActiveTemperature } from "@/utils/provider/samplingControl";
 
 /**
  * Gets the default NovelAI model with a robust fallback chain:
@@ -276,7 +277,8 @@ export class NovelaiProvider extends BaseLLMProvider implements LLMProvider {
     return {
       model: tomoriState.llm.llm_codename,
       apiKey: apiKey,
-      temperature: tomoriState.config.llm_temperature,
+      temperature: getActiveTemperature(tomoriState.config) ?? tomoriState.config.llm_temperature,
+      disabledParams: tomoriState.config.llm_disabled_params ?? [],
       maxOutputTokens: 2048, // NovelAI's typical max length
       tools: tools,
     };

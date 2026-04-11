@@ -1,8 +1,9 @@
 import type { Client, ChatInputCommandInteraction } from "discord.js";
-import { MessageFlags, type SlashCommandSubcommandBuilder, EmbedBuilder, ChannelType } from "discord.js";
+import { MessageFlags, type SlashCommandSubcommandBuilder, EmbedBuilder } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed, promptWithPaginatedModal } from "@/utils/discord/interactionHelper";
+import { isGuildMessageCommandChannel } from "@/utils/discord/guildMessageChannel";
 import type { UserRow } from "@/types/db/schema";
 
 /**
@@ -40,7 +41,7 @@ export async function execute(
   }
 
   // Narrow channel type to TextChannel
-  if (interaction.channel.type !== ChannelType.GuildText) {
+  if (!isGuildMessageCommandChannel(interaction.channel)) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.tool.comment.invalid_channel_title",
       descriptionKey: "commands.tool.comment.invalid_channel_description",

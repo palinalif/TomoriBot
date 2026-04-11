@@ -248,6 +248,7 @@ export async function execute(
         llm_frequency_penalty: tomoriState.config.llm_frequency_penalty,
         llm_presence_penalty: tomoriState.config.llm_presence_penalty,
         llm_min_p: tomoriState.config.llm_min_p,
+        llm_disabled_params: tomoriState.config.llm_disabled_params ?? [],
         llm_logit_biases: tomoriState.config.llm_logit_biases ?? [],
         channel_llm_overrides: currentChannelOverrides
           .filter((o): o is typeof o & { llm: { llm_id: number } } => o.llm.llm_id != null)
@@ -295,6 +296,7 @@ export async function execute(
     let newFrequencyPenalty: number | null = null;
     let newPresencePenalty: number | null = null;
     let newMinP: number | null = null;
+    let newDisabledParams = tomoriState.config.llm_disabled_params ?? [];
     let newLogitBiasEntries = tomoriState.config.llm_logit_biases ?? [];
 
     if (isRestoringFromSaved) {
@@ -325,6 +327,7 @@ export async function execute(
       newFrequencyPenalty = savedConfig.llm_frequency_penalty ?? null;
       newPresencePenalty = savedConfig.llm_presence_penalty ?? null;
       newMinP = savedConfig.llm_min_p ?? null;
+      newDisabledParams = savedConfig.llm_disabled_params ?? [];
       newLogitBiasEntries = savedConfig.llm_logit_biases ?? [];
 
       if (isCustomProvider(normalizedProvider)) {
@@ -612,6 +615,7 @@ export async function execute(
         newFrequencyPenalty = savedConfig.llm_frequency_penalty ?? null;
         newPresencePenalty = savedConfig.llm_presence_penalty ?? null;
         newMinP = savedConfig.llm_min_p ?? null;
+        newDisabledParams = savedConfig.llm_disabled_params ?? [];
         newLogitBiasEntries = savedConfig.llm_logit_biases ?? [];
       } else {
         // Fresh provider switch — load default models
@@ -701,6 +705,7 @@ export async function execute(
     const targetLlm = newLlmId === tomoriState.config.llm_id ? tomoriState.llm : await loadLlmById(newLlmId);
     const resolvedLogitBiases = resolveLogitBiasEntriesForLlm(newLogitBiasEntries, targetLlm);
     const newLogitBiasesJson = JSON.stringify(resolvedLogitBiases.entries);
+    const newDisabledParamsLiteral = `{${newDisabledParams.map((param) => `"${param.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
     const [updatedRow] = await sql`
 			UPDATE tomori_configs
 			SET api_key = ${encrypted},
@@ -721,6 +726,7 @@ export async function execute(
 			    llm_frequency_penalty = COALESCE(${newFrequencyPenalty}, llm_frequency_penalty),
 			    llm_presence_penalty = COALESCE(${newPresencePenalty}, llm_presence_penalty),
 			    llm_min_p = COALESCE(${newMinP}, llm_min_p),
+			    llm_disabled_params = ${newDisabledParamsLiteral}::text[],
 			    llm_logit_biases = ${newLogitBiasesJson}::jsonb
 			WHERE server_id = ${tomoriState.server_id}
 			RETURNING *

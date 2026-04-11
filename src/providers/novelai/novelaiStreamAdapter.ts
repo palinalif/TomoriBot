@@ -42,6 +42,7 @@ import {
   type NovelAIParameters,
 } from "./novelaiService";
 import { buildProviderStopStrings } from "@/providers/utils/stopStrings";
+import { isParamDisabled } from "@/utils/provider/samplingControl";
 
 /** Whether GLM 4.6 thinking (reasoning) is enabled. When disabled, /nothink is appended to suppress internal reasoning. */
 const NAI_GLM_THINKING_ENABLED = (process.env.NAI_GLM_THINKING_ENABLED ?? "true").toLowerCase() === "true";
@@ -380,16 +381,14 @@ export class NovelaiStreamAdapter implements StreamProvider {
     // Neutral values (topK=0, topP=1.0, minP=0.0) preserve the model preset defaults.
     // Non-schema NAI preset fields (order, TFS, phrase_rep_pen, etc.) are extracted
     // from the active preset and merged before DB schema overrides are applied.
-    const { llm_top_k, llm_top_p, llm_min_p } = context.tomoriState.config;
+    const { llm_top_k, llm_top_p, llm_min_p, llm_disabled_params } = context.tomoriState.config;
+    const disabledParams = config.disabledParams ?? llm_disabled_params ?? [];
+    const temperature = isParamDisabled(disabledParams, "temperature") ? undefined : config.temperature;
+    const topK = isParamDisabled(disabledParams, "topK") ? undefined : llm_top_k;
+    const topP = isParamDisabled(disabledParams, "topP") ? undefined : llm_top_p;
+    const minP = isParamDisabled(disabledParams, "minP") ? undefined : llm_min_p;
     const naiPresetOverrides = extractNonSchemaPresetParams(context.tomoriState.nai_preset?.parameters ?? {});
-    const parameters = getParametersForModel(
-      config.model,
-      config.temperature,
-      llm_top_k,
-      llm_top_p,
-      llm_min_p,
-      naiPresetOverrides,
-    );
+    const parameters = getParametersForModel(config.model, temperature, topK, topP, minP, naiPresetOverrides);
 
     // Dynamic max_length safety cap for GLM 4.6.
     //

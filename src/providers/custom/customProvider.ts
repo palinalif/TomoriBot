@@ -33,6 +33,7 @@ import { callCustomStructuredJSON } from "@/providers/custom/customStructuredOut
 import { isBraveSearchAvailable } from "@/tools/restAPIs/brave/braveSearchService";
 import { getMCPManager } from "@/utils/mcp/mcpManager";
 import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
+import { buildActiveSamplingParams, getActiveTemperature } from "@/utils/provider/samplingControl";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
 import { CustomStreamAdapter, type CustomStreamConfig } from "./customStreamAdapter";
 import type { ProviderError, StreamContext } from "../../types/stream/interfaces";
@@ -323,7 +324,7 @@ export class CustomProvider
     return await generatePresetFromPromptCustom(request.apiKey, request.params, request.locale, {
       endpointUrl,
       model: modelName,
-      temperature: request.tomoriState.config.llm_temperature,
+      temperature: getActiveTemperature(request.tomoriState.config),
       tools,
       toolContext: request.toolContext as ToolContext | undefined,
       maxToolRounds: request.maxToolRounds,
@@ -362,18 +363,17 @@ export class CustomProvider
     log.info(`Custom provider: supports_structoutput: ${tomoriState.llm.supports_structoutput}`);
 
     // Build config object
+    const samplingParams = buildActiveSamplingParams(tomoriState.config);
     const config: CustomProviderConfig = {
       model: modelName, // Use custom_model_name if set, otherwise llm_codename
       apiKey: apiKey, // May be used for Bearer auth if endpoint requires it
       temperature: tomoriState.config.llm_temperature,
+      disabledParams: tomoriState.config.llm_disabled_params ?? [],
       maxOutputTokens: 4096,
       endpointUrl: endpointUrl,
       seesImages: tomoriState.llm.sees_images,
       seesVideos: tomoriState.llm.sees_videos,
-      // Sampling parameters for better output quality
-      topP: 0.9,
-      frequencyPenalty: 0.3,
-      presencePenalty: 0.2,
+      ...samplingParams,
       repetitionPenalty: 1.1,
     };
 

@@ -27,6 +27,7 @@ import { generateConversationSummaryNvidia, generateRoleplaySummaryNvidia } from
 import { generatePresetFromPromptNvidia } from "@/providers/nvidia/presetGenerator";
 import { isBraveSearchAvailable } from "@/tools/restAPIs/brave/braveSearchService";
 import { getMCPManager } from "@/utils/mcp/mcpManager";
+import { buildActiveSamplingParams, getActiveTemperature } from "@/utils/provider/samplingControl";
 import type { TomoriState } from "@/types/db/schema";
 import type { StructuredContextItem } from "@/types/misc/context";
 import type {
@@ -337,29 +338,17 @@ export class NvidiaProvider
   }
 
   async createConfig(tomoriState: TomoriState, apiKey: string): Promise<NvidiaProviderConfig> {
+    const samplingParams = buildActiveSamplingParams(tomoriState.config);
     const config: NvidiaProviderConfig = {
       model: tomoriState.llm.llm_codename,
       apiKey,
       temperature: tomoriState.config.llm_temperature,
+      disabledParams: tomoriState.config.llm_disabled_params ?? [],
       maxOutputTokens: 4096,
       endpointUrl: NVIDIA_CHAT_COMPLETIONS_URL,
       seesImages: tomoriState.llm.sees_images,
       seesVideos: tomoriState.llm.sees_videos,
-      ...(tomoriState.config.llm_top_p < 1.0 && {
-        topP: tomoriState.config.llm_top_p,
-      }),
-      ...(tomoriState.config.llm_top_k > 0 && {
-        topK: tomoriState.config.llm_top_k,
-      }),
-      ...(tomoriState.config.llm_frequency_penalty !== 0 && {
-        frequencyPenalty: tomoriState.config.llm_frequency_penalty,
-      }),
-      ...(tomoriState.config.llm_presence_penalty !== 0 && {
-        presencePenalty: tomoriState.config.llm_presence_penalty,
-      }),
-      ...(tomoriState.config.llm_min_p > 0 && {
-        minP: tomoriState.config.llm_min_p,
-      }),
+      ...samplingParams,
     };
 
     // Attach runtime logit_bias map if the server has any active entries for this model
@@ -534,7 +523,7 @@ export class NvidiaProvider
 
     return await generatePresetFromPromptNvidia(request.apiKey, request.params, request.locale, {
       model: request.tomoriState.llm.llm_codename,
-      temperature: request.tomoriState.config.llm_temperature,
+      temperature: getActiveTemperature(request.tomoriState.config),
       tools,
       toolContext: request.toolContext,
       maxToolRounds: request.maxToolRounds,

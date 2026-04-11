@@ -62,6 +62,7 @@ import { vertexProviderInfo } from "./providerInfo";
 import { callGoogleStructuredJSON } from "../google/googleStructuredOutput";
 import { generateConversationSummaryGoogle, generateRoleplaySummaryGoogle } from "../google/compactGenerator";
 import { generatePresetFromPrompt } from "../google/presetGenerator";
+import { getActiveTemperature, isParamDisabled } from "@/utils/provider/samplingControl";
 
 /**
  * Gets the default Vertex model with a robust fallback chain:
@@ -119,7 +120,7 @@ export interface VertexProviderConfig extends ProviderConfig {
     threshold: string;
   }>;
   generationConfig: {
-    temperature: number;
+    temperature?: number;
     topK?: number;
     topP?: number;
     maxOutputTokens?: number;
@@ -398,11 +399,16 @@ export class VertexProvider
 
   async createConfig(tomoriState: TomoriState, apiKey: string): Promise<VertexProviderConfig> {
     const maxOutputTokens = Number.parseInt(process.env.GOOGLE_MAX_OUTPUT_TOKENS || "8192", 10);
+    const disabledParams = tomoriState.config.llm_disabled_params ?? [];
+    const temperature = getActiveTemperature(tomoriState.config);
+    const topKDisabled = isParamDisabled(disabledParams, "topK");
+    const topPDisabled = isParamDisabled(disabledParams, "topP");
 
     const config: VertexProviderConfig = {
       model: tomoriState.llm.llm_codename,
       apiKey: apiKey,
       temperature: tomoriState.config.llm_temperature,
+      disabledParams,
       maxOutputTokens,
       safetySettings: [
         {
@@ -423,13 +429,17 @@ export class VertexProvider
         },
       ],
       generationConfig: {
-        temperature: tomoriState.config.llm_temperature,
-        ...(tomoriState.config.llm_top_k > 0 && {
-          topK: tomoriState.config.llm_top_k,
+        ...(temperature !== undefined && {
+          temperature,
         }),
-        ...(tomoriState.config.llm_top_p < 1.0 && {
-          topP: tomoriState.config.llm_top_p,
-        }),
+        ...(!topKDisabled &&
+          tomoriState.config.llm_top_k > 0 && {
+            topK: tomoriState.config.llm_top_k,
+          }),
+        ...(!topPDisabled &&
+          tomoriState.config.llm_top_p < 1.0 && {
+            topP: tomoriState.config.llm_top_p,
+          }),
         maxOutputTokens,
         stopSequences: [],
       },

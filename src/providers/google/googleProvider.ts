@@ -56,6 +56,7 @@ import { callGoogleStructuredJSON } from "./googleStructuredOutput";
 import { getCachedDefaultLLM, isLLMCacheReady } from "../../utils/cache/llmCache";
 import { loadDefaultModelForProvider, loadAvailableModelsForProvider } from "../../utils/db/dbRead";
 import { googleProviderInfo } from "./providerInfo";
+import { getActiveTemperature, isParamDisabled } from "@/utils/provider/samplingControl";
 
 /**
  * Gets the default Google Gemini model with a robust fallback chain:
@@ -134,7 +135,7 @@ export interface GoogleProviderConfig extends ProviderConfig {
     threshold: string;
   }>;
   generationConfig: {
-    temperature: number;
+    temperature?: number;
     topK?: number;
     topP?: number;
     maxOutputTokens?: number;
@@ -455,10 +456,17 @@ export class GoogleProvider
     // Resolve max output tokens from env var with default fallback
     const maxOutputTokens = Number.parseInt(process.env.GOOGLE_MAX_OUTPUT_TOKENS || "8192", 10);
     const modelCodename = tomoriState.llm.llm_codename;
+    const disabledParams = tomoriState.config.llm_disabled_params ?? [];
+    const temperature = getActiveTemperature(tomoriState.config);
+    const topKDisabled = isParamDisabled(disabledParams, "topK");
+    const topPDisabled = isParamDisabled(disabledParams, "topP");
+    const frequencyPenaltyDisabled = isParamDisabled(disabledParams, "frequencyPenalty");
+    const presencePenaltyDisabled = isParamDisabled(disabledParams, "presencePenalty");
     const googlePenaltyParamsEnabled = isGooglePenaltyParamsEnabled();
     const supportsPenaltyParams = googlePenaltyParamsEnabled && isGemini3Model(modelCodename);
     const hasConfiguredPenaltyParams =
-      tomoriState.config.llm_frequency_penalty !== 0 || tomoriState.config.llm_presence_penalty !== 0;
+      (!frequencyPenaltyDisabled && tomoriState.config.llm_frequency_penalty !== 0) ||
+      (!presencePenaltyDisabled && tomoriState.config.llm_presence_penalty !== 0);
     if (!supportsPenaltyParams && hasConfiguredPenaltyParams) {
       const skipReason = !googlePenaltyParamsEnabled
         ? "GOOGLE_ENABLE_PENALTY_PARAMS is disabled"
@@ -467,16 +475,20 @@ export class GoogleProvider
         modelCodename,
         tomoriState.server_id,
         skipReason,
-        tomoriState.config.llm_frequency_penalty !== 0 ? tomoriState.config.llm_frequency_penalty : undefined,
-        tomoriState.config.llm_presence_penalty !== 0 ? tomoriState.config.llm_presence_penalty : undefined,
+        !frequencyPenaltyDisabled && tomoriState.config.llm_frequency_penalty !== 0
+          ? tomoriState.config.llm_frequency_penalty
+          : undefined,
+        !presencePenaltyDisabled && tomoriState.config.llm_presence_penalty !== 0
+          ? tomoriState.config.llm_presence_penalty
+          : undefined,
       );
     }
     const frequencyPenalty =
-      supportsPenaltyParams && tomoriState.config.llm_frequency_penalty !== 0
+      supportsPenaltyParams && !frequencyPenaltyDisabled && tomoriState.config.llm_frequency_penalty !== 0
         ? sanitizeGooglePenalty(tomoriState.config.llm_frequency_penalty, "frequencyPenalty", tomoriState.server_id)
         : undefined;
     const presencePenalty =
-      supportsPenaltyParams && tomoriState.config.llm_presence_penalty !== 0
+      supportsPenaltyParams && !presencePenaltyDisabled && tomoriState.config.llm_presence_penalty !== 0
         ? sanitizeGooglePenalty(tomoriState.config.llm_presence_penalty, "presencePenalty", tomoriState.server_id)
         : undefined;
 
@@ -484,6 +496,7 @@ export class GoogleProvider
       model: modelCodename,
       apiKey: apiKey,
       temperature: tomoriState.config.llm_temperature,
+      disabledParams,
       maxOutputTokens,
       safetySettings: [
         {
@@ -504,15 +517,19 @@ export class GoogleProvider
         },
       ],
       generationConfig: {
-        temperature: tomoriState.config.llm_temperature,
+        ...(temperature !== undefined && {
+          temperature,
+        }),
         // Only include topK/topP if user has configured non-neutral values
         // Neutral: topK=0 (disabled) and topP=1.0 (full probability distribution)
-        ...(tomoriState.config.llm_top_k > 0 && {
-          topK: tomoriState.config.llm_top_k,
-        }),
-        ...(tomoriState.config.llm_top_p < 1.0 && {
-          topP: tomoriState.config.llm_top_p,
-        }),
+        ...(!topKDisabled &&
+          tomoriState.config.llm_top_k > 0 && {
+            topK: tomoriState.config.llm_top_k,
+          }),
+        ...(!topPDisabled &&
+          tomoriState.config.llm_top_p < 1.0 && {
+            topP: tomoriState.config.llm_top_p,
+          }),
         // Only include penalty params if user has configured non-neutral values
         // Neutral: frequencyPenalty=0.0, presencePenalty=0.0
         ...(frequencyPenalty !== undefined && {

@@ -26,6 +26,7 @@ import type {
 } from "@/types/stream/interfaces";
 import type { StructuredContextItem } from "@/types/misc/context";
 import { log } from "@/utils/misc/logger";
+import { isParamDisabled } from "@/utils/provider/samplingControl";
 import { localizer } from "@/utils/text/localizer";
 import { isRegisteredOrReservedSpeakerLabel } from "@/utils/text/stringHelper";
 import { buildPersonaSpeakerStopString, buildProviderStopStrings } from "@/providers/utils/stopStrings";
@@ -98,12 +99,15 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
     logSanitizedOpenAICompatibleRequest(this.options.adapterName, messages);
 
     try {
+      const disabledParams = config.disabledParams ?? [];
       const requestBody: Record<string, unknown> = {
         model: config.model,
         messages,
-        temperature: config.temperature,
         stream: true,
       };
+      if (!isParamDisabled(disabledParams, "temperature")) {
+        requestBody.temperature = config.temperature;
+      }
 
       const personaSpeakerStop = buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname);
       this.speakerGuardEnabled = this.options.enableSpeakerGuard !== false && Boolean(personaSpeakerStop);
@@ -125,22 +129,25 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
       if (config.tools && config.tools.length > 0) {
         requestBody.tools = config.tools;
       }
-      if (openAICompatibleConfig.topP !== undefined) {
+      if (openAICompatibleConfig.topP !== undefined && !isParamDisabled(disabledParams, "topP")) {
         requestBody.top_p = openAICompatibleConfig.topP;
       }
-      if (openAICompatibleConfig.topK !== undefined) {
+      if (openAICompatibleConfig.topK !== undefined && !isParamDisabled(disabledParams, "topK")) {
         requestBody.top_k = openAICompatibleConfig.topK;
       }
-      if (openAICompatibleConfig.frequencyPenalty !== undefined) {
+      if (
+        openAICompatibleConfig.frequencyPenalty !== undefined &&
+        !isParamDisabled(disabledParams, "frequencyPenalty")
+      ) {
         requestBody.frequency_penalty = openAICompatibleConfig.frequencyPenalty;
       }
-      if (openAICompatibleConfig.presencePenalty !== undefined) {
+      if (openAICompatibleConfig.presencePenalty !== undefined && !isParamDisabled(disabledParams, "presencePenalty")) {
         requestBody.presence_penalty = openAICompatibleConfig.presencePenalty;
       }
       if (openAICompatibleConfig.repetitionPenalty !== undefined) {
         requestBody.repetition_penalty = openAICompatibleConfig.repetitionPenalty;
       }
-      if (openAICompatibleConfig.minP !== undefined) {
+      if (openAICompatibleConfig.minP !== undefined && !isParamDisabled(disabledParams, "minP")) {
         requestBody.min_p = openAICompatibleConfig.minP;
       }
       if (openAICompatibleConfig.logitBias !== undefined) {
@@ -167,8 +174,29 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
         context,
       });
 
+      const effectiveTemperatureLabel = "temperature" in requestBody ? String(config.temperature) : "omitted";
+      const effectiveTopPLabel =
+        openAICompatibleConfig.topP !== undefined && "top_p" in requestBody
+          ? String(openAICompatibleConfig.topP)
+          : "omitted";
+      const effectiveTopKLabel =
+        openAICompatibleConfig.topK !== undefined && "top_k" in requestBody
+          ? String(openAICompatibleConfig.topK)
+          : "omitted";
+      const effectiveFrequencyPenaltyLabel =
+        openAICompatibleConfig.frequencyPenalty !== undefined && "frequency_penalty" in requestBody
+          ? String(openAICompatibleConfig.frequencyPenalty)
+          : "omitted";
+      const effectivePresencePenaltyLabel =
+        openAICompatibleConfig.presencePenalty !== undefined && "presence_penalty" in requestBody
+          ? String(openAICompatibleConfig.presencePenalty)
+          : "omitted";
+      const effectiveMinPLabel =
+        openAICompatibleConfig.minP !== undefined && "min_p" in requestBody
+          ? String(openAICompatibleConfig.minP)
+          : "omitted";
       log.info(
-        `${this.options.adapterName}: Sampling params - temp: ${config.temperature}, top_p: ${openAICompatibleConfig.topP ?? "default"}, top_k: ${openAICompatibleConfig.topK ?? "default"}, freq_penalty: ${openAICompatibleConfig.frequencyPenalty ?? "default"}, pres_penalty: ${openAICompatibleConfig.presencePenalty ?? "default"}, rep_penalty: ${openAICompatibleConfig.repetitionPenalty ?? "default"}, min_p: ${openAICompatibleConfig.minP ?? "default"}, logit_bias: ${Object.keys(openAICompatibleConfig.logitBias ?? {}).length}`,
+        `${this.options.adapterName}: Sampling params - temp: ${effectiveTemperatureLabel}, top_p: ${effectiveTopPLabel}, top_k: ${effectiveTopKLabel}, freq_penalty: ${effectiveFrequencyPenaltyLabel}, pres_penalty: ${effectivePresencePenaltyLabel}, rep_penalty: ${openAICompatibleConfig.repetitionPenalty ?? "default"}, min_p: ${effectiveMinPLabel}, logit_bias: ${Object.keys(openAICompatibleConfig.logitBias ?? {}).length}`,
       );
 
       // Create AbortController and link to external abort signal (SDK call timeout)

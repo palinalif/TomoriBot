@@ -68,6 +68,7 @@ import { isBraveSearchAvailable } from "../../tools/restAPIs/brave/braveSearchSe
 import { openrouterProviderInfo } from "./providerInfo";
 import { buildRuntimeLogitBiasMapForLlm } from "@/utils/provider/logitBiasResolver";
 import { resolveEffectiveOpenRouterSeesYouTube } from "@/utils/provider/openrouterModelCapabilities";
+import { buildActiveSamplingParams, getActiveTemperature } from "@/utils/provider/samplingControl";
 
 /**
  * Gets the default OpenRouter model with a robust fallback chain:
@@ -387,7 +388,7 @@ export class OpenrouterProvider
 
     return await generatePresetFromPromptOpenrouter(request.apiKey, request.params, request.locale, {
       model: request.tomoriState.llm.llm_codename,
-      temperature: request.tomoriState.config.llm_temperature,
+      temperature: getActiveTemperature(request.tomoriState.config),
       tools,
       toolContext: request.toolContext as ToolContext | undefined,
       maxToolRounds: request.maxToolRounds,
@@ -658,28 +659,13 @@ export class OpenrouterProvider
           : tomoriState.llm.llm_codename,
       apiKey: apiKey,
       temperature: tomoriState.config.llm_temperature,
+      disabledParams: tomoriState.config.llm_disabled_params ?? [],
       maxOutputTokens: resolvedMaxOutputTokens,
       seesImages: effectiveSeesImages, // Use effective value (may be overridden)
       seesVideos: effectiveSeesVideos, // Wire through video capability flag
       // repetitionPenalty is hardcoded as a general token repetition dampener
       repetitionPenalty: 1.1,
-      // Conditionally include user-configured sampling params (neutral = omit entirely)
-      // Neutral values: topP=1.0, topK=0, frequencyPenalty=0.0, presencePenalty=0.0, minP=0.0
-      ...(tomoriState.config.llm_top_p < 1.0 && {
-        topP: tomoriState.config.llm_top_p,
-      }),
-      ...(tomoriState.config.llm_top_k > 0 && {
-        topK: tomoriState.config.llm_top_k,
-      }),
-      ...(tomoriState.config.llm_frequency_penalty !== 0 && {
-        frequencyPenalty: tomoriState.config.llm_frequency_penalty,
-      }),
-      ...(tomoriState.config.llm_presence_penalty !== 0 && {
-        presencePenalty: tomoriState.config.llm_presence_penalty,
-      }),
-      ...(tomoriState.config.llm_min_p > 0 && {
-        minP: tomoriState.config.llm_min_p,
-      }),
+      ...buildActiveSamplingParams(tomoriState.config),
     };
     const runtimeLogitBias = buildRuntimeLogitBiasMapForLlm(tomoriState.config.llm_logit_biases ?? [], tomoriState.llm);
     if (Object.keys(runtimeLogitBias).length > 0) {

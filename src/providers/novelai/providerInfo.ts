@@ -22,5 +22,5 @@ export const novelaiProviderInfo: ProviderInfo = {
     conversationCompaction: false,
     historyExtraction: false,
   },
-  supportedParams: ["temperature"] as const,
+  supportedParams: ["temperature", "topP", "topK", "minP"] as const,
 };
