@@ -433,6 +433,22 @@ try {
   // Non-critical error - memory monitoring won't work but bot can still function
 }
 
+// Initialize cache metrics logger - periodic size snapshots of every in-memory cache
+// Emits one structured log.metric() line per interval so CloudWatch can graph growth
+// over time and correlate with RSS. See src/timers/cacheMetricsLogger.ts for query examples.
+log.section("Initializing Cache Metrics Logger...");
+try {
+  const { initializeCacheMetricsLogger } = await import("./timers/cacheMetricsLogger");
+
+  client.once("clientReady", () => {
+    initializeCacheMetricsLogger(client);
+    log.success("Cache metrics logger initialized");
+  });
+} catch (error) {
+  log.error("Failed to initialize cache metrics logger", error as Error);
+  // Non-critical error - diagnostics won't work but bot can still function
+}
+
 // Initialize quota cleanup system
 log.section("Initializing Upload Quota System...");
 try {

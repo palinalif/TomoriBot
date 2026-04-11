@@ -70,6 +70,27 @@ const webhookMutationLocks = new Map<string, Promise<void>>();
 const webhookAvatarStateCache = new Map<string, string>();
 const persistedManagedWebhookIds = new Set<string>();
 
+/**
+ * Returns current sizes of every in-memory map owned by the webhook manager.
+ * Used by the cache metrics logger to detect unbounded growth in webhook caches
+ * (none of these maps have a TTL — they only shrink on explicit invalidation).
+ */
+export function getWebhookCacheSizes(): {
+  webhookChannel: number;
+  webhookPersona: number;
+  webhookMutationLocks: number;
+  webhookAvatarState: number;
+  persistedManagedWebhookIds: number;
+} {
+  return {
+    webhookChannel: webhookCache.size,
+    webhookPersona: personaWebhookCache.size,
+    webhookMutationLocks: webhookMutationLocks.size,
+    webhookAvatarState: webhookAvatarStateCache.size,
+    persistedManagedWebhookIds: persistedManagedWebhookIds.size,
+  };
+}
+
 function toWebhookAvatarData(avatar?: Buffer | string | null): string | null {
   if (!avatar) {
     return null;

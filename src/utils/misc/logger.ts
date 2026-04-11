@@ -38,6 +38,7 @@ const pinoLogger = pino({
   customLevels: {
     success: 35, // Between info (30) and warn (40)
     section: 31, // Just above info (30)
+    metric: 52, // Above error (50) so periodic metrics reach CloudWatch in production
     rateLimit: 55, // Between error (50) and fatal (60)
   },
   transport: !shouldHideLogs
@@ -47,7 +48,8 @@ const pinoLogger = pino({
           colorize: false,
           translateTime: "HH:MM:ss",
           ignore: "pid,hostname",
-          customLevels: "trace:10,debug:20,info:30,section:31,success:35,warn:40,error:50,rateLimit:55,fatal:60",
+          customLevels:
+            "trace:10,debug:20,info:30,section:31,success:35,warn:40,error:50,metric:52,rateLimit:55,fatal:60",
         },
       }
     : undefined,
@@ -146,6 +148,23 @@ export const log = {
     } else {
       logger.rateLimit(coloredMsg);
     }
+  },
+
+  /**
+   * Logs a periodic metric sample as structured JSON.
+   * Always emitted regardless of environment (uses custom level 52, above `error`).
+   * Intended for CloudWatch Logs Insights queries — pass flat numeric fields
+   * so each metric becomes queryable at the top level of the log record.
+   *
+   * @param name - Short metric name (used as the `metric` field for filtering).
+   * @param fields - Flat key/value map of numeric fields to attach to the log.
+   */
+  metric: (name: string, fields: Record<string, number | string>) => {
+    // 1. Merge the metric name into the payload so it's queryable via `filter metric = "..."`
+    const payload = { metric: name, ...fields };
+    // 2. Pino adds custom level methods at runtime; TS doesn't know about them
+    // biome-ignore lint/suspicious/noExplicitAny: Custom Pino level added at runtime
+    (pinoLogger as any).metric(payload, `metric:${name}`);
   },
 
   /**

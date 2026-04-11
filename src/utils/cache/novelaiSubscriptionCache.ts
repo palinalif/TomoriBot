@@ -129,3 +129,11 @@ export async function refreshNovelAISubscription(guildId: string, apiKey: string
     return undefined;
   }
 }
+
+/**
+ * Returns the current number of entries held in the NovelAI subscription cache.
+ * Used by the cache metrics logger to track in-memory growth over time.
+ */
+export function getNovelaiSubscriptionCacheSize(): number {
+  return subscriptionCache.size;
+}

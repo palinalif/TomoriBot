@@ -98,6 +98,14 @@ export function invalidateChannelLlmCache(serverId: number, channelDiscId: strin
 }
 
 /**
+ * Returns the current number of entries held in the channel-LLM cache.
+ * Used by the cache metrics logger to track in-memory growth over time.
+ */
+export function getChannelLlmCacheSize(): number {
+  return channelLlmCache.size;
+}
+
+/**
  * Removes all cached channel overrides for a server (e.g., on full server reset).
  *
  * @param serverId - Database integer server ID
