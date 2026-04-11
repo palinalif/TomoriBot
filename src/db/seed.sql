@@ -3,6 +3,7 @@ SELECT add_column_if_not_exists('tomori_configs', 'voice_transcript_chat_mode', 
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_codename', 'TEXT');
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_capabilities', 'JSONB');
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_capabilities_fetched_at', 'TIMESTAMP');
+SELECT add_column_if_not_exists('tomori_configs', 'autoch_persona_overrides', 'JSONB', '''[]''::JSONB');
 
 -- Ensure all required columns exist in persona_configs table
 SELECT add_column_if_not_exists('persona_configs', 'reward_conditioning_enabled', 'BOOLEAN', 'true');

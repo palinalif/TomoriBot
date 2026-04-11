@@ -3546,6 +3546,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           !!config &&
           isAutochatQualifyingMessage(message, isSelfMessage) &&
           isAutochatCounterHit(tomoriState, message.channel.id);
+        const autoTriggerPersonaId = config ? getAutochatAssignedPersonaId(config, message.channel.id) : null;
         const isScopedAlwaysReplyActive =
           !!config &&
           isAutochatAlwaysReplyChannelActive(config, message.channel.id) &&
@@ -3567,6 +3568,8 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           isBotMentioned,
           !!isAutoMsgHit, // Convert to boolean
           isAlwaysReplyActive,
+          autoTriggerPersonaId,
+          isScopedAlwaysReplyActive ? autoTriggerPersonaId : null,
         );
 
         // Consecutive persona filter: prevent the same persona from triggering in
@@ -7689,6 +7692,11 @@ function isAutochatConfiguredChannel(config: TomoriConfigRow, channelId: string)
   return config.autoch_disc_ids.length > 0 && config.autoch_disc_ids.includes(channelId);
 }
 
+function getAutochatAssignedPersonaId(config: TomoriConfigRow, channelId: string): number | null {
+  const assignedPersona = config.autoch_persona_overrides.find((entry) => entry.channel_disc_id === channelId);
+  return assignedPersona?.tomori_id ?? null;
+}
+
 function isAutochatQualifyingMessage(message: Message, isSelfMessage: boolean): boolean {
   return !isSelfMessage && isRealUserLikeMessage(message) && !(message.channel instanceof DMChannel);
 }
@@ -7737,16 +7745,24 @@ export function determineMatchingPersonas(
   isBotMentioned: boolean,
   isAutoMsgHit: boolean,
   isAlwaysReply = false,
+  autoTriggerPersonaId?: number | null,
+  alwaysReplyFallbackPersonaId?: number | null,
 ): TomoriState[] {
+  const mainPersona = allPersonas.find((persona) => !persona.is_alter);
+  const resolveFallbackPersona = (personaId?: number | null): TomoriState | undefined =>
+    (personaId ? allPersonas.find((persona) => persona.tomori_id === personaId) : undefined) ?? mainPersona;
+
   // 1. Special cases: Only main persona responds
   // (reply to a persona, reply to bot, bot mentioned, shared auto-chat hit)
   if (replyPersona) {
     return [replyPersona];
   }
-  if (isReplyToBot || isBotMentioned || isAutoMsgHit) {
-    // Find main persona (is_alter = false)
-    const mainPersona = allPersonas.find((p) => !p.is_alter);
+  if (isReplyToBot || isBotMentioned) {
     return mainPersona ? [mainPersona] : [];
+  }
+  if (isAutoMsgHit) {
+    const autoTriggerPersona = resolveFallbackPersona(autoTriggerPersonaId);
+    return autoTriggerPersona ? [autoTriggerPersona] : [];
   }
 
   // Determine which persona (if any) sent this message for self-trigger prevention
@@ -7848,9 +7864,9 @@ export function determineMatchingPersonas(
   // to avoid doubling up. If the main persona's OWN trigger matched, it's already in the list
   // so no duplicate is added.
   if (isAlwaysReply && result.length === 0) {
-    const mainPersona = allPersonas.find((p) => !p.is_alter);
-    if (mainPersona) {
-      return [mainPersona];
+    const fallbackPersona = resolveFallbackPersona(alwaysReplyFallbackPersonaId);
+    if (fallbackPersona) {
+      return [fallbackPersona];
     }
   }
 

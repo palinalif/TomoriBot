@@ -10,7 +10,10 @@ import { sql } from "@/utils/db/client";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import {
+  acknowledgeModalSubmitForRefresh,
   replyInfoEmbed,
+  replyComponentsV2Status,
+  updateButtonComponentsV2Status,
   replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   safeSelectOptionText,
@@ -47,7 +50,8 @@ async function performReminderRemoval(
   reminderToRemove: { reminder_id: number; reminder_purpose: string },
   replyInteraction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
   locale: string,
-): Promise<void> {
+  suppressSuccessReply = false,
+): Promise<boolean> {
   const deleted = await deleteReminderById(reminderToRemove.reminder_id);
 
   if (!deleted) {
@@ -56,24 +60,28 @@ async function performReminderRemoval(
       descriptionKey: "general.errors.operation_failed_description",
       color: ColorCode.ERROR,
     });
-    return;
+    return false;
   }
 
   log.success(
     `Deleted reminder ${reminderToRemove.reminder_id} (${reminderToRemove.reminder_purpose.slice(0, 60)}...)`,
   );
 
-  await replyInfoEmbed(replyInteraction, locale, {
-    titleKey: "commands.scheduled-task.remove.success_title",
-    descriptionKey: "commands.scheduled-task.remove.success_description",
-    descriptionVars: {
-      reminder_purpose:
-        reminderToRemove.reminder_purpose.length > 80
-          ? `${reminderToRemove.reminder_purpose.slice(0, 77)}...`
-          : reminderToRemove.reminder_purpose,
-    },
-    color: ColorCode.SUCCESS,
-  });
+  if (!suppressSuccessReply) {
+    await replyInfoEmbed(replyInteraction, locale, {
+      titleKey: "commands.scheduled-task.remove.success_title",
+      descriptionKey: "commands.scheduled-task.remove.success_description",
+      descriptionVars: {
+        reminder_purpose:
+          reminderToRemove.reminder_purpose.length > 80
+            ? `${reminderToRemove.reminder_purpose.slice(0, 77)}...`
+            : reminderToRemove.reminder_purpose,
+      },
+      color: ColorCode.SUCCESS,
+    });
+  }
+
+  return true;
 }
 
 // Rule 21: Configure the subcommand
@@ -153,12 +161,16 @@ export async function execute(
       personaSelectionInteraction = personaSelection.interaction;
       const selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
       if (!selectedPersona?.tomori_id) {
-        await replyInfoEmbed(personaSelectionInteraction, locale, {
-          titleKey: "general.errors.invalid_option_title",
-          descriptionKey: "general.errors.invalid_option_description",
-          color: ColorCode.ERROR,
-        });
-        return;
+        await updateButtonComponentsV2Status(
+          personaSelectionInteraction,
+          locale,
+          "general.errors.invalid_option_title",
+          "general.errors.invalid_option_description",
+          ColorCode.ERROR,
+          undefined,
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
       }
       targetTomoriId = selectedPersona.tomori_id;
       targetIsAlter = selectedPersona.is_alter === true;
@@ -193,12 +205,16 @@ export async function execute(
       const selectionInteraction = personaSelectionInteraction ?? interaction;
 
       if (!reminders || reminders.length === 0) {
-        await replyInfoEmbed(selectionInteraction, locale, {
-          titleKey: "commands.scheduled-task.remove.no_entries_title",
-          descriptionKey: "commands.scheduled-task.remove.no_entries",
-          color: ColorCode.WARN,
-        });
-        return;
+        await updateButtonComponentsV2Status(
+          personaSelectionInteraction,
+          locale,
+          "commands.scheduled-task.remove.no_entries_title",
+          "commands.scheduled-task.remove.no_entries",
+          ColorCode.WARN,
+          undefined,
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
       }
 
       const timezoneOffset = tomoriState.config.timezone_offset ?? 0;
@@ -255,9 +271,16 @@ export async function execute(
         ],
       });
 
-      // Handle modal outcome - loop back to persona picker on dismiss
+      // Handle modal outcome - keep the persona picker loop alive when the modal closes
       if (modalResult.outcome !== "submit") {
         log.info(`Reminder deletion modal ${modalResult.outcome} for user ${userData.user_id}`);
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "general.pagination.select_persona_title",
+          "general.pagination.reloading_persona_picker",
+          ColorCode.INFO,
+        );
         continue;
       }
 
@@ -279,8 +302,25 @@ export async function execute(
         return;
       }
 
-      await performReminderRemoval(selectedReminder, modalSubmitInteraction, locale);
-      break;
+      const removalSucceeded = await performReminderRemoval(selectedReminder, modalSubmitInteraction, locale, true);
+      if (!removalSucceeded) {
+        return;
+      }
+      await acknowledgeModalSubmitForRefresh(modalSubmitInteraction);
+      await replyComponentsV2Status(
+        interaction,
+        locale,
+        "commands.scheduled-task.remove.success_title",
+        "commands.scheduled-task.remove.success_description",
+        ColorCode.SUCCESS,
+        {
+          reminder_purpose:
+            selectedReminder.reminder_purpose.length > 80
+              ? `${selectedReminder.reminder_purpose.slice(0, 77)}...`
+              : selectedReminder.reminder_purpose,
+        },
+        "general.pagination.reloading_persona_picker",
+      );
     }
   } catch (error) {
     const context: ErrorContext = {

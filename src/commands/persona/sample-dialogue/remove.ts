@@ -9,7 +9,10 @@ import {
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import {
+  acknowledgeModalSubmitForRefresh,
   replyInfoEmbed,
+  replyComponentsV2Status,
+  updateButtonComponentsV2Status,
   replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   safeSelectOptionText,
@@ -85,7 +88,8 @@ async function performSampleDialogueRemoval(
   userData: UserRow,
   replyInteraction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
   locale: string,
-): Promise<void> {
+  suppressSuccessReply = false,
+): Promise<boolean> {
   // Get the item being removed (for display purposes)
   const itemToRemoveIn = currentIn[selectedIndex];
   const itemToRemoveOut = currentOut[selectedIndex];
@@ -143,7 +147,7 @@ async function performSampleDialogueRemoval(
       descriptionKey: "general.errors.update_failed_description",
       color: ColorCode.ERROR,
     });
-    return;
+    return false;
   }
 
   // Invalidate cache so next message gets fresh config
@@ -156,15 +160,19 @@ async function performSampleDialogueRemoval(
     `Removed sample dialogue pair at index ${selectedIndex} for tomori ${tomoriState.tomori_id} by user ${userData.user_disc_id}`,
   );
 
-  await replyInfoEmbed(replyInteraction, locale, {
-    titleKey: "commands.forget.sampledialogue.success_title",
-    descriptionKey: "commands.forget.sampledialogue.success_description",
-    descriptionVars: {
-      input: itemToRemoveIn.length > 50 ? `${itemToRemoveIn.slice(0, 50)}...` : itemToRemoveIn,
-      output: itemToRemoveOut.length > 50 ? `${itemToRemoveOut.slice(0, 50)}...` : itemToRemoveOut,
-    },
-    color: ColorCode.SUCCESS,
-  });
+  if (!suppressSuccessReply) {
+    await replyInfoEmbed(replyInteraction, locale, {
+      titleKey: "commands.forget.sampledialogue.success_title",
+      descriptionKey: "commands.forget.sampledialogue.success_description",
+      descriptionVars: {
+        input: itemToRemoveIn.length > 50 ? `${itemToRemoveIn.slice(0, 50)}...` : itemToRemoveIn,
+        output: itemToRemoveOut.length > 50 ? `${itemToRemoveOut.slice(0, 50)}...` : itemToRemoveOut,
+      },
+      color: ColorCode.SUCCESS,
+    });
+  }
+
+  return true;
 }
 
 // Rule 21: Configure the subcommand
@@ -247,12 +255,16 @@ export async function execute(
       personaSelectionInteraction = personaSelection.interaction;
       selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
       if (!selectedPersona?.tomori_id) {
-        await replyInfoEmbed(personaSelectionInteraction, locale, {
-          titleKey: "general.errors.invalid_option_title",
-          descriptionKey: "general.errors.invalid_option_description",
-          color: ColorCode.ERROR,
-        });
-        return;
+        await updateButtonComponentsV2Status(
+          personaSelectionInteraction,
+          locale,
+          "general.errors.invalid_option_title",
+          "general.errors.invalid_option_description",
+          ColorCode.ERROR,
+          undefined,
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
       }
 
       // Check if user has Manage Server permission - admins can bypass teaching restriction
@@ -293,12 +305,16 @@ export async function execute(
 
       // 7. Check if there are any dialogues to remove after potential repair
       if (currentIn.length === 0 || currentIn.length !== currentOut.length) {
-        await replyInfoEmbed(personaSelectionInteraction, locale, {
-          titleKey: "commands.forget.sampledialogue.no_dialogues_title",
-          descriptionKey: "commands.forget.sampledialogue.no_dialogues",
-          color: ColorCode.WARN,
-        });
-        return;
+        await updateButtonComponentsV2Status(
+          personaSelectionInteraction,
+          locale,
+          "commands.forget.sampledialogue.no_dialogues_title",
+          "commands.forget.sampledialogue.no_dialogues",
+          ColorCode.WARN,
+          undefined,
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
       }
 
       // 8. Create dialogue select options for the modal
@@ -331,9 +347,16 @@ export async function execute(
         ],
       });
 
-      // 10. Handle modal outcome - loop back to persona picker on dismiss
+      // 10. Handle modal outcome - keep the persona picker loop alive when the modal closes
       if (modalResult.outcome !== "submit") {
         log.info(`Sample dialogue deletion modal ${modalResult.outcome} for user ${userData.user_id}`);
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "general.pagination.select_persona_title",
+          "general.pagination.reloading_persona_picker",
+          ColorCode.INFO,
+        );
         continue;
       }
 
@@ -350,7 +373,7 @@ export async function execute(
       const selectedIndex = Number.parseInt(selectedIndexStr, 10);
 
       // 12. Perform the database update using the helper function - let helper manage interaction state
-      await performSampleDialogueRemoval(
+      const removalSucceeded = await performSampleDialogueRemoval(
         selectedPersona,
         selectedIndex,
         currentIn,
@@ -358,8 +381,30 @@ export async function execute(
         userData,
         modalSubmitInteraction,
         locale,
+        true,
       );
-      break;
+      if (!removalSucceeded) {
+        return;
+      }
+      await acknowledgeModalSubmitForRefresh(modalSubmitInteraction);
+      await replyComponentsV2Status(
+        interaction,
+        locale,
+        "commands.forget.sampledialogue.success_title",
+        "commands.forget.sampledialogue.success_description",
+        ColorCode.SUCCESS,
+        {
+          input:
+            currentIn[selectedIndex].length > 50
+              ? `${currentIn[selectedIndex].slice(0, 50)}...`
+              : currentIn[selectedIndex],
+          output:
+            currentOut[selectedIndex].length > 50
+              ? `${currentOut[selectedIndex].slice(0, 50)}...`
+              : currentOut[selectedIndex],
+        },
+        "general.pagination.reloading_persona_picker",
+      );
     }
   } catch (error) {
     // 15. Catch unexpected errors

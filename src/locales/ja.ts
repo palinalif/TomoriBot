@@ -36,6 +36,7 @@ export default {
       select_page_title: `ページを選択`,
       select_page_description: `{totalItems}項目から{totalPages}ページ中の表示するページを選択してください：`,
       select_persona_title: `ペルソナを選択`,
+      reloading_persona_picker: `ペルソナピッカーを更新しています...`,
       persona_no_attributes: `属性はまだ設定されていません。`,
       persona_select_button: `選択`,
     },
@@ -3350,13 +3351,24 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
       "auto-trigger": {
         description: `自動チャット設定を管理`,
         channels: {
-          description: `私が自動的にチャットするチャンネルの保存済みセットを管理します。`,
+          description: `私が自動的にチャットするチャンネルの保存済みセットを管理するか、1つのチャンネルに使うペルソナを設定します。`,
+          channel_description: `設定したい単一のテキストチャンネルです。空欄なら一括チェックリストを開きます。`,
           modal_title: `自動トリガーチャンネルを管理`,
           checkbox_label: `自動トリガーチャンネル`,
           checkbox_label_continued: `自動トリガーチャンネル（続き）`,
           checkbox_description: `チェックしたチャンネルは自動トリガー対象のままです。外したチャンネルは対象外になります。`,
+          single_modal_title: `自動トリガーチャンネルを設定`,
+          single_enabled_label: `自動トリガーを有効化`,
+          single_enabled_description: `このチャンネルで自動トリガーを有効または無効にします。`,
+          single_persona_label: `自動トリガーペルソナ`,
+          single_persona_description: `このチャンネルで自動トリガーとチャンネル限定の常時応答に使うペルソナを選択します。トリガーワードは通常どおり動作します。`,
+          single_persona_placeholder: `現在: {persona}`,
+          main_persona_description: `メインペルソナ`,
+          alter_persona_description: `オルタペルソナ`,
           no_channels_title: `対象チャンネルはありません`,
           no_channels_description: `このサーバーには管理できるテキストチャンネルがありません。`,
+          invalid_channel_title: `無効なチャンネル`,
+          invalid_channel_description: `自動トリガーに使えるサーバーのテキストチャンネルを選択してください。`,
           select_page_title: `自動トリガーチャンネルを管理`,
           select_page_description: `このサーバーには対象テキストチャンネルが **{channel_count}** 件あり、**{total_pages}** ページに分かれています。
 現在有効: **{selected_count}**。`,
@@ -3369,6 +3381,9 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
           success_description: `自動トリガーを有効化したチャンネル **{enabled_count}** 件: {enabled_channels}
 自動トリガーを無効化したチャンネル **{disabled_count}** 件: {disabled_channels}
 現在 **{selected_count}** 件のチャンネルが有効です。`,
+          single_success_title: `自動トリガーチャンネルを更新しました`,
+          single_success_enabled_description: `{channel} で自動トリガーを有効化し、**{persona}** を使うようにしました。`,
+          single_success_disabled_description: `{channel} での自動トリガーを無効化しました。`,
         },
         threshold: {
           description: `設定済みの自動チャットチャンネル用の共有自動チャット範囲を設定します。`,

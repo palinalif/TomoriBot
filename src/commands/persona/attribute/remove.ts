@@ -9,7 +9,10 @@ import {
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import {
+  acknowledgeModalSubmitForRefresh,
   replyInfoEmbed,
+  replyComponentsV2Status,
+  updateButtonComponentsV2Status,
   replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   safeSelectOptionText,
@@ -38,7 +41,8 @@ async function performAttributeRemoval(
   userData: UserRow,
   replyInteraction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
   locale: string,
-): Promise<void> {
+  suppressSuccessReply = false,
+): Promise<boolean> {
   // Update the attribute_list in the database using array_remove
   const [updatedRow] = await sql`
 		UPDATE tomoris
@@ -77,7 +81,7 @@ async function performAttributeRemoval(
       descriptionKey: "general.errors.update_failed_description",
       color: ColorCode.ERROR,
     });
-    return;
+    return false;
   }
 
   // Invalidate cache so next message gets fresh config
@@ -90,14 +94,18 @@ async function performAttributeRemoval(
     `Removed attribute "${attributeToRemove}" for tomori ${tomoriState.tomori_id} by user ${userData.user_disc_id}`,
   );
 
-  await replyInfoEmbed(replyInteraction, locale, {
-    titleKey: "commands.forget.attribute.success_title",
-    descriptionKey: "commands.forget.attribute.success_description",
-    descriptionVars: {
-      attribute: attributeToRemove,
-    },
-    color: ColorCode.SUCCESS,
-  });
+  if (!suppressSuccessReply) {
+    await replyInfoEmbed(replyInteraction, locale, {
+      titleKey: "commands.forget.attribute.success_title",
+      descriptionKey: "commands.forget.attribute.success_description",
+      descriptionVars: {
+        attribute: attributeToRemove,
+      },
+      color: ColorCode.SUCCESS,
+    });
+  }
+
+  return true;
 }
 
 // Rule 21: Configure the subcommand
@@ -178,12 +186,16 @@ export async function execute(
       personaSelectionInteraction = personaSelection.interaction;
       selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
       if (!selectedPersona?.tomori_id) {
-        await replyInfoEmbed(personaSelectionInteraction, locale, {
-          titleKey: "general.errors.invalid_option_title",
-          descriptionKey: "general.errors.invalid_option_description",
-          color: ColorCode.ERROR,
-        });
-        return;
+        await updateButtonComponentsV2Status(
+          personaSelectionInteraction,
+          locale,
+          "general.errors.invalid_option_title",
+          "general.errors.invalid_option_description",
+          ColorCode.ERROR,
+          undefined,
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
       }
 
       // Check if user has Manage Server permission - admins can bypass teaching restriction
@@ -205,12 +217,16 @@ export async function execute(
 
       // 6. Check if there are any attributes to remove
       if (currentAttributes.length === 0) {
-        await replyInfoEmbed(personaSelectionInteraction, locale, {
-          titleKey: "commands.forget.attribute.no_attributes_title",
-          descriptionKey: "commands.forget.attribute.no_attributes",
-          color: ColorCode.WARN,
-        });
-        return;
+        await updateButtonComponentsV2Status(
+          personaSelectionInteraction,
+          locale,
+          "commands.forget.attribute.no_attributes_title",
+          "commands.forget.attribute.no_attributes",
+          ColorCode.WARN,
+          undefined,
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
       }
 
       // 7. Use unified paginated modal system (supports up to 25 items directly, >25 via page selection)
@@ -235,9 +251,16 @@ export async function execute(
         ],
       });
 
-      // Handle modal outcome - loop back to persona picker on dismiss
+      // Handle modal outcome - keep the persona picker loop alive when the modal closes
       if (modalResult.outcome !== "submit") {
         log.info(`Attribute removal modal ${modalResult.outcome} for user ${userData.user_id}`);
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "general.pagination.select_persona_title",
+          "general.pagination.reloading_persona_picker",
+          ColorCode.INFO,
+        );
         continue;
       }
 
@@ -252,8 +275,29 @@ export async function execute(
       const attributeToRemove = currentAttributes[selectedIndex];
 
       // Perform the database update - let helper functions manage interaction state
-      await performAttributeRemoval(selectedPersona, attributeToRemove, userData, modalSubmitInteraction, locale);
-      break;
+      const removalSucceeded = await performAttributeRemoval(
+        selectedPersona,
+        attributeToRemove,
+        userData,
+        modalSubmitInteraction,
+        locale,
+        true,
+      );
+      if (!removalSucceeded) {
+        return;
+      }
+      await acknowledgeModalSubmitForRefresh(modalSubmitInteraction);
+      await replyComponentsV2Status(
+        interaction,
+        locale,
+        "commands.forget.attribute.success_title",
+        "commands.forget.attribute.success_description",
+        ColorCode.SUCCESS,
+        {
+          attribute: attributeToRemove,
+        },
+        "general.pagination.reloading_persona_picker",
+      );
     }
   } catch (error) {
     // 15. Catch unexpected errors

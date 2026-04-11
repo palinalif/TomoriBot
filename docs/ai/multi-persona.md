@@ -65,6 +65,11 @@ Configured join welcomes also use the manual-trigger path:
 - On `guildMemberAdd`, the welcome event resolves that persona and calls `tomoriChat(..., isManuallyTriggered = true, selectedPersonaId = ...)`.
 - If `welcome_persona_id` is `NULL`, one persona is chosen uniformly from the server's available personas for that join.
 
+Configured auto-trigger channels can also pin a single persona per channel:
+- `/server auto-trigger channels` can enable/disable channels in bulk, or target one channel and choose which persona should answer there.
+- The per-channel assignment is stored in `tomori_configs.autoch_persona_overrides`.
+- If a channel has no explicit assignment, auto-trigger falls back to the main persona.
+
 ## Response Pipeline (Multi-Persona)
 
 High-level flow (per incoming message):
@@ -176,7 +181,7 @@ The chain resets (depth → 0) when:
 
 **Exception:** if the active user sends a natural-language stop message while a generation is already running, TomoriBot preserves the current depth and clears queued self-reply work for that chain instead of resetting it.
 
-Auto-trigger note: auto-chat / always-reply channel behavior only qualifies on real user-like messages. Persona self-messages do not advance the shared auto-chat counter and do not auto-trigger fresh self turns by themselves.
+Auto-trigger note: auto-chat / always-reply channel behavior only qualifies on real user-like messages. Persona self-messages do not advance the shared auto-chat counter and do not auto-trigger fresh self turns by themselves. When a channel has an auto-trigger persona assignment, that persona owns the auto-trigger fallback for that channel; explicit trigger-word matches still take priority.
 
 ### Configuration
 

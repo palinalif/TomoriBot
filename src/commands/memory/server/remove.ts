@@ -16,7 +16,10 @@ import {
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import {
+  acknowledgeModalSubmitForRefresh,
   replyInfoEmbed,
+  replyComponentsV2Status,
+  updateButtonComponentsV2Status,
   replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   safeSelectOptionText,
@@ -43,7 +46,8 @@ async function performServerMemoryRemoval(
   userData: UserRow,
   replyInteraction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
   locale: string,
-): Promise<void> {
+  suppressSuccessReply = false,
+): Promise<boolean> {
   // Delete the memory from the database using Bun SQL
   const [deletedRow] = await sql`
 		DELETE FROM server_memories
@@ -82,7 +86,7 @@ async function performServerMemoryRemoval(
       descriptionKey: "general.errors.update_failed_description",
       color: ColorCode.ERROR,
     });
-    return;
+    return false;
   }
 
   // Invalidate cache so next message gets fresh config
@@ -95,14 +99,19 @@ async function performServerMemoryRemoval(
     `Deleted server memory "${memoryToDelete.content.slice(0, 30)}..." (ID: ${memoryToDelete.server_memory_id}) for server ${tomoriState.server_id} by user ${userData.user_disc_id}`,
   );
 
-  await replyInfoEmbed(replyInteraction, locale, {
-    titleKey: "commands.forget.memory.server.success_title",
-    descriptionKey: "commands.forget.memory.server.success_description",
-    descriptionVars: {
-      memory: memoryToDelete.content.length > 50 ? `${memoryToDelete.content.slice(0, 50)}...` : memoryToDelete.content,
-    },
-    color: ColorCode.SUCCESS,
-  });
+  if (!suppressSuccessReply) {
+    await replyInfoEmbed(replyInteraction, locale, {
+      titleKey: "commands.forget.memory.server.success_title",
+      descriptionKey: "commands.forget.memory.server.success_description",
+      descriptionVars: {
+        memory:
+          memoryToDelete.content.length > 50 ? `${memoryToDelete.content.slice(0, 50)}...` : memoryToDelete.content,
+      },
+      color: ColorCode.SUCCESS,
+    });
+  }
+
+  return true;
 }
 
 // Rule 21: Configure the subcommand
@@ -183,12 +192,16 @@ export async function execute(
       personaSelectionInteraction = personaSelection.interaction;
       selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
       if (!selectedPersona?.tomori_id) {
-        await replyInfoEmbed(personaSelectionInteraction, locale, {
-          titleKey: "general.errors.invalid_option_title",
-          descriptionKey: "general.errors.invalid_option_description",
-          color: ColorCode.ERROR,
-        });
-        return;
+        await updateButtonComponentsV2Status(
+          personaSelectionInteraction,
+          locale,
+          "general.errors.invalid_option_title",
+          "general.errors.invalid_option_description",
+          ColorCode.ERROR,
+          undefined,
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
       }
 
       // 4. Check permissions and if teaching is enabled
@@ -236,12 +249,16 @@ export async function execute(
         const descriptionKey = hasManagePermission
           ? "commands.forget.memory.server.no_memories" // No memories on server
           : "commands.forget.memory.server.no_owned_memories"; // User owns no memories
-        await replyInfoEmbed(personaSelectionInteraction, locale, {
-          titleKey: "commands.forget.memory.server.no_memories_title",
-          descriptionKey: descriptionKey,
-          color: ColorCode.WARN,
-        });
-        return;
+        await updateButtonComponentsV2Status(
+          personaSelectionInteraction,
+          locale,
+          "commands.forget.memory.server.no_memories_title",
+          descriptionKey,
+          ColorCode.WARN,
+          undefined,
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
       }
 
       // 7. Use unified paginated modal system (supports up to 25 items directly, >25 via page selection)
@@ -266,9 +283,16 @@ export async function execute(
         ],
       });
 
-      // Handle modal outcome - loop back to persona picker on dismiss
+      // Handle modal outcome - keep the persona picker loop alive when the modal closes
       if (modalResult.outcome !== "submit") {
         log.info(`Server memory deletion modal ${modalResult.outcome} for user ${userData.user_id}`);
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "general.pagination.select_persona_title",
+          "general.pagination.reloading_persona_picker",
+          ColorCode.INFO,
+        );
         continue;
       }
 
@@ -296,8 +320,30 @@ export async function execute(
       }
 
       // Perform the database update using the helper function - let helper manage interaction state
-      await performServerMemoryRemoval(selectedPersona, selectedMemory, userData, modalSubmitInteraction, locale);
-      break;
+      const removalSucceeded = await performServerMemoryRemoval(
+        selectedPersona,
+        selectedMemory,
+        userData,
+        modalSubmitInteraction,
+        locale,
+        true,
+      );
+      if (!removalSucceeded) {
+        return;
+      }
+      await acknowledgeModalSubmitForRefresh(modalSubmitInteraction);
+      await replyComponentsV2Status(
+        interaction,
+        locale,
+        "commands.forget.memory.server.success_title",
+        "commands.forget.memory.server.success_description",
+        ColorCode.SUCCESS,
+        {
+          memory:
+            selectedMemory.content.length > 50 ? `${selectedMemory.content.slice(0, 50)}...` : selectedMemory.content,
+        },
+        "general.pagination.reloading_persona_picker",
+      );
     }
   } catch (error) {
     // 14. Catch unexpected errors

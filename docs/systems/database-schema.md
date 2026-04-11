@@ -93,6 +93,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `tomori_configs.message_fetch_limit` stores the per-server context fetch cap (default `80`, configurable via `/config message-fetch-limit`).
 - `tomori_configs.welcome_channel_disc_id` stores the single configured join-welcome channel per server.
 - `tomori_configs.thought_log_channel_disc_id` stores the optional server-scoped channel where provider reasoning summaries are posted after successful streamed chat turns.
+- `tomori_configs.autoch_persona_overrides` stores optional per-channel persona assignments for configured auto-trigger channels. Each entry is a JSON object with `channel_disc_id` and `tomori_id`; missing entries fall back to the main persona.
 - `tomori_configs.crosschannel_blocklist_ids` stores the server-scoped channel blocklist for tool-driven `cross_channel_message` dispatch. Blocking a forum/media parent also blocks visits into threads under that parent.
 - `tomori_configs.welcome_prompt` stores the required additional greeting instruction shown in `/server welcome-channel set`.
 - `tomori_configs.welcome_persona_id` stores the selected welcome persona; `NULL` means random persona selection per join.

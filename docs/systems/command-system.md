@@ -215,6 +215,7 @@ Rules:
 - do not defer before pagination helpers (they acknowledge directly)
 - keep pre-helper work under 3 seconds
 - `promptWithPaginatedModal(...)` does not expose an auto-defer parameter; defer on submission manually when needed
+- for persona-button transaction loops that use `replyPaginatedPersonaChoicesV2(...)`, a successful write can `continue` back to the picker so the original ephemeral picker message refreshes in place and the user can perform another transaction without rerunning the slash command
 
 ### Pattern 5: Manual Deferral Timing
 
@@ -280,7 +281,7 @@ Rules:
 - `conditioning`: manage, reward(headpat/hug/kiss/tickle), punish(spank/pinch/bite/squeeze)
 - `tool`: ping, status, refresh, compact, comment
 
-`/server auto-trigger` is channel-scoped and uses one shared cycle across its configured channels. Threshold `0` enables always-reply in those channels. Positive values use either a fixed trigger (`min = max`) or a shared inclusive random range (`min-max`), rerolling after each successful auto-trigger. The cycle only advances on qualifying real user-like messages; TomoriBot and alter webhook self-messages do not advance or consume the auto-trigger counter. Removing a channel disables auto-trigger behavior for that channel.
+`/server auto-trigger` is channel-scoped and uses one shared cycle across its configured channels. Threshold `0` enables always-reply in those channels. Positive values use either a fixed trigger (`min = max`) or a shared inclusive random range (`min-max`), rerolling after each successful auto-trigger. The cycle only advances on qualifying real user-like messages; TomoriBot and alter webhook self-messages do not advance or consume the auto-trigger counter. Removing a channel disables auto-trigger behavior for that channel. `/server auto-trigger channels` can also target a single channel and assign one persona to that room's auto-trigger fallback instead of always using the main persona.
 
 `/bot generate image` is a modal-driven, fire-and-forget scene snapshot command. It plans against the current channel context with the active text provider, then renders with either the current provider's native image path or NovelAI's tag-based image tool when a NovelAI backend is available.
 

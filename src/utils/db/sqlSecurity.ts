@@ -66,6 +66,7 @@ const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
   "key_version",
   "trigger_words",
   "autoch_disc_ids",
+  "autoch_persona_overrides",
   "autoch_threshold",
   "autoch_threshold_max",
   "message_fetch_limit",

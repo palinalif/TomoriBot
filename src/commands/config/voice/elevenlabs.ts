@@ -9,8 +9,10 @@ import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import { updateTomori } from "@/utils/db/dbWrite";
 import {
+  acknowledgeModalSubmitForRefresh,
   promptWithPaginatedModal,
   replyInfoEmbed,
+  replyComponentsV2Status,
   replyPaginatedPersonaChoicesV2,
   safeSelectOptionText,
 } from "@/utils/discord/interactionHelper";
@@ -183,6 +185,13 @@ export async function execute(
         ],
       });
       if (modalResult.outcome !== "submit" || !modalResult.interaction) {
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "general.pagination.select_persona_title",
+          "general.pagination.reloading_persona_picker",
+          ColorCode.INFO,
+        );
         continue;
       }
 
@@ -225,27 +234,27 @@ export async function execute(
 
       invalidateTomoriStateCache(serverDiscId);
 
-      await replyInfoEmbed(modalInteraction, locale, {
-        titleKey:
-          nextVoice === null
-            ? "commands.config.voice.elevenlabs.cleared_title"
-            : "commands.config.voice.elevenlabs.success_title",
-        descriptionKey:
-          nextVoice === null
-            ? "commands.config.voice.elevenlabs.cleared_description"
-            : "commands.config.voice.elevenlabs.success_description",
-        descriptionVars:
-          nextVoice === null
-            ? {
-                persona: selectedPersona.tomori_nickname,
-              }
-            : {
-                persona: selectedPersona.tomori_nickname,
-                voice: nextVoice.name,
-              },
-        color: ColorCode.SUCCESS,
-      });
-      break;
+      await acknowledgeModalSubmitForRefresh(modalInteraction);
+      await replyComponentsV2Status(
+        interaction,
+        locale,
+        nextVoice === null
+          ? "commands.config.voice.elevenlabs.cleared_title"
+          : "commands.config.voice.elevenlabs.success_title",
+        nextVoice === null
+          ? "commands.config.voice.elevenlabs.cleared_description"
+          : "commands.config.voice.elevenlabs.success_description",
+        ColorCode.SUCCESS,
+        nextVoice === null
+          ? {
+              persona: selectedPersona.tomori_nickname,
+            }
+          : {
+              persona: selectedPersona.tomori_nickname,
+              voice: nextVoice.name,
+            },
+        "general.pagination.reloading_persona_picker",
+      );
     }
   } catch (error) {
     const errorReplyInteraction = modalResult?.interaction ?? interaction;

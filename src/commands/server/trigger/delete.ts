@@ -9,7 +9,10 @@ import {
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import {
+  acknowledgeModalSubmitForRefresh,
   replyInfoEmbed,
+  replyComponentsV2Status,
+  updateButtonComponentsV2Status,
   replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   promptWithRawModal,
@@ -89,12 +92,16 @@ export async function execute(
       selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
       tomoriState = selectedPersona;
       if (!selectedPersona?.tomori_id) {
-        await replyInfoEmbed(responseInteraction, locale, {
-          titleKey: "general.errors.invalid_option_title",
-          descriptionKey: "general.errors.invalid_option_description",
-          color: ColorCode.ERROR,
-        });
-        return;
+        await updateButtonComponentsV2Status(
+          personaSelection.interaction,
+          locale,
+          "general.errors.invalid_option_title",
+          "general.errors.invalid_option_description",
+          ColorCode.ERROR,
+          undefined,
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
       }
       const selectedPersonaWithId = selectedPersona as TomoriState & {
         tomori_id: number;
@@ -102,16 +109,20 @@ export async function execute(
 
       const currentTriggerWords = selectedPersonaWithId.trigger_words ?? [];
       if (currentTriggerWords.length === 0) {
-        await replyInfoEmbed(responseInteraction, locale, {
-          titleKey: "commands.server.trigger.delete.no_triggers_title",
-          descriptionKey: "commands.server.trigger.delete.no_triggers_description",
-          color: ColorCode.WARN,
-        });
-        return;
+        await updateButtonComponentsV2Status(
+          personaSelection.interaction,
+          locale,
+          "commands.server.trigger.delete.no_triggers_title",
+          "commands.server.trigger.delete.no_triggers_description",
+          ColorCode.WARN,
+          undefined,
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
       }
 
       if (currentTriggerWords.length > MAX_ENTRIES_PER_MODAL) {
-        await handlePaginatedTriggerRemovalFallback(
+        const fallbackHandled = await handlePaginatedTriggerRemovalFallback(
           responseInteraction,
           selectedPersonaWithId,
           currentTriggerWords,
@@ -119,25 +130,30 @@ export async function execute(
           locale,
           interaction.guild.id,
         );
-        return;
+        if (!fallbackHandled) {
+          return;
+        }
+        continue;
       }
 
       const triggerGroupCount = Math.ceil(currentTriggerWords.length / MAX_OPTIONS_PER_GROUP);
       const checkboxGroups = buildTriggerCheckboxGroups(currentTriggerWords);
 
-      const triggerModalResult = await promptWithRawModal(
-        responseInteraction,
-        locale,
-        {
-          modalCustomId: TRIGGER_MODAL_CUSTOM_ID,
-          modalTitleKey: "commands.server.trigger.delete.modal_title",
-          components: checkboxGroups,
-        },
-        MessageFlags.Ephemeral,
-      );
+      const triggerModalResult = await promptWithRawModal(responseInteraction, locale, {
+        modalCustomId: TRIGGER_MODAL_CUSTOM_ID,
+        modalTitleKey: "commands.server.trigger.delete.modal_title",
+        components: checkboxGroups,
+      });
 
       if (triggerModalResult.outcome !== "submit") {
         log.info(`Trigger delete modal ${triggerModalResult.outcome} for user ${userData.user_id}`);
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "general.pagination.select_persona_title",
+          "general.pagination.reloading_persona_picker",
+          ColorCode.INFO,
+        );
         continue;
       }
 
@@ -146,6 +162,7 @@ export async function execute(
         log.error("Trigger delete modal unexpectedly missing interaction");
         return;
       }
+      await acknowledgeModalSubmitForRefresh(triggerModalInteraction);
       responseInteraction = triggerModalInteraction;
 
       const checkedIndices = new Set<number>();
@@ -158,15 +175,19 @@ export async function execute(
 
       const removedIndices = currentTriggerWords.flatMap((_, index) => (checkedIndices.has(index) ? [] : [index]));
       if (removedIndices.length === 0) {
-        await replyInfoEmbed(triggerModalInteraction, locale, {
-          titleKey: "commands.server.trigger.delete.no_removals_title",
-          descriptionKey: "commands.server.trigger.delete.no_removals_description",
-          color: ColorCode.INFO,
-        });
-        return;
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "commands.server.trigger.delete.no_removals_title",
+          "commands.server.trigger.delete.no_removals_description",
+          ColorCode.INFO,
+          undefined,
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
       }
 
-      await performTriggerWordRemoval(
+      const removalSucceeded = await performTriggerWordRemoval(
         selectedPersonaWithId,
         currentTriggerWords,
         removedIndices,
@@ -174,8 +195,22 @@ export async function execute(
         triggerModalInteraction,
         locale,
         interaction.guild.id,
+        true,
       );
-      break;
+      if (!removalSucceeded) {
+        return;
+      }
+      await replyComponentsV2Status(
+        interaction,
+        locale,
+        "commands.server.trigger.delete.success_title",
+        "commands.server.trigger.delete.success_description",
+        ColorCode.SUCCESS,
+        {
+          triggerWords: formatTriggerList(currentTriggerWords.filter((_, index) => removedIndices.includes(index))),
+        },
+        "general.pagination.reloading_persona_picker",
+      );
     }
   } catch (error) {
     const context: ErrorContext = {
@@ -219,7 +254,7 @@ async function handlePaginatedTriggerRemovalFallback(
   userData: UserRow,
   locale: string,
   guildId: string,
-): Promise<void> {
+): Promise<boolean> {
   const triggerOptions: SelectOption[] = currentTriggerWords.map((trigger, index) => ({
     label: safeSelectOptionText(trigger, 50),
     value: index.toString(),
@@ -242,31 +277,61 @@ async function handlePaginatedTriggerRemovalFallback(
 
   if (triggerModalResult.outcome !== "submit") {
     log.info(`Trigger delete fallback modal ${triggerModalResult.outcome} for user ${userData.user_id}`);
-    return;
+    await replyComponentsV2Status(
+      responseInteraction,
+      locale,
+      "general.pagination.select_persona_title",
+      "general.pagination.reloading_persona_picker",
+      ColorCode.INFO,
+    );
+    return true;
   }
 
   const triggerModalInteraction = triggerModalResult.interaction;
   const selectedTriggerIndex = triggerModalResult.values?.[TRIGGER_SELECT_ID];
   if (!triggerModalInteraction || !selectedTriggerIndex) {
     log.error("Trigger fallback modal result unexpectedly missing interaction or values");
-    return;
+    return false;
   }
 
-  if (!triggerModalInteraction.deferred && !triggerModalInteraction.replied) {
-    await triggerModalInteraction.deferReply({
-      flags: MessageFlags.Ephemeral,
+  const parsedSelectedTriggerIndex = Number.parseInt(selectedTriggerIndex, 10);
+  const selectedTriggerWord = currentTriggerWords[parsedSelectedTriggerIndex];
+  if (!selectedTriggerWord) {
+    await replyInfoEmbed(triggerModalInteraction, locale, {
+      titleKey: "general.errors.invalid_option_title",
+      descriptionKey: "general.errors.invalid_option_description",
+      color: ColorCode.ERROR,
     });
+    return false;
   }
 
-  await performTriggerWordRemoval(
+  const removalSucceeded = await performTriggerWordRemoval(
     selectedPersona,
     currentTriggerWords,
-    [Number.parseInt(selectedTriggerIndex, 10)],
+    [parsedSelectedTriggerIndex],
     userData,
     triggerModalInteraction,
     locale,
     guildId,
+    true,
   );
+  if (!removalSucceeded) {
+    return false;
+  }
+  await acknowledgeModalSubmitForRefresh(triggerModalInteraction);
+  await replyComponentsV2Status(
+    responseInteraction,
+    locale,
+    "commands.server.trigger.delete.success_title",
+    "commands.server.trigger.delete.success_description",
+    ColorCode.SUCCESS,
+    {
+      triggerWords: formatTriggerList([selectedTriggerWord]),
+    },
+    "general.pagination.reloading_persona_picker",
+  );
+
+  return true;
 }
 
 async function performTriggerWordRemoval(
@@ -277,7 +342,8 @@ async function performTriggerWordRemoval(
   replyInteraction: ModalSubmitInteraction,
   locale: string,
   guildId: string,
-): Promise<void> {
+  suppressSuccessReply = false,
+): Promise<boolean> {
   const removedIndexSet = new Set(removedIndices);
   const remainingTriggerWords = currentTriggerWords.filter((_, index) => !removedIndexSet.has(index));
   const removedTriggerWords = currentTriggerWords.filter((_, index) => removedIndexSet.has(index));
@@ -288,7 +354,7 @@ async function performTriggerWordRemoval(
       descriptionKey: "commands.server.trigger.delete.no_removals_description",
       color: ColorCode.INFO,
     });
-    return;
+    return false;
   }
 
   await sql`
@@ -333,7 +399,7 @@ async function performTriggerWordRemoval(
       descriptionKey: "general.errors.update_failed_description",
       color: ColorCode.ERROR,
     });
-    return;
+    return false;
   }
 
   invalidateTomoriStateCache(guildId);
@@ -342,14 +408,18 @@ async function performTriggerWordRemoval(
     `Removed ${removedTriggerWords.length} trigger word(s) for tomori ${selectedPersona.tomori_id} by user ${userData.user_disc_id}: ${removedTriggerWords.join(", ")}`,
   );
 
-  await replyInfoEmbed(replyInteraction, locale, {
-    titleKey: "commands.server.trigger.delete.success_title",
-    descriptionKey: "commands.server.trigger.delete.success_description",
-    descriptionVars: {
-      triggerWords: formatTriggerList(removedTriggerWords),
-    },
-    color: ColorCode.SUCCESS,
-  });
+  if (!suppressSuccessReply) {
+    await replyInfoEmbed(replyInteraction, locale, {
+      titleKey: "commands.server.trigger.delete.success_title",
+      descriptionKey: "commands.server.trigger.delete.success_description",
+      descriptionVars: {
+        triggerWords: formatTriggerList(removedTriggerWords),
+      },
+      color: ColorCode.SUCCESS,
+    });
+  }
+
+  return true;
 }
 
 function buildTriggerCheckboxGroups(currentTriggerWords: string[]): ModalCheckboxGroupField[] {

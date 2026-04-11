@@ -11,7 +11,10 @@ import { personalMemorySchema, type UserRow, type ErrorContext, type TomoriState
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import {
+  acknowledgeModalSubmitForRefresh,
   replyInfoEmbed,
+  replyComponentsV2Status,
+  updateButtonComponentsV2Status,
   replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   safeSelectOptionText,
@@ -44,14 +47,15 @@ async function performPersonalMemoryRemoval(
   userData: UserRow,
   replyInteraction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
   locale: string,
-): Promise<void> {
+  suppressSuccessReply = false,
+): Promise<boolean> {
   if (!memoryToRemove.personal_memory_id) {
     await replyInfoEmbed(replyInteraction, locale, {
       titleKey: "general.errors.update_failed_title",
       descriptionKey: "general.errors.update_failed_description",
       color: ColorCode.ERROR,
     });
-    return;
+    return false;
   }
 
   // Delete selected memory row from personal_memories
@@ -95,7 +99,7 @@ async function performPersonalMemoryRemoval(
       descriptionKey: "general.errors.update_failed_description",
       color: ColorCode.ERROR,
     });
-    return;
+    return false;
   }
 
   // Invalidate user cache so next message gets fresh data
@@ -106,14 +110,19 @@ async function performPersonalMemoryRemoval(
     `Deleted personal memory "${memoryToRemove.content.slice(0, 30)}..." for user ${userData.user_disc_id} (ID: ${userData.user_id})`,
   );
 
-  await replyInfoEmbed(replyInteraction, locale, {
-    titleKey: "commands.forget.memory.personal.success_title",
-    descriptionKey: "commands.forget.memory.personal.success_description",
-    descriptionVars: {
-      memory: memoryToRemove.content.length > 50 ? `${memoryToRemove.content.slice(0, 50)}...` : memoryToRemove.content,
-    },
-    color: ColorCode.SUCCESS,
-  });
+  if (!suppressSuccessReply) {
+    await replyInfoEmbed(replyInteraction, locale, {
+      titleKey: "commands.forget.memory.personal.success_title",
+      descriptionKey: "commands.forget.memory.personal.success_description",
+      descriptionVars: {
+        memory:
+          memoryToRemove.content.length > 50 ? `${memoryToRemove.content.slice(0, 50)}...` : memoryToRemove.content,
+      },
+      color: ColorCode.SUCCESS,
+    });
+  }
+
+  return true;
 }
 
 // Rule 21: Configure the subcommand
@@ -226,22 +235,30 @@ export async function execute(
         selectionInteraction = personaSelectionInteraction;
         selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
         if (!selectedPersona) {
-          await replyInfoEmbed(personaSelectionInteraction, locale, {
-            titleKey: "general.errors.invalid_option_title",
-            descriptionKey: "general.errors.invalid_option_description",
-            color: ColorCode.ERROR,
-          });
-          return;
+          await updateButtonComponentsV2Status(
+            personaSelectionInteraction,
+            locale,
+            "general.errors.invalid_option_title",
+            "general.errors.invalid_option_description",
+            ColorCode.ERROR,
+            undefined,
+            "general.pagination.reloading_persona_picker",
+          );
+          continue;
         }
 
         targetLineageId = selectedPersona.persona_lineage_id ?? 0;
         if (targetLineageId === GLOBAL_PERSONAL_MEMORY_LINEAGE_ID) {
-          await replyInfoEmbed(selectionInteraction, locale, {
-            titleKey: "general.errors.operation_failed_title",
-            descriptionKey: "general.errors.operation_failed_description",
-            color: ColorCode.ERROR,
-          });
-          return;
+          await updateButtonComponentsV2Status(
+            personaSelectionInteraction,
+            locale,
+            "general.errors.operation_failed_title",
+            "general.errors.operation_failed_description",
+            ColorCode.ERROR,
+            undefined,
+            "general.pagination.reloading_persona_picker",
+          );
+          continue;
         }
 
         // 5. Get current personal memories from lineage-scoped table
@@ -253,12 +270,16 @@ export async function execute(
 
         // 6. Check if there are any memories to remove
         if (currentMemories.length === 0) {
-          await replyInfoEmbed(selectionInteraction, locale, {
-            titleKey: "commands.forget.memory.personal.no_memories_title",
-            descriptionKey: "commands.forget.memory.personal.no_memories",
-            color: ColorCode.WARN,
-          });
-          return;
+          await updateButtonComponentsV2Status(
+            personaSelectionInteraction,
+            locale,
+            "commands.forget.memory.personal.no_memories_title",
+            "commands.forget.memory.personal.no_memories",
+            ColorCode.WARN,
+            undefined,
+            "general.pagination.reloading_persona_picker",
+          );
+          continue;
         }
 
         // 7. Create memory select options for the modal
@@ -284,9 +305,16 @@ export async function execute(
           ],
         });
 
-        // 9. Handle modal outcome - loop back to persona picker on dismiss
+        // 9. Handle modal outcome - keep the persona picker loop alive when the modal closes
         if (modalResult.outcome !== "submit") {
           log.info(`Personal memory deletion modal ${modalResult.outcome} for user ${userData.user_id}`);
+          await replyComponentsV2Status(
+            interaction,
+            locale,
+            "general.pagination.select_persona_title",
+            "general.pagination.reloading_persona_picker",
+            ColorCode.INFO,
+          );
           continue;
         }
 
@@ -312,7 +340,29 @@ export async function execute(
         }
 
         // 11. Perform the database update using the helper function
-        await performPersonalMemoryRemoval(selectedMemory, userData, modalSubmitInteraction, locale);
+        const removalSucceeded = await performPersonalMemoryRemoval(
+          selectedMemory,
+          userData,
+          modalSubmitInteraction,
+          locale,
+          true,
+        );
+        if (!removalSucceeded) {
+          return;
+        }
+        await acknowledgeModalSubmitForRefresh(modalSubmitInteraction);
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "commands.forget.memory.personal.success_title",
+          "commands.forget.memory.personal.success_description",
+          ColorCode.SUCCESS,
+          {
+            memory:
+              selectedMemory.content.length > 50 ? `${selectedMemory.content.slice(0, 50)}...` : selectedMemory.content,
+          },
+          "general.pagination.reloading_persona_picker",
+        );
 
         // 12. If personalization is disabled, send a warning follow-up
         if (personalizationDisabledWarning) {
@@ -327,7 +377,6 @@ export async function execute(
             flags: MessageFlags.Ephemeral,
           });
         }
-        break;
       }
     } else {
       // 4b. GLOBAL scope: load lineage-0 memories directly (no persona picker needed)

@@ -15,7 +15,9 @@ import { setChannelLlmCache } from "../../../utils/cache/channelLlmCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import {
+  acknowledgeModalSubmitForRefresh,
   replyInfoEmbed,
+  replyComponentsV2Status,
   promptWithPaginatedModal,
   safeSelectOptionText,
   replyPaginatedPersonaChoicesV2,
@@ -395,7 +397,16 @@ export async function execute(
           },
         ],
       });
-      if (personaModalResult.outcome !== "submit") continue;
+      if (personaModalResult.outcome !== "submit") {
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "general.pagination.select_persona_title",
+          "general.pagination.reloading_persona_picker",
+          ColorCode.INFO,
+        );
+        continue;
+      }
       // biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees values
       const personaModalInteraction = personaModalResult.interaction!;
       const selectedPersonaCodename = personaModalResult.values?.[MODEL_SELECT_ID];
@@ -421,16 +432,19 @@ export async function execute(
       }
       // Invalidate server cache so next loadAllPersonasForServer picks up persona_llm
       invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
-      await replyInfoEmbed(personaModalInteraction, locale, {
-        titleKey: "commands.config.model.text.success_title",
-        descriptionKey: "commands.config.model.text.scope_set_persona_success",
-        descriptionVars: {
+      await acknowledgeModalSubmitForRefresh(personaModalInteraction);
+      await replyComponentsV2Status(
+        interaction,
+        locale,
+        "commands.config.model.text.success_title",
+        "commands.config.model.text.scope_set_persona_success",
+        ColorCode.SUCCESS,
+        {
           persona: selectedPersona.tomori_nickname,
           model: selectedPersonaModel.llm_codename,
         },
-        color: ColorCode.SUCCESS,
-      });
-      break;
+        "general.pagination.reloading_persona_picker",
+      );
     }
     return;
   }

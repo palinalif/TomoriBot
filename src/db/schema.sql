@@ -345,6 +345,7 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   api_key BYTEA, -- encrypted
   trigger_words TEXT[] DEFAULT '{}',
   autoch_disc_ids TEXT[] DEFAULT '{}',
+  autoch_persona_overrides JSONB DEFAULT '[]'::JSONB,
   autoch_threshold INT DEFAULT 0, -- 0 with configured channels means always-reply, otherwise minimum messages before auto-chat
   autoch_threshold_max INT DEFAULT 0, -- 0 keeps fixed/always behavior; > autoch_threshold enables a shared random range
   message_fetch_limit INT DEFAULT 80,
@@ -610,6 +611,7 @@ SELECT add_column_if_not_exists('tomori_configs', 'welcome_channel_disc_id', 'TE
 SELECT add_column_if_not_exists('tomori_configs', 'thought_log_channel_disc_id', 'TEXT', 'NULL');
 SELECT add_column_if_not_exists('tomori_configs', 'welcome_prompt', 'TEXT', 'NULL');
 SELECT add_column_if_not_exists('tomori_configs', 'welcome_persona_id', 'INTEGER', 'NULL');
+SELECT add_column_if_not_exists('tomori_configs', 'autoch_persona_overrides', 'JSONB', '''[]''::JSONB');
 
 -- Add hidden tool notice registry (April 2026)
 -- Stores hidden notice keys only; missing entries remain visible by default

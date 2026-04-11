@@ -36,6 +36,7 @@ export default {
       select_page_title: `Select Page`,
       select_page_description: `Choose a page to view from {totalItems} items across {totalPages} pages:`,
       select_persona_title: `Select Persona`,
+      reloading_persona_picker: `Refreshing the persona picker...`,
       persona_no_attributes: `No attributes configured yet.`,
       persona_select_button: `Select`,
     },
@@ -3331,13 +3332,24 @@ Disabled RP mode on **{disabled_count}** channel(s): {disabled_channels}
       "auto-trigger": {
         description: `Manage auto-chat settings`,
         channels: {
-          description: `Manage the full set of channels where I will automatically chat.`,
+          description: `Manage the full set of channels where I will automatically chat, or target one channel to pick its persona.`,
+          channel_description: `Optional single text channel to configure. Leave empty to open the bulk channel checklist.`,
           modal_title: `Manage Auto-Trigger Channels`,
           checkbox_label: `Auto-Trigger Channels`,
           checkbox_label_continued: `Auto-Trigger Channels (Continued)`,
           checkbox_description: `Checked channels stay in the auto-trigger set. Unchecked channels are removed from it.`,
+          single_modal_title: `Configure Auto-Trigger Channel`,
+          single_enabled_label: `Enable Auto-Trigger`,
+          single_enabled_description: `Turn auto-trigger on or off for this channel.`,
+          single_persona_label: `Auto-Trigger Persona`,
+          single_persona_description: `Pick which persona auto-trigger and channel-scoped always-reply should use here. Trigger words still work normally.`,
+          single_persona_placeholder: `Current: {persona}`,
+          main_persona_description: `Main Persona`,
+          alter_persona_description: `Alter Persona`,
           no_channels_title: `No Eligible Channels`,
           no_channels_description: `There are no text channels available to manage in this server.`,
+          invalid_channel_title: `Invalid Channel`,
+          invalid_channel_description: `Please choose a server text channel that can be used for auto-trigger.`,
           select_page_title: `Manage Auto-Trigger Channels`,
           select_page_description: `This server has **{channel_count}** eligible text channel(s) across **{total_pages}** page(s).
 Currently enabled: **{selected_count}**.`,
@@ -3350,6 +3362,9 @@ Currently enabled: **{selected_count}**.`,
           success_description: `Enabled auto-trigger on **{enabled_count}** channel(s): {enabled_channels}
 Disabled auto-trigger on **{disabled_count}** channel(s): {disabled_channels}
 **{selected_count}** channel(s) are currently enabled.`,
+          single_success_title: `Auto-Trigger Channel Updated`,
+          single_success_enabled_description: `Auto-trigger is now enabled in {channel} and will use **{persona}**.`,
+          single_success_disabled_description: `Auto-trigger is now disabled in {channel}.`,
         },
         threshold: {
           description: `Set the shared auto-chat range for configured auto-chat channels.`,

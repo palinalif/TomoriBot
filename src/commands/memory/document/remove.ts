@@ -10,7 +10,10 @@ import { sql } from "@/utils/db/client";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import {
+  acknowledgeModalSubmitForRefresh,
   replyInfoEmbed,
+  replyComponentsV2Status,
+  updateButtonComponentsV2Status,
   replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   safeSelectOptionText,
@@ -31,7 +34,8 @@ async function performDocumentRemoval(
   userData: UserRow,
   replyInteraction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
   locale: string,
-): Promise<void> {
+  suppressSuccessReply = false,
+): Promise<boolean> {
   const deletedRows =
     targetTomoriId === null
       ? await sql`
@@ -67,21 +71,25 @@ async function performDocumentRemoval(
       descriptionKey: "general.errors.update_failed_description",
       color: ColorCode.ERROR,
     });
-    return;
+    return false;
   }
 
   if (replyInteraction.guildId) {
     invalidateTomoriStateCache(replyInteraction.guildId);
   }
 
-  await replyInfoEmbed(replyInteraction, locale, {
-    titleKey: "commands.forget.document.success_title",
-    descriptionKey: "commands.forget.document.success_description",
-    descriptionVars: {
-      name: deletedRow.document_name,
-    },
-    color: ColorCode.SUCCESS,
-  });
+  if (!suppressSuccessReply) {
+    await replyInfoEmbed(replyInteraction, locale, {
+      titleKey: "commands.forget.document.success_title",
+      descriptionKey: "commands.forget.document.success_description",
+      descriptionVars: {
+        name: deletedRow.document_name,
+      },
+      color: ColorCode.SUCCESS,
+    });
+  }
+
+  return true;
 }
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
@@ -194,12 +202,16 @@ export async function execute(
         personaSelectionInteraction = personaSelection.interaction;
         const selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
         if (!selectedPersona?.tomori_id) {
-          await replyInfoEmbed(personaSelectionInteraction, locale, {
-            titleKey: "general.errors.invalid_option_title",
-            descriptionKey: "general.errors.invalid_option_description",
-            color: ColorCode.ERROR,
-          });
-          return;
+          await updateButtonComponentsV2Status(
+            personaSelectionInteraction,
+            locale,
+            "general.errors.invalid_option_title",
+            "general.errors.invalid_option_description",
+            ColorCode.ERROR,
+            undefined,
+            "general.pagination.reloading_persona_picker",
+          );
+          continue;
         }
         targetTomoriId = selectedPersona.tomori_id;
       }
@@ -223,12 +235,24 @@ export async function execute(
 					`;
 
       if (!documents || documents.length === 0) {
-        await replyInfoEmbed(selectionInteraction, locale, {
-          titleKey: "commands.forget.document.none_title",
-          descriptionKey: "commands.forget.document.none_description",
-          color: ColorCode.WARN,
-        });
-        return;
+        if (personaSelectionInteraction) {
+          await updateButtonComponentsV2Status(
+            personaSelectionInteraction,
+            locale,
+            "commands.forget.document.none_title",
+            "commands.forget.document.none_description",
+            ColorCode.WARN,
+            undefined,
+            "general.pagination.reloading_persona_picker",
+          );
+        } else {
+          await replyInfoEmbed(selectionInteraction, locale, {
+            titleKey: "commands.forget.document.none_title",
+            descriptionKey: "commands.forget.document.none_description",
+            color: ColorCode.WARN,
+          });
+        }
+        continue;
       }
 
       const documentOptions: SelectOption[] = documents.map((doc) => ({
@@ -251,9 +275,16 @@ export async function execute(
         ],
       });
 
-      // Handle modal outcome - loop back to persona picker on dismiss
+      // Handle modal outcome - keep the persona picker loop alive when the modal closes
       if (modalResult.outcome !== "submit") {
         log.info(`Document removal modal ${modalResult.outcome} for user ${userData.user_id}`);
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "general.pagination.select_persona_title",
+          "general.pagination.reloading_persona_picker",
+          ColorCode.INFO,
+        );
         continue;
       }
 
@@ -279,9 +310,41 @@ export async function execute(
 
       const modalSubmitInteraction = modalResult.interaction;
       const selectedId = Number.parseInt(selectedIdStr, 10);
+      const selectedDocument = documents.find((document) => document.document_id === selectedId);
+      if (!selectedDocument) {
+        await replyInfoEmbed(modalSubmitInteraction, locale, {
+          titleKey: "general.errors.invalid_option_title",
+          descriptionKey: "general.errors.invalid_option_description",
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
 
-      await performDocumentRemoval(tomoriState, targetTomoriId, selectedId, userData, modalSubmitInteraction, locale);
-      break;
+      const removalSucceeded = await performDocumentRemoval(
+        tomoriState,
+        targetTomoriId,
+        selectedId,
+        userData,
+        modalSubmitInteraction,
+        locale,
+        true,
+      );
+      if (!removalSucceeded) {
+        return;
+      }
+      await acknowledgeModalSubmitForRefresh(modalSubmitInteraction);
+      await replyComponentsV2Status(
+        interaction,
+        locale,
+        "commands.forget.document.success_title",
+        "commands.forget.document.success_description",
+        ColorCode.SUCCESS,
+        {
+          name: selectedDocument.document_name,
+        },
+        "general.pagination.reloading_persona_picker",
+      );
     }
   } catch (error) {
     const context: ErrorContext = {

@@ -237,6 +237,11 @@ function normalizeDisabledLlmParams(value: unknown): SupportedParamValue[] {
 
 const toolNoticeKeySchema = z.enum(TOOL_NOTICE_KEYS);
 const supportedParamSchema = z.enum(SUPPORTED_PARAM_VALUES);
+export const autochatPersonaOverrideSchema = z.object({
+  channel_disc_id: z.string(),
+  tomori_id: z.number().int(),
+});
+export type AutochatPersonaOverride = z.infer<typeof autochatPersonaOverrideSchema>;
 
 export const tomoriConfigSchema = z.object({
   tomori_config_id: z.number().optional(),
@@ -273,6 +278,10 @@ export const tomoriConfigSchema = z.object({
   key_version: z.number().int().default(1).optional(), // Added November 2025 - Encryption key version for rotation
   trigger_words: z.array(z.string()).default([]),
   autoch_disc_ids: z.array(z.string()).default([]),
+  autoch_persona_overrides: z.preprocess(
+    (value) => normalizeJsonbArray(value),
+    z.array(autochatPersonaOverrideSchema).default([]),
+  ), // Added April 2026 - Optional per-channel persona assignment for auto-trigger channels
   rp_channel_ids: z.array(z.string()).default([]), // Added February 2026 - Channels where emojis/stickers are always suppressed
   private_channel_ids: z.array(z.string()).default([]), // Added March 2026 - Channels where STMs cannot leak out and thought logs are suppressed
   crosschannel_blocklist_ids: z.array(z.string()).default([]), // Added April 2026 - Channels blocked as cross_channel_message targets; thread parents also apply

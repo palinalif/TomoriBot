@@ -9,7 +9,13 @@ import {
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
-import { promptWithModal, replyInfoEmbed, replyPaginatedPersonaChoicesV2 } from "../../utils/discord/interactionHelper";
+import {
+  acknowledgeModalSubmitForRefresh,
+  promptWithModal,
+  replyComponentsV2Status,
+  replyInfoEmbed,
+  replyPaginatedPersonaChoicesV2,
+} from "../../utils/discord/interactionHelper";
 import type { TomoriState, UserRow } from "../../types/db/schema";
 import { sql } from "@/utils/db/client";
 import { loadAllPersonasForServer } from "../../utils/db/dbRead";
@@ -87,7 +93,7 @@ export async function execute(
     }
 
     // 3. Loop: show paginated persona selector, then modal.
-    //    On modal dismiss, loop back to persona picker.
+    //    After each completed transaction, refresh the picker so the user can continue.
     while (true) {
       // 3a. Show paginated persona selector.
       //    preserveSelectedInteraction=true leaves the ButtonInteraction unacknowledged
@@ -176,6 +182,13 @@ export async function execute(
 
       if (modalResult.outcome !== "submit") {
         log.info(`ATTG modal ${modalResult.outcome} for user ${userData.user_id}`);
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "general.pagination.select_persona_title",
+          "general.pagination.reloading_persona_picker",
+          ColorCode.INFO,
+        );
         continue;
       }
 
@@ -223,13 +236,17 @@ export async function execute(
         // 6a. Invalidate cache so next access gets fresh data
         invalidateTomoriStateCache(interaction.guild.id);
 
-        await replyInfoEmbed(modalSubmitInteraction, locale, {
-          titleKey: "commands.novelai.attg.cleared_title",
-          descriptionKey: "commands.novelai.attg.cleared_description",
-          descriptionVars: { persona_name: selectedPersona.tomori_nickname },
-          color: ColorCode.SUCCESS,
-        });
-        break;
+        await acknowledgeModalSubmitForRefresh(modalSubmitInteraction);
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "commands.novelai.attg.cleared_title",
+          "commands.novelai.attg.cleared_description",
+          ColorCode.SUCCESS,
+          { persona_name: selectedPersona.tomori_nickname },
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
       }
 
       // 7. Write non-empty values to DB.
@@ -249,13 +266,16 @@ export async function execute(
       invalidateTomoriStateCache(interaction.guild.id);
 
       // 8. Success reply
-      await replyInfoEmbed(modalSubmitInteraction, locale, {
-        titleKey: "commands.novelai.attg.success_title",
-        descriptionKey: "commands.novelai.attg.success_description",
-        descriptionVars: { persona_name: selectedPersona.tomori_nickname },
-        color: ColorCode.SUCCESS,
-      });
-      break;
+      await acknowledgeModalSubmitForRefresh(modalSubmitInteraction);
+      await replyComponentsV2Status(
+        interaction,
+        locale,
+        "commands.novelai.attg.success_title",
+        "commands.novelai.attg.success_description",
+        ColorCode.SUCCESS,
+        { persona_name: selectedPersona.tomori_nickname },
+        "general.pagination.reloading_persona_picker",
+      );
     }
   } catch (error) {
     const context = {

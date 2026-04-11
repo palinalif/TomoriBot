@@ -310,6 +310,40 @@ async function formatRandomTriggers(
   return lines.join("\n");
 }
 
+async function formatAutochatChannels(
+  client: Client,
+  config: TomoriConfigRow,
+  personaNameMap: Map<number, string>,
+  mainPersonaName: string,
+  locale: string,
+): Promise<string> {
+  const channelIds = config.autoch_disc_ids ?? [];
+  if (channelIds.length === 0) {
+    return localizer(locale, "commands.choices.none");
+  }
+
+  if (channelIds.length > MAX_ITEMS_DISPLAY) {
+    return localizer(locale, "commands.tool.status.item_count", {
+      count: channelIds.length,
+    });
+  }
+
+  const overrideMap = new Map(
+    (config.autoch_persona_overrides ?? []).map((override) => [override.channel_disc_id, override.tomori_id]),
+  );
+
+  const lines = await Promise.all(
+    channelIds.map(async (channelId, index) => {
+      const mention = await resolveChannelMention(client, channelId, locale);
+      const personaId = overrideMap.get(channelId);
+      const personaName = personaId != null ? (personaNameMap.get(personaId) ?? `ID:${personaId}`) : mainPersonaName;
+      return `${index + 1}. ${mention} · ${personaName}`;
+    }),
+  );
+
+  return lines.join("\n");
+}
+
 /**
  * Formats the list of channel-level LLM overrides as a numbered list.
  * Each entry shows channel mention and the model codename + provider.
@@ -567,6 +601,9 @@ export async function execute(
             personaNameMap.set(persona.tomori_id, persona.tomori_nickname);
           }
         }
+        const mainPersonaName =
+          allPersonas.find((persona) => !persona.is_alter)?.tomori_nickname ??
+          localizer(locale, "commands.choices.none");
 
         // 4. Format timezone (UTC+08:00 style)
         const timezoneOffset = config.timezone_offset;
@@ -618,7 +655,7 @@ export async function execute(
           randomTriggersValue,
           channelLlmOverridesValue,
         ] = await Promise.all([
-          formatChannelList(client, config.autoch_disc_ids, locale),
+          formatAutochatChannels(client, config, personaNameMap, mainPersonaName, locale),
           formatChannelList(client, config.rp_channel_ids, locale),
           formatChannelList(client, config.private_channel_ids, locale),
           formatChannelList(client, config.crosschannel_blocklist_ids ?? [], locale),

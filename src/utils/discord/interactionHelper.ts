@@ -824,6 +824,8 @@ function buildV2StatusComponents(
   descriptionKey: string,
   color: string | number,
   descriptionVars?: Record<string, string | number | boolean>,
+  secondaryDescriptionKey?: string,
+  secondaryDescriptionVars?: Record<string, string | number | boolean>,
 ): TopLevelComponentData[] {
   const container: ContainerComponentData<ComponentInContainerData> = {
     type: ComponentType.Container,
@@ -837,10 +839,95 @@ function buildV2StatusComponents(
         type: ComponentType.TextDisplay,
         content: localizer(locale, descriptionKey, descriptionVars),
       },
+      ...(secondaryDescriptionKey
+        ? [
+            {
+              type: ComponentType.TextDisplay,
+              content: `**${localizer(locale, secondaryDescriptionKey, secondaryDescriptionVars)}**`,
+            } satisfies ComponentInContainerData,
+          ]
+        : []),
     ],
   };
 
   return [container];
+}
+
+export async function replyComponentsV2Status(
+  interaction: ChatInputCommandInteraction | ButtonInteraction,
+  locale: string,
+  titleKey: string,
+  descriptionKey: string,
+  color: string | number,
+  descriptionVars?: Record<string, string | number | boolean>,
+  secondaryDescriptionKey?: string,
+  secondaryDescriptionVars?: Record<string, string | number | boolean>,
+): Promise<void> {
+  const components = buildV2StatusComponents(
+    locale,
+    titleKey,
+    descriptionKey,
+    color,
+    descriptionVars,
+    secondaryDescriptionKey,
+    secondaryDescriptionVars,
+  );
+
+  try {
+    if (interaction.replied || interaction.deferred) {
+      await interaction.editReply({
+        components,
+        flags: MessageFlags.IsComponentsV2,
+      });
+    } else {
+      await interaction.reply({
+        components,
+        flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+      });
+    }
+  } catch (error) {
+    log.warn("Failed to update Components V2 status reply:", error);
+  }
+}
+
+export async function updateButtonComponentsV2Status(
+  interaction: ButtonInteraction,
+  locale: string,
+  titleKey: string,
+  descriptionKey: string,
+  color: string | number,
+  descriptionVars?: Record<string, string | number | boolean>,
+  secondaryDescriptionKey?: string,
+  secondaryDescriptionVars?: Record<string, string | number | boolean>,
+): Promise<void> {
+  const components = buildV2StatusComponents(
+    locale,
+    titleKey,
+    descriptionKey,
+    color,
+    descriptionVars,
+    secondaryDescriptionKey,
+    secondaryDescriptionVars,
+  );
+
+  try {
+    await interaction.update({
+      components,
+      flags: MessageFlags.IsComponentsV2,
+    });
+  } catch (error) {
+    log.warn("Failed to update button interaction with Components V2 status:", error);
+  }
+}
+
+export async function acknowledgeModalSubmitForRefresh(interaction: ModalSubmitInteraction): Promise<void> {
+  try {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferUpdate();
+    }
+  } catch (error) {
+    log.warn("Failed to silently acknowledge modal submit for picker refresh:", error);
+  }
 }
 
 /**
