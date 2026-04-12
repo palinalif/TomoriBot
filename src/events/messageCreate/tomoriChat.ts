@@ -3775,9 +3775,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         channelWebhook = webhookResult.webhook;
         webhookErrorReason = webhookResult.errorReason;
 
-        if (channelWebhook) {
-          log.info(`Webhook ready for multi-persona responses in ${channel.type} ${channel.id}`);
-        } else if (webhookErrorReason) {
+        if (!channelWebhook && webhookErrorReason) {
           await sendWebhookErrorEmbed(channel, locale, webhookErrorReason);
           webhookErrorNotified = true;
         }
@@ -4778,14 +4776,6 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         }
       }
 
-      if (REACTION_CONTEXT_ENABLED) {
-        log.info(
-          `Reaction context summary: messages_with_reactions=${reactionContextBudget.messagesWithReactions}, ` +
-            `api_calls_used=${reactionContextBudget.callsUsed}/${REACTION_CONTEXT_MAX_API_CALLS_PER_TURN}, ` +
-            `counts_only_fallbacks=${reactionContextBudget.fallbackCount}`,
-        );
-      }
-
       // Add the bot's own Discord user ID only when no alter persona identity is
       // active in this turn. When alters are present, exposing both the bot account
       // ID and persona IDs can confuse tool targeting.
@@ -4935,14 +4925,6 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               // Convert to Discord emoji string format
               emojiStrings = sortedEmojis.map(
                 (e) => `<${e.is_animated ? "a" : ""}:${e.emoji_name}:${e.emoji_disc_id}>`,
-              );
-
-              // Debug: Log loaded emoji count and sample
-              log.info(
-                `[Emoji Load] Loaded ${emojiStrings.length} emojis from cache. Sample: ${emojiStrings
-                  .slice(0, 5)
-                  .map((e) => e.match(/:[^:]+:/)?.[0])
-                  .join(", ")}`,
               );
             }
           }
@@ -5675,10 +5657,6 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               }
               // Regular stop requests fall through to the stream loop's built-in handling
             }
-
-            log.info(
-              `Streaming LLM Call Iteration: ${i + 1}/${MAX_FUNCTION_CALL_ITERATIONS}. History items: ${functionInteractionHistory.length}`,
-            );
 
             try {
               // Debug: Log final context right before sending to LLM
@@ -7431,14 +7409,6 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 // Look up the lineage ID for this persona from the responses
                 const matchingResponse = personaResponses.find((r) => r.tomoriId === tomoriId);
                 const personaLineageId = matchingResponse?.personaLineageId ?? null;
-                const userCacheKey = `shortterm:user:${userDiscId}:${channel.id}:${tomoriId}`;
-                const serverCacheKey = isDMChannel
-                  ? "n/a"
-                  : `shortterm:server:${serverDiscId}:${channel.id}:${tomoriId}`;
-                log.info(
-                  `[tomoriChat] [CONVERSATION_STORAGE] Calling storeShortTermMemory - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}, messageCount=${messagesToStore.length}, tomoriId=${tomoriId}, personaLineageId=${personaLineageId}`,
-                );
-
                 storeShortTermMemory(
                   userDiscId,
                   channel.id,
@@ -7449,19 +7419,9 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                   tomoriId,
                   personaLineageId,
                 );
-
-                log.info(
-                  `[tomoriChat] [CONVERSATION_STORAGE] Finished storeShortTermMemory - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}`,
-                );
               }
             } else {
               // Fallback: no persona responses captured (e.g., all failed), store without tomoriId
-              const userCacheKey = `shortterm:user:${userDiscId}:${channel.id}`;
-              const serverCacheKey = isDMChannel ? "n/a" : `shortterm:server:${serverDiscId}:${channel.id}`;
-              log.info(
-                `[tomoriChat] [CONVERSATION_STORAGE] Calling storeShortTermMemory (no persona) - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}, messageCount=${messagesToStore.length}`,
-              );
-
               storeShortTermMemory(
                 userDiscId,
                 channel.id,
@@ -7469,10 +7429,6 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 isDMChannel ? "DM" : serverDiscId,
                 serverName,
                 channelName,
-              );
-
-              log.info(
-                `[tomoriChat] [CONVERSATION_STORAGE] Finished storeShortTermMemory - userCacheKey=${userCacheKey}, serverCacheKey=${serverCacheKey}`,
               );
             }
           }

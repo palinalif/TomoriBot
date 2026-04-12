@@ -69,6 +69,12 @@ interface CommandDescriptionViolation {
   locale: string;
 }
 
+interface ExpectedMetadataKey {
+  key: string;
+  file: string;
+  strict: boolean;
+}
+
 /**
  * Interface for analysis results
  */
@@ -304,6 +310,93 @@ function isCommandDescriptionKey(key: string): boolean {
   // Pattern: commands.*.*.command_description or commands.*.*.*.command_description
   // Examples: commands.help.memory.command_description, commands.teach.memory.personal.command_description
   return /^commands\.[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+\.command_description$/.test(key);
+}
+
+function getLocalizationAliases(key: string): string[] {
+  const aliases: string[] = [];
+
+  const staticAliases: Record<string, string> = {
+    "commands.memory.description": "commands.teach.memory.description",
+    "commands.conditioning.reward.description": "commands.reward.description",
+    "commands.conditioning.punish.description": "commands.punish.description",
+    "commands.persona.attribute.description": "commands.teach.attribute.description",
+    "commands.persona.sample-dialogue.description": "commands.teach.sampledialogue.description",
+    "commands.persona.prompt.description": "commands.teach.personaprompt.description",
+    "commands.memory.document.description": "commands.teach.document.description",
+    "commands.memory.personal.description": "commands.teach.memory.personal.description",
+    "commands.memory.server.description": "commands.teach.memory.server.description",
+    "commands.persona.attribute.add.description": "commands.teach.attribute.description",
+    "commands.persona.attribute.remove.description": "commands.forget.attribute.description",
+    "commands.persona.sample-dialogue.add.description": "commands.teach.sampledialogue.description",
+    "commands.persona.sample-dialogue.remove.description": "commands.forget.sampledialogue.description",
+    "commands.persona.prompt.set.description": "commands.teach.personaprompt.description",
+    "commands.persona.prompt.remove.description": "commands.forget.personaprompt.description",
+    "commands.memory.document.add.description": "commands.teach.document.description",
+    "commands.memory.document.remove.description": "commands.forget.document.description",
+    "commands.memory.personal.add.description": "commands.teach.memory.personal.description",
+    "commands.memory.personal.remove.description": "commands.forget.memory.personal.description",
+    "commands.memory.server.add.description": "commands.teach.memory.server.description",
+    "commands.memory.server.remove.description": "commands.forget.memory.server.description",
+  };
+
+  const staticAlias = staticAliases[key];
+  if (staticAlias) {
+    aliases.push(staticAlias);
+  }
+
+  const pathAliases: Record<string, string> = {
+    "commands.config.bot-permissions.description": "commands.config.permissions.description",
+    "commands.config.send-limit.description": "commands.config.sendlimit.description",
+    "commands.server.always-reply.description": "commands.server.alwaysreply.description",
+    "commands.server.quota.image-generation.description": "commands.server.quota.imagegen.description",
+    "commands.server.quota.text-generation.description": "commands.server.quota.textgen.description",
+    "commands.server.quota.video-generation.description": "commands.server.quota.videogen.description",
+    "commands.config.model-fallback.remove.description": "commands.config.remove.modelfallback.description",
+    "commands.config.model-override.remove.description": "commands.config.remove.modeloverride.description",
+  };
+  const pathAlias = pathAliases[key];
+  if (pathAlias) {
+    aliases.push(pathAlias);
+  }
+
+  const systemPromptMatch = key.match(/^commands\.config\.system-prompt\.(set|remove|preset)\.description$/);
+  if (systemPromptMatch) {
+    const aliasByAction: Record<string, string> = {
+      set: "commands.config.prompt.change.command_description",
+      remove: "commands.config.prompt.clear.command_description",
+      preset: "commands.config.prompt.preset.command_description",
+    };
+    aliases.push(aliasByAction[systemPromptMatch[1]]);
+  }
+
+  const novelAiImageTagsMatch = key.match(/^commands\.novelai\.image-tags\.([a-z0-9-]+)\.description$/);
+  if (novelAiImageTagsMatch) {
+    aliases.push(`commands.novelai.tags.${novelAiImageTagsMatch[1]}.description`);
+  }
+
+  const conditioningMatch = key.match(
+    /^commands\.conditioning\.(reward|punish)\.([a-z0-9-]+)\.(description|reason_description)$/,
+  );
+  if (conditioningMatch) {
+    const [, type, actionKey, suffix] = conditioningMatch;
+    aliases.push(`commands.${type}.${actionKey}.${suffix}`);
+  }
+
+  return aliases;
+}
+
+function resolveLocalizationKey(key: string, availableKeys: Set<string>): string | null {
+  if (availableKeys.has(key)) {
+    return key;
+  }
+
+  for (const alias of getLocalizationAliases(key)) {
+    if (availableKeys.has(alias)) {
+      return alias;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -852,8 +945,8 @@ async function extractGetLocaleSubKeysUsage(availableKeys: Set<string>): Promise
  * @param _availableKeys - Unused; retained for backwards-compatible call sites
  * @returns Array of matched description keys derived from the filesystem layout
  */
-async function extractCommandDescriptionKeys(_availableKeys: Set<string>): Promise<string[]> {
-  const matchedKeys: string[] = [];
+async function extractExpectedCommandMetadataKeys(): Promise<ExpectedMetadataKey[]> {
+  const expectedKeys: ExpectedMetadataKey[] = [];
   const commandsPath = join(process.cwd(), "src", "commands");
 
   try {
@@ -865,23 +958,71 @@ async function extractCommandDescriptionKeys(_availableKeys: Set<string>): Promi
       const catName = cat.name;
 
       // 1. Top-level command description: commands.{category}.description
-      const catDescKey = `commands.${catName}.description`;
-      matchedKeys.push(catDescKey);
+      expectedKeys.push({
+        key: `commands.${catName}.description`,
+        file: `src/commands/${catName}`,
+        strict: false,
+      });
 
       // 2. Subcommand group descriptions: commands.{category}.{group}.description
       const catPath = join(commandsPath, catName);
       const subEntries = await readdir(catPath, { withFileTypes: true });
       for (const sub of subEntries) {
-        if (!sub.isDirectory()) continue;
-        const groupDescKey = `commands.${catName}.${sub.name}.description`;
-        matchedKeys.push(groupDescKey);
+        const subPath = join(catPath, sub.name);
+
+        if (sub.isDirectory()) {
+          expectedKeys.push({
+            key: `commands.${catName}.${sub.name}.description`,
+            file: `src/commands/${catName}/${sub.name}`,
+            strict: false,
+          });
+
+          const groupFiles = await readdir(subPath, { withFileTypes: true });
+          for (const groupFile of groupFiles) {
+            if (!groupFile.isFile() || !groupFile.name.endsWith(".ts")) continue;
+
+            const relativePath = `src/commands/${catName}/${sub.name}/${groupFile.name}`;
+            const filePath = join(subPath, groupFile.name);
+            const content = await readFile(filePath, "utf-8");
+            const nameMatch = content.match(/setName\("([^"]+)"\)/);
+            const subcommandName = nameMatch?.[1] ?? groupFile.name.replace(/\.ts$/, "");
+
+            expectedKeys.push({
+              key: `commands.${catName}.${sub.name}.${subcommandName}.description`,
+              file: relativePath,
+              strict: true,
+            });
+
+            if (catName === "conditioning" && (sub.name === "reward" || sub.name === "punish")) {
+              expectedKeys.push({
+                key: `commands.${catName}.${sub.name}.${subcommandName}.reason_description`,
+                file: relativePath,
+                strict: true,
+              });
+            }
+          }
+
+          continue;
+        }
+
+        if (!sub.isFile() || !sub.name.endsWith(".ts")) continue;
+
+        const relativePath = `src/commands/${catName}/${sub.name}`;
+        const content = await readFile(subPath, "utf-8");
+        const nameMatch = content.match(/setName\("([^"]+)"\)/);
+        const subcommandName = nameMatch?.[1] ?? sub.name.replace(/\.ts$/, "");
+        expectedKeys.push({
+          key: `commands.${catName}.${subcommandName}.description`,
+          file: relativePath,
+          strict: true,
+        });
       }
     }
   } catch (error) {
     log.warn("Failed to scan command directories for description keys", error);
   }
 
-  return matchedKeys;
+  return expectedKeys;
 }
 
 /**
@@ -1057,8 +1198,19 @@ export async function analyzeLocalizationKeys(): Promise<AnalysisResult> {
   for (const key of subKeyMatches) referencedKeys.add(key);
 
   // 2. Add keys derived from filesystem-based commandLoader patterns
-  const commandDescKeys = await extractCommandDescriptionKeys(availableKeys);
-  for (const key of commandDescKeys) referencedKeys.add(key);
+  const expectedMetadataKeys = await extractExpectedCommandMetadataKeys();
+  for (const { key, file, strict } of expectedMetadataKeys) {
+    const resolvedKey = resolveLocalizationKey(key, availableKeys);
+    const trackedKey = resolvedKey ?? key;
+
+    referencedKeys.add(trackedKey);
+    if (strict) {
+      if (!referencedKeysMap.has(trackedKey)) {
+        referencedKeysMap.set(trackedKey, new Set());
+      }
+      referencedKeysMap.get(trackedKey)?.add(file);
+    }
+  }
 
   // 3. Add keys that are provably used but cannot be detected statically
   for (const key of KNOWN_DYNAMIC_LOCALE_KEYS) referencedKeys.add(key);
@@ -1066,7 +1218,7 @@ export async function analyzeLocalizationKeys(): Promise<AnalysisResult> {
   // Find missing keys (referenced but not available)
   const missingKeys: KeyUsage[] = [];
   for (const [key, files] of referencedKeysMap) {
-    if (!availableKeys.has(key)) {
+    if (!resolveLocalizationKey(key, availableKeys)) {
       missingKeys.push({ key, files: new Set(files) });
     }
   }

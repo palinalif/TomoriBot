@@ -510,10 +510,6 @@ export class OpenrouterProvider
    * @returns Promise<OpenrouterProviderConfig> - Provider-specific configuration object
    */
   async createConfig(tomoriState: TomoriState, apiKey: string): Promise<OpenrouterProviderConfig> {
-    log.info(`createConfig for model: ${tomoriState.llm.llm_codename}`);
-    log.info(`has_tools flag: ${tomoriState.llm.has_tools}`);
-    log.info(`sees_images flag: ${tomoriState.llm.sees_images}`);
-
     // Override capabilities with OpenRouter API data
     // This prevents routing errors caused by incorrect database flags
     let effectiveHasTools = tomoriState.llm.has_tools;
@@ -646,10 +642,6 @@ export class OpenrouterProvider
         resolvedMaxOutputTokens = Math.min(tokenLimits.maxCompletionTokens, maxOutputTokensCap);
       }
     }
-    log.info(
-      `maxOutputTokens resolved to: ${resolvedMaxOutputTokens ?? "undefined (omitted from request)"} (cap: ${maxOutputTokensCap})`,
-    );
-
     const config: OpenrouterProviderConfig = {
       // For other-model, use the user-configured model codename (e.g., "openrouter/free")
       // rather than the placeholder codename "other-model" which OpenRouter rejects
@@ -739,8 +731,6 @@ export class OpenrouterProvider
         const contextAwareTools = await this.getTools(tomoriState, streamingContext);
         streamConfig.tools = contextAwareTools;
         log.info(`Context-aware tools loaded: ${contextAwareTools.length} tools`);
-      } else if (streamingContext && !modelSupportsToolsAfterOverride) {
-        log.info("Skipping context-aware tool reload - tools disabled by capability override");
       }
 
       // Create streaming context

@@ -1476,8 +1476,6 @@ async function buildContextNative({
         ],
         metadataTag: ContextItemTag.KNOWLEDGE_SERVER_EMOJIS,
       });
-
-      log.info(`Loaded ${sortedEmojis.length} emoji descriptions for server ${serverName}`);
     }
   }
 
@@ -1616,8 +1614,6 @@ async function buildContextNative({
         ],
         metadataTag: ContextItemTag.KNOWLEDGE_SERVER_STICKERS,
       });
-
-      log.info(`Loaded ${sortedStickers.length} sticker descriptions for server ${serverName}`);
     }
   }
 
@@ -2705,8 +2701,6 @@ async function getUserPresenceDetails(
   preloadedMember?: import("discord.js").GuildMember | null,
 ): Promise<string> {
   try {
-    log.info(`Fetching presence data for user ${userId} in guild ${guildId}`);
-
     // 1. Try to get the guild and member objects
     const guild = client.guilds.cache.get(guildId);
     if (!guild) {
@@ -2720,10 +2714,8 @@ async function getUserPresenceDetails(
     // Note: Fetching requires GUILD_PRESENCES intent to be enabled
     let member: import("discord.js").GuildMember | null = null;
     if (preloadedMember && preloadedMember.id === userId) {
-      log.info(`Using preloaded member data for ${userId} in guild ${guild.name}`);
       member = preloadedMember;
     } else {
-      log.info(`Fetching member data for ${userId} in guild ${guild.name} (development mode)`);
       member = await guild.members.fetch({ user: userId, force: true }).catch((error) => {
         log.warn(`Failed to fetch member ${userId}: ${error}`);
         return null;
@@ -2735,13 +2727,8 @@ async function getUserPresenceDetails(
       return "Offline or status unknown";
     }
 
-    log.info(`Member found: ${member.user.username} (${member.id})`);
-
     if (!member.presence) {
       log.warn(`No presence data available for ${member.user.username} (${member.id})`);
-      log.info(
-        `Presence permission check: GUILD_PRESENCES intent enabled: ${Boolean(client.options.intents?.has(GatewayIntentBits.GuildPresences))}`,
-      );
       return "Offline or status unknown";
     }
 
@@ -2757,17 +2744,9 @@ async function getUserPresenceDetails(
     const status = statusMap[member.presence.status] || "Status unknown";
     let result = status;
 
-    log.info(`User ${member.user.username} status: ${status}`);
-
     // 4. Format activities if present
     if (member.presence.activities && member.presence.activities.length > 0) {
-      log.info(`User ${member.user.username} has ${member.presence.activities.length} activities`);
-
       const activityDetails = member.presence.activities.map((activity) => {
-        log.info(
-          `Activity found: ${activity.type} - ${activity.name} - Details: ${activity.details || "none"} - State: ${activity.state || "none"}`,
-        );
-
         // Build activity description based on type
         switch (activity.type) {
           case 0: // Playing

@@ -64,9 +64,6 @@ export async function lazySyncGuildEmojis(guild: Guild, serverId: number, forceF
       now.getTime() - new Date(lastSync.last_updated).getTime() > CACHE_DURATION_MS;
 
     if (!needsFetch) {
-      log.info(
-        `Emoji cache is fresh for guild ${guild.name} (${guild.id}). Last synced: ${lastSync.last_updated}, Count: ${lastSync.emoji_count}`,
-      );
       return false;
     }
 

@@ -670,8 +670,6 @@ export async function loadUserRow(userDiscId: string): Promise<UserRow | null> {
 			`;
 
       if (!rows.length) {
-        // It's common for users not to exist yet, so use info level
-        log.info(`No user data found for ID ${userDiscId}.`);
         return null;
       }
 
@@ -870,7 +868,6 @@ export async function getPrivacyLevel(userDiscId: string): Promise<import("@/typ
 
     // 2. If user doesn't exist, return MINIMAL (default - most permissive)
     if (!result.length) {
-      log.info(`User ${userDiscId} not found, defaulting to privacy level MINIMAL`);
       return PrivacyLevel.MINIMAL;
     }
 
@@ -939,21 +936,16 @@ export async function getCrossServerShortTermMemoryOptIn(userDiscId: string): Pr
  */
 export async function loadServerEmojis(internalServerId: number): Promise<ServerEmojiRow[] | null> {
   try {
-    log.info(`[loadServerEmojis] Querying emojis for server_id: ${internalServerId}`);
     const emojiRows = await sql`
 			SELECT *
 			FROM server_emojis
 			WHERE server_id = ${internalServerId}
 		`;
 
-    log.info(`[loadServerEmojis] Found ${emojiRows.length} emoji row(s) from query`);
-
     if (!emojiRows || emojiRows.length === 0) {
-      log.info(`No custom emojis found for server ID ${internalServerId}.`);
       return null;
     }
 
-    // Validate the array of emojis
     const parsedEmojis = serverEmojiSchema.array().safeParse(emojiRows);
 
     if (!parsedEmojis.success) {
@@ -961,7 +953,6 @@ export async function loadServerEmojis(internalServerId: number): Promise<Server
       return null;
     }
 
-    log.info(`[loadServerEmojis] Validated ${parsedEmojis.data.length} emoji(s) successfully`);
     return parsedEmojis.data;
   } catch (error) {
     log.error(`Error loading emojis for server ID ${internalServerId}:`, error);
@@ -1977,7 +1968,6 @@ export async function getPendingRemindersForUser(
     }
 
     if (reminderData.length === 0) {
-      log.info(`No pending reminders found for user ${userDiscordId}`);
       return [];
     }
 

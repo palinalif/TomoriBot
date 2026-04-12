@@ -439,7 +439,7 @@ These modals have dynamic or large option sets that exceed Radio Group/Checkbox 
 | `/config model fallback`         | `config/model/fallback.ts`       | Dynamic model list, uses pagination                       |
 | `/config system-prompt preset`       | `config/system-prompt/preset.ts`     | Dynamic preset list from DB                               |
 | `/config api-key set`             | `config/api-key/set.ts`           | Provider select + text input combo; list may grow         |
-| `/persona prompt set`            | `persona/prompt/set.ts`         | Dynamic persona list + free-form prompt (up to 16000 chars, 4 fields) |
+| `/persona prompt set`            | `persona/prompt/set.ts`         | Persona picker embed first, then a prefilled free-form prompt modal (up to 16000 chars, 4 fields) |
 | `/persona attribute add`         | `persona/attribute/add.ts`      | Dynamic persona list, uses pagination                     |
 | `/persona sample-dialogue add`   | `persona/sample-dialogue/add.ts`| Dynamic persona list, uses pagination                     |
 | `/memory personal add`           | `memory/personal/add.ts`        | Dynamic memory list                                       |

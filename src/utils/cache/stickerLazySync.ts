@@ -64,9 +64,6 @@ export async function lazySyncGuildStickers(guild: Guild, serverId: number, forc
       now.getTime() - new Date(lastSync.last_updated).getTime() > CACHE_DURATION_MS;
 
     if (!needsFetch) {
-      log.info(
-        `Sticker cache is fresh for guild ${guild.name} (${guild.id}). Last synced: ${lastSync.last_updated}, Count: ${lastSync.sticker_count}`,
-      );
       return false;
     }
 

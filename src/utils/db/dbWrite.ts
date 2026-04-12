@@ -459,8 +459,8 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
       const selectedDiffusionModelId = selectedDiffusionModel ? selectedDiffusionModel.diffusion_model_id : null;
       const selectedEmbeddingModelId = selectedEmbeddingModel ? selectedEmbeddingModel.embedding_model_id : null;
 
-      const presetRows = await tx<Array<{ preset_trigger_words: string[] | null }>>`
-				SELECT preset_trigger_words
+      const presetRows = await tx<Array<{ preset_trigger_words: string[] | null; tomori_preset_desc: string | null }>>`
+				SELECT preset_trigger_words, tomori_preset_desc
 				FROM tomori_presets
 				WHERE tomori_preset_id = ${validConfig.presetId}
 				LIMIT 1
@@ -482,6 +482,7 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
 
       const defaultTriggers =
         dedupedPresetTriggers.length > 0 ? dedupedPresetTriggers : getBaseTriggerWords(validConfig.locale);
+      const presetPersonaPrompt = presetRows[0]?.tomori_preset_desc?.trim() || null;
 
       // 1. Create or update server record with DM support (Rule 15)
       // registration_locale is only set on INSERT (static field for analytics)
@@ -559,8 +560,8 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
 
       // Initialize persona-scoped config for the main persona.
       await tx`
-				INSERT INTO persona_configs (tomori_id, trigger_words)
-				VALUES (${tomori.tomori_id}, ${triggerWordsArrayLiteral}::text[])
+				INSERT INTO persona_configs (tomori_id, trigger_words, persona_prompt)
+				VALUES (${tomori.tomori_id}, ${triggerWordsArrayLiteral}::text[], ${presetPersonaPrompt})
 				ON CONFLICT (tomori_id) DO NOTHING
 			`;
 

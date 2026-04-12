@@ -11,18 +11,11 @@ import { sql } from "@/utils/db/client";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { replyInfoEmbed, promptWithRawModal } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
+import { combineModalPromptParts, splitPromptIntoModalParts } from "@/utils/text/modalPromptParts";
 
 const MODAL_CUSTOM_ID = "config_prompt_change_modal";
 const PROMPT_PART_MAX_LENGTH = 4000;
 const PROMPT_PART_COUNT = 4;
-
-function splitPromptIntoModalParts(prompt: string | null | undefined): string[] {
-  const promptValue = prompt ?? "";
-
-  return Array.from({ length: PROMPT_PART_COUNT }, (_, index) =>
-    promptValue.slice(index * PROMPT_PART_MAX_LENGTH, (index + 1) * PROMPT_PART_MAX_LENGTH),
-  );
-}
 
 /**
  * Configure the slash command subcommand metadata
@@ -79,7 +72,11 @@ export async function execute(
   let modalSubmitInteraction: ModalSubmitInteraction | undefined;
 
   try {
-    const existingPromptParts = splitPromptIntoModalParts(tomoriState.config.system_prompt);
+    const existingPromptParts = splitPromptIntoModalParts(
+      tomoriState.config.system_prompt,
+      PROMPT_PART_COUNT,
+      PROMPT_PART_MAX_LENGTH,
+    );
 
     // 4. Show modal with 4 text fields (first required, others optional)
     const modalResult = await promptWithRawModal(
@@ -93,6 +90,7 @@ export async function execute(
             customId: "prompt_part1",
             style: TextInputStyle.Paragraph,
             labelKey: "commands.config.prompt.change.part1_label",
+            descriptionKey: "commands.config.prompt.change.part1_description",
             placeholder: "commands.config.prompt.change.part1_placeholder",
             required: true,
             maxLength: PROMPT_PART_MAX_LENGTH,
@@ -145,11 +143,15 @@ export async function execute(
     }
 
     // 7. Extract and concatenate all parts
-    const part1 = modalResult.values?.prompt_part1 || "";
-    const part2 = modalResult.values?.prompt_part2 || "";
-    const part3 = modalResult.values?.prompt_part3 || "";
-    const part4 = modalResult.values?.prompt_part4 || "";
-    const systemPrompt = (part1 + part2 + part3 + part4).trim();
+    const systemPrompt = combineModalPromptParts(
+      [
+        modalResult.values?.prompt_part1 || "",
+        modalResult.values?.prompt_part2 || "",
+        modalResult.values?.prompt_part3 || "",
+        modalResult.values?.prompt_part4 || "",
+      ],
+      PROMPT_PART_MAX_LENGTH,
+    );
 
     // 8. Validate non-empty
     if (!systemPrompt) {

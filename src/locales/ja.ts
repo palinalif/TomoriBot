@@ -2926,8 +2926,10 @@ Prompt Guidance Rescale: {cfg_rescale}
       },
       prompt: {
         change: {
+          command_description: `行動を導くカスタムシステムプロンプトを設定します`,
           modal_title: `カスタムシステムプロンプトを設定`,
           part1_label: `システムプロンプト（1/4）`,
+          part1_description: `Discord の 4000 文字制限により、プロンプト入力は 4 つに分割されています。`,
           part1_placeholder: `例：{bot} はフレンドリーで親切...`,
           part2_label: `システムプロンプト（2/4）- 任意`,
           part2_placeholder: `追加の指示...`,
@@ -2944,6 +2946,7 @@ Prompt Guidance Rescale: {cfg_rescale}
 \`\`\``,
         },
         clear: {
+          command_description: `カスタムシステムプロンプトを削除してデフォルトプロンプトに戻します`,
           no_custom_prompt_title: `カスタムプロンプトは未設定です`,
           no_custom_prompt_description: `カスタムシステムプロンプトは設定されていません。現在はデフォルトのプロンプトを使用しています：
 \`\`\`
@@ -2956,6 +2959,7 @@ Prompt Guidance Rescale: {cfg_rescale}
 \`\`\``,
         },
         preset: {
+          command_description: `システムプロンプトのプリセットを適用します`,
           modal_title: `システムプロンプトプリセットを選択`,
           selection_label: `プリセットを選択`,
           selection_placeholder: `プリセットのプロンプトスタイルを選択...`,
@@ -4166,16 +4170,13 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
         alter_persona_description: `オルタペルソナ`,
         modal_title: `ペルソナプロンプトを設定`,
         part1_label: `ペルソナプロンプト（1/4）`,
-        part1_description: `この内容は対象ペルソナのシステムプロンプト後に追記されます。Discord のモーダルでは各テキスト入力に文字数制限があるため、4つに分割しています。`,
+        part1_description: `Discord の 4000 文字制限により、プロンプト入力は 4 つに分割されています。`,
         part1_placeholder: `例: ベテラン戦術家のように、簡潔で落ち着いた口調で話して。`,
         part2_label: `ペルソナプロンプト（2/4）- 任意`,
-        part2_description: `ペルソナプロンプトの続き。Discord のモーダル入力の文字数制限に対応するための分割です（任意）`,
         part2_placeholder: `追加のペルソナ指示...`,
         part3_label: `ペルソナプロンプト（3/4）- 任意`,
-        part3_description: `ペルソナプロンプトの続き。Discord のモーダル入力の文字数制限に対応するための分割です（任意）`,
         part3_placeholder: `さらにペルソナ指示...`,
         part4_label: `ペルソナプロンプト（4/4）- 任意`,
-        part4_description: `ペルソナプロンプトの続き。Discord のモーダル入力の文字数制限に対応するための分割です（任意）`,
         part4_placeholder: `最後のペルソナ指示...`,
         success_title: `ペルソナプロンプトを更新しました`,
         success_description: `「{persona_name}」のペルソナプロンプトを更新しました。`,

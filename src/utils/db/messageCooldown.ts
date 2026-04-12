@@ -77,7 +77,7 @@ export async function checkMessageTriggerCooldown(
     ? (whitelistStatus.channelCooldownType ?? config.cooldown_type ?? CooldownType.OFF)
     : (config.cooldown_type ?? CooldownType.OFF);
 
-  // Diagnostic logging for whitelist-based cooldowns
+  // Log whitelisted channel cooldown overrides (non-trivial paths only)
   if (whitelistStatus.isChannelWhitelisted) {
     if (whitelistStatus.hasChannelCooldownOverride) {
       log.info(
@@ -88,15 +88,10 @@ export async function checkMessageTriggerCooldown(
         `[Cooldown Check] Channel ${message.channelId} is whitelisted - inheriting global cooldown type ${cooldownType}`,
       );
     }
-  } else {
-    log.info(
-      `[Cooldown Check] Channel ${message.channelId} NOT whitelisted - using global cooldown type ${cooldownType}`,
-    );
   }
 
   // If cooldowns are off, not on cooldown
   if (cooldownType === CooldownType.OFF) {
-    log.info(`[Cooldown Check] Cooldown type is OFF - skipping cooldown check`);
     return {
       isOnCooldown: false,
       remainingSeconds: 0,
@@ -107,10 +102,6 @@ export async function checkMessageTriggerCooldown(
   // Check if user is exempt from this cooldown type
   // Can be disabled for testing with DISABLE_COOLDOWN_EXEMPTIONS=true
   const disableExemptions = process.env.DISABLE_COOLDOWN_EXEMPTIONS === "true";
-
-  log.info(
-    `[Cooldown Check] DISABLE_COOLDOWN_EXEMPTIONS = ${process.env.DISABLE_COOLDOWN_EXEMPTIONS} (parsed as: ${disableExemptions})`,
-  );
 
   const member = message.member;
   const isExempt = !disableExemptions && isExemptFromCooldown(member, cooldownType);
@@ -130,8 +121,6 @@ export async function checkMessageTriggerCooldown(
     log.warn(`[Cooldown Check] User ${message.author.id} WOULD BE EXEMPT but exemptions are DISABLED for testing`);
   }
 
-  log.info(`[Cooldown Check] User ${message.author.id} is NOT exempt - proceeding to database check`);
-
   // Determine which identifiers to populate based on cooldown type
   const userDiscIdParam = cooldownType === CooldownType.PER_USER ? message.author.id : null;
   const channelDiscIdParam = cooldownType === CooldownType.PER_CHANNEL ? message.channelId : null;
@@ -139,10 +128,6 @@ export async function checkMessageTriggerCooldown(
   try {
     // Check if cooldown exists and is still active
     const now = Date.now();
-
-    log.info(
-      `[Cooldown Check] Querying database - type: ${cooldownType}, server: ${serverDiscId}, user: ${userDiscIdParam}, channel: ${channelDiscIdParam}, now: ${now}`,
-    );
 
     const [cooldown] = await sql`
 			SELECT expiry_time
@@ -155,7 +140,6 @@ export async function checkMessageTriggerCooldown(
 		`;
 
     if (!cooldown) {
-      log.info(`[Cooldown Check] No active cooldown found for type ${cooldownType} in server ${serverDiscId}`);
       return {
         isOnCooldown: false,
         remainingSeconds: 0,

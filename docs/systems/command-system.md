@@ -152,7 +152,7 @@ Rules:
 
 - do not call `deferReply()` before showing modal
 - pre-modal data loading must stay within the initial 3-second window
-- if modal submit processing is async, pass `MessageFlags.Ephemeral` as `promptWithRawModal` arg 4
+- if modal submit processing is async and the command will reply on the modal submission itself, pass `MessageFlags.Ephemeral` as `promptWithRawModal` arg 4
 
 ### Pattern 3A: Bulk Management Modal (Checkbox Groups)
 
@@ -216,6 +216,20 @@ Rules:
 - keep pre-helper work under 3 seconds
 - `promptWithPaginatedModal(...)` does not expose an auto-defer parameter; defer on submission manually when needed
 - for persona-button transaction loops that use `replyPaginatedPersonaChoicesV2(...)`, a successful write can `continue` back to the picker so the original ephemeral picker message refreshes in place and the user can perform another transaction without rerunning the slash command
+
+### Pattern 4A: Persona Picker Transaction Loop
+
+Use when a command starts with `replyPaginatedPersonaChoicesV2(...)` and then launches a modal or second-step transaction from the selected persona button.
+
+Rules:
+
+- wrap the persona-picker flow in `while (true)` so recoverable states can `continue` back to the picker
+- use `preserveSelectedInteraction: true` so the selected persona button stays valid for opening the next modal
+- on invalid persona or other recoverable picker-side errors, replace the picker in place with `updateButtonComponentsV2Status(..., "general.pagination.reloading_persona_picker")`
+- on modal close or timeout, refresh the original picker message with `replyComponentsV2Status(interaction, ..., "general.pagination.reloading_persona_picker")` and continue
+- on successful submit, prefer a single in-place picker update by calling `acknowledgeModalSubmitForRefresh(modalSubmitInteraction)` and then `replyComponentsV2Status(interaction, success_title, success_description, ..., "general.pagination.reloading_persona_picker")`
+- if the command refreshes the original picker after modal submit, do not pass `MessageFlags.Ephemeral` as arg 4 to `promptWithRawModal(...)`; that auto-defer path is for commands that will send their final reply on the modal interaction itself
+- if `replyPaginatedPersonaChoicesV2(...)` returns `reason: "fatal"`, return immediately instead of continuing the loop; continuing on a dead interaction can recreate the old infinite Discord API retry loop
 
 ### Pattern 5: Manual Deferral Timing
 

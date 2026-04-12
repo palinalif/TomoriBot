@@ -72,18 +72,66 @@ const COMMAND_LOCALIZATION_ALIASES: Record<string, string> = {
   "commands.memory.server.remove.description": "commands.forget.memory.server.description",
 };
 
+function getCommandLocalizationAliases(key: string): string[] {
+  const aliases: string[] = [];
+  const staticAlias = COMMAND_LOCALIZATION_ALIASES[key];
+
+  if (staticAlias) {
+    aliases.push(staticAlias);
+  }
+
+  const systemPromptMatch = key.match(/^commands\.config\.system-prompt\.(set|remove|preset)\.description$/);
+  if (systemPromptMatch) {
+    const aliasByAction: Record<string, string> = {
+      set: "commands.config.prompt.change.command_description",
+      remove: "commands.config.prompt.clear.command_description",
+      preset: "commands.config.prompt.preset.command_description",
+    };
+    aliases.push(aliasByAction[systemPromptMatch[1]]);
+  }
+
+  const configDescriptionAliases: Record<string, string> = {
+    "commands.config.bot-permissions.description": "commands.config.permissions.description",
+    "commands.config.send-limit.description": "commands.config.sendlimit.description",
+    "commands.server.always-reply.description": "commands.server.alwaysreply.description",
+    "commands.server.quota.image-generation.description": "commands.server.quota.imagegen.description",
+    "commands.server.quota.text-generation.description": "commands.server.quota.textgen.description",
+    "commands.server.quota.video-generation.description": "commands.server.quota.videogen.description",
+    "commands.config.model-fallback.remove.description": "commands.config.remove.modelfallback.description",
+    "commands.config.model-override.remove.description": "commands.config.remove.modeloverride.description",
+  };
+  const configAlias = configDescriptionAliases[key];
+  if (configAlias) {
+    aliases.push(configAlias);
+  }
+
+  const novelAiImageTagsMatch = key.match(/^commands\.novelai\.image-tags\.([a-z0-9-]+)\.description$/);
+  if (novelAiImageTagsMatch) {
+    aliases.push(`commands.novelai.tags.${novelAiImageTagsMatch[1]}.description`);
+  }
+
+  const conditioningMatch = key.match(
+    /^commands\.conditioning\.(reward|punish)\.([a-z0-9-]+)\.(description|reason_description)$/,
+  );
+  if (conditioningMatch) {
+    const [, type, actionKey, suffix] = conditioningMatch;
+    aliases.push(`commands.${type}.${actionKey}.${suffix}`);
+  }
+
+  return aliases;
+}
+
 function localizeWithAliases(locale: string, key: string): string {
-  const directValue = localizer(locale, key);
-  if (directValue && directValue !== key) {
-    return directValue;
+  const candidateKeys = [key, ...getCommandLocalizationAliases(key)];
+
+  for (const candidateKey of candidateKeys) {
+    const localizedValue = localizer(locale, candidateKey);
+    if (localizedValue && localizedValue !== candidateKey) {
+      return localizedValue;
+    }
   }
 
-  const aliasKey = COMMAND_LOCALIZATION_ALIASES[key];
-  if (!aliasKey) {
-    return directValue;
-  }
-
-  return localizer(locale, aliasKey);
+  return localizer(locale, key);
 }
 
 // Note: Individual subcommand restrictions are no longer needed.

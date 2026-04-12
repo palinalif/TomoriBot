@@ -80,11 +80,8 @@ export function shouldApplyEmojiPenalty(contextItems: StructuredContextItem[], c
     (item) => item.role === "model" && item.metadataTag === ContextItemTag.DIALOGUE_HISTORY,
   );
 
-  log.info(`[Emoji Penalty] Found ${botMessages.length} bot messages in dialogue history`);
-
   // 4. If no bot messages exist at all, no penalty needed
   if (botMessages.length === 0) {
-    log.info("[Emoji Penalty] No bot messages found, skipping penalty");
     return false;
   }
 
@@ -92,29 +89,20 @@ export function shouldApplyEmojiPenalty(contextItems: StructuredContextItem[], c
   const messagesToCheck = Math.min(botMessages.length, penaltyConfig.lookbackCount);
   const recentBotMessages = botMessages.slice(-messagesToCheck);
 
-  log.info(
-    `[Emoji Penalty] Checking last ${messagesToCheck} message(s) (lookback config: ${penaltyConfig.lookbackCount})`,
-  );
-
   // 6. Count total CUSTOM emojis across recent messages (ignore Unicode emojis)
   let totalCustomEmojis = 0;
-  const emojiCounts: string[] = [];
   for (const message of recentBotMessages) {
     const text = extractTextFromContextItem(message);
-    const customEmojis = extractCustomEmojis(text);
-    const count = customEmojis.length;
-    totalCustomEmojis += count;
-    emojiCounts.push(
-      `"${text.substring(0, 50)}..." = ${count} custom emoji(s)${count > 0 ? `: ${customEmojis.join(", ")}` : ""}`,
-    );
+    totalCustomEmojis += extractCustomEmojis(text).length;
   }
-
-  log.info(`[Emoji Penalty] Analyzed messages:\n${emojiCounts.join("\n")}`);
-  log.info(`[Emoji Penalty] Total: ${totalCustomEmojis} custom emojis (threshold: ${penaltyConfig.maxEmojis})`);
 
   // 7. Check if threshold exceeded
   const shouldTrigger = totalCustomEmojis > penaltyConfig.maxEmojis;
-  log.info(`[Emoji Penalty] ${shouldTrigger ? "TRIGGERING" : "NOT triggering"} penalty (custom emojis only)`);
+  if (shouldTrigger) {
+    log.info(
+      `[Emoji Penalty] Triggering penalty (${totalCustomEmojis} custom emojis, threshold: ${penaltyConfig.maxEmojis})`,
+    );
+  }
 
   return shouldTrigger;
 }

@@ -536,7 +536,6 @@ export async function getOrCreateWebhook(channel: TextChannel | BaseGuildTextCha
           // Verify webhook still exists remotely; cached objects may survive manual deletes.
           const liveWebhooks = await channel.fetchWebhooks();
           if (liveWebhooks.has(cachedWebhook.id)) {
-            log.info(`[Webhook Manager] Cache HIT for channel ${channelId} (${channel.name})`);
             await persistSharedChannelWebhook(channel, cachedWebhook);
             return { webhook: cachedWebhook };
           }
