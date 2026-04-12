@@ -1,6 +1,5 @@
 import type { WhitelistCheckResult } from "@/types/misc/channelWhitelist";
 import { checkChannelWhitelist } from "@/utils/db/channelWhitelist";
-import { log } from "@/utils/misc/logger";
 
 /**
  * Cache for channel whitelist status
@@ -67,13 +66,11 @@ export async function getCachedWhitelistStatus(
   const cached = whitelistCache.get(cacheKey);
   if (cached && cached.expiresAt > now) {
     cacheHits++;
-    log.info(`[Whitelist Cache] HIT - ${cacheKey} (hit rate: ${getCacheHitRate().toFixed(1)}%)`);
     return cached.result;
   }
 
   // Cache miss - fetch from database
   cacheMisses++;
-  log.info(`[Whitelist Cache] MISS - ${cacheKey} (hit rate: ${getCacheHitRate().toFixed(1)}%)`);
 
   const result = await checkChannelWhitelist(serverDiscId, channelDiscId, memberRoleDiscIds, parentChannelDiscId);
 
@@ -94,30 +91,11 @@ export async function getCachedWhitelistStatus(
  * @param channelDiscId - Optional Discord channel ID (snowflake)
  */
 export function invalidateWhitelistCache(serverDiscId: string, channelDiscId?: string): void {
-  if (channelDiscId) {
-    // Invalidate all cached role-signature variants for this channel
-    const prefix = `${serverDiscId}:${channelDiscId}:`;
-    let deletedCount = 0;
-    for (const key of whitelistCache.keys()) {
-      if (key.startsWith(prefix)) {
-        whitelistCache.delete(key);
-        deletedCount++;
-      }
+  const prefix = channelDiscId ? `${serverDiscId}:${channelDiscId}:` : `${serverDiscId}:`;
+  for (const key of whitelistCache.keys()) {
+    if (key.startsWith(prefix)) {
+      whitelistCache.delete(key);
     }
-    log.info(`[Whitelist Cache] Invalidated channel variants - ${prefix}* (deleted: ${deletedCount})`);
-  } else {
-    // Invalidate all channels for this server
-    let deletedCount = 0;
-    const prefix = `${serverDiscId}:`;
-
-    for (const key of whitelistCache.keys()) {
-      if (key.startsWith(prefix)) {
-        whitelistCache.delete(key);
-        deletedCount++;
-      }
-    }
-
-    log.info(`[Whitelist Cache] Invalidated all channels for server ${serverDiscId} (deleted: ${deletedCount})`);
   }
 }
 
@@ -157,5 +135,4 @@ export function clearWhitelistCache(): void {
   whitelistCache.clear();
   cacheHits = 0;
   cacheMisses = 0;
-  log.info("[Whitelist Cache] Cache cleared and stats reset");
 }

@@ -188,10 +188,6 @@ function storeMemoryEntry(
 ): void {
   const existing = cache.get(key);
 
-  log.info(
-    `[shortTermMemoryCache] [STORAGE] Before store - key=${key}, existingEntry=${!!existing}, existingSummary=${!!existing?.summary}, existingSummaryLength=${existing?.summary?.length || 0}`,
-  );
-
   const entry: ShortTermMemoryEntry = {
     messages,
     summary: existing?.summary,
@@ -206,10 +202,6 @@ function storeMemoryEntry(
 
   cache.set(key, entry);
   stats.stores++;
-
-  log.info(
-    `[shortTermMemoryCache] [STORAGE] After store - key=${key}, messageCount=${messages.length}, hasSummary=${!!entry.summary}, summaryLength=${entry.summary?.length || 0}, summaryPreserved=${!!existing?.summary && !!entry.summary}`,
-  );
 }
 
 function collectMemories(
@@ -254,13 +246,8 @@ function collectMemories(
 function getShortTermMemoryByKey(key: string): ShortTermMemoryEntry | undefined {
   const entry = cache.get(key);
 
-  log.info(
-    `[shortTermMemoryCache] [RETRIEVAL] Get memory - key=${key}, entryFound=${!!entry}, hasSummary=${!!entry?.summary}, summaryLength=${entry?.summary?.length || 0}, messageCount=${entry?.messages.length || 0}`,
-  );
-
   if (!entry) {
     stats.misses++;
-    log.info(`[shortTermMemoryCache] [RETRIEVAL] Cache miss - no entry found for key=${key}`);
     return undefined;
   }
 
@@ -268,14 +255,10 @@ function getShortTermMemoryByKey(key: string): ShortTermMemoryEntry | undefined 
     cache.delete(key);
     stats.expirations++;
     stats.misses++;
-    log.info(`[shortTermMemoryCache] [RETRIEVAL] Cache miss - entry expired for key=${key}`);
     return undefined;
   }
 
   stats.hits++;
-  log.info(
-    `[shortTermMemoryCache] [RETRIEVAL] Cache hit - returning entry with summary=${!!entry.summary}, messages=${entry.messages.length}`,
-  );
   return entry;
 }
 
@@ -291,15 +274,7 @@ function updateSummaryForKey(
 ): void {
   let existing = cache.get(key);
 
-  log.info(
-    `[shortTermMemoryCache] [SUMMARY_UPDATE] Before update - key=${key}, existingEntry=${!!existing}, existingMessages=${existing?.messages.length || 0}, existingSummary=${!!existing?.summary}`,
-  );
-
   if (!existing) {
-    log.info(
-      `[shortTermMemoryCache] [SUMMARY_UPDATE] Creating new entry with summary - key=${key}, summaryLength=${summary.length}`,
-    );
-
     existing = {
       messages: [],
       summary,
@@ -312,19 +287,11 @@ function updateSummaryForKey(
       lastUpdated: Date.now(),
     };
   } else {
-    log.info(
-      `[shortTermMemoryCache] [SUMMARY_UPDATE] Updating existing entry - previousSummary=${!!existing.summary}, newSummaryLength=${summary.length}`,
-    );
     existing.summary = summary;
     existing.lastUpdated = Date.now();
   }
 
   cache.set(key, existing);
-
-  const stored = cache.get(key);
-  log.info(
-    `[shortTermMemoryCache] [SUMMARY_UPDATE] After update - key=${key}, storedEntry=${!!stored}, storedSummary=${!!stored?.summary}, storedSummaryLength=${stored?.summary?.length || 0}, storedMessages=${stored?.messages.length || 0}`,
-  );
 }
 
 /**
@@ -414,11 +381,6 @@ export function getShortTermMemoriesForUser(
 ): ShortTermMemoryEntry[] {
   try {
     const memories = collectMemories(`${USER_CACHE_PREFIX}:${userId}:`, excludeChannelId, personaLineageId);
-
-    log.info(
-      `[shortTermMemoryCache] Retrieved short-term memories for user - userId=${userId}, count=${memories.length}, excludeChannelId=${excludeChannelId}, personaLineageId=${personaLineageId ?? "none"}`,
-    );
-
     return memories;
   } catch (error) {
     log.error(`[shortTermMemoryCache] Failed to get short-term memories - userId=${userId}`, error, {
@@ -448,11 +410,6 @@ export function getShortTermMemoriesForServer(
     }
 
     const memories = collectMemories(`${SERVER_CACHE_PREFIX}:${serverId}:`, excludeChannelId, personaLineageId);
-
-    log.info(
-      `[shortTermMemoryCache] Retrieved server-shared short-term memories - serverId=${serverId}, count=${memories.length}, excludeChannelId=${excludeChannelId}, personaLineageId=${personaLineageId ?? "none"}`,
-    );
-
     return memories;
   } catch (error) {
     log.error(`[shortTermMemoryCache] Failed to get server-shared short-term memories - serverId=${serverId}`, error, {
@@ -627,9 +584,6 @@ export function invalidateShortTermMemory(
 
     if (clearedCount > 0) {
       stats.invalidations += clearedCount;
-      log.info(
-        `[shortTermMemoryCache] Invalidated short-term memory - userId=${userId}, channelId=${channelId}, clearedCount=${clearedCount}`,
-      );
     }
   } catch (error) {
     log.error(
@@ -661,10 +615,6 @@ export function clearShortTermMemoryForChannel(channelId: string): void {
     }
 
     stats.invalidations += clearedCount;
-
-    log.info(
-      `[shortTermMemoryCache] Cleared all short-term memories for channel - channelId=${channelId}, clearedCount=${clearedCount}`,
-    );
   } catch (error) {
     log.error(
       `[shortTermMemoryCache] Failed to clear short-term memories for channel - channelId=${channelId}`,
@@ -697,12 +647,8 @@ export function clearShortTermMemoryForServerChannel(
       return;
     }
 
-    const deleted = cache.delete(getServerCacheKey(serverId, channelId, tomoriId));
-    if (deleted) {
+    if (cache.delete(getServerCacheKey(serverId, channelId, tomoriId))) {
       stats.invalidations++;
-      log.info(
-        `[shortTermMemoryCache] Cleared server short-term memory entry - serverId=${serverId}, channelId=${channelId}, tomoriId=${tomoriId ?? "none"}`,
-      );
     }
   } catch (error) {
     log.error(
@@ -734,10 +680,6 @@ export function clearShortTermMemoryForUser(userId: string): void {
     }
 
     stats.invalidations += clearedCount;
-
-    log.info(
-      `[shortTermMemoryCache] Cleared all short-term memories for user - userId=${userId}, clearedCount=${clearedCount}`,
-    );
   } catch (error) {
     log.error(`[shortTermMemoryCache] Failed to clear short-term memories for user - userId=${userId}`, error, {
       errorType: "CACHE_CLEAR_ERROR",
@@ -763,12 +705,6 @@ export function clearExpiredEntries(): void {
     }
 
     stats.expirations += expiredCount;
-
-    if (expiredCount > 0) {
-      log.info(
-        `[shortTermMemoryCache] Cleared expired short-term memories - expiredCount=${expiredCount}, remainingCount=${cache.size}`,
-      );
-    }
   } catch (error) {
     log.error("[shortTermMemoryCache] Failed to clear expired entries", error, {
       errorType: "CACHE_CLEANUP_ERROR",

@@ -76,7 +76,6 @@ export async function loadEmojiStickerCache(
     if (cacheAge < MEMORY_CACHE_DURATION_MS) {
       // Cache hit - return immediately
       cacheHits++;
-      log.info(`[Emoji/Sticker Cache] HIT for server ${serverId} (age: ${Math.round(cacheAge / 1000)}s)`);
       return {
         emojis: emojiUsageEnabled ? cachedEntry.emojis : null,
         stickers: stickerUsageEnabled ? cachedEntry.stickers : null,
@@ -84,12 +83,10 @@ export async function loadEmojiStickerCache(
     }
 
     // Cache stale - fall through to refresh
-    log.info(`[Emoji/Sticker Cache] STALE for server ${serverId} (age: ${Math.round(cacheAge / 1000)}s)`);
   }
 
   // 3. Cache miss or stale - refresh from DB
   cacheMisses++;
-  log.info(`[Emoji/Sticker Cache] MISS for server ${serverId} - loading from DB`);
 
   try {
     // 4. Lazy sync from Discord if needed (24hr check)
@@ -131,10 +128,6 @@ export async function loadEmojiStickerCache(
       cachedAt: now,
     });
 
-    log.success(
-      `[Emoji/Sticker Cache] Cached ${emojis?.length || 0} emoji(s) and ${stickers?.length || 0} sticker(s) for server ${serverId}`,
-    );
-
     return { emojis, stickers };
   } catch (error) {
     log.error(`[Emoji/Sticker Cache] Error loading data for server ${serverId}:`, error);
@@ -160,12 +153,7 @@ export async function loadEmojiStickerCache(
  * @param serverId - Internal database server ID to invalidate
  */
 export function invalidateEmojiStickerCache(serverId: number): void {
-  const hadCache = cache.has(serverId);
   cache.delete(serverId);
-
-  if (hadCache) {
-    log.info(`[Emoji/Sticker Cache] Invalidated cache for server ${serverId}`);
-  }
 }
 
 /**
@@ -173,12 +161,9 @@ export function invalidateEmojiStickerCache(serverId: number): void {
  * Useful for testing or manual refresh operations
  */
 export function clearEmojiStickerCache(): void {
-  const previousSize = cache.size;
   cache.clear();
   cacheHits = 0;
   cacheMisses = 0;
-
-  log.info(`[Emoji/Sticker Cache] Cleared entire cache (${previousSize} entries)`);
 }
 
 /**

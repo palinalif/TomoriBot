@@ -111,6 +111,14 @@ const KNOWLEDGE_FLUSH_ANCHORS = new Set(["charPersonality", "charDescription", "
  */
 const DIALOGUE_FLUSH_ANCHORS = new Set(["dialogueExamples", "chatHistory"]);
 
+/**
+ * Separator appended when a preset leaves sample dialogues at the very end
+ * of the assembled prompt. This prevents strict chat backends from treating
+ * the final example assistant turn as the active conversation turn.
+ */
+const TERMINAL_SAMPLE_DIALOGUE_SPACER =
+  "[System: The sample dialogues above are reference material showing how {{char}} speaks. They are not the active conversation. Continue from the current scene or live conversation instead of continuing the examples.]";
+
 // ─── Helpers ────────────────────────────────────────────────────────────
 
 /**
@@ -204,6 +212,39 @@ function pullFirstFromBucket(
     buckets.delete(tag);
   }
   return first;
+}
+
+/**
+ * Append a user-side separator if sample dialogues are the terminal prompt block.
+ * Some strict chat APIs reject requests whose final message is an assistant/example turn.
+ *
+ * @param contextItems - Assembled context items
+ * @param mentionParams - Parameters needed to resolve {{char}} safely
+ */
+async function appendTerminalSampleDialogueSpacerIfNeeded(
+  contextItems: StructuredContextItem[],
+  mentionParams: MentionParams,
+): Promise<void> {
+  const lastItem = contextItems.at(-1);
+  if (!lastItem || lastItem.metadataTag !== ContextItemTag.DIALOGUE_SAMPLE) {
+    return;
+  }
+
+  const resolvedSpacerText = await convertMentions(
+    TERMINAL_SAMPLE_DIALOGUE_SPACER,
+    mentionParams.client,
+    mentionParams.guildId,
+    mentionParams.triggererName,
+    mentionParams.botName,
+    mentionParams.personalMemoriesEnabled,
+  );
+
+  contextItems.push({
+    role: "user",
+    parts: [{ type: "text", text: resolvedSpacerText }],
+  });
+
+  log.info("[Preset Builder] Appended terminal sample-dialogue spacer after dialogueExamples ended the prompt");
 }
 
 /**
@@ -515,6 +556,8 @@ export async function reassembleWithPreset(
   if (resolvedInjections.length > 0) {
     batchMergeDepthInjections(contextItems, resolvedInjections);
   }
+
+  await appendTerminalSampleDialogueSpacerIfNeeded(contextItems, mentionParams);
 
   log.info(
     `[Preset Builder] Reassembled ${contextItems.length} context items using preset "${presetData.preset.preset_name}" ` +

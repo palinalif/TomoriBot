@@ -154,13 +154,20 @@ function emitSnapshot(client: Client): void {
 }
 
 /**
- * Start the cache metrics interval. Safe to call multiple times — a subsequent
- * call is a no-op if the interval is already running.
+ * Start the cache metrics interval. Only runs in production — these logs are
+ * intended for CloudWatch Logs Insights and are not useful in local dev.
+ * Safe to call multiple times — a subsequent call is a no-op if already running.
  *
  * @param client - Discord client (needed for `.guilds.cache` iteration)
  * @param intervalMs - Optional override; defaults to CACHE_METRICS_INTERVAL_MS env or 5 min
  */
 export function initializeCacheMetricsLogger(client: Client, intervalMs?: number): void {
+  // Skip in non-production — these snapshots are for CloudWatch, not local dev
+  if (process.env.RUN_ENV !== "production") {
+    //log.info("Cache metrics logger skipped (non-production environment)");
+    return;
+  }
+
   if (intervalId !== null) {
     log.warn("Cache metrics logger already initialized");
     return;

@@ -50,17 +50,14 @@ async function getOrCreateCacheEntry(userDiscId: string): Promise<UserCacheEntry
     const cacheAge = now - cachedEntry.cachedAt;
     if (cacheAge < USER_CACHE_DURATION_MS) {
       cacheHits++;
-      log.info(`[User Cache] HIT for user ${userDiscId} (age: ${Math.round(cacheAge / 1000)}s)`);
       return cachedEntry;
     }
 
     // Cache stale - fall through to refresh
-    log.info(`[User Cache] STALE for user ${userDiscId} (age: ${Math.round(cacheAge / 1000)}s)`);
   }
 
   // Cache miss or stale - refresh from DB
   cacheMisses++;
-  log.info(`[User Cache] MISS for user ${userDiscId} - loading from DB`);
 
   try {
     // Load user row and privacy level in parallel
@@ -75,11 +72,6 @@ async function getOrCreateCacheEntry(userDiscId: string): Promise<UserCacheEntry
     };
 
     cache.set(userDiscId, newEntry);
-
-    log.success(
-      `[User Cache] Cached user ${userDiscId} (nickname: ${userRow?.user_nickname ?? "N/A"}, privacy: ${privacyLevel})`,
-    );
-
     return newEntry;
   } catch (error) {
     log.error(`[User Cache] Error loading user data for ${userDiscId}:`, error);
@@ -141,23 +133,16 @@ export async function getCachedBlacklistStatus(serverDiscId: string, userDiscId:
   // Check if we have blacklist status cached for this server
   if (entry.blacklistStatus.has(serverDiscId)) {
     blacklistCacheHits++;
-    log.info(`[User Cache] Blacklist HIT for user ${userDiscId} in server ${serverDiscId}`);
     // biome-ignore lint/style/noNonNullAssertion: has() check guarantees existence
     return entry.blacklistStatus.get(serverDiscId)!;
   }
 
   // Blacklist status not cached for this server - query DB
   blacklistCacheMisses++;
-  log.info(`[User Cache] Blacklist MISS for user ${userDiscId} in server ${serverDiscId} - querying DB`);
 
   try {
     const isUserBlacklisted = await isBlacklisted(serverDiscId, userDiscId);
     entry.blacklistStatus.set(serverDiscId, isUserBlacklisted);
-
-    log.info(
-      `[User Cache] Cached blacklist status for user ${userDiscId} in server ${serverDiscId}: ${isUserBlacklisted}`,
-    );
-
     return isUserBlacklisted;
   } catch (error) {
     log.error(`[User Cache] Error checking blacklist for user ${userDiscId} in server ${serverDiscId}:`, error);
@@ -173,12 +158,7 @@ export async function getCachedBlacklistStatus(serverDiscId: string, userDiscId:
  * @param userDiscId - Discord user ID to invalidate
  */
 export function invalidateUserCache(userDiscId: string): void {
-  const hadCache = cache.has(userDiscId);
   cache.delete(userDiscId);
-
-  if (hadCache) {
-    log.info(`[User Cache] Invalidated cache for user ${userDiscId}`);
-  }
 }
 
 /**
@@ -191,12 +171,7 @@ export function invalidateUserCache(userDiscId: string): void {
 export function invalidateUserBlacklistCache(serverDiscId: string, userDiscId: string): void {
   const entry = cache.get(userDiscId);
   if (entry) {
-    const hadBlacklist = entry.blacklistStatus.has(serverDiscId);
     entry.blacklistStatus.delete(serverDiscId);
-
-    if (hadBlacklist) {
-      log.info(`[User Cache] Invalidated blacklist for user ${userDiscId} in server ${serverDiscId}`);
-    }
   }
 }
 
@@ -205,14 +180,11 @@ export function invalidateUserBlacklistCache(serverDiscId: string, userDiscId: s
  * Useful for testing or manual refresh operations.
  */
 export function clearUserCache(): void {
-  const previousSize = cache.size;
   cache.clear();
   cacheHits = 0;
   cacheMisses = 0;
   blacklistCacheHits = 0;
   blacklistCacheMisses = 0;
-
-  log.info(`[User Cache] Cleared entire cache (${previousSize} entries)`);
 }
 
 /**

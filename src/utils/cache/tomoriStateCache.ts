@@ -126,19 +126,14 @@ export async function getCachedAllPersonas(serverDiscId: string): Promise<Tomori
     if (cacheAge < TOMORI_STATE_CACHE_DURATION_MS) {
       // Cache hit - return immediately
       cacheHits++;
-      log.info(
-        `[TomoriState Cache] HIT for server ${serverDiscId} (age: ${Math.round(cacheAge / 1000)}s, ${cachedEntry.personas.length} personas)`,
-      );
       return cachedEntry.personas;
     }
 
     // Cache stale - fall through to refresh
-    log.info(`[TomoriState Cache] STALE for server ${serverDiscId} (age: ${Math.round(cacheAge / 1000)}s)`);
   }
 
   // 2. Cache miss or stale - refresh from DB
   cacheMisses++;
-  log.info(`[TomoriState Cache] MISS for server ${serverDiscId} - loading all personas from DB`);
 
   try {
     // 3. Load fresh data from database (all personas)
@@ -161,10 +156,6 @@ export async function getCachedAllPersonas(serverDiscId: string): Promise<Tomori
         mainPersona,
         cachedAt: now,
       });
-
-      log.success(
-        `[TomoriState Cache] Cached ${personas.length} persona(s) for server ${serverDiscId} (main: ${mainPersona.tomori_nickname})`,
-      );
     }
 
     return personas;
@@ -240,13 +231,8 @@ export async function getCachedTomoriState(serverDiscId: string): Promise<Tomori
  * @param serverDiscId - Discord server ID to invalidate
  */
 export function invalidateTomoriStateCache(serverDiscId: string): void {
-  const hadCache = cache.has(serverDiscId);
   cache.delete(serverDiscId);
   lastDbError.delete(serverDiscId);
-
-  if (hadCache) {
-    log.info(`[TomoriState Cache] Invalidated cache for server ${serverDiscId}`);
-  }
 }
 
 /**
@@ -254,13 +240,10 @@ export function invalidateTomoriStateCache(serverDiscId: string): void {
  * Useful for testing or manual refresh operations.
  */
 export function clearTomoriStateCache(): void {
-  const previousSize = cache.size;
   cache.clear();
   lastDbError.clear();
   cacheHits = 0;
   cacheMisses = 0;
-
-  log.info(`[TomoriState Cache] Cleared entire cache (${previousSize} entries)`);
 }
 
 /**

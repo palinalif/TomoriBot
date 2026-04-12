@@ -94,7 +94,6 @@ export function setChannelLlmCache(serverId: number, channelDiscId: string, llm:
 export function invalidateChannelLlmCache(serverId: number, channelDiscId: string): void {
   const key = getCacheKey(serverId, channelDiscId);
   channelLlmCache.delete(key);
-  log.info(`[ChannelLlmCache] Invalidated cache for ${key}`);
 }
 
 /**
@@ -112,12 +111,9 @@ export function getChannelLlmCacheSize(): number {
  */
 export function invalidateAllChannelLlmCacheForServer(serverId: number): void {
   const prefix = `${serverId}:`;
-  let count = 0;
   for (const key of channelLlmCache.keys()) {
     if (key.startsWith(prefix)) {
       channelLlmCache.delete(key);
-      count++;
     }
   }
-  log.info(`[ChannelLlmCache] Invalidated ${count} channel override entries for server ${serverId}`);
 }

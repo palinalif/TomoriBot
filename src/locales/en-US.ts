@@ -313,9 +313,9 @@ The selected model requires allowing data for paid model training, but your Open
     },
     "st-preset": {
       description: `Manage SillyTavern presets`,
-      upload: {
-        description: `Upload a SillyTavern preset JSON file`,
-        file_description: `The SillyTavern preset .json file to upload`,
+      import: {
+        description: `Import a SillyTavern preset JSON file`,
+        file_description: `The SillyTavern preset .json file to import`,
         invalid_file_title: `Invalid File`,
         file_too_large_title: `File Too Large`,
         file_too_large_description: `The preset file must be under {max_size} MB.`,
@@ -323,7 +323,7 @@ The selected model requires allowing data for paid model training, but your Open
         invalid_json: `The file could not be parsed as valid JSON.`,
         not_a_preset: `This doesn't look like a SillyTavern preset — no \`prompts\` array found.`,
         no_nodes: `No usable prompt nodes were found in this preset.`,
-        success_title: `Preset Uploaded`,
+        success_title: `Preset Imported`,
         success_description: `**{name}** has been imported.
 
 • **{total}** total nodes
@@ -351,7 +351,7 @@ Use \`/st-preset remove\` to revert to default behavior.`,
         toggle: {
           description: `Toggle preset prompt nodes on or off`,
           no_preset_title: `No Preset Found`,
-          no_preset_description: `No active SillyTavern preset found for this server. Upload one with \`/st-preset upload\` first.`,
+          no_preset_description: `No active SillyTavern preset found for this server. Import one with \`/st-preset import\` first.`,
           no_nodes_title: `No Toggleable Nodes`,
           no_nodes_description: `This preset has no toggleable prompt nodes.`,
           select_page_title: `Select Page`,

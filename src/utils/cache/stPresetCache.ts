@@ -70,7 +70,6 @@ export async function getCachedActivePreset(serverId: number): Promise<CachedPre
       return entry.data;
     }
     // Stale — fall through to refresh
-    log.info(`[ST Preset Cache] STALE for server_id ${serverId} (age: ${Math.round(cacheAge / 1000)}s)`);
   }
 
   // 2. Cache miss or stale — load from DB
@@ -96,11 +95,6 @@ export async function getCachedActivePreset(serverId: number): Promise<CachedPre
 
     const data: CachedPresetData = { preset, nodes };
     cache.set(serverId, { data, cachedAt: now });
-
-    log.info(
-      `[ST Preset Cache] Cached preset "${preset.preset_name}" (${nodes.length} nodes) for server_id ${serverId}`,
-    );
-
     return data;
   } catch (error) {
     log.error(`[ST Preset Cache] Failed to load active preset for server_id ${serverId}`, error);
@@ -123,23 +117,14 @@ export async function getCachedActivePreset(serverId: number): Promise<CachedPre
  * @param serverId - Internal numeric server_id to invalidate
  */
 export function invalidateStPresetCache(serverId: number): void {
-  const hadCache = cache.has(serverId);
   cache.delete(serverId);
-
-  if (hadCache) {
-    log.info(`[ST Preset Cache] Invalidated cache for server_id ${serverId}`);
-  }
 }
 
 /**
  * Clear the entire preset cache. Used during shutdown or testing.
  */
 export function clearStPresetCache(): void {
-  const size = cache.size;
   cache.clear();
-  if (size > 0) {
-    log.info(`[ST Preset Cache] Cleared all ${size} entries`);
-  }
 }
 
 /**

@@ -313,9 +313,9 @@ export default {
     },
     "st-preset": {
       description: `SillyTavernプリセットを管理`,
-      upload: {
-        description: `SillyTavernプリセットJSONファイルをアップロード`,
-        file_description: `アップロードするSillyTavernプリセットの.jsonファイル`,
+      import: {
+        description: `SillyTavernプリセットJSONファイルをインポート`,
+        file_description: `インポートするSillyTavernプリセットの.jsonファイル`,
         invalid_file_title: `無効なファイル`,
         file_too_large_title: `ファイルが大きすぎます`,
         file_too_large_description: `プリセットファイルは{max_size} MB以下にしてください。`,
@@ -323,7 +323,7 @@ export default {
         invalid_json: `ファイルを有効なJSONとして解析できませんでした。`,
         not_a_preset: `これはSillyTavernプリセットではないようです — \`prompts\`配列が見つかりません。`,
         no_nodes: `このプリセットに使用可能なプロンプトノードが見つかりませんでした。`,
-        success_title: `プリセットをアップロードしました`,
+        success_title: `プリセットをインポートしました`,
         success_description: `**{name}**をインポートしました。
 
 • **{total}** 合計ノード
@@ -351,7 +351,7 @@ export default {
         toggle: {
           description: `プリセットのプロンプトノードのオン・オフを切り替え`,
           no_preset_title: `プリセットが見つかりません`,
-          no_preset_description: `このサーバーにアクティブなSillyTavernプリセットがありません。まず\`/st-preset upload\`でアップロードしてください。`,
+          no_preset_description: `このサーバーにアクティブなSillyTavernプリセットがありません。まず\`/st-preset import\`でインポートしてください。`,
           no_nodes_title: `切り替え可能なノードがありません`,
           no_nodes_description: `このプリセットには切り替え可能なプロンプトノードがありません。`,
           select_page_title: `ページを選択`,

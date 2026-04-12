@@ -65,18 +65,18 @@ interface RawSTPreset {
 // ─── Subcommand Configuration ────────────────────────────────────────
 
 /**
- * Configure the /st-preset upload subcommand.
+ * Configure the /st-preset import subcommand.
  * Accepts a required JSON file attachment containing a SillyTavern preset.
  * @param subcommand - The subcommand builder
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
-    .setName("upload")
-    .setDescription(localizer("en-US", "commands.st-preset.upload.description"))
+    .setName("import")
+    .setDescription(localizer("en-US", "commands.st-preset.import.description"))
     .addAttachmentOption((option) =>
       option
         .setName("file")
-        .setDescription(localizer("en-US", "commands.st-preset.upload.file_description"))
+        .setDescription(localizer("en-US", "commands.st-preset.import.file_description"))
         .setRequired(true),
     );
 
@@ -117,7 +117,7 @@ function isCommentOnly(content: string): boolean {
 }
 
 /**
- * Derive a preset name from the uploaded filename.
+ * Derive a preset name from the imported filename.
  * Strips the .json extension and truncates to MAX_PRESET_NAME_LENGTH.
  * @param filename - Original filename from the Discord attachment
  * @returns Cleaned preset name
@@ -231,7 +231,7 @@ function parsePresetNodes(raw: RawSTPreset): ParseResult | null {
 // ─── Execution ───────────────────────────────────────────────────────
 
 /**
- * Execute /st-preset upload.
+ * Execute /st-preset import.
  * Downloads the attached JSON file, validates it as a SillyTavern preset,
  * parses prompt nodes from the prompt_order, and stores the preset + nodes
  * in the database for this server.
@@ -265,8 +265,8 @@ export async function execute(
   const validation = validateAttachment(attachment);
   if (!validation.isValid) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.st-preset.upload.invalid_file_title",
-      descriptionKey: `commands.st-preset.upload.${validation.errorKey}`,
+      titleKey: "commands.st-preset.import.invalid_file_title",
+      descriptionKey: `commands.st-preset.import.${validation.errorKey}`,
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -277,8 +277,8 @@ export async function execute(
   const maxSizeBytes = MAX_PRESET_FILE_SIZE_MB * 1024 * 1024;
   if (attachment.size && attachment.size > maxSizeBytes) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.st-preset.upload.file_too_large_title",
-      descriptionKey: "commands.st-preset.upload.file_too_large_description",
+      titleKey: "commands.st-preset.import.file_too_large_title",
+      descriptionKey: "commands.st-preset.import.file_too_large_description",
       descriptionVars: { max_size: MAX_PRESET_FILE_SIZE_MB.toString() },
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
@@ -299,7 +299,7 @@ export async function execute(
 
     if (!downloadResult.success || !downloadResult.buffer) {
       await interaction.editReply({
-        content: localizer(locale, "commands.st-preset.upload.download_failed"),
+        content: localizer(locale, "commands.st-preset.import.download_failed"),
       });
       return;
     }
@@ -310,7 +310,7 @@ export async function execute(
       rawPreset = JSON.parse(downloadResult.buffer.toString("utf-8"));
     } catch {
       await interaction.editReply({
-        content: localizer(locale, "commands.st-preset.upload.invalid_json"),
+        content: localizer(locale, "commands.st-preset.import.invalid_json"),
       });
       return;
     }
@@ -318,7 +318,7 @@ export async function execute(
     // 7. Validate it looks like a SillyTavern preset (must have prompts array)
     if (!rawPreset.prompts || !Array.isArray(rawPreset.prompts)) {
       await interaction.editReply({
-        content: localizer(locale, "commands.st-preset.upload.not_a_preset"),
+        content: localizer(locale, "commands.st-preset.import.not_a_preset"),
       });
       return;
     }
@@ -327,7 +327,7 @@ export async function execute(
     const parseResult = parsePresetNodes(rawPreset);
     if (!parseResult) {
       await interaction.editReply({
-        content: localizer(locale, "commands.st-preset.upload.no_nodes"),
+        content: localizer(locale, "commands.st-preset.import.no_nodes"),
       });
       return;
     }
@@ -347,7 +347,7 @@ export async function execute(
       return;
     }
 
-    // 11. Activate the newly uploaded preset (deactivates any previously active preset)
+    // 11. Activate the newly imported preset (deactivates any previously active preset)
     if (preset.preset_id) {
       await setActivePreset(tomoriState.server_id, preset.preset_id);
     }
@@ -362,14 +362,14 @@ export async function execute(
     const filterNotes: string[] = [];
     if (commentOnlyCount > 0) {
       filterNotes.push(
-        localizer(locale, "commands.st-preset.upload.note_comment_only", {
+        localizer(locale, "commands.st-preset.import.note_comment_only", {
           count: commentOnlyCount.toString(),
         }),
       );
     }
     if (disabledByPreset > 0) {
       filterNotes.push(
-        localizer(locale, "commands.st-preset.upload.note_disabled_by_preset", {
+        localizer(locale, "commands.st-preset.import.note_disabled_by_preset", {
           count: disabledByPreset.toString(),
         }),
       );
@@ -378,8 +378,8 @@ export async function execute(
 
     // 14. Success response
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.st-preset.upload.success_title",
-      descriptionKey: "commands.st-preset.upload.success_description",
+      titleKey: "commands.st-preset.import.success_title",
+      descriptionKey: "commands.st-preset.import.success_description",
       descriptionVars: {
         name: presetName,
         total: nodes.length.toString(),
@@ -392,7 +392,7 @@ export async function execute(
     });
 
     log.success(
-      `[ST Preset Upload] "${presetName}" uploaded for server ${serverId} — ${nodes.length} nodes (${toggleableCount} toggleable, ${markerCount} markers, ${commentOnlyCount} comment-only, ${disabledByPreset} disabled by preset)`,
+      `[ST Preset Import] "${presetName}" imported for server ${serverId} — ${nodes.length} nodes (${toggleableCount} toggleable, ${markerCount} markers, ${commentOnlyCount} comment-only, ${disabledByPreset} disabled by preset)`,
     );
   } catch (error) {
     const context: ErrorContext = {
@@ -400,9 +400,9 @@ export async function execute(
       serverId: null,
       tomoriId: null,
       errorType: "CommandExecutionError",
-      metadata: { command: "st-preset upload" },
+      metadata: { command: "st-preset import" },
     };
-    await log.error("Error executing /st-preset upload", error as Error, context);
+    await log.error("Error executing /st-preset import", error as Error, context);
 
     await interaction.editReply({
       content: localizer(locale, "general.errors.unknown_error_description"),

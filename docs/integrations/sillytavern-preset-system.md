@@ -16,7 +16,7 @@ This is distinct from [SillyTavern Card Import](./sillytavern-card-support.md), 
 
 ## How It Works (User Perspective)
 
-1. User uploads an ST preset JSON via `/st-preset upload`
+1. User imports an ST preset JSON via `/st-preset import`
 2. The preset becomes active for that server
 3. On every LLM call, the context builder detects the active preset and rearranges blocks accordingly
 4. The `/sysprompt` and personality settings still apply — the preset controls *where* they appear, not *whether* they exist
@@ -32,9 +32,9 @@ This is distinct from [SillyTavern Card Import](./sillytavern-card-support.md), 
 
 ## Commands
 
-### `/st-preset upload`
+### `/st-preset import`
 
-Uploads a SillyTavern preset JSON file and stores it for the current server.
+Imports a SillyTavern preset JSON file and stores it for the current server.
 
 **Flow:**
 1. User attaches a `.json` file to the slash command
@@ -184,6 +184,8 @@ Key observations:
 - TomoriBot-only blocks (server info, emojis, etc.) have no ST marker, so they're auto-flushed at anchor points
 - `{{setvar}}`/`{{getvar}}` are resolved at build time, not stored in the prompt
 - Depth injections merge into existing history items rather than creating new messages
+- Marker order is literal: if a preset places `chatHistory` before `dialogueExamples`, the sample dialogues will appear after live history
+- If `dialogueExamples` becomes the terminal block, TomoriBot appends a short user-side separator note so strict providers do not treat the final sample assistant turn as the active prompt
 
 ### Why Build-Then-Rearrange?
 
@@ -448,6 +450,6 @@ This section documents what our implementation supports versus what native Silly
 | `src/utils/text/stPresetEngine.ts` | Template macro engine (two-pass resolution) |
 | `src/utils/text/presetContextBuilder.ts` | Preset-driven context rearrangement |
 | `src/utils/text/contextBuilder.ts` | Routing wrapper + native context assembly |
-| `src/commands/st-preset/upload.ts` | `/st-preset upload` command |
+| `src/commands/st-preset/import.ts` | `/st-preset import` command |
 | `src/commands/st-preset/remove.ts` | `/st-preset remove` command |
 | `src/commands/st-preset/node/toggle.ts` | `/st-preset node toggle` command |

@@ -98,12 +98,7 @@ export async function getCachedEnabledGuildMcpConfigs(serverId: number): Promise
  * @param serverId - Internal server_id to invalidate
  */
 export function invalidateGuildMcpConfigCache(serverId: number): void {
-  const had = cache.has(serverId);
   cache.delete(serverId);
-
-  if (had) {
-    log.info(`[GuildMcpConfigCache] Invalidated cache for server ${serverId}`);
-  }
 }
 
 /**
@@ -111,12 +106,9 @@ export function invalidateGuildMcpConfigCache(serverId: number): void {
  * Useful for testing or manual refresh.
  */
 export function clearGuildMcpConfigCache(): void {
-  const previousSize = cache.size;
   cache.clear();
   cacheHits = 0;
   cacheMisses = 0;
-
-  log.info(`[GuildMcpConfigCache] Cleared entire cache (${previousSize} entries)`);
 }
 
 /**

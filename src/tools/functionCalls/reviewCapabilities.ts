@@ -283,7 +283,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
         } else {
           capabilitiesContent += "No SillyTavern preset is active. Using native context assembly.\n";
           capabilitiesContent +=
-            "- Upload a preset with `/st-preset upload` to customize how context is structured\n\n";
+            "- Import a preset with `/st-preset import` to customize how context is structured\n\n";
         }
       }
 
@@ -697,7 +697,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
           settingsContent += `- **Manage**: \`/st-preset node toggle\` to enable/disable nodes, \`/st-preset remove\` to deactivate\n\n`;
         } else {
           settingsContent += `No SillyTavern preset is active. Using native context assembly.\n`;
-          settingsContent += `- Upload one with \`/st-preset upload\` to customize context structure\n\n`;
+          settingsContent += `- Import one with \`/st-preset import\` to customize context structure\n\n`;
         }
       }
 
