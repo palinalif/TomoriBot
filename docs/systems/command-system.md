@@ -212,7 +212,8 @@ await replyInfoEmbed(modalResult.interaction, locale, { ... });
 
 Rules:
 
-- do not defer before pagination helpers (they acknowledge directly)
+- do not defer before `replyPaginatedChoices(...)` or `promptWithPaginatedModal(...)` (they acknowledge directly)
+- `replyPaginatedPersonaChoicesV2(...)` auto-defers unreplied slash interactions before its first render, then uses `editReply(...)` for the picker UI
 - keep pre-helper work under 3 seconds
 - `promptWithPaginatedModal(...)` does not expose an auto-defer parameter; defer on submission manually when needed
 - for persona-button transaction loops that use `replyPaginatedPersonaChoicesV2(...)`, a successful write can `continue` back to the picker so the original ephemeral picker message refreshes in place and the user can perform another transaction without rerunning the slash command
@@ -228,6 +229,7 @@ Rules:
 - on invalid persona or other recoverable picker-side errors, replace the picker in place with `updateButtonComponentsV2Status(..., "general.pagination.reloading_persona_picker")`
 - on modal close or timeout, refresh the original picker message with `replyComponentsV2Status(interaction, ..., "general.pagination.reloading_persona_picker")` and continue
 - on successful submit, prefer a single in-place picker update by calling `acknowledgeModalSubmitForRefresh(modalSubmitInteraction)` and then `replyComponentsV2Status(interaction, success_title, success_description, ..., "general.pagination.reloading_persona_picker")`
+- slash-entry callers normally do not need to `deferReply()` just to launch `replyPaginatedPersonaChoicesV2(...)`; the helper acknowledges before avatar/file resolution. If the command itself must do substantial async work before it can call the helper, defer earlier in the command.
 - if the command refreshes the original picker after modal submit, do not pass `MessageFlags.Ephemeral` as arg 4 to `promptWithRawModal(...)`; that auto-defer path is for commands that will send their final reply on the modal interaction itself
 - if `replyPaginatedPersonaChoicesV2(...)` returns `reason: "fatal"`, return immediately instead of continuing the loop; continuing on a dead interaction can recreate the old infinite Discord API retry loop
 

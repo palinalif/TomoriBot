@@ -441,6 +441,7 @@ export async function promptWithUnacknowledgedConfirmation(
     embedDescriptionKey,
     embedDescriptionVars = {},
     embedColor = ColorCode.WARN,
+    useComponentsV2 = false,
     continueLabelKey,
     cancelLabelKey,
     continueCustomId,
@@ -466,20 +467,47 @@ export async function promptWithUnacknowledgedConfirmation(
     .setStyle(ButtonStyle.Danger);
 
   const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(continueButton, cancelButton);
+  const v2Components = useComponentsV2
+    ? buildV2ConfirmationComponents(
+        locale,
+        embedTitleKey,
+        embedDescriptionKey,
+        embedColor,
+        embedDescriptionVars,
+        continueLabelKey,
+        cancelLabelKey,
+        continueCustomId,
+        cancelCustomId,
+      )
+    : null;
 
   let message: Message;
   try {
     if (interaction.deferred || interaction.replied) {
-      message = await interaction.editReply({
-        embeds: [embed],
-        components: [buttonRow],
-      });
+      message = await interaction.editReply(
+        useComponentsV2
+          ? {
+              components: v2Components ?? [],
+              flags: MessageFlags.IsComponentsV2,
+            }
+          : {
+              embeds: [embed],
+              components: [buttonRow],
+            },
+      );
     } else {
-      await interaction.reply({
-        embeds: [embed],
-        components: [buttonRow],
-        flags: MessageFlags.Ephemeral,
-      });
+      await interaction.reply(
+        useComponentsV2
+          ? {
+              components: v2Components ?? [],
+              flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+            }
+          : {
+              embeds: [embed],
+              components: [buttonRow],
+              flags: MessageFlags.Ephemeral,
+            },
+      );
       message = await interaction.fetchReply();
     }
   } catch (error) {
@@ -499,29 +527,53 @@ export async function promptWithUnacknowledgedConfirmation(
       return { outcome: "continue", interaction: buttonInteraction };
     }
 
-    await buttonInteraction.update({
-      embeds: [
-        createStandardEmbed(locale, {
-          titleKey: "general.interaction.cancel_title",
-          descriptionKey: "general.interaction.cancel_description",
-          color: ColorCode.ERROR,
-        }),
-      ],
-      components: [],
-    });
+    await buttonInteraction.update(
+      useComponentsV2
+        ? {
+            components: buildV2StatusComponents(
+              locale,
+              "general.interaction.cancel_title",
+              "general.interaction.cancel_description",
+              ColorCode.ERROR,
+            ),
+            flags: MessageFlags.IsComponentsV2,
+          }
+        : {
+            embeds: [
+              createStandardEmbed(locale, {
+                titleKey: "general.interaction.cancel_title",
+                descriptionKey: "general.interaction.cancel_description",
+                color: ColorCode.ERROR,
+              }),
+            ],
+            components: [],
+          },
+    );
     return { outcome: "cancel" };
   } catch (_timeoutError) {
     log.warn(`Unacknowledged confirmation prompt timed out for user ${interaction.user.id}`);
-    await interaction.editReply({
-      embeds: [
-        createStandardEmbed(locale, {
-          titleKey: "general.interaction.timeout_title",
-          descriptionKey: "general.interaction.timeout_description",
-          color: ColorCode.ERROR,
-        }),
-      ],
-      components: [],
-    });
+    await interaction.editReply(
+      useComponentsV2
+        ? {
+            components: buildV2StatusComponents(
+              locale,
+              "general.interaction.timeout_title",
+              "general.interaction.timeout_description",
+              ColorCode.ERROR,
+            ),
+            flags: MessageFlags.IsComponentsV2,
+          }
+        : {
+            embeds: [
+              createStandardEmbed(locale, {
+                titleKey: "general.interaction.timeout_title",
+                descriptionKey: "general.interaction.timeout_description",
+                color: ColorCode.ERROR,
+              }),
+            ],
+            components: [],
+          },
+    );
     return { outcome: "timeout" };
   }
 }
@@ -907,7 +959,9 @@ interface PersonaPaginatedChoiceOptions {
   preserveSelectedInteraction?: boolean;
 }
 
-function resolveAccentColor(color?: string | number): number {
+type AccentColorInput = string | number | readonly [red: number, green: number, blue: number];
+
+function resolveAccentColor(color?: AccentColorInput): number {
   if (typeof color === "number") {
     return color;
   }
@@ -917,6 +971,11 @@ function resolveAccentColor(color?: string | number): number {
     if (/^[0-9a-fA-F]{6}$/.test(normalized)) {
       return Number.parseInt(normalized, 16);
     }
+  }
+
+  if (Array.isArray(color) && color.length === 3) {
+    const [red, green, blue] = color;
+    return (red << 16) + (green << 8) + blue;
   }
 
   return Number.parseInt(ColorCode.INFO.replace("#", ""), 16);
@@ -951,6 +1010,54 @@ function buildV2StatusComponents(
             } satisfies ComponentInContainerData,
           ]
         : []),
+    ],
+  };
+
+  return [container];
+}
+
+function buildV2ConfirmationComponents(
+  locale: string,
+  titleKey: string,
+  descriptionKey: string,
+  color: AccentColorInput,
+  descriptionVars: Record<string, string | number | boolean> | undefined,
+  continueLabelKey: string,
+  cancelLabelKey: string,
+  continueCustomId: string,
+  cancelCustomId: string,
+): TopLevelComponentData[] {
+  const actionRow: ActionRowData<ButtonComponentData> = {
+    type: ComponentType.ActionRow,
+    components: [
+      {
+        type: ComponentType.Button,
+        style: ButtonStyle.Success,
+        customId: continueCustomId,
+        label: localizer(locale, continueLabelKey),
+      },
+      {
+        type: ComponentType.Button,
+        style: ButtonStyle.Danger,
+        customId: cancelCustomId,
+        label: localizer(locale, cancelLabelKey),
+      },
+    ],
+  };
+
+  const container: ContainerComponentData<ComponentInContainerData> = {
+    type: ComponentType.Container,
+    accentColor: resolveAccentColor(color),
+    components: [
+      {
+        type: ComponentType.TextDisplay,
+        content: `## ${localizer(locale, titleKey)}`,
+      },
+      {
+        type: ComponentType.TextDisplay,
+        content: localizer(locale, descriptionKey, descriptionVars),
+      },
+      actionRow,
     ],
   };
 
@@ -1635,7 +1742,15 @@ export async function replyPaginatedPersonaChoicesV2(
       //    This ensures every Discord API error is caught here and returned cleanly
       //    without propagating to the outer catch and triggering a second API call.
       try {
-        // 1a. Guard against the Discord 15-minute interaction token expiry.
+        // 1a. Slash-command entry points may spend most of their 3-second ACK window
+        //     loading personas before they reach the picker. Acknowledge here before
+        //     avatar/file resolution so the initial render uses editReply() instead of
+        //     racing the first interaction.reply().
+        if (interaction.isChatInputCommand() && !interaction.replied && !interaction.deferred) {
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        }
+
+        // 1b. Guard against the Discord 15-minute interaction token expiry.
         //     awaitMessageComponent resets its per-iteration timeout on each loop
         //     pass, so an active user clicking buttons can hold the session open
         //     indefinitely — past the point where the token becomes invalid and all
@@ -1657,12 +1772,12 @@ export async function replyPaginatedPersonaChoicesV2(
           return { success: false, reason: "timeout" };
         }
 
-        // 1b. Determine which personas are on the current page.
+        // 1c. Determine which personas are on the current page.
         const startIdx = (currentPage - 1) * PERSONA_PAGINATION_ITEMS_PER_PAGE;
         const endIdx = Math.min(startIdx + PERSONA_PAGINATION_ITEMS_PER_PAGE, options.personas.length);
         const pagePersonas = options.personas.slice(startIdx, endIdx);
 
-        // 1c. Pre-resolve avatar URLs (and collect local file attachments when needed).
+        // 1d. Pre-resolve avatar URLs (and collect local file attachments when needed).
         //     In non-production without AVATAR_PUBLIC_BASE_URL, alter avatars stored as
         //     local paths are loaded from disk and attached directly to the message.
         const { avatarUrls, files } = await resolvePersonaPageAvatarData(pagePersonas, fallbackAvatarUrl);
@@ -1680,7 +1795,7 @@ export async function replyPaginatedPersonaChoicesV2(
           files,
         };
 
-        // 1d. Send or update the pagination message.
+        // 1e. Send or update the pagination message.
         let message: Message;
         if (interaction.replied || interaction.deferred) {
           message = await interaction.editReply({

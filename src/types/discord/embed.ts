@@ -36,6 +36,7 @@ export interface ConfirmationOptions {
   embedDescriptionKey: string;
   embedDescriptionVars?: Record<string, string | number | boolean>;
   embedColor?: ColorResolvable; // Allow number or hex
+  useComponentsV2?: boolean;
   continueLabelKey: string;
   cancelLabelKey: string;
   continueCustomId: string;

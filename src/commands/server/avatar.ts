@@ -3,6 +3,7 @@ import type {
   Client,
   SlashCommandSubcommandBuilder,
   Attachment,
+  APIAttachment,
   ModalSubmitInteraction,
 } from "discord.js";
 import { MessageFlags, EmbedBuilder } from "discord.js";
@@ -21,31 +22,29 @@ import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 
 const PERSONA_SELECT_MODAL_ID = "server_avatar_persona_modal";
 const PERSONA_SELECT_ID = "persona_select";
+const FILE_UPLOAD_ID = "avatar_image";
+
+type AvatarAttachment = Attachment | APIAttachment;
 /**
  * Configure the avatar subcommand
  * @param subcommand - SlashCommandSubcommandBuilder instance
  * @returns Configured subcommand
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand
-    .setName("avatar")
-    .setDescription(localizer("en-US", "commands.server.avatar.description"))
-    .addAttachmentOption((option) =>
-      option
-        .setName("image")
-        .setDescription(localizer("en-US", "commands.server.avatar.image_description"))
-        .setRequired(false),
-    );
+  subcommand.setName("avatar").setDescription(localizer("en-US", "commands.server.avatar.description"));
 
 /**
  * Validates if the provided attachment is a valid image
  * @param attachment - Discord attachment to validate
  * @returns Object with isValid boolean and error message if invalid
  */
-function validateImage(attachment: Attachment): {
+function validateImage(attachment: AvatarAttachment): {
   isValid: boolean;
   error?: string;
 } {
+  const contentType = "contentType" in attachment ? attachment.contentType : attachment.content_type;
+  const filename = "name" in attachment ? attachment.name : attachment.filename;
+
   // 1. Check file size (Discord's limit is 8MB for bots)
   const maxSize = 8 * 1024 * 1024; // 8MB in bytes
   if (attachment.size > maxSize) {
@@ -57,7 +56,7 @@ function validateImage(attachment: Attachment): {
 
   // 2. Check content type
   const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/gif"];
-  if (!attachment.contentType || !allowedTypes.includes(attachment.contentType)) {
+  if (!contentType || !allowedTypes.includes(contentType)) {
     return {
       isValid: false,
       error: "INVALID_FORMAT",
@@ -66,7 +65,7 @@ function validateImage(attachment: Attachment): {
 
   // 3. Check file extension as backup validation
   const allowedExtensions = [".png", ".jpg", ".jpeg", ".gif"];
-  const fileExtension = attachment.name?.toLowerCase().split(".").pop();
+  const fileExtension = filename?.toLowerCase().split(".").pop();
   if (!fileExtension || !allowedExtensions.includes(`.${fileExtension}`)) {
     return {
       isValid: false,
@@ -82,13 +81,15 @@ function validateImage(attachment: Attachment): {
  * @param attachment - Discord attachment to convert
  * @returns Promise resolving to SafeDownloadResult-like object with dataUri or error
  */
-async function attachmentToBase64DataUri(attachment: Attachment): Promise<{
+async function attachmentToBase64DataUri(attachment: AvatarAttachment): Promise<{
   success: boolean;
   dataUri?: string;
   buffer?: Buffer;
   error?: "size_exceeded" | "timeout" | "network_error" | "invalid_response";
   details?: string;
 }> {
+  const contentType = "contentType" in attachment ? attachment.contentType : attachment.content_type;
+
   // 1. Use safeDownload with 15s timeout and 8MB size limit
   const downloadResult = await safeDownload(attachment.url, {
     maxSizeMB: 8,
@@ -107,7 +108,7 @@ async function attachmentToBase64DataUri(attachment: Attachment): Promise<{
 
   // 3. Convert buffer to base64 data URI
   const base64 = downloadResult.buffer?.toString("base64");
-  const mimeType = attachment.contentType || "image/png";
+  const mimeType = contentType || "image/png";
   const dataUri = `data:${mimeType};base64,${base64}`;
 
   return {
@@ -254,6 +255,14 @@ export async function execute(
           required: true,
           options: personaSelectOptions,
         },
+        {
+          customId: FILE_UPLOAD_ID,
+          labelKey: "commands.server.avatar.image_label",
+          descriptionKey: "commands.server.avatar.image_description",
+          minValues: 0,
+          maxValues: 1,
+          required: false,
+        },
       ],
     });
 
@@ -316,8 +325,8 @@ export async function execute(
       return;
     }
 
-    // 6. Get the attachment option
-    const imageAttachment = interaction.options.getAttachment("image");
+    // 6. Resolve the optional modal upload
+    const imageAttachment = modalResult.attachments?.[FILE_UPLOAD_ID];
     const isMainPersona = !selectedPersona.is_alter;
 
     // 7. Handle avatar removal (no attachment provided)

@@ -335,7 +335,9 @@ export async function execute(
         return;
       }
 
-      const confirmationResult = await promptWithUnacknowledgedConfirmation(selectModalInteraction, locale, {
+      await acknowledgeModalSubmitForRefresh(selectModalInteraction);
+
+      const confirmationResult = await promptWithUnacknowledgedConfirmation(interaction, locale, {
         embedTitleKey: "commands.persona.sample-dialogue.edit.confirm_title",
         embedDescriptionKey: "commands.persona.sample-dialogue.edit.confirm_description",
         embedDescriptionVars: {
@@ -343,6 +345,7 @@ export async function execute(
           output: formatDialoguePreview(selectedBotInput),
         },
         embedColor: ColorCode.INFO,
+        useComponentsV2: true,
         continueLabelKey: "general.confirm",
         cancelLabelKey: "general.pagination.cancel",
         continueCustomId: `persona_sampledialogue_edit_confirm_${selectModalInteraction.id}`,

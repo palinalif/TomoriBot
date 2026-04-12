@@ -3764,7 +3764,8 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
       },
       avatar: {
         description: `このサーバーで選択したペルソナのアバターを設定または削除します。`,
-        image_description: `アバターとして設定する画像（空白にすると選択したペルソナのアバターを削除）`,
+        image_description: `アバターとして設定する画像。空白のまま送信すると、代わりに選択したペルソナのアバターをクリアします。`,
+        image_label: `アバター画像`,
         persona_modal_title: `ペルソナを選択`,
         persona_select_label: `ペルソナ`,
         persona_select_description: `アバターを更新するペルソナを選択してください。`,

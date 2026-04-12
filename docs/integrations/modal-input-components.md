@@ -464,7 +464,7 @@ These modals collect free-form text and have no structured option set:
 | `/persona create`          | `persona/create.ts`           | Free-form text fields + file upload                     |
 | `/persona generate`        | `persona/generate.ts`         | Free-form name + file upload                            |
 | `/server trigger add`      | `server/trigger/add.ts`       | Free-form text fields (word, response, cooldown)        |
-| `/server avatar`           | `server/avatar.ts`            | File upload only                                        |
+| `/server avatar`           | `server/avatar.ts`            | Persona select + optional file upload                   |
 | `/tool comment`            | `tool/comment.ts`             | Free-form paragraph text                                |
 | `/memory personal import`  | `memory/personal/import.ts`   | File upload only                                        |
 
@@ -477,6 +477,8 @@ When a flow needs both a selection modal and a later prefilled edit modal, use:
 3. `showModal()` from the confirm button interaction
 
 This is the pattern used by the `/memory personal edit`, `/memory server edit`, `/persona attribute edit`, and `/persona sample-dialogue edit` flows.
+
+For persona-scoped flows that already have a persistent ephemeral picker message, prefer replacing that same message with the confirmation embed and later success state instead of spawning a second ephemeral thread.
 
 Do **not** use `promptWithConfirmation()` for this case.
 It eagerly `deferUpdate()`s the button click in its collector filter, which consumes the interaction and prevents the next `showModal()` call.

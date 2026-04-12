@@ -322,13 +322,16 @@ export async function execute(
           return;
         }
 
-        const confirmationResult = await promptWithUnacknowledgedConfirmation(selectModalInteraction, locale, {
+        await acknowledgeModalSubmitForRefresh(selectModalInteraction);
+
+        const confirmationResult = await promptWithUnacknowledgedConfirmation(interaction, locale, {
           embedTitleKey: "commands.memory.personal.edit.confirm_title",
           embedDescriptionKey: "commands.memory.personal.edit.confirm_description",
           embedDescriptionVars: {
             memory: formatMemoryPreview(selectedMemory.content),
           },
           embedColor: ColorCode.INFO,
+          useComponentsV2: true,
           continueLabelKey: "general.confirm",
           cancelLabelKey: "general.pagination.cancel",
           continueCustomId: `memory_personal_edit_confirm_${selectModalInteraction.id}`,
