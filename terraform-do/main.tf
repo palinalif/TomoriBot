@@ -11,6 +11,21 @@ terraform {
       source  = "digitalocean/digitalocean"
       version = "~> 2.0"
     }
+
+    cloudflare = {
+      source  = "cloudflare/cloudflare"
+      version = "~> 5.0"
+    }
+  }
+
+  # Remote state in the same S3 bucket used by the AWS stack.
+  # Key is intentionally different to keep stacks fully isolated.
+  backend "s3" {
+    bucket       = "tomoribot-terraform-state"
+    key          = "matrix-do/terraform.tfstate"
+    region       = "us-east-1"
+    use_lockfile = true
+    encrypt      = true
   }
 }
 

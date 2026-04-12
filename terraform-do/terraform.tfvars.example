@@ -22,3 +22,11 @@ volume_size_gib = 25
 # Optional: only if this zone is managed in DigitalOcean DNS.
 domain_name        = "example.com"
 matrix_record_name = "matrix"
+
+# Cloudflare — required for DNS, tunnel, and WAF management.
+# API token needs: Zone:DNS:Edit, Zone:WAF:Edit, Account:Cloudflare Tunnel:Edit
+cloudflare_api_token  = "REPLACE_ME"
+cloudflare_account_id = "REPLACE_ME"
+cloudflare_zone_id    = "REPLACE_ME"
+cloudflare_zone_name  = "tomoribot.app"
+matrix_tunnel_id      = "REPLACE_ME"
