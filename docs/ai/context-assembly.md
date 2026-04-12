@@ -73,16 +73,16 @@ The `metadataTag` is a stable interface between the native builder and the prese
 | Tag | Block # | Description | Configured via |
 |-----|---------|-------------|---------------|
 | `SYSTEM_HUMANIZER_RULES` | 1 | System prompt + persona prompt | `/sysprompt`, `/persona` |
-| `SYSTEM_PERSONALITY` | 2 | Personality attributes | `/persona attribute add`, `/persona attribute remove` |
+| `SYSTEM_PERSONALITY` | 2 | Personality attributes | `/persona attribute add`, `/persona attribute edit`, `/persona attribute remove` |
 | `KNOWLEDGE_SERVER_INFO` | 3 | Server name, description, channel info | Automatic (Discord metadata) |
-| `KNOWLEDGE_SERVER_MEMORIES` | 4 | Server-level memories | `/memory server add`, `/memory server remove` |
+| `KNOWLEDGE_SERVER_MEMORIES` | 4 | Server-level memories | `/memory server add`, `/memory server edit`, `/memory server remove` |
 | `KNOWLEDGE_SERVER_EMOJIS` | 5 | Available custom emojis | `/server initialize expressions` |
 | `KNOWLEDGE_SERVER_STICKERS` | 6 | Available stickers | `/server initialize expressions` |
-| `KNOWLEDGE_USERS_IN_CONVERSATION` | 7 | User list + personal memories + status + reminders + time/channel info | `/memory personal add`, `/memory personal remove` |
+| `KNOWLEDGE_USERS_IN_CONVERSATION` | 7 | User list + personal memories + status + reminders + time/channel info | `/memory personal add`, `/memory personal edit`, `/memory personal remove` |
 | `KNOWLEDGE_SHORT_TERM_MEMORY` | 8 | Recent conversation summaries from other channels (STM) | `/personal cache` |
 | `KNOWLEDGE_SERVER_DOCUMENTS` | 9 | RAG document chunks | `/memory document add`, `/memory history import`, `/memory document remove` |
 | `KNOWLEDGE_SERVER_CONDITIONING` | 10 | Reward/punish conditioning guidance for the active persona | `/conditioning reward`, `/conditioning punish`, `/conditioning manage` |
-| `DIALOGUE_SAMPLE` | 11 | Sample dialogue pairs | `/persona sample-dialogue add`, `/persona sample-dialogue remove` |
+| `DIALOGUE_SAMPLE` | 11 | Sample dialogue pairs | `/persona sample-dialogue add`, `/persona sample-dialogue edit`, `/persona sample-dialogue remove` |
 | `DIALOGUE_HISTORY` | 12 | Actual conversation history | `/config message-fetch-limit` |
 
 ## Native Assembly Order
@@ -93,9 +93,9 @@ All blocks marked with `*` are conditional (only included when enabled/available
 ```text
  1.  System prompt (/sysprompt)                          [SYSTEM_HUMANIZER_RULES]
  2.  Persona prompt (/persona)*                          [SYSTEM_HUMANIZER_RULES]
- 3.  Personality attributes (/persona attribute add)*     [SYSTEM_PERSONALITY]
+ 3.  Personality attributes (/persona attribute add|edit)* [SYSTEM_PERSONALITY]
  4.  Server info = server name + description              [KNOWLEDGE_SERVER_INFO]
- 5.  Server memories (/memory server add)*                [KNOWLEDGE_SERVER_MEMORIES]
+ 5.  Server memories (/memory server add|edit)*           [KNOWLEDGE_SERVER_MEMORIES]
  6.  Server emojis*                                       [KNOWLEDGE_SERVER_EMOJIS]
  7.  Server stickers*                                     [KNOWLEDGE_SERVER_STICKERS]
  8.  Users in conversation = user list + personal         [KNOWLEDGE_USERS_IN_CONVERSATION]

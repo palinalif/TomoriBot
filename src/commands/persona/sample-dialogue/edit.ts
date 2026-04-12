@@ -1,0 +1,519 @@
+import type {
+  ButtonInteraction,
+  ChatInputCommandInteraction,
+  Client,
+  ModalSubmitInteraction,
+  SlashCommandSubcommandBuilder,
+} from "discord.js";
+import { MessageFlags, TextInputStyle } from "discord.js";
+import { sql } from "@/utils/db/client";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
+import {
+  acknowledgeModalSubmitForRefresh,
+  promptWithPaginatedModal,
+  promptWithRawModal,
+  promptWithUnacknowledgedConfirmation,
+  replyComponentsV2Status,
+  replyInfoEmbed,
+  replyPaginatedPersonaChoicesV2,
+  safeSelectOptionText,
+  updateButtonComponentsV2Status,
+} from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { isBlacklisted, loadAllPersonasForServer } from "@/utils/db/dbRead";
+import { getMemoryLimits, validateSampleDialogue } from "@/utils/db/memoryLimits";
+import type { SelectOption } from "@/types/discord/modal";
+import { tomoriSchema, type ErrorContext, type TomoriState, type UserRow } from "@/types/db/schema";
+
+const SELECT_MODAL_CUSTOM_ID = "persona_sampledialogue_edit_select_modal";
+const EDIT_MODAL_CUSTOM_ID = "persona_sampledialogue_edit_value_modal";
+const DIALOGUE_SELECT_ID = "dialogue_select";
+const USER_INPUT_ID = "user_input";
+const BOT_INPUT_ID = "bot_input";
+
+const memoryLimits = getMemoryLimits();
+
+function formatDialoguePreview(text: string, maxLength = 96): string {
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function makeDialogueKey(userInput: string, botInput: string): string {
+  return `${userInput.trim().toLowerCase()}|||${botInput.trim().toLowerCase()}`;
+}
+
+async function repairMismatchedDialogues(
+  tomoriId: number,
+  inLength: number,
+  outLength: number,
+): Promise<{ repairedIn: string[]; repairedOut: string[] } | null> {
+  const safeLength = Math.min(inLength, outLength);
+
+  log.warn(
+    `Self-healing: truncating sample dialogues for tomori ${tomoriId} from (in: ${inLength}, out: ${outLength}) to ${safeLength} pairs`,
+  );
+
+  const [updatedRow] = await sql`
+    UPDATE tomoris
+    SET
+      sample_dialogues_in = sample_dialogues_in[1:${safeLength}],
+      sample_dialogues_out = sample_dialogues_out[1:${safeLength}]
+    WHERE tomori_id = ${tomoriId}
+    RETURNING sample_dialogues_in, sample_dialogues_out
+  `;
+
+  if (!updatedRow) {
+    log.error(`Self-healing failed: no rows returned for tomori ${tomoriId}`);
+    return null;
+  }
+
+  log.success(`Self-healing complete: sample dialogues for tomori ${tomoriId} repaired to ${safeLength} pairs`);
+
+  return {
+    repairedIn: (updatedRow.sample_dialogues_in as string[]) ?? [],
+    repairedOut: (updatedRow.sample_dialogues_out as string[]) ?? [],
+  };
+}
+
+async function performSampleDialogueEdit(
+  selectedPersona: TomoriState,
+  selectedIndex: number,
+  newUserInput: string,
+  newBotInput: string,
+  userData: UserRow,
+  replyInteraction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
+  locale: string,
+  suppressSuccessReply = false,
+): Promise<boolean> {
+  const pgIndex = selectedIndex + 1;
+  const [updatedRow] = await sql`
+    UPDATE tomoris
+    SET
+      sample_dialogues_in[${pgIndex}] = ${newUserInput},
+      sample_dialogues_out[${pgIndex}] = ${newBotInput}
+    WHERE tomori_id = ${selectedPersona.tomori_id}
+    RETURNING *
+  `;
+
+  const validationResult = tomoriSchema.safeParse(updatedRow);
+  if (!validationResult.success || !updatedRow) {
+    const context: ErrorContext = {
+      userId: userData.user_id,
+      serverId: selectedPersona.server_id,
+      tomoriId: selectedPersona.tomori_id,
+      errorType: "DatabaseUpdateError",
+      metadata: {
+        command: "persona sample-dialogue edit",
+        selectedIndex,
+        validationErrors: validationResult.success ? null : validationResult.error.flatten(),
+      },
+    };
+
+    await log.error(
+      "Failed to update or validate sample dialogue arrays",
+      validationResult.success
+        ? new Error("Database update returned no rows or unexpected data")
+        : new Error("Updated tomori row failed validation"),
+      context,
+    );
+
+    await replyInfoEmbed(replyInteraction, locale, {
+      titleKey: "general.errors.update_failed_title",
+      descriptionKey: "general.errors.update_failed_description",
+      color: ColorCode.ERROR,
+    });
+    return false;
+  }
+
+  if (replyInteraction.guildId) {
+    invalidateTomoriStateCache(replyInteraction.guildId);
+  }
+
+  log.success(
+    `Updated sample dialogue ${selectedIndex} for tomori ${selectedPersona.tomori_id} by ${userData.user_disc_id}`,
+  );
+
+  if (!suppressSuccessReply) {
+    await replyInfoEmbed(replyInteraction, locale, {
+      titleKey: "commands.persona.sample-dialogue.edit.success_title",
+      descriptionKey: "commands.persona.sample-dialogue.edit.success_description",
+      descriptionVars: {
+        input: formatDialoguePreview(newUserInput),
+        output: formatDialoguePreview(newBotInput),
+      },
+      color: ColorCode.SUCCESS,
+    });
+  }
+
+  return true;
+}
+
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand.setName("edit").setDescription(localizer("en-US", "commands.persona.sample-dialogue.edit.description"));
+
+export async function execute(
+  _client: Client,
+  interaction: ChatInputCommandInteraction,
+  userData: UserRow,
+  locale: string,
+): Promise<void> {
+  if (!interaction.channel) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.errors.channel_only_title",
+      descriptionKey: "general.errors.channel_only_description",
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  let tomoriState: TomoriState | null = null;
+  let selectedPersona: TomoriState | null = null;
+  let personaSelectionInteraction: ButtonInteraction | null = null;
+
+  try {
+    const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
+
+    if (interaction.guild) {
+      const blacklisted = (await isBlacklisted(interaction.guild.id, interaction.user.id)) ?? false;
+      if (blacklisted && !hasManagePermission) {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "general.errors.user_blacklisted_title",
+          descriptionKey: "general.errors.user_blacklisted_description",
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+    }
+
+    tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
+    if (!tomoriState) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.tomori_not_setup_title",
+        descriptionKey: "general.errors.tomori_not_setup_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    let allPersonas = await loadAllPersonasForServer(interaction.guild?.id ?? interaction.user.id);
+    if (allPersonas.length === 0) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.tomori_not_setup_title",
+        descriptionKey: "general.errors.tomori_not_setup_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    while (true) {
+      const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+        personas: allPersonas,
+        color: ColorCode.INFO,
+        preserveSelectedInteraction: true,
+        onSelect: async () => {},
+      });
+
+      if (!personaSelection.success) {
+        if (personaSelection.reason === "cancelled" || personaSelection.reason === "fatal") return;
+        continue;
+      }
+      if (personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
+        return;
+      }
+
+      personaSelectionInteraction = personaSelection.interaction;
+      selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
+      if (!selectedPersona?.tomori_id) {
+        await updateButtonComponentsV2Status(
+          personaSelectionInteraction,
+          locale,
+          "general.errors.invalid_option_title",
+          "general.errors.invalid_option_description",
+          ColorCode.ERROR,
+          undefined,
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
+      }
+
+      if (!tomoriState.config.sampledialogue_memteaching_enabled && !hasManagePermission) {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "commands.teach.sampledialogue.teaching_disabled_title",
+          descriptionKey: "commands.teach.sampledialogue.teaching_disabled_description",
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      let currentIn = selectedPersona.sample_dialogues_in ?? [];
+      let currentOut = selectedPersona.sample_dialogues_out ?? [];
+
+      if (currentIn.length !== currentOut.length && currentIn.length > 0 && currentOut.length > 0) {
+        const repaired = await repairMismatchedDialogues(
+          selectedPersona.tomori_id,
+          currentIn.length,
+          currentOut.length,
+        );
+        if (repaired) {
+          currentIn = repaired.repairedIn;
+          currentOut = repaired.repairedOut;
+          selectedPersona.sample_dialogues_in = repaired.repairedIn;
+          selectedPersona.sample_dialogues_out = repaired.repairedOut;
+          if (interaction.guildId) {
+            invalidateTomoriStateCache(interaction.guildId);
+          }
+        }
+      }
+
+      if (currentIn.length === 0 || currentIn.length !== currentOut.length) {
+        await updateButtonComponentsV2Status(
+          personaSelectionInteraction,
+          locale,
+          "commands.forget.sampledialogue.no_dialogues_title",
+          "commands.forget.sampledialogue.no_dialogues",
+          ColorCode.WARN,
+          undefined,
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
+      }
+
+      const dialogueSelectOptions: SelectOption[] = currentIn.map((input, index) => ({
+        label: safeSelectOptionText(input, 50),
+        value: index.toString(),
+        description: safeSelectOptionText(currentOut[index] ?? "", 50),
+      }));
+
+      const selectModalResult = await promptWithPaginatedModal(personaSelectionInteraction, locale, {
+        modalCustomId: SELECT_MODAL_CUSTOM_ID,
+        modalTitleKey: "commands.persona.sample-dialogue.edit.select_modal_title",
+        components: [
+          {
+            customId: DIALOGUE_SELECT_ID,
+            labelKey: "commands.persona.sample-dialogue.edit.select_label",
+            descriptionKey: "commands.persona.sample-dialogue.edit.select_description",
+            placeholder: "commands.persona.sample-dialogue.edit.select_placeholder",
+            required: true,
+            options: dialogueSelectOptions,
+          },
+        ],
+      });
+
+      if (selectModalResult.outcome !== "submit") {
+        log.info(`Sample dialogue edit selection modal ${selectModalResult.outcome} for user ${userData.user_id}`);
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "general.pagination.select_persona_title",
+          "general.pagination.reloading_persona_picker",
+          ColorCode.INFO,
+        );
+        continue;
+      }
+
+      const selectModalInteraction = selectModalResult.interaction;
+      const selectedIndexRaw = selectModalResult.values?.[DIALOGUE_SELECT_ID];
+      if (!selectModalInteraction || !selectedIndexRaw) {
+        log.error("Sample dialogue edit selection unexpectedly missing interaction or values");
+        return;
+      }
+
+      const selectedIndex = Number.parseInt(selectedIndexRaw, 10);
+      const selectedUserInput = currentIn[selectedIndex];
+      const selectedBotInput = currentOut[selectedIndex];
+      if (!selectedUserInput || !selectedBotInput) {
+        await replyInfoEmbed(selectModalInteraction, locale, {
+          titleKey: "general.errors.operation_failed_title",
+          descriptionKey: "general.errors.operation_failed_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+
+      const confirmationResult = await promptWithUnacknowledgedConfirmation(selectModalInteraction, locale, {
+        embedTitleKey: "commands.persona.sample-dialogue.edit.confirm_title",
+        embedDescriptionKey: "commands.persona.sample-dialogue.edit.confirm_description",
+        embedDescriptionVars: {
+          input: formatDialoguePreview(selectedUserInput),
+          output: formatDialoguePreview(selectedBotInput),
+        },
+        embedColor: ColorCode.INFO,
+        continueLabelKey: "general.confirm",
+        cancelLabelKey: "general.pagination.cancel",
+        continueCustomId: `persona_sampledialogue_edit_confirm_${selectModalInteraction.id}`,
+        cancelCustomId: `persona_sampledialogue_edit_cancel_${selectModalInteraction.id}`,
+      });
+
+      if (confirmationResult.outcome !== "continue" || !confirmationResult.interaction) {
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "general.pagination.select_persona_title",
+          "general.pagination.reloading_persona_picker",
+          ColorCode.INFO,
+        );
+        continue;
+      }
+
+      const editModalResult = await promptWithRawModal(confirmationResult.interaction, locale, {
+        modalCustomId: EDIT_MODAL_CUSTOM_ID,
+        modalTitleKey: "commands.persona.sample-dialogue.edit.modal_title",
+        components: [
+          {
+            customId: USER_INPUT_ID,
+            labelKey: "commands.persona.sample-dialogue.edit.user_input_label",
+            descriptionKey: "commands.persona.sample-dialogue.edit.user_input_description",
+            placeholder: "commands.persona.sample-dialogue.edit.user_input_placeholder",
+            style: TextInputStyle.Paragraph,
+            required: true,
+            maxLength: memoryLimits.maxSampleDialogueLength,
+            value: selectedUserInput,
+          },
+          {
+            customId: BOT_INPUT_ID,
+            labelKey: "commands.persona.sample-dialogue.edit.bot_input_label",
+            descriptionKey: "commands.persona.sample-dialogue.edit.bot_input_description",
+            placeholder: "commands.persona.sample-dialogue.edit.bot_input_placeholder",
+            style: TextInputStyle.Paragraph,
+            required: true,
+            maxLength: memoryLimits.maxSampleDialogueLength,
+            value: selectedBotInput,
+          },
+        ],
+      });
+
+      if (editModalResult.outcome !== "submit") {
+        log.info(`Sample dialogue edit modal ${editModalResult.outcome} for user ${userData.user_id}`);
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "general.pagination.select_persona_title",
+          "general.pagination.reloading_persona_picker",
+          ColorCode.INFO,
+        );
+        continue;
+      }
+
+      const editModalInteraction = editModalResult.interaction;
+      const editedUserInput = editModalResult.values?.[USER_INPUT_ID]?.trim() ?? "";
+      const editedBotInput = editModalResult.values?.[BOT_INPUT_ID]?.trim() ?? "";
+      if (!editModalInteraction) {
+        log.error("Sample dialogue edit modal unexpectedly missing interaction");
+        return;
+      }
+
+      const userInputValidation = validateSampleDialogue(editedUserInput);
+      if (!userInputValidation.isValid) {
+        await replyInfoEmbed(editModalInteraction, locale, {
+          titleKey: "commands.teach.sampledialogue.user_input_too_long_title",
+          descriptionKey: "commands.teach.sampledialogue.user_input_too_long_description",
+          descriptionVars: {
+            current_length: editedUserInput.length.toString(),
+            max_allowed: (userInputValidation.maxAllowed || memoryLimits.maxSampleDialogueLength).toString(),
+          },
+          color: ColorCode.ERROR,
+        });
+        continue;
+      }
+
+      const botInputValidation = validateSampleDialogue(editedBotInput);
+      if (!botInputValidation.isValid) {
+        await replyInfoEmbed(editModalInteraction, locale, {
+          titleKey: "commands.teach.sampledialogue.bot_input_too_long_title",
+          descriptionKey: "commands.teach.sampledialogue.bot_input_too_long_description",
+          descriptionVars: {
+            current_length: editedBotInput.length.toString(),
+            max_allowed: (botInputValidation.maxAllowed || memoryLimits.maxSampleDialogueLength).toString(),
+          },
+          color: ColorCode.ERROR,
+        });
+        continue;
+      }
+
+      if (editedUserInput === selectedUserInput.trim() && editedBotInput === selectedBotInput.trim()) {
+        await replyInfoEmbed(editModalInteraction, locale, {
+          titleKey: "commands.persona.sample-dialogue.edit.no_changes_title",
+          descriptionKey: "commands.persona.sample-dialogue.edit.no_changes_description",
+          color: ColorCode.WARN,
+        });
+        continue;
+      }
+
+      const editedKey = makeDialogueKey(editedUserInput, editedBotInput);
+      const duplicateExists = currentIn.some(
+        (input, index) => index !== selectedIndex && makeDialogueKey(input, currentOut[index] ?? "") === editedKey,
+      );
+      if (duplicateExists) {
+        await replyInfoEmbed(editModalInteraction, locale, {
+          titleKey: "commands.persona.sample-dialogue.edit.duplicate_title",
+          descriptionKey: "commands.persona.sample-dialogue.edit.duplicate_description",
+          color: ColorCode.WARN,
+        });
+        continue;
+      }
+
+      const editSucceeded = await performSampleDialogueEdit(
+        selectedPersona,
+        selectedIndex,
+        editedUserInput,
+        editedBotInput,
+        userData,
+        editModalInteraction,
+        locale,
+        true,
+      );
+      if (!editSucceeded) {
+        return;
+      }
+
+      await acknowledgeModalSubmitForRefresh(editModalInteraction);
+      await replyComponentsV2Status(
+        interaction,
+        locale,
+        "commands.persona.sample-dialogue.edit.success_title",
+        "commands.persona.sample-dialogue.edit.success_description",
+        ColorCode.SUCCESS,
+        {
+          input: formatDialoguePreview(editedUserInput),
+          output: formatDialoguePreview(editedBotInput),
+        },
+        "general.pagination.reloading_persona_picker",
+      );
+
+      allPersonas = await loadAllPersonasForServer(interaction.guild?.id ?? interaction.user.id);
+    }
+  } catch (error) {
+    const context: ErrorContext = {
+      userId: userData.user_id,
+      serverId: tomoriState?.server_id,
+      tomoriId: selectedPersona?.tomori_id ?? tomoriState?.tomori_id,
+      errorType: "CommandExecutionError",
+      metadata: {
+        command: "persona sample-dialogue edit",
+        guildId: interaction.guild?.id,
+        executorDiscordId: interaction.user.id,
+      },
+    };
+    await log.error(
+      `Unexpected error in /persona sample-dialogue edit for user ${userData.user_disc_id}`,
+      error as Error,
+      context,
+    );
+
+    const errorReplyTarget =
+      personaSelectionInteraction && !personaSelectionInteraction.deferred && !personaSelectionInteraction.replied
+        ? personaSelectionInteraction
+        : interaction;
+    await replyInfoEmbed(errorReplyTarget, locale, {
+      titleKey: "general.errors.unknown_error_title",
+      descriptionKey: "general.errors.unknown_error_description",
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+}

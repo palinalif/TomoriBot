@@ -725,6 +725,28 @@ export default {
         add: {
           description: `ペルソナに属性を追加します。`,
         },
+        edit: {
+          description: `ペルソナの属性を編集します。`,
+          select_modal_title: `属性を選択`,
+          select_label: `編集する属性`,
+          select_description: `編集する属性を選択してください`,
+          select_placeholder: `属性を選択...`,
+          confirm_title: `属性を編集しますか？`,
+          confirm_description: `次の属性を選択しました:
+> {attribute}
+
+**確認** を押すと編集モーダルを開きます。`,
+          modal_title: `属性を編集`,
+          attribute_input_label: `更新後の属性`,
+          attribute_input_description: `選択した属性を新しいテキストに置き換えます。`,
+          attribute_input_placeholder: `{bot}はマンゴーが好き`,
+          no_changes_title: `変更はありません`,
+          no_changes_description: `その属性は既にその内容に設定されています。`,
+          duplicate_title: `重複した属性`,
+          duplicate_description: `この属性 '{attribute}' は既に私の属性リストにあります。`,
+          success_title: `属性を更新しました`,
+          success_description: `属性を正常に更新しました: "{attribute}"`,
+        },
         remove: {
           description: `ペルソナから属性を削除します。`,
         },
@@ -742,6 +764,32 @@ export default {
         description: `私がどのように応答すべきかの例として、ユーザー/ボットの対話ペアを追加します。`,
         add: {
           description: `私がどのように応答すべきかの例として、ユーザー/ボットの対話ペアを追加します。`,
+        },
+        edit: {
+          description: `サンプル対話ペアを編集します。`,
+          select_modal_title: `サンプル対話を選択`,
+          select_label: `編集する対話`,
+          select_description: `編集する対話ペアを選択してください`,
+          select_placeholder: `対話を選択...`,
+          confirm_title: `サンプル対話を編集しますか？`,
+          confirm_description: `次の対話ペアを選択しました:
+**ユーザー:** {input}
+**私:** {output}
+
+**確認** を押すと編集モーダルを開きます。`,
+          modal_title: `サンプル対話を編集`,
+          user_input_label: `ユーザーのセリフ`,
+          user_input_description: `ユーザー側の例文を更新します。`,
+          user_input_placeholder: `好きな食べ物は何ですか？`,
+          bot_input_label: `私の応答`,
+          bot_input_description: `私の応答例を更新します。`,
+          bot_input_placeholder: `わ、わたしはマンゴーが好きです…`,
+          no_changes_title: `変更はありません`,
+          no_changes_description: `そのサンプル対話ペアは既にその内容に設定されています。`,
+          duplicate_title: `重複したサンプル対話`,
+          duplicate_description: `そのサンプル対話ペアは既に存在します。`,
+          success_title: `サンプル対話を更新しました`,
+          success_description: `対話ペアを正常に更新しました: ユーザー: "{input}" -> ボット: "{output}"`,
         },
         remove: {
           description: `私の記憶からサンプルユーザー/ボットの対話ペアを削除します。`,
@@ -3993,6 +4041,31 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
           scope_choice_persona: `ペルソナ`,
           scope_choice_global: `グローバル`,
         },
+        edit: {
+          description: `個人記憶を編集します。`,
+          scope_description: `ペルソナ記憶かグローバル記憶かを選択します。`,
+          scope_choice_persona: `ペルソナ`,
+          scope_choice_global: `グローバル`,
+          select_modal_title: `個人記憶を選択`,
+          select_label: `編集する記憶`,
+          select_description: `編集する個人記憶を選択してください`,
+          select_placeholder: `記憶を選択...`,
+          confirm_title: `個人記憶を編集しますか？`,
+          confirm_description: `次の個人記憶を選択しました:
+> {memory}
+
+**確認** を押すと編集モーダルを開きます。`,
+          modal_title: `個人記憶を編集`,
+          memory_input_label: `更新後の個人記憶`,
+          memory_input_description: `選択した個人記憶を新しいテキストに置き換えます。`,
+          memory_input_placeholder: `{user}はマンゴーが好き`,
+          no_changes_title: `変更はありません`,
+          no_changes_description: `その個人記憶は既にその内容に設定されています。`,
+          duplicate_title: `重複した個人記憶`,
+          duplicate_description: `この記憶 '{memory}' は既にあなたの個人的な記憶にあります。`,
+          success_title: `個人記憶を更新しました`,
+          success_description: `個人記憶を正常に更新しました: "{memory}"`,
+        },
         export: {
           description: `個人記憶をJSONでエクスポートします。`,
           scope_description: `ペルソナ記憶かグローバル記憶かを選択します。`,
@@ -4020,6 +4093,28 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
         description: `サーバー記憶を管理します。`,
         add: {
           description: `サーバー記憶を追加します。`,
+        },
+        edit: {
+          description: `サーバー記憶を編集します。`,
+          select_modal_title: `サーバー記憶を選択`,
+          select_label: `編集する記憶`,
+          select_description: `編集するサーバー記憶を選択してください`,
+          select_placeholder: `記憶を選択...`,
+          confirm_title: `サーバー記憶を編集しますか？`,
+          confirm_description: `次のサーバー記憶を選択しました:
+> {memory}
+
+**確認** を押すと編集モーダルを開きます。`,
+          modal_title: `サーバー記憶を編集`,
+          memory_input_label: `更新後のサーバー記憶`,
+          memory_input_description: `選択したサーバー記憶を新しいテキストに置き換えます。`,
+          memory_input_placeholder: `このサーバーのメンバーはマンゴーが好き`,
+          no_changes_title: `変更はありません`,
+          no_changes_description: `そのサーバー記憶は既にその内容に設定されています。`,
+          duplicate_title: `重複した記憶`,
+          duplicate_description: `この記憶 '{memory}' は既にこのサーバーの私の記憶にあります。`,
+          success_title: `サーバー記憶を更新しました`,
+          success_description: `サーバー記憶を正常に更新しました: "{memory}"`,
         },
         export: {
           description: `サーバー記憶をJSONでエクスポートします。`,

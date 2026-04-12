@@ -423,6 +423,110 @@ export async function promptWithConfirmation(
 }
 
 /**
+ * @description Prompts the user with a confirmation embed and buttons without
+ * pre-acknowledging the selected button interaction, so the caller can still
+ * open a modal from the returned ButtonInteraction.
+ * @param interaction The interaction to show the confirmation for
+ * @param locale The locale for localization
+ * @param options Configuration for the embed and buttons
+ * @returns Promise resolving to a ConfirmationResult
+ */
+export async function promptWithUnacknowledgedConfirmation(
+  interaction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
+  locale: string,
+  options: ConfirmationOptions,
+): Promise<ConfirmationResult> {
+  const {
+    embedTitleKey,
+    embedDescriptionKey,
+    embedDescriptionVars = {},
+    embedColor = ColorCode.WARN,
+    continueLabelKey,
+    cancelLabelKey,
+    continueCustomId,
+    cancelCustomId,
+    timeout = PROMPT_TIMEOUT,
+  } = options;
+
+  const embed = createStandardEmbed(locale, {
+    titleKey: embedTitleKey,
+    descriptionKey: embedDescriptionKey,
+    descriptionVars: embedDescriptionVars,
+    color: embedColor,
+  });
+
+  const continueButton = new ButtonBuilder()
+    .setCustomId(continueCustomId)
+    .setLabel(localizer(locale, continueLabelKey))
+    .setStyle(ButtonStyle.Success);
+
+  const cancelButton = new ButtonBuilder()
+    .setCustomId(cancelCustomId)
+    .setLabel(localizer(locale, cancelLabelKey))
+    .setStyle(ButtonStyle.Danger);
+
+  const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(continueButton, cancelButton);
+
+  let message: Message;
+  try {
+    if (interaction.deferred || interaction.replied) {
+      message = await interaction.editReply({
+        embeds: [embed],
+        components: [buttonRow],
+      });
+    } else {
+      await interaction.reply({
+        embeds: [embed],
+        components: [buttonRow],
+        flags: MessageFlags.Ephemeral,
+      });
+      message = await interaction.fetchReply();
+    }
+  } catch (error) {
+    log.error("Failed to send modal confirmation prompt:", error);
+    return { outcome: "timeout" };
+  }
+
+  try {
+    const buttonInteraction = await message.awaitMessageComponent({
+      filter: (i) =>
+        i.user.id === interaction.user.id && (i.customId === continueCustomId || i.customId === cancelCustomId),
+      componentType: ComponentType.Button,
+      time: timeout,
+    });
+
+    if (buttonInteraction.customId === continueCustomId) {
+      return { outcome: "continue", interaction: buttonInteraction };
+    }
+
+    await buttonInteraction.update({
+      embeds: [
+        createStandardEmbed(locale, {
+          titleKey: "general.interaction.cancel_title",
+          descriptionKey: "general.interaction.cancel_description",
+          color: ColorCode.ERROR,
+        }),
+      ],
+      components: [],
+    });
+    return { outcome: "cancel" };
+  } catch (_timeoutError) {
+    log.warn(`Unacknowledged confirmation prompt timed out for user ${interaction.user.id}`);
+    await interaction.editReply({
+      embeds: [
+        createStandardEmbed(locale, {
+          titleKey: "general.interaction.timeout_title",
+          descriptionKey: "general.interaction.timeout_description",
+          color: ColorCode.ERROR,
+        }),
+      ],
+      components: [],
+    });
+    return { outcome: "timeout" };
+  }
+}
+
+/**
  * @description Prompts the user with a modal form and awaits their response.
  * Discord handles modal timeouts naturally (~15 minutes), so no artificial timeout is applied.
  * @param interaction The interaction to show the modal for

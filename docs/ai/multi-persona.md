@@ -424,6 +424,12 @@ Behavior:
 - Deletes the stored avatar file/reference when present.
 - Does **not** automatically delete legacy persona webhooks.
 
+### Persona Memory Editing
+
+- `/persona attribute add|edit|remove` manages `attribute_list` for a selected persona.
+- `/persona sample-dialogue add|edit|remove` manages the paired `sample_dialogues_in/out` arrays for a selected persona.
+- Edit flows reuse the existing persona picker and item selector, then show a confirmation button before opening a prefilled edit modal.
+
 ### `/persona swap`
 
 - Promotes an alter to main.

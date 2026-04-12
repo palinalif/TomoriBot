@@ -155,7 +155,7 @@ export async function execute(
             descriptionKey: "commands.teach.personaprompt.part1_description",
             placeholder: "commands.teach.personaprompt.part1_placeholder",
             style: TextInputStyle.Paragraph,
-            required: true,
+            required: false,
             maxLength: PERSONA_PROMPT_PART_MAX_LENGTH,
             value: existingPromptParts[0] || undefined,
           },
@@ -206,25 +206,13 @@ export async function execute(
         PERSONA_PROMPT_INPUT_IDS.map((inputId) => modalResult.values?.[inputId] || ""),
         PERSONA_PROMPT_PART_MAX_LENGTH,
       );
-      if (!modalSubmitInteraction || !personaPrompt) {
-        if (modalSubmitInteraction) {
-          await acknowledgeModalSubmitForRefresh(modalSubmitInteraction);
-        }
-        await replyComponentsV2Status(
-          interaction,
-          locale,
-          "general.errors.operation_failed_title",
-          "general.errors.operation_failed_description",
-          ColorCode.ERROR,
-          undefined,
-          "general.pagination.reloading_persona_picker",
-        );
-        continue;
+      if (!modalSubmitInteraction) {
+        return;
       }
 
       await sql`
 			  INSERT INTO persona_configs (tomori_id, persona_prompt)
-			  VALUES (${selectedPersona.tomori_id}, ${personaPrompt})
+			  VALUES (${selectedPersona.tomori_id}, ${personaPrompt || null})
 			  ON CONFLICT (tomori_id) DO UPDATE
 			  SET persona_prompt = EXCLUDED.persona_prompt
 		  `;
@@ -235,8 +223,10 @@ export async function execute(
       await replyComponentsV2Status(
         interaction,
         locale,
-        "commands.teach.personaprompt.success_title",
-        "commands.teach.personaprompt.success_description",
+        personaPrompt ? "commands.teach.personaprompt.success_title" : "commands.forget.personaprompt.success_title",
+        personaPrompt
+          ? "commands.teach.personaprompt.success_description"
+          : "commands.forget.personaprompt.success_description",
         ColorCode.SUCCESS,
         { persona_name: selectedPersona.tomori_nickname },
         "general.pagination.reloading_persona_picker",

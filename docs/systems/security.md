@@ -122,8 +122,10 @@ Blacklisted users:
 Primary files:
 - `src/commands/memory/personal/export.ts`
 - `src/commands/memory/personal/remove.ts`
+- `src/commands/memory/personal/edit.ts`
 - `src/commands/memory/server/export.ts`
 - `src/commands/memory/server/remove.ts`
+- `src/commands/memory/server/edit.ts`
 - `src/commands/personal/config/export.ts`
 - `src/commands/personal/config/remove.ts`
 - `src/commands/server/config/export.ts`
@@ -141,7 +143,7 @@ Delete/reset remains type-scoped. Commands that currently require confirmation c
 - personal settings reset
 - server config reset
 
-Personal memory removal remains type-scoped by persona/global scope, and server memory removal remains type-scoped by persona scope, but both now remove a single selected memory per invocation instead of bulk-deleting a scope.
+Personal memory management remains type-scoped by persona/global scope, and server memory management remains type-scoped by persona scope. `/memory personal remove|edit` and `/memory server remove|edit` operate on one selected stored row per invocation rather than bulk-resetting a whole scope.
 
 Important: the current reset/remove commands do not implement a blanket user-row/account hard delete path in these command implementations.
 

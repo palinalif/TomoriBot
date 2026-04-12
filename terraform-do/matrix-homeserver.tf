@@ -26,6 +26,12 @@ resource "digitalocean_droplet" "matrix_homeserver" {
 	systemctl enable --now docker
 	mkdir -p /opt/matrix-conduit
   EOT
+
+  # user_data only runs on first boot — ignore changes to avoid forcing a
+  # droplet replacement after the server is already bootstrapped.
+  lifecycle {
+    ignore_changes = [user_data]
+  }
 }
 
 resource "digitalocean_volume" "matrix_data" {

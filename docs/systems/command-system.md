@@ -265,6 +265,9 @@ Rules:
 - `promptWithRawModal(...)`:
   - shows modal (acknowledges original interaction)
   - optional arg 4 (`autoDeferReply`) can defer modal submission automatically
+- `promptWithUnacknowledgedConfirmation(...)`:
+  - shows confirm/cancel buttons without pre-acknowledging the confirm button
+  - use this for button -> modal flows where `showModal()` must happen after confirmation
 - `replyPaginatedChoices(...)` / `promptWithPaginatedModal(...)`:
   - send pagination UI immediately (acknowledges interaction)
   - should be called without pre-deferring
@@ -288,8 +291,8 @@ Rules:
 - `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(channels/threshold), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove), member-permissions, always-reply, thought-logs-channel
 - `novelai`: attg, image(model/params/generate), image-tags(style/me/character/negative), character-reference
 - `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(*), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove)
-- `persona`: create, generate, import, export, default, swap, remove, attribute(add/remove), sample-dialogue(add/remove), prompt(set/remove), history(import/remove)
-- `memory`: document(add/remove), personal(add/remove/import/export), server(add/remove/import/export)
+- `persona`: create, generate, import, export, default, swap, remove, attribute(add/edit/remove), sample-dialogue(add/edit/remove), prompt(set/remove), history(import/remove)
+- `memory`: document(add/remove), personal(add/edit/remove/import/export), server(add/edit/remove/import/export)
 - `personal`: privacy, language, nickname, cache, config(import/export/remove), impersonate(prompt)
 - `scheduled-task`: remove
 - `conditioning`: manage, reward(headpat/hug/kiss/tickle), punish(spank/pinch/bite/squeeze)

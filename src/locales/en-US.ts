@@ -725,6 +725,28 @@ Memories imported: {memories_count}
         add: {
           description: `Add an attribute to a persona.`,
         },
+        edit: {
+          description: `Edit an attribute on a persona.`,
+          select_modal_title: `Select Attribute`,
+          select_label: `Attribute to Edit`,
+          select_description: `Choose which attribute to edit`,
+          select_placeholder: `Select an attribute...`,
+          confirm_title: `Edit Attribute?`,
+          confirm_description: `You selected this attribute:
+> {attribute}
+
+Click **Confirm** to edit it.`,
+          modal_title: `Edit Attribute`,
+          attribute_input_label: `Updated Attribute`,
+          attribute_input_description: `Replace the selected attribute with new text.`,
+          attribute_input_placeholder: `{bot} likes mango floats`,
+          no_changes_title: `No Changes Made`,
+          no_changes_description: `That attribute is already set to this text.`,
+          duplicate_title: `Duplicate Attribute`,
+          duplicate_description: `This attribute '{attribute}' is already in my attribute list.`,
+          success_title: `Attribute Updated`,
+          success_description: `Successfully updated the attribute to: "{attribute}"`,
+        },
         remove: {
           description: `Remove an attribute from a persona.`,
         },
@@ -742,6 +764,32 @@ Memories imported: {memories_count}
         description: `Add a sample user/bot dialogue pair to as an example for how I should respond.`,
         add: {
           description: `Add a sample user/bot dialogue pair to as an example for how I should respond.`,
+        },
+        edit: {
+          description: `Edit a sample user/bot dialogue pair.`,
+          select_modal_title: `Select Sample Dialogue`,
+          select_label: `Dialogue to Edit`,
+          select_description: `Choose which dialogue pair to edit`,
+          select_placeholder: `Select a dialogue...`,
+          confirm_title: `Edit Sample Dialogue?`,
+          confirm_description: `You selected this dialogue pair:
+**User:** {input}
+**Me:** {output}
+
+Click **Confirm** to edit it.`,
+          modal_title: `Edit Sample Dialogue`,
+          user_input_label: `User's Line`,
+          user_input_description: `Update the user's example line.`,
+          user_input_placeholder: `What's your favorite food?`,
+          bot_input_label: `My Response`,
+          bot_input_description: `Update my example response.`,
+          bot_input_placeholder: `I-I like mango floats...`,
+          no_changes_title: `No Changes Made`,
+          no_changes_description: `That sample dialogue pair is already set to this text.`,
+          duplicate_title: `Duplicate Sample Dialogue`,
+          duplicate_description: `That sample dialogue pair already exists.`,
+          success_title: `Sample Dialogue Updated`,
+          success_description: `Successfully updated the dialogue pair: User: "{input}" -> Bot: "{output}"`,
         },
         remove: {
           description: `Remove a sample user/bot dialogue pair from my memory.`,
@@ -3975,6 +4023,31 @@ You can change this anytime using \`/personal privacy\`.`,
           scope_choice_persona: `Persona`,
           scope_choice_global: `Global`,
         },
+        edit: {
+          description: `Edit a personal memory.`,
+          scope_description: `Choose whether to edit persona-scoped or global memories.`,
+          scope_choice_persona: `Persona`,
+          scope_choice_global: `Global`,
+          select_modal_title: `Select Personal Memory`,
+          select_label: `Memory to Edit`,
+          select_description: `Choose which personal memory to edit`,
+          select_placeholder: `Select a memory...`,
+          confirm_title: `Edit Personal Memory?`,
+          confirm_description: `You selected this personal memory:
+> {memory}
+
+Click **Confirm** to edit it.`,
+          modal_title: `Edit Personal Memory`,
+          memory_input_label: `Updated Personal Memory`,
+          memory_input_description: `Replace the selected personal memory with new text.`,
+          memory_input_placeholder: `{user} likes mango floats`,
+          no_changes_title: `No Changes Made`,
+          no_changes_description: `That personal memory is already set to this text.`,
+          duplicate_title: `Duplicate Personal Memory`,
+          duplicate_description: `This memory '{memory}' is already in your personal memories.`,
+          success_title: `Personal Memory Updated`,
+          success_description: `Successfully updated the personal memory to: "{memory}"`,
+        },
         export: {
           description: `Export personal memories to JSON.`,
           scope_description: `Choose whether to export persona-scoped or global memories.`,
@@ -4002,6 +4075,28 @@ You can change this anytime using \`/personal privacy\`.`,
         description: `Manage server memories.`,
         add: {
           description: `Add a server memory.`,
+        },
+        edit: {
+          description: `Edit a server memory.`,
+          select_modal_title: `Select Server Memory`,
+          select_label: `Memory to Edit`,
+          select_description: `Choose which server memory to edit`,
+          select_placeholder: `Select a memory...`,
+          confirm_title: `Edit Server Memory?`,
+          confirm_description: `You selected this server memory:
+> {memory}
+
+Click **Confirm** to edit it.`,
+          modal_title: `Edit Server Memory`,
+          memory_input_label: `Updated Server Memory`,
+          memory_input_description: `Replace the selected server memory with new text.`,
+          memory_input_placeholder: `This server's members like mango floats`,
+          no_changes_title: `No Changes Made`,
+          no_changes_description: `That server memory is already set to this text.`,
+          duplicate_title: `Duplicate Memory`,
+          duplicate_description: `This memory '{memory}' is already in my memories for this server.`,
+          success_title: `Server Memory Updated`,
+          success_description: `Successfully updated the server memory to: "{memory}"`,
         },
         export: {
           description: `Export server memories to JSON.`,

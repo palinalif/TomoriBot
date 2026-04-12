@@ -468,6 +468,21 @@ These modals collect free-form text and have no structured option set:
 | `/tool comment`            | `tool/comment.ts`             | Free-form paragraph text                                |
 | `/memory personal import`  | `memory/personal/import.ts`   | File upload only                                        |
 
+### Button-To-Modal Confirmation Pattern
+
+When a flow needs both a selection modal and a later prefilled edit modal, use:
+
+1. selection modal
+2. confirmation embed with buttons
+3. `showModal()` from the confirm button interaction
+
+This is the pattern used by the `/memory personal edit`, `/memory server edit`, `/persona attribute edit`, and `/persona sample-dialogue edit` flows.
+
+Do **not** use `promptWithConfirmation()` for this case.
+It eagerly `deferUpdate()`s the button click in its collector filter, which consumes the interaction and prevents the next `showModal()` call.
+
+Use `promptWithUnacknowledgedConfirmation()` instead so the confirm button interaction stays available for the edit modal.
+
 ---
 
 ## discord.js Support Status
