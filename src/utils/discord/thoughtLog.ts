@@ -68,13 +68,21 @@ function buildThoughtLogEmbeds(args: {
     {
       label: localizer(locale, "genai.thought_log.summary_field"),
       content: normalizeThoughtLogText(thoughtLog.summary),
+      /** Whether to wrap the content in a code block */
+      codeBlock: false,
     },
     {
       label: localizer(locale, "genai.thought_log.raw_field"),
       content: normalizeThoughtLogText(thoughtLog.raw),
+      codeBlock: false,
+    },
+    {
+      label: localizer(locale, "genai.thought_log.fetched_content_field"),
+      content: normalizeThoughtLogText(thoughtLog.fetchedContent),
+      codeBlock: true,
     },
   ].filter(
-    (section): section is { label: string; content: string } =>
+    (section): section is { label: string; content: string; codeBlock: boolean } =>
       typeof section.content === "string" && section.content.length > 0,
   );
 
@@ -92,6 +100,34 @@ function buildThoughtLogEmbeds(args: {
 
   let metadataAttached = false;
   for (const section of sections) {
+    // Code-block sections: split content across multiple embeds, each with
+    // properly opened and closed triple-backtick fences.
+    if (section.codeBlock) {
+      const fenceOverhead = "```\n\n```".length; // Opening + closing backticks with newlines
+      const sectionHeader = `**${section.label}**\n`;
+      let remaining = section.content;
+
+      while (remaining.length > 0) {
+        const prefix = !metadataAttached && embeds.length === 0 ? `${description}\n\n${sectionHeader}` : sectionHeader;
+        const availableLength = Math.max(1, EMBED_DESCRIPTION_LIMIT - prefix.length - fenceOverhead);
+        const { chunk, remaining: nextRemaining } = takeEmbedChunk(remaining, availableLength);
+
+        embeds.push(
+          new EmbedBuilder()
+            .setColor(ColorCode.INFO)
+            .setTitle(localizer(locale, "genai.thought_log.title"))
+            .setDescription(`${prefix}\`\`\`\n${chunk}\n\`\`\``)
+            .setTimestamp()
+            .setFooter({ text: footerText }),
+        );
+
+        remaining = nextRemaining;
+        metadataAttached = true;
+      }
+      continue;
+    }
+
+    // Standard sections: split across multiple embeds if needed
     let remaining = section.content;
 
     while (remaining.length > 0) {
@@ -142,21 +178,27 @@ export function mergeThoughtLogPayload(
 ): ThoughtLogPayload | undefined {
   const summary = appendThoughtSection(base?.summary, next?.summary);
   const raw = appendThoughtSection(base?.raw, next?.raw);
+  const fetchedContent = appendThoughtSection(base?.fetchedContent, next?.fetchedContent);
   const firstReplyUrl = base?.firstReplyUrl || next?.firstReplyUrl;
 
-  if (!summary && !raw && !firstReplyUrl) {
+  if (!summary && !raw && !fetchedContent && !firstReplyUrl) {
     return undefined;
   }
 
   return {
     summary,
     raw,
+    fetchedContent,
     firstReplyUrl,
   };
 }
 
 export function hasThoughtLogContent(payload?: ThoughtLogPayload | null): boolean {
-  return Boolean(normalizeThoughtLogText(payload?.summary) || normalizeThoughtLogText(payload?.raw));
+  return Boolean(
+    normalizeThoughtLogText(payload?.summary) ||
+      normalizeThoughtLogText(payload?.raw) ||
+      normalizeThoughtLogText(payload?.fetchedContent),
+  );
 }
 
 interface SendThoughtLogEmbedArgs {

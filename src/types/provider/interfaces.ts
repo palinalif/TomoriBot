@@ -62,6 +62,8 @@ export interface ThoughtLogEntry {
 export interface ThoughtLogPayload {
   summary?: string;
   raw?: string;
+  /** Formatted text content fetched via the fetch MCP tool, rendered as code blocks in thought-log embeds. */
+  fetchedContent?: string;
   firstReplyUrl?: string;
 }
 

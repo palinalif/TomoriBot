@@ -262,8 +262,14 @@ const REACTION_CONTEXT_MAX_USERS_PER_REACTION = parseIntegerEnvFlag(
   0,
 );
 
-/** Maximum number of tool-call round-trips before giving up and showing the "Thinking Loop" embed. Configurable via BOT_MAX_FUNCTION_CALL_ITERATIONS (min: 1). */
-const MAX_FUNCTION_CALL_ITERATIONS = parseIntegerEnvFlag(process.env.BOT_MAX_FUNCTION_CALL_ITERATIONS, 20, 1);
+/**
+ * Hard safety ceiling on tool-call round-trips — prevents runaway loops from burning API credits indefinitely.
+ * The "Thinking Loop" embed fires only if this ceiling is actually reached.
+ * Configurable via BOT_MAX_FUNCTION_CALL_ITERATIONS (min: 1).
+ */
+const MAX_FUNCTION_CALL_ITERATIONS = parseIntegerEnvFlag(process.env.BOT_MAX_FUNCTION_CALL_ITERATIONS, 100, 1);
+/** Iteration index (0-based) at which a soft "still working" embed is sent, reminding users they can /bot kill. */
+const SOFT_WARN_ITERATION_THRESHOLD = 20;
 const NAI_TOOL_FAILURE_RETRY_THRESHOLD = Number.parseInt(process.env.NAI_TOOL_FAILURE_RETRY_THRESHOLD || "3", 10); // Max consecutive tool failures before showing error embed (NAI GLM only)
 const TOOLS_SUPPRESS_FOLLOWUP_AFTER_PRETOOL_TEXT = new Set([
   "update_short_term_memory",
@@ -1338,7 +1344,7 @@ function formatInlineSystemContent(
 }
 
 function formatAttachmentSystemHint(filename: string, messageId: string): string {
-  return `[System: A file named \`${filename}\` is attached (message ID: ${messageId}). Use \`read_file\` with this message ID to read its contents.]`;
+  return `[System: A file named \`${filename}\` is attached (message ID: ${messageId}). Use \`read_file\` with this message ID to read its contents, only if needed.]`;
 }
 
 function buildRecentMessageMetadataInline(createdAt: number): string {
@@ -5658,6 +5664,18 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               // Regular stop requests fall through to the stream loop's built-in handling
             }
 
+            // Soft-warn once at the threshold so users know the task is taking many steps.
+            if (i === SOFT_WARN_ITERATION_THRESHOLD) {
+              log.info(
+                `Tool-call iteration ${i} reached soft-warn threshold in channel ${channel.id}. Sending still-working notice.`,
+              );
+              await sendStandardEmbed(channel, locale, {
+                color: ColorCode.WARN,
+                titleKey: "genai.still_working_title",
+                descriptionKey: "genai.still_working_description",
+              });
+            }
+
             try {
               // Debug: Log final context right before sending to LLM
               if (reminderRecipientID) {
@@ -6370,6 +6388,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                     impersonatedUserId,
                     contextItems: contextSegments,
                     messageIdMap: streamingContext.messageIdMap,
+                    showKillHint: i >= SOFT_WARN_ITERATION_THRESHOLD,
                   };
 
                   // Execute tool using ToolRegistry (handles both built-in and MCP tools seamlessly)
@@ -6396,6 +6415,21 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
                   if (toolResult.success) {
                     functionExecutionResult = (toolResult.data as Record<string, unknown>) || { status: "completed" };
+
+                    // Capture fetch tool content for thought-logs
+                    // Both built-in and custom MCP fetch tools return formatted content in toolResult.message
+                    if (funcName === "fetch" && toolResult.message) {
+                      const toolData = toolResult.data as Record<string, unknown> | undefined;
+                      const isMcpFetch = toolData?.source === "mcp" && toolData?.functionName === "fetch";
+                      if (isMcpFetch) {
+                        personaThoughtLog = mergeThoughtLogPayload(personaThoughtLog, {
+                          fetchedContent: toolResult.message,
+                        });
+                        log.info(
+                          `Captured fetch content for thought-log (${(toolData?.contentLength as number) ?? toolResult.message.length} chars)`,
+                        );
+                      }
+                    }
 
                     // Handle sticker selection specifically (extract sticker for later sending)
                     if (funcName === "select_sticker_for_response" && toolResult.data) {

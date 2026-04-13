@@ -8,6 +8,7 @@ import { localizer } from "@/utils/text/localizer";
 import { log } from "@/utils/misc/logger";
 
 const HIDE_NOTICE_FOOTER_KEY = "genai.tool_notice.hide_footer";
+const KILL_HINT_FOOTER_KEY = "genai.tool_notice.hide_footer_with_kill";
 const IMAGE_NOTICE_PROMPT_PREVIEW_LENGTH = 700;
 
 function resolveDescription(locale: string, options: StandardEmbedOptions): string {
@@ -25,6 +26,7 @@ function buildToolNoticeOptions(
   locale: string,
   options: StandardEmbedOptions,
   sourceLine?: string,
+  showKillHint?: boolean,
 ): StandardEmbedOptions {
   const description = resolveDescription(locale, options);
   const sourceDescription = sourceLine
@@ -36,7 +38,7 @@ function buildToolNoticeOptions(
   return {
     ...options,
     description: [sourceDescription, description].filter((part) => part.length > 0).join("\n\n"),
-    footerKey: HIDE_NOTICE_FOOTER_KEY,
+    footerKey: showKillHint ? KILL_HINT_FOOTER_KEY : HIDE_NOTICE_FOOTER_KEY,
     footerVars: undefined,
   };
 }
@@ -187,7 +189,7 @@ export async function routeToolNoticeToThoughtLog(
   await sendStandardEmbed(
     thoughtLogChannel as BaseGuildTextChannel,
     context.locale,
-    buildToolNoticeOptions(context.locale, options, getSourceLine(context)),
+    buildToolNoticeOptions(context.locale, options, getSourceLine(context), context.showKillHint),
     getWebhookContext(context),
   );
 
@@ -202,7 +204,7 @@ export async function sendToolNotice(
 ): Promise<void> {
   if (context.suppressProgressNotices) return;
   try {
-    const finalOptions = buildToolNoticeOptions(context.locale, options);
+    const finalOptions = buildToolNoticeOptions(context.locale, options, undefined, context.showKillHint);
     if (isToolNoticeVisible(context.tomoriState.config, noticeKey)) {
       await sendStandardEmbed(context.channel, context.locale, finalOptions, getWebhookContext(context));
       return;

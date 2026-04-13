@@ -126,6 +126,8 @@ export default {
     empty_response_description: `AIから空の応答を受け取りました。この問題が解決しない場合は、\`/tool refresh\`を使用してください。`,
     max_iterations_title: `思考ループ`,
     max_iterations_streaming_description: `思考ループに陥り、リクエストを完了できませんでした。この問題が解決しない場合は、\`/tool refresh\`を使用してください。`,
+    still_working_title: `まだ作業中...`,
+    still_working_description: `このタスクは通常より多くのステップが必要です。もし止まっていると思ったら、\`/bot kill\` を使用してください。`,
     nai_tool_retry_exhausted_title: `ツールエラー`,
     nai_tool_retry_exhausted_description: `ツールが複数回失敗し、リクエストを完了できませんでした。もう一度お試しいただくか、問題が解決しない場合は \`/tool refresh\` を使用してください。`,
     fallback_used_title: `フォールバックモデルを使用しました`,
@@ -137,6 +139,7 @@ export default {
       description: `元チャンネル: {source_line}`,
       summary_field: `思考サマリー`,
       raw_field: `生の思考`,
+      fetched_content_field: `取得コンテンツ`,
       footer: `プロバイダー: {provider} | モデル: {model}`,
     },
     message_interaction: {
@@ -165,6 +168,7 @@ export default {
     },
     tool_notice: {
       hide_footer: `\`/config tool-notices visibility\` で非表示にできます`,
+      hide_footer_with_kill: `\`/config tool-notices visibility\` で非表示にできます · 止まっていると思ったら \`/bot kill\` を使用してください`,
     },
     video: {
       youtube_processing_title: `👁️ YouTube動画を視聴中...`,

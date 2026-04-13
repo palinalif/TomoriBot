@@ -126,6 +126,8 @@ export default {
     empty_response_description: `I received an empty response from the AI, use \`/tool refresh\` if this issue persists.`,
     max_iterations_title: `Thinking Loop`,
     max_iterations_streaming_description: `I got stuck in a thinking loop and couldn't complete the request, use \`/tool refresh\` if this issue persists.`,
+    still_working_title: `Still Working...`,
+    still_working_description: `This task is taking more steps than usual. Use \`/bot kill\` if you think I'm stuck.`,
     nai_tool_retry_exhausted_title: `Tool Error`,
     nai_tool_retry_exhausted_description: `A tool failed multiple times and couldn't complete the request. Please try again or use \`/tool refresh\` if this issue persists.`,
     fallback_used_title: `Fallback Model Used`,
@@ -137,6 +139,7 @@ export default {
       description: `Source: {source_line}`,
       summary_field: `Thought Summary`,
       raw_field: `Raw Thoughts`,
+      fetched_content_field: `Fetched Content`,
       footer: `Provider: {provider} | Model: {model}`,
     },
     message_interaction: {
@@ -165,6 +168,7 @@ export default {
     },
     tool_notice: {
       hide_footer: `Hide this using \`/config tool-notices visibility\``,
+      hide_footer_with_kill: `Hide this using \`/config tool-notices visibility\` · Use \`/bot kill\` if you think I'm stuck`,
     },
     video: {
       youtube_processing_title: `👁️  Watching YouTube Video...`,
