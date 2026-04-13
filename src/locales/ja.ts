@@ -186,6 +186,8 @@ export default {
     document: {
       reading_title: `📄 ドキュメントを読み取り中...`,
       reading_description: `\`{filename}\` の内容を読み取っています`,
+      truncated_title: `⚠️ ファイルが省略されました`,
+      truncated_description: `\`{filename}\` が長すぎるため、{limit}文字に省略されました（元のサイズ：{original}文字）。応答が不完全な場合があります。ファイルを小さく分割して、一つずつ送ることをお勧めします。`,
     },
     image: {
       generating_title: `🖼️ 画像を生成中...`,
@@ -213,6 +215,7 @@ export default {
     },
     fetch: {
       reading_title: `🌐 Webページを読み取り中...`,
+      reading_title_page: `🌐 Webページを読み取り中（{page}ページ目）...`,
       reading_description: `{url} を取得して内容を読み取っています`,
       reading_footer: `ページサイズによって少し時間がかかる場合があります`,
     },

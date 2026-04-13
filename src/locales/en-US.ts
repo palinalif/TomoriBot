@@ -184,8 +184,10 @@ export default {
       generating_footer: `This may take 1-3 minutes.`,
     },
     document: {
-      reading_title: `📄 Reading Document...`,
-      reading_description: `Reading the contents of \`{filename}\``,
+      reading_title: `📄 Reading File Contents...`,
+      reading_description: `Reading the text inside \`{filename}\``,
+      truncated_title: `⚠️ File Truncated`,
+      truncated_description: `\`{filename}\` was too long and has been truncated to {limit} characters (original: {original} characters). The response may be incomplete so consider splitting the file into smaller parts and sharing them one at a time.`,
     },
     image: {
       generating_title: `🖼️  Generating Image...`,
@@ -213,6 +215,7 @@ export default {
     },
     fetch: {
       reading_title: `🌐  Reading Webpage...`,
+      reading_title_page: `🌐  Reading Webpage (Page {page})...`,
       reading_description: `Fetching and reading: {url}`,
       reading_footer: `This may take a moment depending on the page size`,
     },

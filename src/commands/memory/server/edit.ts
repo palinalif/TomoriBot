@@ -312,7 +312,7 @@ export async function execute(
         embedTitleKey: "commands.memory.server.edit.confirm_title",
         embedDescriptionKey: "commands.memory.server.edit.confirm_description",
         embedDescriptionVars: {
-          memory: formatMemoryPreview(selectedMemory.content),
+          memory: selectedMemory.content,
         },
         embedColor: ColorCode.INFO,
         useComponentsV2: true,

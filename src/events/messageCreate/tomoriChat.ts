@@ -6376,7 +6376,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                     message,
                     userId: userRow?.user_disc_id || userDiscId, // Use Discord user ID (not database ID) for cache consistency
                     guildId: message.guild?.id, // Pass guild ID for guild-specific features (e.g., server avatars)
-                    tomoriState,
+                    tomoriState: effectiveTomoriState,
                     locale,
                     provider: provider.getInfo().name,
                     streamContext: streamingContext, // Pass streaming context to tools

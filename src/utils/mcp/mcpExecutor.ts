@@ -21,6 +21,60 @@ import { sendToolProgressNotice } from "../discord/toolProgressNotice";
 import { FETCH_LIMITS, memoryGuard } from "../security/rateLimiter";
 
 /**
+ * Tracks consecutive fetch calls per channel to show pagination in notices.
+ * Keyed by channel ID; stores the last-fetched URL and how many times
+ * it has been fetched consecutively (page count).
+ */
+const fetchPageTracker = new Map<string, { url: string; page: number }>();
+const FETCH_PAGE_TRACKER_MAX_SIZE = 500;
+
+/** Evicts oldest entries when the tracker exceeds its size cap. */
+function trimFetchPageTracker(): void {
+  if (fetchPageTracker.size <= FETCH_PAGE_TRACKER_MAX_SIZE) return;
+  // Map preserves insertion order, so the first entries are the oldest
+  const excess = fetchPageTracker.size - FETCH_PAGE_TRACKER_MAX_SIZE;
+  let i = 0;
+  for (const key of fetchPageTracker.keys()) {
+    if (i++ >= excess) break;
+    fetchPageTracker.delete(key);
+  }
+}
+
+/**
+ * Sends a fetch-specific progress notice with pagination tracking.
+ * Shared by both the global MCP executor and guild MCP manager so that
+ * custom fetch tools (url_fetcher server type) get the same UX.
+ *
+ * @param context - Tool execution context (channel, locale, etc.)
+ * @param url     - The URL being fetched (used for display and dedup tracking)
+ * @param label   - Log label for the caller (e.g. "MCPExecutor", "GuildMcpManager")
+ */
+export async function sendFetchProgressNotice(context: ToolContext, url: string, label: string): Promise<void> {
+  const channelId = context.channel.id;
+  const tracked = fetchPageTracker.get(channelId);
+  let page = 1;
+  if (tracked && tracked.url === url) {
+    page = tracked.page + 1;
+  }
+  fetchPageTracker.set(channelId, { url, page });
+  trimFetchPageTracker();
+
+  await sendToolProgressNotice(
+    context,
+    "web_fetch",
+    {
+      titleKey: page > 1 ? "genai.fetch.reading_title_page" : "genai.fetch.reading_title",
+      titleVars: page > 1 ? { page: String(page) } : undefined,
+      descriptionKey: "genai.fetch.reading_description",
+      descriptionVars: { url: url || "the requested page" },
+      footerKey: "genai.fetch.reading_footer",
+      color: ColorCode.INFO,
+    },
+    label,
+  );
+}
+
+/**
  * Validates fetch URL size before downloading
  * Performs HEAD request to check Content-Length header
  * @param url - URL to validate
@@ -330,20 +384,7 @@ export class MCPExecutor {
       mcpContext.modifiedArgs = this.applyBusinessRules(functionName, args);
 
       if (functionName === "fetch" && context?.channel && context.locale) {
-        await sendToolProgressNotice(
-          context,
-          "web_fetch",
-          {
-            titleKey: "genai.fetch.reading_title",
-            descriptionKey: "genai.fetch.reading_description",
-            descriptionVars: {
-              url: String(mcpContext.modifiedArgs.url || "the requested page"),
-            },
-            footerKey: "genai.fetch.reading_footer",
-            color: ColorCode.INFO,
-          },
-          "MCPExecutor",
-        );
+        await sendFetchProgressNotice(context, String(mcpContext.modifiedArgs.url || ""), "MCPExecutor");
       }
 
       // Find and execute the MCP function

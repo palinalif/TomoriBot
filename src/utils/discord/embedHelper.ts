@@ -33,6 +33,17 @@ export type WebhookEmbedContext = {
   personaAvatarUrl?: string;
 };
 
+function canUseWebhookForChannel(
+  channel: TextChannel | NewsChannel | DMChannel | BaseGuildTextChannel | AnyThreadChannel | BaseGuildVoiceChannel,
+  webhook: Webhook,
+): boolean {
+  if ("isThread" in channel && typeof channel.isThread === "function" && channel.isThread()) {
+    return channel.parentId === webhook.channelId;
+  }
+
+  return webhook.channelId === channel.id;
+}
+
 /**
  * Truncates a field value to Discord's maximum allowed length.
  * Adds ellipsis if truncation occurs.
@@ -178,7 +189,11 @@ export async function sendStandardEmbed(
   webhookContext?: WebhookEmbedContext,
 ): Promise<void> {
   const embed = createStandardEmbed(locale, options);
-  if (webhookContext?.webhook && webhookContext.personaUsername) {
+  if (
+    webhookContext?.webhook &&
+    webhookContext.personaUsername &&
+    canUseWebhookForChannel(channel, webhookContext.webhook)
+  ) {
     const threadId =
       "isThread" in channel && typeof channel.isThread === "function" && channel.isThread() ? channel.id : undefined;
     try {

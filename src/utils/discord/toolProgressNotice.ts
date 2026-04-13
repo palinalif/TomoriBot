@@ -3,7 +3,8 @@ import type { StandardEmbedOptions } from "@/types/discord/embed";
 import type { ToolContext } from "@/types/tool/interfaces";
 import type { TomoriConfigRow } from "@/types/db/schema";
 import { type ToolNoticeKey, TOOL_NOTICE_DEFINITIONS } from "@/constants/toolNotices";
-import { sendStandardEmbed } from "@/utils/discord/embedHelper";
+import { sendStandardEmbed, type WebhookEmbedContext } from "@/utils/discord/embedHelper";
+import { getOrCreateWebhook } from "@/utils/discord/webhookManager";
 import { localizer } from "@/utils/text/localizer";
 import { log } from "@/utils/misc/logger";
 
@@ -186,11 +187,27 @@ export async function routeToolNoticeToThoughtLog(
     return false;
   }
 
+  let rerouteWebhookContext: WebhookEmbedContext | undefined;
+  if (context.personaUsername && "fetchWebhooks" in thoughtLogChannel && "createWebhook" in thoughtLogChannel) {
+    const webhookResult = await getOrCreateWebhook(thoughtLogChannel as BaseGuildTextChannel);
+    if (webhookResult.webhook) {
+      rerouteWebhookContext = {
+        webhook: webhookResult.webhook,
+        personaUsername: context.personaUsername,
+        personaAvatarUrl: context.personaAvatarUrl,
+      };
+    } else if (context.webhook) {
+      log.warn(
+        `${logLabel}: Failed to get webhook for thought log channel ${thoughtLogChannelId}. Falling back to bot send.`,
+      );
+    }
+  }
+
   await sendStandardEmbed(
     thoughtLogChannel as BaseGuildTextChannel,
     context.locale,
     buildToolNoticeOptions(context.locale, options, getSourceLine(context), context.showKillHint),
-    getWebhookContext(context),
+    rerouteWebhookContext,
   );
 
   return true;

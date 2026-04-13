@@ -341,8 +341,8 @@ export async function execute(
         embedTitleKey: "commands.persona.sample-dialogue.edit.confirm_title",
         embedDescriptionKey: "commands.persona.sample-dialogue.edit.confirm_description",
         embedDescriptionVars: {
-          input: formatDialoguePreview(selectedUserInput),
-          output: formatDialoguePreview(selectedBotInput),
+          input: selectedUserInput,
+          output: selectedBotInput,
         },
         embedColor: ColorCode.INFO,
         useComponentsV2: true,

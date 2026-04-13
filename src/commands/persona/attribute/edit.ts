@@ -278,7 +278,7 @@ export async function execute(
         embedTitleKey: "commands.persona.attribute.edit.confirm_title",
         embedDescriptionKey: "commands.persona.attribute.edit.confirm_description",
         embedDescriptionVars: {
-          attribute: formatAttributePreview(selectedAttribute),
+          attribute: selectedAttribute,
         },
         embedColor: ColorCode.INFO,
         useComponentsV2: true,

@@ -328,7 +328,7 @@ export async function execute(
           embedTitleKey: "commands.memory.personal.edit.confirm_title",
           embedDescriptionKey: "commands.memory.personal.edit.confirm_description",
           embedDescriptionVars: {
-            memory: formatMemoryPreview(selectedMemory.content),
+            memory: selectedMemory.content,
           },
           embedColor: ColorCode.INFO,
           useComponentsV2: true,
@@ -529,7 +529,7 @@ export async function execute(
       embedTitleKey: "commands.memory.personal.edit.confirm_title",
       embedDescriptionKey: "commands.memory.personal.edit.confirm_description",
       embedDescriptionVars: {
-        memory: formatMemoryPreview(selectedMemory.content),
+        memory: selectedMemory.content,
       },
       embedColor: ColorCode.INFO,
       continueLabelKey: "general.confirm",

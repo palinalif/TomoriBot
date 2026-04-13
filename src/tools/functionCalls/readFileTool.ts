@@ -216,6 +216,25 @@ export class ReadFileTool extends BaseTool {
         : "";
       const authorName = targetMessage.author?.displayName || targetMessage.author?.username || "unknown user";
 
+      // Notify the user visually if the file was too large and had to be cut
+      if (result.truncated) {
+        await sendToolProgressNotice(
+          context,
+          "document_reading",
+          {
+            titleKey: "genai.document.truncated_title",
+            descriptionKey: "genai.document.truncated_description",
+            descriptionVars: {
+              filename: docAttachment.name,
+              limit: (result.text?.length ?? 0).toLocaleString(),
+              original: result.originalLength?.toLocaleString() ?? "unknown",
+            },
+            color: ColorCode.WARN,
+          },
+          "ReadFileTool",
+        );
+      }
+
       // Build contextual header + document text for the LLM
       const documentContent = [
         `[Document "${docAttachment.name}" sent by ${authorName}${truncationNote}]`,

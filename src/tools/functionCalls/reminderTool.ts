@@ -70,7 +70,7 @@ export class ReminderTool extends BaseTool {
       target_channel: {
         type: "string",
         description:
-          "OPTIONAL: Channel or active thread name where this task should trigger. Useful for cross-channel tasks. The channel must exist in the current server. Qualified forum-post references like 'Post Title in #forum-name' or 'forum-name/Post Title' are also accepted, and you can pass a Discord channel/thread ID if a prior clarification exposed one. If omitted, the current channel is used.",
+          "OPTIONAL: Channel or active thread label where this task should trigger. Useful for cross-channel tasks. The channel must exist in the current server. If the prompt shows a label with an '(ID: ...)' suffix, prefer copying that exact label to avoid ambiguity. A raw Discord channel/thread ID is also accepted. If omitted, the current channel is used.",
       },
     },
     required: ["reminder_purpose", "repetition_interval_hours"],
@@ -282,7 +282,7 @@ export class ReminderTool extends BaseTool {
       const channelResolution = await resolveChannelTarget(requestedTargetChannel, context);
       if (channelResolution.status === "ambiguous") {
         const clarificationHint = channelResolution.candidates.some((candidate) => candidate.channelId)
-          ? " Retry with the exact thread ID if needed."
+          ? " Retry with the exact label including its '(ID: ...)' suffix, or with the raw channel/thread ID, if needed."
           : "";
         return {
           success: false,

@@ -28,6 +28,7 @@ import type { ToolContext } from "@/types/tool/interfaces";
 import { getCachedEnabledGuildMcpConfigs } from "@/utils/cache/guildMcpConfigCache";
 import { decryptGuildMcpAuthToken } from "@/utils/db/guildMcpDb";
 import { sendToolNotice } from "@/utils/discord/toolProgressNotice";
+import { sendFetchProgressNotice } from "@/utils/mcp/mcpExecutor";
 import { validateRemoteMcpUrl } from "@/utils/mcp/mcpUrlSecurity";
 import { localizer } from "@/utils/text/localizer";
 
@@ -229,17 +230,22 @@ class GuildMcpManager {
       // 3. Send a user-facing embed to show the MCP tool is being invoked
       if (context?.channel && context.locale) {
         try {
-          const formattedArgs = this.formatMcpArgs(args, context.locale);
-          await sendToolNotice(
-            context,
-            "mcp_tool_call",
-            {
-              titleKey: "genai.mcp.tool_invoke_title",
-              titleVars: { server: conn.name, function: functionName },
-              description: formattedArgs,
-            },
-            "GuildMcpManager",
-          );
+          if (functionName === "fetch") {
+            // Fetch-specific notice with pagination tracking
+            await sendFetchProgressNotice(context, String(args.url || ""), "GuildMcpManager");
+          } else {
+            const formattedArgs = this.formatMcpArgs(args, context.locale);
+            await sendToolNotice(
+              context,
+              "mcp_tool_call",
+              {
+                titleKey: "genai.mcp.tool_invoke_title",
+                titleVars: { server: conn.name, function: functionName },
+                description: formattedArgs,
+              },
+              "GuildMcpManager",
+            );
+          }
         } catch (embedError) {
           // Non-critical — don't block execution if the embed fails
           log.warn(`[GuildMcpManager] Failed to send MCP tool embed for ${functionName}:`, embedError);

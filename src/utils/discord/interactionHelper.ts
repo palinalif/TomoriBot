@@ -260,6 +260,7 @@ const MODAL_LABEL_MAX_LENGTH = 45;
 const TEXT_INPUT_PLACEHOLDER_MAX_LENGTH = 100;
 const SELECT_PLACEHOLDER_MAX_LENGTH = 150;
 const SELECT_OPTION_TEXT_MAX_LENGTH = 100;
+const CONFIRMATION_DESCRIPTION_LIMIT = 4096; // Discord embed/TextDisplay description limit
 
 /**
  * Safely localizes a string for modal usage, truncating if necessary to prevent Discord API errors
@@ -289,6 +290,30 @@ function safeModalLocalizer(
   }
 
   return localizedText;
+}
+
+function truncateForDiscordDescription(text: string): string {
+  if (text.length <= CONFIRMATION_DESCRIPTION_LIMIT) {
+    return text;
+  }
+
+  return `${text.substring(0, CONFIRMATION_DESCRIPTION_LIMIT - 3)}...`;
+}
+
+function localizeConfirmationDescription(
+  locale: string,
+  key: string,
+  vars?: Record<string, string | number | boolean>,
+): string {
+  const localizedText = localizer(locale, key, vars);
+
+  if (localizedText.length > CONFIRMATION_DESCRIPTION_LIMIT) {
+    log.warn(
+      `Confirmation description truncated - Key: '${key}', Original: ${localizedText.length} chars, Truncated to: ${CONFIRMATION_DESCRIPTION_LIMIT} chars`,
+    );
+  }
+
+  return truncateForDiscordDescription(localizedText);
 }
 
 /**
@@ -329,12 +354,13 @@ export async function promptWithConfirmation(
     cancelCustomId,
     timeout = PROMPT_TIMEOUT, // Default 15 seconds
   } = options;
+  const localizedDescription = localizeConfirmationDescription(locale, embedDescriptionKey, embedDescriptionVars);
 
   // 2. Create Embed
   const embed = new EmbedBuilder()
     .setColor(embedColor)
     .setTitle(localizer(locale, embedTitleKey))
-    .setDescription(localizer(locale, embedDescriptionKey, embedDescriptionVars));
+    .setDescription(localizedDescription);
 
   // 3. Create Buttons
   const continueButton = new ButtonBuilder()
@@ -448,11 +474,11 @@ export async function promptWithUnacknowledgedConfirmation(
     cancelCustomId,
     timeout = PROMPT_TIMEOUT,
   } = options;
+  const localizedDescription = localizeConfirmationDescription(locale, embedDescriptionKey, embedDescriptionVars);
 
   const embed = createStandardEmbed(locale, {
     titleKey: embedTitleKey,
-    descriptionKey: embedDescriptionKey,
-    descriptionVars: embedDescriptionVars,
+    description: localizedDescription,
     color: embedColor,
   });
 
@@ -470,10 +496,9 @@ export async function promptWithUnacknowledgedConfirmation(
   const v2Components = useComponentsV2
     ? buildV2ConfirmationComponents(
         locale,
-        embedTitleKey,
-        embedDescriptionKey,
+        localizer(locale, embedTitleKey),
+        localizedDescription,
         embedColor,
-        embedDescriptionVars,
         continueLabelKey,
         cancelLabelKey,
         continueCustomId,
@@ -1018,10 +1043,9 @@ function buildV2StatusComponents(
 
 function buildV2ConfirmationComponents(
   locale: string,
-  titleKey: string,
-  descriptionKey: string,
+  title: string,
+  description: string,
   color: AccentColorInput,
-  descriptionVars: Record<string, string | number | boolean> | undefined,
   continueLabelKey: string,
   cancelLabelKey: string,
   continueCustomId: string,
@@ -1051,11 +1075,11 @@ function buildV2ConfirmationComponents(
     components: [
       {
         type: ComponentType.TextDisplay,
-        content: `## ${localizer(locale, titleKey)}`,
+        content: `## ${title}`,
       },
       {
         type: ComponentType.TextDisplay,
-        content: localizer(locale, descriptionKey, descriptionVars),
+        content: description,
       },
       actionRow,
     ],
