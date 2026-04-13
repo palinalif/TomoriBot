@@ -1141,7 +1141,7 @@ Please try again with different inputs or check your API key.`,
         documents_description: `- Upload text, PDF, or Markdown files as server knowledge using \`/memory document add\`
 - Extract channel history into searchable knowledge with \`/memory history import\`
 - I retrieve and reference relevant document content when answering questions
-- I can also read document attachments (PDF, TXT, MD) shared directly in chat, just ask me to read it!
+- I can also read file attachments shared directly in chat (PDF, source code, markdown, JSON, YAML, and more) — just ask me to read it!
 - Requires an embedding model (configure with \`/config model embedding\`)
 - Remove uploaded or history-extracted documents with \`/memory document remove\` and \`/memory history remove\``,
         impersonation_title: `Impersonation & Tools`,

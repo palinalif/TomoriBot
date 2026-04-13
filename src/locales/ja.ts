@@ -1141,7 +1141,7 @@ export default {
         documents_description: `- \`/memory document add\`でテキスト、PDF、Markdownファイルをサーバー知識としてアップロードできます
 - \`/memory history import\`でチャンネル履歴を検索可能な知識として抽出できます
 - 質問に答える際に、私は関連するドキュメント内容を取得して参照します
-- チャットで共有されたドキュメント添付ファイル（PDF、TXT、MD）も直接読み取れます、読んでと頼むだけ！
+- チャットで共有されたファイル添付（PDF、ソースコード、Markdown、JSON、YAMLなど）も直接読み取れます、読んでと頼むだけ！
 - 埋め込みモデルが必要です（\`/config model embedding\`で設定）
 - \`/memory document remove\`と\`/memory history remove\`で保存済みドキュメントを削除できます`,
         impersonation_title: `なりきり＆ツール`,

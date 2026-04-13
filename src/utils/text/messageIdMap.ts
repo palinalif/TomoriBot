@@ -8,7 +8,7 @@
  *
  * Prefixes:
  * - `media_N` — message IDs referenced by media tools (analyze_image,
- *   generate_image, read_document, process_gif, etc.)
+ *   generate_image, read_file, process_gif, etc.)
  * - `ref_N`   — general recent-message references for replies, metadata reveals,
  *   and message-management targets
  *

@@ -1,4 +1,4 @@
-import type { Guild, GuildMember, GuildTextBasedChannel } from "discord.js";
+import { ChannelType, type Guild, type GuildMember, type GuildTextBasedChannel } from "discord.js";
 import { ContextItemTag, type ConversationUserReference, type StructuredContextItem } from "@/types/misc/context";
 import type { ToolContext } from "@/types/tool/interfaces";
 import { loadUserRowsByNormalizedNickname } from "@/utils/db/dbRead";
@@ -33,7 +33,13 @@ export type ResolvedChannelTarget = {
   status: "resolved";
   channel: GuildTextBasedChannel;
   displayLabel: string;
-  source: "legacy_id" | "channel_name" | "thread_name" | "normalized_name";
+  source:
+    | "legacy_id"
+    | "channel_name"
+    | "thread_name"
+    | "qualified_thread_name"
+    | "forum_parent_name"
+    | "normalized_name";
 };
 
 export type AmbiguousChannelTarget = {
@@ -93,6 +99,10 @@ function isGuildTextTarget(channel: unknown): channel is GuildTextBasedChannel {
 
 function isThreadLike(channel: { isThread?: () => boolean }): boolean {
   return typeof channel.isThread === "function" && channel.isThread();
+}
+
+function isForumOrMediaParent(channel: { type?: ChannelType } | null | undefined): boolean {
+  return channel?.type === ChannelType.GuildForum || channel?.type === ChannelType.GuildMedia;
 }
 
 function formatDiscordUserLabel(member: GuildMember): string {
@@ -433,6 +443,20 @@ function formatChannelCandidateLabel(channel: GuildTextBasedChannel): string {
   return `#${channel.name}`;
 }
 
+function getQualifiedThreadLookupValues(channel: GuildTextBasedChannel): string[] {
+  if (!isThreadLike(channel) || !("parent" in channel) || !channel.parent?.name) {
+    return [];
+  }
+
+  const parentName = channel.parent.name;
+  return [
+    normalizeChannelTargetInput(`${channel.name} in #${parentName}`),
+    normalizeChannelTargetInput(`${channel.name} in ${parentName}`),
+    normalizeChannelTargetInput(`${parentName}/${channel.name}`),
+    normalizeChannelTargetInput(`#${parentName}/${channel.name}`),
+  ];
+}
+
 export async function formatChannelReferenceLabel(channel: GuildTextBasedChannel): Promise<string> {
   const baseLabel = formatChannelCandidateLabel(channel);
   if (!isThreadLike(channel) || !("guild" in channel)) {
@@ -516,6 +540,35 @@ export async function resolveChannelTarget(input: string, context: ToolContext):
     .filter((channel) => isGuildTextTarget(channel) && !isThreadLike(channel))
     .map((channel) => channel as GuildTextBasedChannel);
 
+  const activeThreads = await getActiveThreadTargets(guild);
+
+  const qualifiedThreadMatches = dedupeChannelCandidates(
+    activeThreads
+      .filter((thread) => getQualifiedThreadLookupValues(thread).includes(normalizedInput))
+      .map((thread) => ({
+        label: formatChannelCandidateLabel(thread),
+        channelName: thread.name,
+        channel: thread,
+      })),
+  );
+
+  if (qualifiedThreadMatches.length === 1) {
+    return {
+      status: "resolved",
+      channel: qualifiedThreadMatches[0].channel,
+      displayLabel: qualifiedThreadMatches[0].label,
+      source: "qualified_thread_name",
+    };
+  }
+
+  if (qualifiedThreadMatches.length > 1) {
+    return {
+      status: "ambiguous",
+      input: rawInput,
+      candidates: buildAmbiguousChannelCandidates(qualifiedThreadMatches),
+    };
+  }
+
   const exactChannelMatches = dedupeChannelCandidates(
     textChannels
       .filter((channel) => normalizeChannelTargetInput(channel.name) === normalizedInput)
@@ -526,24 +579,40 @@ export async function resolveChannelTarget(input: string, context: ToolContext):
       })),
   );
 
-  if (exactChannelMatches.length === 1) {
+  const forumParentThreadMatches = dedupeChannelCandidates(
+    activeThreads
+      .filter(
+        (thread) =>
+          "parent" in thread &&
+          !!thread.parent?.name &&
+          isForumOrMediaParent(thread.parent) &&
+          normalizeChannelTargetInput(thread.parent.name) === normalizedInput,
+      )
+      .map((thread) => ({
+        label: formatChannelCandidateLabel(thread),
+        channelName: thread.name,
+        channel: thread,
+      })),
+  );
+
+  if (forumParentThreadMatches.length === 1 && exactChannelMatches.length === 0) {
     return {
       status: "resolved",
-      channel: exactChannelMatches[0].channel,
-      displayLabel: exactChannelMatches[0].label,
-      source: "channel_name",
+      channel: forumParentThreadMatches[0].channel,
+      displayLabel: forumParentThreadMatches[0].label,
+      source: "forum_parent_name",
     };
   }
 
-  if (exactChannelMatches.length > 1) {
+  if (forumParentThreadMatches.length > 0) {
+    const combinedForumCandidates = dedupeChannelCandidates([...exactChannelMatches, ...forumParentThreadMatches]);
     return {
       status: "ambiguous",
       input: rawInput,
-      candidates: buildAmbiguousChannelCandidates(exactChannelMatches),
+      candidates: buildAmbiguousChannelCandidates(combinedForumCandidates),
     };
   }
 
-  const activeThreads = await getActiveThreadTargets(guild);
   const exactThreadMatches = dedupeChannelCandidates(
     activeThreads
       .filter((thread) => normalizeChannelTargetInput(thread.name) === normalizedInput)
@@ -554,30 +623,34 @@ export async function resolveChannelTarget(input: string, context: ToolContext):
       })),
   );
 
-  if (exactThreadMatches.length === 1) {
+  const combinedExactMatches = dedupeChannelCandidates([...exactChannelMatches, ...exactThreadMatches]);
+
+  if (combinedExactMatches.length === 1) {
+    const match = combinedExactMatches[0];
     return {
       status: "resolved",
-      channel: exactThreadMatches[0].channel,
-      displayLabel: exactThreadMatches[0].label,
-      source: "thread_name",
+      channel: match.channel,
+      displayLabel: match.label,
+      source: isThreadLike(match.channel) ? "thread_name" : "channel_name",
     };
   }
 
-  if (exactThreadMatches.length > 1) {
+  if (combinedExactMatches.length > 1) {
     return {
       status: "ambiguous",
       input: rawInput,
-      candidates: buildAmbiguousChannelCandidates(exactThreadMatches),
+      candidates: buildAmbiguousChannelCandidates(combinedExactMatches),
     };
   }
 
   const normalizedMatches = dedupeChannelCandidates(
-    [...textChannels, ...activeThreads]
+    activeThreads
+      .concat(textChannels)
       .filter((channel) => normalizeChannelTargetInput(channel.name) === normalizedInput)
-      .map((channel) => ({
-        label: formatChannelCandidateLabel(channel),
-        channelName: channel.name,
-        channel,
+      .map((thread) => ({
+        label: formatChannelCandidateLabel(thread),
+        channelName: thread.name,
+        channel: thread,
       })),
   );
 

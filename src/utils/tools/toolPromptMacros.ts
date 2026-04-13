@@ -37,7 +37,7 @@ const STATIC_TOOL_PROMPT_MACROS: Record<string, string> = {
   "{pin_tool}": "manage_message",
   "{message_interaction_tool}": "interact_with_recent_message",
   "{profile_picture_tool}": "peek_profile_picture",
-  "{document_tool}": "read_document",
+  "{document_tool}": "read_file",
   "{message_metadata_tool}": "reveal_message_metadata",
   "{timestamp_refresh_tool}": "reveal_message_metadata",
   "{media_context_tool}": "increase_media_context",
@@ -188,8 +188,8 @@ export const TOOL_PROMPT_MACRO_DOCS: ToolPromptMacroDocEntry[] = [
   {
     macro: "{document_tool}",
     type: "static",
-    currentTarget: "read_document",
-    notes: "Read recent PDF/TXT/MD attachments.",
+    currentTarget: "read_file",
+    notes: "Read recent file attachments (PDF, source code, text, etc.).",
   },
   {
     macro: "{message_metadata_tool}",

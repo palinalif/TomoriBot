@@ -29,7 +29,7 @@ variable "droplet_name" {
 variable "droplet_size" {
   description = "Droplet size slug"
   type        = string
-  default     = "s-1vcpu-1gb"
+  default     = "s-1vcpu-512mb-10gb"
 }
 
 variable "droplet_image" {
@@ -41,7 +41,7 @@ variable "droplet_image" {
 variable "enable_droplet_backups" {
   description = "Enable managed droplet backups"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "ssh_key_fingerprints" {
@@ -77,7 +77,7 @@ variable "volume_name" {
 variable "volume_size_gib" {
   description = "Block volume size in GiB"
   type        = number
-  default     = 25
+  default     = 5
 }
 
 variable "tags" {

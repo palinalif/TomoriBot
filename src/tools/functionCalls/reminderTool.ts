@@ -70,7 +70,7 @@ export class ReminderTool extends BaseTool {
       target_channel: {
         type: "string",
         description:
-          "OPTIONAL: Channel or active thread name where this task should trigger. Useful for cross-channel tasks. The channel must exist in the current server. You can also pass a Discord channel/thread ID if a prior clarification exposed one. If omitted, the current channel is used.",
+          "OPTIONAL: Channel or active thread name where this task should trigger. Useful for cross-channel tasks. The channel must exist in the current server. Qualified forum-post references like 'Post Title in #forum-name' or 'forum-name/Post Title' are also accepted, and you can pass a Discord channel/thread ID if a prior clarification exposed one. If omitted, the current channel is used.",
       },
     },
     required: ["reminder_purpose", "repetition_interval_hours"],

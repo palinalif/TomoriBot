@@ -40,9 +40,9 @@ From `src/tools/functionCalls/`:
 Current `cross_channel_message` runtime notes:
 
 - can target another text channel immediately without scheduling
-- target selection is now name-first through `target_channel`; exact active thread titles are supported alongside channel names
+- target selection is now name-first through `target_channel`; exact active thread titles are supported alongside channel names, and qualified forum-post references such as `Post Title in #forum-name` or `forum-name/Post Title` resolve directly to the active thread
 - deprecated `channel_id` / `channel_name` inputs are still accepted at execution time for backward compatibility, but they are no longer advertised to the model
-- ambiguous channel or thread names return a clarification failure instead of guessing; when duplicate active thread titles still collide after parent-name labeling, the clarification includes the thread snowflake so the next tool call can target it directly
+- ambiguous channel or thread names return a clarification failure instead of guessing; same-name text channels, active thread titles, and forum-parent references are now disambiguated together so a forum request cannot silently fall through to a text channel with the same name. When duplicate active thread labels still collide after parent-name labeling, the clarification includes the thread snowflake so the next tool call can target it directly
 - thread permission checks use `SendMessagesInThreads` instead of `SendMessages`
 - the `/server crosschannel-blocklist` setting blocks tool-driven visits into listed channels, and blocked forum/media parents also block thread targets under them
 - tool-driven cross-channel dispatch now preserves the active sender identity, including alter personas and `/bot impersonate` user impersonation turns, for both the target-channel visit and optional boomerang follow-up
@@ -73,12 +73,12 @@ Current name-resolution notes for built-in tools:
 - `peek_profile_picture` now supplies the target Discord user's profile banner alongside the avatar when a banner exists, so vision-capable flows can inspect both images together
 - shared resolution is handled by `src/utils/discord/targetResolver.ts`
 - user resolution order is: current-conversation aliases, exact guild display name, exact DB nickname intersected with guild membership, exact global name, exact username
-- channel resolution is exact text-channel name, exact active thread title, then unique normalized match across both sets
+- channel resolution now checks exact qualified active-thread references first, then resolves exact channel/thread names with cross-set ambiguity handling, and treats a bare forum/media parent name as that forum's active posts instead of silently falling through to a same-named text channel
 - matching is exact plus unique normalized only; V1 intentionally avoids fuzzy matching
 - ambiguous results never auto-pick and instead return candidate labels for clarification; duplicate thread labels expose the thread snowflake in that clarification so the model can retry with an exact ID
 - if a Discord user resolves successfully but has no Tomori user row yet, reminder/personal-memory tools fail with a human-readable "Tomori doesn't know this user yet" style error
 - bridge users can still be resolved by name from current conversation metadata, but avatar tools reject them and personal-memory creation/update does not create bridge-scoped personal memories
-- message-targeted tools such as `read_document`, `manage_message`, `interact_with_recent_message`, `analyze_image`, `process_gif`, and edit/inpaint reference flows still target Discord messages internally, but the prompt-visible arguments are opaque `media_N` / `ref_N` handles rather than raw snowflakes
+- message-targeted tools such as `read_file`, `manage_message`, `interact_with_recent_message`, `analyze_image`, `process_gif`, and edit/inpaint reference flows still target Discord messages internally, but the prompt-visible arguments are opaque `media_N` / `ref_N` handles rather than raw snowflakes
 - `ref_N` is now a general recent-message handle, not just a reply reference
 - `ToolRegistry.executeTool()` resolves those opaque handles back to real Discord IDs before dispatch, including both `message_id` and `end_message_id`, so individual tool implementations continue to work with normal message IDs
 
@@ -124,7 +124,7 @@ Static built-in macros always expand to the current canonical built-in tool name
 | `{pin_tool}` | `manage_message` | Compatibility alias for `{manage_message_tool}`. |
 | `{message_interaction_tool}` | `interact_with_recent_message` | React to or reply to a recent message for playful backtracking. |
 | `{profile_picture_tool}` | `peek_profile_picture` | Inspect an avatar or banner. |
-| `{document_tool}` | `read_document` | Read PDF/TXT/MD attachments. |
+| `{document_tool}` | `read_file` | Read PDF or any text-based file attachment (source code, markdown, JSON, YAML, etc.). |
 | `{message_metadata_tool}` | `reveal_message_metadata` | Reveal recent message refs and sent timestamps. |
 | `{timestamp_refresh_tool}` | `reveal_message_metadata` | Compatibility alias for `{message_metadata_tool}`. |
 | `{media_context_tool}` | `increase_media_context` | Bring older hidden images/videos back into context. |

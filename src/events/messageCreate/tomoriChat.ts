@@ -1338,7 +1338,7 @@ function formatInlineSystemContent(
 }
 
 function formatAttachmentSystemHint(filename: string, messageId: string): string {
-  return `[System: A file named \`${filename}\` is attached (message ID: ${messageId})]`;
+  return `[System: A file named \`${filename}\` is attached (message ID: ${messageId}). Use \`read_file\` with this message ID to read its contents.]`;
 }
 
 function buildRecentMessageMetadataInline(createdAt: number): string {
@@ -4518,7 +4518,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 log.info(`Processed video attachment: ${attachment.name} (${attachment.contentType})`);
               }
               // Non-media attachments (PDF, TXT, MD, etc.) — check for audio cache first,
-              // otherwise append a text placeholder with message ID for read_document
+              // otherwise append a text placeholder with message ID for read_file
               else if (isAudioAttachment(attachment)) {
                 if (config.voice_transcript_chat_mode) {
                   // Chat mode: skip audio entirely. The transcript was already posted

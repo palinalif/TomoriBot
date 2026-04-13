@@ -1,8 +1,9 @@
 /**
- * Read Document Tool
- * Allows the AI to read and extract text content from document attachments (PDF, TXT, MD)
- * shared in Discord messages. Uses a tool-call approach so the bot selectively reads
- * documents only when needed, avoiding automatic context flooding.
+ * Read File Tool
+ * Allows the AI to read and extract text content from file attachments shared in Discord messages.
+ * Supports PDF and any plain-text format (source code, markdown, JSON, YAML, etc.).
+ * Uses a tool-call approach so the bot selectively reads files only when needed,
+ * avoiding automatic context flooding.
  */
 
 import { log, ColorCode } from "@/utils/misc/logger";
@@ -17,14 +18,15 @@ const CHAT_DOCUMENT_MAX_SIZE_BYTES = Number.parseInt(process.env.CHAT_DOCUMENT_M
 const CHAT_DOCUMENT_MAX_TEXT_LENGTH = Number.parseInt(process.env.CHAT_DOCUMENT_MAX_TEXT_LENGTH || "100000", 10);
 
 /**
- * Tool for reading document attachments (PDF, TXT, MD) from Discord messages.
+ * Tool for reading text-based file attachments from Discord messages.
+ * Supports PDF and any plain-text format (source code, markdown, JSON, YAML, etc.).
  * Returns extracted text directly in the tool result — no context restart needed.
  * Available for all LLM providers since the output is text-only.
  */
-export class ReadDocumentTool extends BaseTool {
-  name = "read_document";
+export class ReadFileTool extends BaseTool {
+  name = "read_file";
   description =
-    "Read and extract text content from a document attachment (PDF, TXT, or MD file) in a Discord message. Use this when you want to see the contents of a document that was shared in the conversation.";
+    "Read and extract text content from a text-based file attachment in a Discord message. Supports PDF and any plain-text format including source code (.py, .ts, .c, .cpp, .java, .go, .rs, .json, .yaml, .md, .txt, etc.). Use this when you want to see the contents of a file that was shared in the conversation.";
   category = "utility" as const;
 
   parameters: ToolParameterSchema = {
@@ -76,7 +78,7 @@ export class ReadDocumentTool extends BaseTool {
     const filenameFilter = args.filename as string | undefined;
 
     if (!messageId) {
-      log.warn("ReadDocumentTool: Missing required parameter 'media_id'");
+      log.warn("ReadFileTool: Missing required parameter 'media_id'");
       return {
         success: false,
         error: "Missing required parameter: media_id",
@@ -86,7 +88,7 @@ export class ReadDocumentTool extends BaseTool {
     }
 
     log.info(
-      `ReadDocumentTool: Starting document read for message ${messageId}${filenameFilter ? ` (filter: ${filenameFilter})` : ""}`,
+      `ReadFileTool: Starting document read for message ${messageId}${filenameFilter ? ` (filter: ${filenameFilter})` : ""}`,
     );
 
     try {
@@ -98,7 +100,7 @@ export class ReadDocumentTool extends BaseTool {
       // 3. Find the target message by ID
       const targetMessage = recentMessages.get(messageId);
       if (!targetMessage) {
-        log.warn(`ReadDocumentTool: Message ${messageId} not found in recent 100 messages`);
+        log.warn(`ReadFileTool: Message ${messageId} not found in recent 100 messages`);
         return {
           success: false,
           error: "Message not found",
@@ -140,11 +142,11 @@ export class ReadDocumentTool extends BaseTool {
 
       if (!docAttachment) {
         const filterNote = filenameFilter ? ` matching "${filenameFilter}"` : "";
-        log.warn(`ReadDocumentTool: No document attachment${filterNote} found in message ${messageId}`);
+        log.warn(`ReadFileTool: No document attachment${filterNote} found in message ${messageId}`);
         return {
           success: false,
           error: "No document found",
-          message: `That message doesn't contain a document attachment (PDF, TXT, or MD)${filterNote}. Please provide a message ID with a document file.`,
+          message: `That message doesn't contain a readable file attachment${filterNote}. Please provide a message ID with a text-based file (PDF, source code, markdown, etc.).`,
           data: {
             status: "no_document_found",
             media_id: messageId,
@@ -163,7 +165,7 @@ export class ReadDocumentTool extends BaseTool {
           descriptionVars: { filename: docAttachment.name },
           color: ColorCode.INFO,
         },
-        "ReadDocumentTool",
+        "ReadFileTool",
       );
 
       // 6. Download and extract text
@@ -190,7 +192,7 @@ export class ReadDocumentTool extends BaseTool {
         const errorMessage =
           errorMessages[result.error ?? ""] ?? "An unexpected error occurred while reading the document.";
 
-        log.warn(`ReadDocumentTool: Extraction failed for ${docAttachment.name}: ${result.error}`);
+        log.warn(`ReadFileTool: Extraction failed for ${docAttachment.name}: ${result.error}`);
 
         return {
           success: false,
@@ -221,7 +223,7 @@ export class ReadDocumentTool extends BaseTool {
       ].join("\n");
 
       log.info(
-        `ReadDocumentTool: Successfully extracted ${result.text?.length.toLocaleString()} characters from "${docAttachment.name}"${truncationNote}`,
+        `ReadFileTool: Successfully extracted ${result.text?.length.toLocaleString()} characters from "${docAttachment.name}"${truncationNote}`,
       );
 
       return {
@@ -236,14 +238,14 @@ export class ReadDocumentTool extends BaseTool {
         },
       };
     } catch (error) {
-      log.error(`ReadDocumentTool: Failed to read document for message ${messageId}`, error as Error);
+      log.error(`ReadFileTool: Failed to read document for message ${messageId}`, error as Error);
 
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
         message: "Failed to read the document due to an unexpected error. Please try again.",
         data: {
-          status: "read_document_failed",
+          status: "read_file_failed",
           media_id: messageId,
         },
       };

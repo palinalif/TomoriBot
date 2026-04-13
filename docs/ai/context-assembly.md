@@ -220,7 +220,7 @@ Reply-reference and forwarded-message quotes preserve the full normalized messag
 When a history annotation needs to identify a Discord message for later tool use, the prompt never sees the raw snowflake. Context assembly now emits opaque per-turn keys instead:
 
 - `ref_N` for reply-reference / pin-target message handles
-- `media_N` for media-bearing message handles used by `analyze_image`, `read_document`, `process_gif`, image/video generation reference flows, and similar tools
+- `media_N` for media-bearing message handles used by `analyze_image`, `read_file`, `process_gif`, image/video generation reference flows, and similar tools
 
 The real Discord IDs stay in a per-request `MessageIdMap` carried alongside context metadata and resolved back at tool-execution time.
 

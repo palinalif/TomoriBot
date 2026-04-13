@@ -27,10 +27,14 @@ resource "digitalocean_droplet" "matrix_homeserver" {
 	mkdir -p /opt/matrix-conduit
   EOT
 
-  # user_data only runs on first boot — ignore changes to avoid forcing a
-  # droplet replacement after the server is already bootstrapped.
+  # These fields are set at creation time only. Ignore changes to prevent
+  # Terraform from destroying and recreating the droplet after initial boot:
+  # - user_data: bootstrap script, runs once on first boot only
+  # - ssh_keys:  managed via DO dashboard after provisioning
+  # - size:      actual droplet size may differ from variable default
+  # - backups:   backup setting may differ from variable default
   lifecycle {
-    ignore_changes = [user_data]
+    ignore_changes = [user_data, ssh_keys, size, backups]
   }
 }
 
