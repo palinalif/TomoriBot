@@ -92,9 +92,14 @@ export async function execute(
     return;
   }
 
-  // 3. Permission check: requires ManageGuild OR use in a designated RP channel
+  // 3. Permission check: requires ManageGuild OR use in a designated RP channel.
+  //    When the command is run inside a thread, channelId is the thread's own ID —
+  //    not the parent channel's ID. Check both so threads inherit their parent's RP status.
   const hasManageGuild = interaction.memberPermissions?.has("ManageGuild") ?? false;
-  const isRpChannel = tomoriState.config.rp_channel_ids.includes(channelId);
+  const parentChannelId = channel.isThread() ? channel.parentId : null;
+  const isRpChannel =
+    tomoriState.config.rp_channel_ids.includes(channelId) ||
+    (parentChannelId !== null && tomoriState.config.rp_channel_ids.includes(parentChannelId));
   if (!hasManageGuild && !isRpChannel) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.tool.delete.turn.no_permission_title",

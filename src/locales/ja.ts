@@ -217,6 +217,7 @@ export default {
       reading_title: `🌐 Webページを読み取り中...`,
       reading_title_page: `🌐 Webページを読み取り中（{page}ページ目）...`,
       reading_description: `{url} を取得して内容を読み取っています`,
+      reading_offset_line: `文字 {start_index} から読み取っています`,
       reading_footer: `ページサイズによって少し時間がかかる場合があります`,
     },
     stream: {
@@ -2161,7 +2162,7 @@ Prompt Guidance Rescale: {cfg_rescale}
       squeeze: {
         description: `ぎゅっとして応答をトリガーします。`,
         reason_description: `どうしておしおきするの？`,
-        embed_title: `🫳 スクイーズ・タイム！`,
+        embed_title: `👐 スクイーズ・タイム！`,
         embed_description: `{user}は{bot}をぎゅっと握りました。`,
         history_label: `スクイーズ`,
       },

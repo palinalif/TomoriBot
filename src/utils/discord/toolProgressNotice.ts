@@ -232,7 +232,12 @@ export async function sendToolNotice(
     }
 
     const privateChannelIds = context.tomoriState.config.private_channel_ids ?? [];
-    if (privateChannelIds.includes(context.channel.id)) {
+    // Threads whose parent channel is private must also be suppressed from the thought log.
+    const toolNoticeParentId = context.channel.isThread() ? context.channel.parentId : null;
+    if (
+      privateChannelIds.includes(context.channel.id) ||
+      (toolNoticeParentId !== null && privateChannelIds.includes(toolNoticeParentId))
+    ) {
       return;
     }
 

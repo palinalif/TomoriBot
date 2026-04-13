@@ -17,6 +17,11 @@ export interface MCPServerResponse {
     response?: {
       text?: string;
       content?: MCPContentItem[];
+      /** Error envelope used by the Gemini SDK when an MCP tool call fails */
+      error?: {
+        content?: MCPContentItem[];
+        isError?: boolean;
+      };
     };
   };
   content?: MCPContentItem[];

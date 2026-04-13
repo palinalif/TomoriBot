@@ -3419,7 +3419,9 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       }
 
       const { minThreshold, maxThreshold } = getAutochatRange(config);
-      const isAutoCounterChannelActive = isAutochatCounterChannelActive(config, channel.id);
+      // Threads inherit autochat settings from their parent channel.
+      const effectiveChannelId = channel.isThread() ? (channel.parentId ?? channel.id) : channel.id;
+      const isAutoCounterChannelActive = isAutochatCounterChannelActive(config, effectiveChannelId);
 
       if (isRealUserMessage && isAutoCounterChannelActive) {
         if (!tomoriState.tomori_id) {
@@ -3557,11 +3559,11 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         const isAutoMsgHit =
           !!config &&
           isAutochatQualifyingMessage(message, isSelfMessage) &&
-          isAutochatCounterHit(tomoriState, message.channel.id);
-        const autoTriggerPersonaId = config ? getAutochatAssignedPersonaId(config, message.channel.id) : null;
+          isAutochatCounterHit(tomoriState, effectiveChannelId);
+        const autoTriggerPersonaId = config ? getAutochatAssignedPersonaId(config, effectiveChannelId) : null;
         const isScopedAlwaysReplyActive =
           !!config &&
-          isAutochatAlwaysReplyChannelActive(config, message.channel.id) &&
+          isAutochatAlwaysReplyChannelActive(config, effectiveChannelId) &&
           isAutochatQualifyingMessage(message, isSelfMessage);
 
         // Check if always-reply mode applies to this message:
@@ -4890,8 +4892,11 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           let loadedEmojis: ServerEmojiRow[] | null = null;
           let loadedStickers: ServerStickerRow[] | null = null;
 
-          // Check if current channel is designated as an RP channel (always suppresses emojis/stickers)
-          const isRpChannel = tomoriState.config.rp_channel_ids.includes(channel.id);
+          // Check if current channel (or its thread parent) is designated as an RP channel (always suppresses emojis/stickers)
+          const rpChannelParentId = channel.isThread() ? channel.parentId : null;
+          const isRpChannel =
+            tomoriState.config.rp_channel_ids.includes(channel.id) ||
+            (rpChannelParentId !== null && tomoriState.config.rp_channel_ids.includes(rpChannelParentId));
           const effectiveEmojiEnabled = isRpChannel ? false : tomoriState.config.emoji_usage_enabled;
           const effectiveStickerEnabled = isRpChannel ? false : tomoriState.config.sticker_usage_enabled;
           // Shallow-copy config with effective flags for context building (avoids mutating cached state)
@@ -5098,6 +5103,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               channelDesc,
               channelName,
               channelId: channel.id, // For short-term memory context
+              parentChannelId: channel.isThread() ? channel.parentId : null, // For thread → parent private/RP inheritance
               client,
               triggererName,
               emojiStrings,
@@ -6661,6 +6667,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                         channelDesc,
                         channelName,
                         channelId: channel.id, // For short-term memory context
+                        parentChannelId: channel.isThread() ? channel.parentId : null, // For thread → parent private/RP inheritance
                         client,
                         triggererName,
                         emojiStrings,
@@ -7370,8 +7377,13 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       } // END OF MULTI-PERSONA RESPONSE LOOP
 
       const finalThoughtLog = turnThoughtLog;
-      // Never emit thought logs from private channels — their activity must remain isolated
-      const isPrivateChannel = (tomoriState.config.private_channel_ids ?? []).includes(channel.id);
+      // Never emit thought logs from private channels — their activity must remain isolated.
+      // Also covers threads whose parent channel is private.
+      const thoughtLogPrivateIds = tomoriState.config.private_channel_ids ?? [];
+      const thoughtLogParentId = channel.isThread() ? channel.parentId : null;
+      const isPrivateChannel =
+        thoughtLogPrivateIds.includes(channel.id) ||
+        (thoughtLogParentId !== null && thoughtLogPrivateIds.includes(thoughtLogParentId));
       if (
         !isDMChannel &&
         !isPrivateChannel &&
@@ -8039,11 +8051,15 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
   }
 
   // 5. Check if the shared auto-chat range hit for this message.
+  // Threads inherit autochat settings from their parent channel.
+  const msgEffectiveChannelId = message.channel.isThread()
+    ? (message.channel.parentId ?? message.channel.id)
+    : message.channel.id;
   const isAutoMsgHit =
-    isAutochatQualifyingMessage(message, isSelfMessage) && isAutochatCounterHit(tomoriState, message.channel.id);
+    isAutochatQualifyingMessage(message, isSelfMessage) && isAutochatCounterHit(tomoriState, msgEffectiveChannelId);
   const isScopedAlwaysReplyHit =
     !isMatrixRelayMessage &&
-    isAutochatAlwaysReplyChannelActive(config, message.channel.id) &&
+    isAutochatAlwaysReplyChannelActive(config, msgEffectiveChannelId) &&
     isAutochatQualifyingMessage(message, isSelfMessage);
 
   // 6. Check always-reply mode:

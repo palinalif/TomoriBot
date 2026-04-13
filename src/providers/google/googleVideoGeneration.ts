@@ -14,6 +14,9 @@ const POLL_INTERVAL_MS = 10_000;
 /** Maximum poll attempts before timeout (~5 minutes at 10s intervals) */
 const MAX_POLL_ATTEMPTS = 30;
 
+/** Aspect ratios supported by Google Veo — "1:1" and others are rejected by the API */
+const GOOGLE_SUPPORTED_ASPECT_RATIOS = new Set(["16:9", "9:16"]);
+
 function selectClosestSupportedDuration(
   requestedDuration: number | undefined,
   supportedDurations: readonly number[],
@@ -44,7 +47,7 @@ function normalizeGoogleResolution(requestedResolution: ProviderNativeVideoResol
  * Supports:
  *   - Text-to-video: prompt only
  *   - Image-to-video: prompt + single reference image as starting frame
- *   - Aspect ratio: "16:9" (default) or "9:16"
+ *   - Aspect ratio: "16:9" (default) or "9:16" — unsupported values (e.g. "1:1") are silently ignored and Veo defaults to "16:9"
  *
  * @param request - Video generation request with apiKey, model, prompt, and optional parameters
  * @returns Raw MP4 video data as a Buffer, or null values on failure
@@ -67,9 +70,9 @@ export async function generateGoogleNativeVideo(
     prompt: request.prompt,
   };
 
-  // 2. Add config (aspect ratio)
+  // 2. Add config (aspect ratio — only pass values Veo supports; unsupported values like "1:1" cause a 400)
   const config: NonNullable<GenerateVideosParameters["config"]> = {};
-  if (request.aspectRatio) {
+  if (request.aspectRatio && GOOGLE_SUPPORTED_ASPECT_RATIOS.has(request.aspectRatio)) {
     config.aspectRatio = request.aspectRatio;
   }
   config.durationSeconds = normalizedDurationSeconds;

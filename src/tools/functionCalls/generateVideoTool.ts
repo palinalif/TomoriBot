@@ -55,7 +55,8 @@ export class GenerateVideoTool extends BaseTool {
       },
       aspect_ratio: {
         type: "string",
-        description: "Optional: The aspect ratio for the generated video. Default is '1:1' (square).",
+        description:
+          "Optional: The aspect ratio for the generated video. Default is '16:9'. Note: '1:1' is not supported by all providers (e.g. Google Veo) and will fall back to '16:9'.",
         enum: ["16:9", "9:16", "1:1"],
       },
       duration: {
@@ -306,7 +307,7 @@ export class GenerateVideoTool extends BaseTool {
     // 4. Extract arguments
     const prompt = args.prompt as string;
     const messageId = args.media_id as string | undefined;
-    const aspectRatio = (args.aspect_ratio as string) || "1:1";
+    const aspectRatio = (args.aspect_ratio as string) || "16:9";
     const durationSeconds = this.normalizeDuration(args.duration);
     const resolution = this.normalizeResolution(args.resolution);
     const generateAudio = args.generate_audio === true;

@@ -33,7 +33,10 @@ English | [日本語](README_ja.md)
 [![GitHub Issues](https://img.shields.io/github/issues/Bredrumb/TomoriBot.svg)](https://github.com/Bredrumb/TomoriBot/issues)
 [![GitHub Pull Requests](https://img.shields.io/github/issues-pr/Bredrumb/TomoriBot.svg)](https://github.com/Bredrumb/TomoriBot/pulls)
 
+
   </p>
+
+  
 
 
 
@@ -61,7 +64,7 @@ If you're enjoying TomoriBot, please consider giving her a ⭐ on GitHub or supp
 
 <div align="center">
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/J3J71O7NE6)
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/J3J71O7NE6) 
 
 </div>
 
@@ -591,6 +594,7 @@ See the [open issues](https://github.com/Bredrumb/TomoriBot/issues) for a full l
 <!-- CONTRIBUTING -->
 ## Contributing
 
+
 Since TomoriBot is still in Beta, any contributions made are **greatly appreciated**, especially for localization.
 
 ### To contribute a new language translation:
@@ -617,7 +621,9 @@ Since TomoriBot is still in Beta, any contributions made are **greatly appreciat
 
 ### To contribute new features
 
-The TomoriBot wiki for contributors is still WIP but there are already comprehensive documentation available at `/docs/` that can help you understand TomoriBot's architecture more. Please make sure that `bun run check && bun run lint && bun run check-locales` does not return any errors before doing a pull request of a new feature.
+The TomoriBot wiki for contributors is still WIP but there are already comprehensive documentation available at `/docs/` that can help you understand TomoriBot's architecture more. Please make sure that `bun run vl` does not return any errors before doing a pull request of a new feature. You may also use DeepWiki to learn more about the repo.
+
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Bredrumb/TomoriBot)
 
 <!-- LEGAL -->
 ## Legal & License

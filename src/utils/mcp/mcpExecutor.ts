@@ -18,6 +18,7 @@ import { getBraveSearchHandler } from "../../tools/mcpServers/brave-search/brave
 import { getFetchHandler } from "../../tools/mcpServers/fetch/fetchHandler";
 import { getDuckDuckGoHandler } from "../../tools/mcpServers/duckduckgo-search/duckduckgoHandler";
 import { sendToolProgressNotice } from "../discord/toolProgressNotice";
+import { localizer } from "../text/localizer";
 import { FETCH_LIMITS, memoryGuard } from "../security/rateLimiter";
 
 /**
@@ -45,11 +46,17 @@ function trimFetchPageTracker(): void {
  * Shared by both the global MCP executor and guild MCP manager so that
  * custom fetch tools (url_fetcher server type) get the same UX.
  *
- * @param context - Tool execution context (channel, locale, etc.)
- * @param url     - The URL being fetched (used for display and dedup tracking)
- * @param label   - Log label for the caller (e.g. "MCPExecutor", "GuildMcpManager")
+ * @param context    - Tool execution context (channel, locale, etc.)
+ * @param url        - The URL being fetched (used for display and dedup tracking)
+ * @param label      - Log label for the caller (e.g. "MCPExecutor", "GuildMcpManager")
+ * @param startIndex - Character offset passed to the fetch server (shown when > 0)
  */
-export async function sendFetchProgressNotice(context: ToolContext, url: string, label: string): Promise<void> {
+export async function sendFetchProgressNotice(
+  context: ToolContext,
+  url: string,
+  label: string,
+  startIndex?: number,
+): Promise<void> {
   const channelId = context.channel.id;
   const tracked = fetchPageTracker.get(channelId);
   let page = 1;
@@ -59,14 +66,25 @@ export async function sendFetchProgressNotice(context: ToolContext, url: string,
   fetchPageTracker.set(channelId, { url, page });
   trimFetchPageTracker();
 
+  // Build the description: base URL line + optional offset line when reading a continuation
+  const baseDescription = localizer(context.locale, "genai.fetch.reading_description", {
+    url: url || "the requested page",
+  });
+  const offsetLine =
+    startIndex && startIndex > 0
+      ? localizer(context.locale, "genai.fetch.reading_offset_line", {
+          start_index: startIndex.toLocaleString(),
+        })
+      : "";
+  const description = [baseDescription, offsetLine].filter((part) => part.length > 0).join("\n");
+
   await sendToolProgressNotice(
     context,
     "web_fetch",
     {
       titleKey: page > 1 ? "genai.fetch.reading_title_page" : "genai.fetch.reading_title",
       titleVars: page > 1 ? { page: String(page) } : undefined,
-      descriptionKey: "genai.fetch.reading_description",
-      descriptionVars: { url: url || "the requested page" },
+      description,
       footerKey: "genai.fetch.reading_footer",
       color: ColorCode.INFO,
     },
@@ -384,7 +402,8 @@ export class MCPExecutor {
       mcpContext.modifiedArgs = this.applyBusinessRules(functionName, args);
 
       if (functionName === "fetch" && context?.channel && context.locale) {
-        await sendFetchProgressNotice(context, String(mcpContext.modifiedArgs.url || ""), "MCPExecutor");
+        const startIndex = Number(mcpContext.modifiedArgs.start_index) || 0;
+        await sendFetchProgressNotice(context, String(mcpContext.modifiedArgs.url || ""), "MCPExecutor", startIndex);
       }
 
       // Find and execute the MCP function

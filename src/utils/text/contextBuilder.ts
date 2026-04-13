@@ -567,6 +567,7 @@ async function buildShortTermMemoryContext(
   isUserImpersonation: boolean,
   explicitLongTermMemoryIntent = false,
   toolPromptMacroResolver?: ToolPromptMacroResolver,
+  currentParentChannelId?: string | null,
 ): Promise<{
   memoryItems: StructuredContextItem[];
   createPromptText?: string;
@@ -602,8 +603,11 @@ async function buildShortTermMemoryContext(
     // Filter out private-channel STMs when the current channel is not private.
     // Private channels isolate their STMs — they cannot leak into non-private channels.
     // The reverse is allowed: non-private STMs can still appear in private channels.
+    // Also treat a thread as private when its parent channel is private.
     const privateChannelIds = tomoriState?.config.private_channel_ids ?? [];
-    const isCurrentChannelPrivate = privateChannelIds.includes(currentChannelId);
+    const isCurrentChannelPrivate =
+      privateChannelIds.includes(currentChannelId) ||
+      (currentParentChannelId != null && privateChannelIds.includes(currentParentChannelId));
     if (!isCurrentChannelPrivate && privateChannelIds.length > 0) {
       otherChannelMemories = otherChannelMemories.filter((memory) => !privateChannelIds.includes(memory.channelId));
     }
@@ -933,6 +937,8 @@ export interface BuildContextParams {
   channelDesc: string | null;
   channelName: string;
   channelId: string;
+  /** Parent channel ID when `channelId` is a thread — used for private/RP channel inheritance. */
+  parentChannelId?: string | null;
   client: Client;
   triggererName: string;
   emojiStrings?: string[];
@@ -1083,6 +1089,7 @@ async function buildContextNative({
   channelDesc: _channelDesc,
   channelName,
   channelId,
+  parentChannelId,
   client,
   triggererName,
   emojiStrings: _emojiStrings,
@@ -2043,6 +2050,7 @@ async function buildContextNative({
         isUserImpersonation,
         explicitLongTermMemoryIntent,
         toolPromptMacroResolver,
+        parentChannelId,
       );
       // Push memory items now (goes in middle of context)
       // Includes: other-channel memories + same-channel summary (if exists)

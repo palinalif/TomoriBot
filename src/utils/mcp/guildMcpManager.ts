@@ -232,7 +232,12 @@ class GuildMcpManager {
         try {
           if (functionName === "fetch") {
             // Fetch-specific notice with pagination tracking
-            await sendFetchProgressNotice(context, String(args.url || ""), "GuildMcpManager");
+            await sendFetchProgressNotice(
+              context,
+              String(args.url || ""),
+              "GuildMcpManager",
+              Number(args.start_index) || 0,
+            );
           } else {
             const formattedArgs = this.formatMcpArgs(args, context.locale);
             await sendToolNotice(

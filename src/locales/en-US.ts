@@ -217,6 +217,7 @@ export default {
       reading_title: `🌐  Reading Webpage...`,
       reading_title_page: `🌐  Reading Webpage (Page {page})...`,
       reading_description: `Fetching and reading: {url}`,
+      reading_offset_line: `Starting from character {start_index}`,
       reading_footer: `This may take a moment depending on the page size`,
     },
     stream: {
@@ -2149,7 +2150,7 @@ Each entry shows the persona and whether it is a reward or punishment record.`,
       squeeze: {
         description: `Give me a squeeze!`,
         reason_description: `Why are you punishing me?`,
-        embed_title: `🫳 Squishy squishy!`,
+        embed_title: `👐 Squishy squishy!`,
         embed_description: `{user} just squeezed {bot}.`,
         history_label: `Squeeze`,
       },

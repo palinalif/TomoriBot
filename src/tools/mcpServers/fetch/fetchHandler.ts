@@ -126,6 +126,9 @@ export class FetchHandler implements MCPServerBehaviorHandler {
           resultText = mcpResult.text;
         } else if (mcpResult.functionResponse?.response?.text) {
           resultText = mcpResult.functionResponse.response.text;
+        } else if (mcpResult.functionResponse?.response?.content?.[0]?.text) {
+          // Gemini SDK wraps successful MCP text results in functionResponse.response.content
+          resultText = mcpResult.functionResponse.response.content[0].text ?? "";
         } else {
           // Fallback: try to stringify the result
           resultText = JSON.stringify(mcpResult, null, 2);
@@ -133,7 +136,7 @@ export class FetchHandler implements MCPServerBehaviorHandler {
         url = (args.url as string) || "";
       }
 
-      // Check for error responses
+      // Check for top-level error flag
       if (mcpResult.isError) {
         return {
           success: false,
@@ -146,6 +149,52 @@ export class FetchHandler implements MCPServerBehaviorHandler {
             rawResult: mcpResult,
             executionTime: Date.now() - context.executionStartTime,
             status: "failed",
+          },
+        };
+      }
+
+      // Check for the Gemini SDK nested error envelope: functionResponse.response.error.isError
+      const nestedError = mcpResult.functionResponse?.response?.error;
+      if (nestedError?.isError) {
+        const nestedErrorText = nestedError.content?.[0]?.text ?? "Unknown fetch error";
+        return {
+          success: false,
+          message: `Failed to fetch content from ${url}: ${nestedErrorText}`,
+          error: nestedErrorText,
+          data: {
+            source: "mcp",
+            functionName: "fetch",
+            serverName: this.serverName,
+            rawResult: mcpResult,
+            executionTime: Date.now() - context.executionStartTime,
+            status: "failed",
+          },
+        };
+      }
+
+      // When start_index is past the content end, the fetch server returns an empty body.
+      // Return a clear end-of-content signal so the LLM knows reading is complete.
+      if (!resultText.trim()) {
+        const startIndex = Number(args.start_index) || 0;
+        const endOfContentMessage =
+          startIndex > 0
+            ? `[End of page content — no further content found at character offset ${startIndex}. All sections of this page have been read.]`
+            : `[The page returned no readable content.]`;
+
+        return {
+          success: true,
+          message: endOfContentMessage,
+          data: {
+            source: "mcp",
+            functionName: "fetch",
+            serverName: this.serverName,
+            rawResult: mcpResult,
+            executionTime: Date.now() - context.executionStartTime,
+            status: "completed",
+            contentLength: 0,
+            url: url,
+            title: title,
+            statusCode: statusCode,
           },
         };
       }
