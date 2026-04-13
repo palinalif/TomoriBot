@@ -15,7 +15,7 @@ import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema }
 const CHAT_DOCUMENT_MAX_SIZE_BYTES = Number.parseInt(process.env.CHAT_DOCUMENT_MAX_SIZE_MB || "8", 10) * 1024 * 1024;
 
 /** Max extracted text length per document (characters) */
-const CHAT_DOCUMENT_MAX_TEXT_LENGTH = Number.parseInt(process.env.CHAT_DOCUMENT_MAX_TEXT_LENGTH || "100000", 10);
+const CHAT_DOCUMENT_MAX_TEXT_LENGTH = Number.parseInt(process.env.CHAT_DOCUMENT_MAX_TEXT_LENGTH || "200000", 10);
 
 /**
  * Tool for reading text-based file attachments from Discord messages.

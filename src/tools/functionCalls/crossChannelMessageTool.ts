@@ -13,6 +13,7 @@ import type { StructuredContextItem } from "../../types/misc/context";
 import { ContextItemTag } from "../../types/misc/context";
 import { isRefreshMarkerEmbed } from "../../utils/discord/embedDetection";
 import { resolveChannelTarget } from "@/utils/discord/targetResolver";
+import { resolveContextAuthorLabel } from "@/utils/discord/contextAuthorLabel";
 
 // ─── Boomerang Mechanism ─────────────────────────────────────────────
 // Stores pending boomerang data keyed by source channel ID.
@@ -115,7 +116,7 @@ export class CrossChannelMessageTool extends BaseTool {
       target_channel: {
         type: "string",
         description:
-          "Name of the target channel or active thread in the current server. Accepts natural channel/thread labels like 'general' or '#general'. If the prompt shows a label with an '(ID: ...)' suffix, prefer copying that exact label to avoid ambiguity. A raw Discord channel/thread ID is also accepted.",
+          "Name of the target channel or active thread in the current server. Accepts natural channel/thread labels like 'general' or '#general'. If the prompt shows a copyable inline-code label like `#general (ID: ...)`, prefer copying that exact label to avoid ambiguity. A raw Discord channel/thread ID is also accepted.",
       },
       task: {
         type: "string",
@@ -238,7 +239,7 @@ export class CrossChannelMessageTool extends BaseTool {
     const channelResolution = await resolveChannelTarget(requestedChannel, context);
     if (channelResolution.status === "ambiguous") {
       const clarificationHint = channelResolution.candidates.some((candidate) => candidate.channelId)
-        ? " Retry with the exact label including its '(ID: ...)' suffix, or with the raw channel/thread ID, if needed."
+        ? " Retry with the exact inline-code label, or with the raw channel/thread ID, if needed."
         : "";
       return {
         success: false,
@@ -458,11 +459,17 @@ export class CrossChannelMessageTool extends BaseTool {
             }
             filteredMessages.push(m);
           }
-          targetMessages = filteredMessages.map((m) => ({
-            author: m.author.displayName ?? m.author.username,
-            content: m.content || "(no text content)",
-            timestamp: m.createdAt.toISOString(),
-          }));
+          targetMessages = await Promise.all(
+            filteredMessages.map(async (m) => ({
+              author: await resolveContextAuthorLabel(m, {
+                guildId: context.guildId,
+                tomoriNickname: context.tomoriState.tomori_nickname,
+                personalMemoriesEnabled: context.tomoriState.config.personal_memories_enabled,
+              }),
+              content: m.content || "(no text content)",
+              timestamp: m.createdAt.toISOString(),
+            })),
+          );
         } catch (msgFetchError) {
           log.warn(`Cross-channel tool: Failed to fetch target channel messages for boomerang:`, msgFetchError);
         }

@@ -1577,6 +1577,7 @@ interface ChannelLockEntry {
     injectedContextItems?: StructuredContextItem[];
     forcedMentions?: ForcedMention[];
     manualTriggerInvoker?: ManualTriggerInvoker;
+    manualStreamingContextOverrides?: Pick<StreamingContext, "disableCrossChannelMessage">;
   }>;
 }
 const channelLocks = new Map<string, ChannelLockEntry>(); // Key: channel.id
@@ -2011,7 +2012,7 @@ async function enforceGlobalRateLimit(params: {
  * @param injectedContextItems - Optional synthetic context items appended after rebuilt history.
  * @param forcedMentions - Optional mention handle mappings to enforce for a target user.
  * @param manualTriggerInvoker - Manual-trigger invoker metadata used when a slash command passes a bot/webhook passport message.
- * @param manualStreamingContextOverrides - Optional streaming-context overrides for internal follow-up turns.
+ * @param manualStreamingContextOverrides - Optional streaming-context overrides for internal follow-up turns and retries.
  */
 export default async function tomoriChat(
   client: Client,
@@ -2227,6 +2228,9 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
   if (manualStreamingContextOverrides) {
     Object.assign(streamingContext, manualStreamingContextOverrides);
   }
+
+  const queuedStreamingContextOverrides: Pick<StreamingContext, "disableCrossChannelMessage"> | undefined =
+    streamingContext.disableCrossChannelMessage ? { disableCrossChannelMessage: true } : undefined;
 
   const userDiscId = manualTriggerInvoker?.userDiscId ?? message.author.id;
   const triggererUsername = manualTriggerInvoker?.username ?? message.author.username;
@@ -2616,6 +2620,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           textQuotaSource,
           textQuotaTriggerKey: effectiveTextQuotaTriggerKey,
           textQuotaUserDiscId: effectiveTextQuotaUserDiscId,
+          manualStreamingContextOverrides: queuedStreamingContextOverrides,
         });
 
         log.info(
@@ -2644,6 +2649,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         textQuotaSource,
         textQuotaTriggerKey: effectiveTextQuotaTriggerKey,
         textQuotaUserDiscId: effectiveTextQuotaUserDiscId,
+        manualStreamingContextOverrides: queuedStreamingContextOverrides,
       });
 
       log.info(
@@ -6226,6 +6232,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       injectedContextItems,
                       forcedMentions,
                       manualTriggerInvoker,
+                      manualStreamingContextOverrides,
                     );
                   } else {
                     // Max retries reached, show error embed
@@ -7624,6 +7631,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               nextMessageData.injectedContextItems,
               nextMessageData.forcedMentions,
               nextMessageData.manualTriggerInvoker,
+              nextMessageData.manualStreamingContextOverrides,
             ).catch((e) => {
               log.error(`Error processing queued message ${nextMessageData.message.id}:`, e);
             });

@@ -74,15 +74,25 @@ export function normalizeUserTargetInput(value: string): string {
   return normalizeLookupValue(value, "@");
 }
 
+function unwrapInlineCodeDelimiters(value: string): string {
+  let normalized = value.trim();
+
+  while (normalized.length >= 2 && normalized.startsWith("`") && normalized.endsWith("`")) {
+    normalized = normalized.slice(1, -1).trim();
+  }
+
+  return normalized;
+}
+
 export function normalizeChannelTargetInput(value: string): string {
-  return normalizeLookupValue(value, "#");
+  return normalizeLookupValue(unwrapInlineCodeDelimiters(value), "#");
 }
 
 function extractExplicitChannelId(value: string): {
   explicitId?: string;
   strippedInput: string;
 } {
-  const trimmedValue = value.trim();
+  const trimmedValue = unwrapInlineCodeDelimiters(value);
   const idSuffixMatch = trimmedValue.match(CHANNEL_ID_SUFFIX_PATTERN);
 
   if (!idSuffixMatch) {
@@ -467,6 +477,10 @@ function formatChannelCandidateLabelWithId(channel: GuildTextBasedChannel): stri
   return `${formatChannelCandidateLabel(channel)} (ID: ${channel.id})`;
 }
 
+function formatCopyableChannelCandidateLabel(channel: GuildTextBasedChannel): string {
+  return `\`${formatChannelCandidateLabelWithId(channel)}\``;
+}
+
 function getQualifiedThreadLookupValues(channel: GuildTextBasedChannel): string[] {
   if (!isThreadLike(channel) || !("parent" in channel) || !channel.parent?.name) {
     return [];
@@ -494,7 +508,7 @@ export async function formatChannelReferenceLabel(channel: GuildTextBasedChannel
 
   if (isThreadLike(channel)) {
     const duplicateCount = activeThreads.filter((thread) => formatChannelCandidateLabel(thread) === baseLabel).length;
-    return duplicateCount > 1 ? formatChannelCandidateLabelWithId(channel) : baseLabel;
+    return duplicateCount > 1 ? formatCopyableChannelCandidateLabel(channel) : baseLabel;
   }
 
   const normalizedName = normalizeChannelTargetInput(channel.name);
@@ -513,7 +527,7 @@ export async function formatChannelReferenceLabel(channel: GuildTextBasedChannel
   );
 
   return hasTextChannelCollision || hasActiveThreadCollision || hasForumParentCollision
-    ? formatChannelCandidateLabelWithId(channel)
+    ? formatCopyableChannelCandidateLabel(channel)
     : baseLabel;
 }
 
@@ -530,7 +544,7 @@ function buildAmbiguousChannelCandidates(
 }> {
   return candidates.slice(0, 3).map((candidate) => {
     return {
-      label: formatChannelCandidateLabelWithId(candidate.channel),
+      label: formatCopyableChannelCandidateLabel(candidate.channel),
       channelName: candidate.channelName,
       channelId: candidate.channel.id,
     };
@@ -550,7 +564,8 @@ async function getActiveThreadTargets(guild: Guild): Promise<GuildTextBasedChann
 
 export async function resolveChannelTarget(input: string, context: ToolContext): Promise<ChannelTargetResolution> {
   const rawInput = input.trim();
-  const { explicitId, strippedInput } = extractExplicitChannelId(rawInput);
+  const parsableInput = unwrapInlineCodeDelimiters(rawInput);
+  const { explicitId, strippedInput } = extractExplicitChannelId(parsableInput);
   const normalizedInput = normalizeChannelTargetInput(strippedInput);
   if (!normalizedInput) {
     if (!explicitId) {
@@ -581,8 +596,8 @@ export async function resolveChannelTarget(input: string, context: ToolContext):
     }
   }
 
-  if (isDiscordSnowflake(rawInput)) {
-    const channel = await context.client.channels.fetch(rawInput).catch(() => null);
+  if (isDiscordSnowflake(parsableInput)) {
+    const channel = await context.client.channels.fetch(parsableInput).catch(() => null);
     if (channel && isGuildTextTarget(channel) && "guildId" in channel && channel.guildId === guild.id) {
       return {
         status: "resolved",
