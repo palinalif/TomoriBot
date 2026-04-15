@@ -1,6 +1,6 @@
 {
   "name": "tomoribot",
-  "version": "0.7.940",
+  "version": "0.7.942",
   "description": "Customizable AI Assistant Discord Bot",
   "main": "./src/index.ts",
   "type": "module",
@@ -96,7 +96,8 @@
     "form-data": ">=2.5.4",
     "underscore": ">=1.12.1",
     "nedb": "npm:@seald-io/nedb@latest",
-    "tough-cookie": ">=4.1.3"
+    "tough-cookie": ">=4.1.3",
+    "follow-redirects": ">=1.16.0"
   },
   "patchedDependencies": {
     "@aws-sdk/xml-builder@3.972.11": "patches/@aws-sdk%2Fxml-builder@3.972.11.patch",

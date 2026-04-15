@@ -14,6 +14,7 @@ This folder is organized by topic instead of numeric filenames.
 - [`systems/database-schema.md`](./systems/database-schema.md)
 - [`systems/event-system.md`](./systems/event-system.md)
 - [`systems/command-system.md`](./systems/command-system.md)
+- [`systems/status-command.md`](./systems/status-command.md)
 - [`systems/tool-system.md`](./systems/tool-system.md)
 - [`systems/utils.md`](./systems/utils.md)
 - [`systems/localization.md`](./systems/localization.md)

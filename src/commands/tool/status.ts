@@ -16,13 +16,13 @@ import { localizer } from "../../utils/text/localizer";
 import { getCachedTomoriState } from "../../utils/cache/tomoriStateCache";
 import {
   getUserReminderCount,
-  getBraveApiKeyStatus,
   getBlacklistedMemberIds,
   loadPersonalMemoriesForUserLineage,
   loadAllPersonasForServer,
   getServerRandomTriggers,
   getAllChannelLlmOverridesForServer,
   loadEmbeddingModelById,
+  loadSavedProviderConfigs,
 } from "../../utils/db/dbRead";
 import { getDiffusionModelById } from "@/utils/image/naiDiffusionModels";
 import { sql } from "@/utils/db/client";
@@ -31,6 +31,7 @@ import { getAllWhitelistPersonas } from "@/utils/db/personaWhitelist";
 import { getAllWhitelistRoles } from "@/utils/db/roleWhitelist";
 import { getQuotaConfig } from "@/utils/quota/imageQuotaManager";
 import { getTextQuotaConfig } from "@/utils/quota/textQuotaManager";
+import { getVideoQuotaConfig } from "@/utils/quota/videoQuotaManager";
 import type {
   UserRow,
   ChannelWhitelistRow,
@@ -39,6 +40,10 @@ import type {
   RandomTriggerRow,
   LlmRow,
   TomoriConfigRow,
+  GuildMcpServerRow,
+  SavedProviderConfigRow,
+  StPresetNodeRow,
+  StPresetRow,
 } from "../../types/db/schema";
 import type { SummaryEmbedOptions } from "../../types/discord/embed";
 import { CooldownType, PrivacyLevel, type TomoriState } from "../../types/db/schema";
@@ -47,14 +52,27 @@ import { getMemoryLimits } from "@/utils/db/memoryLimits";
 import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
 import { formatLlmDisplayLabel } from "@/utils/provider/modelDisplay";
 import { SUPPORTED_PARAM_STATUS_FIELD_KEYS, SUPPORTED_PARAM_VALUES } from "@/constants/supportedParams";
+import { TOOL_NOTICE_DEFINITIONS } from "@/constants/toolNotices";
 import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
+import { loadGuildMcpServers } from "@/utils/db/guildMcpDb";
+import { loadPresetsForServer, loadToggleableNodes } from "@/utils/db/stPresetDb";
+import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 
 // Constants
 const MAX_ITEMS_DISPLAY = 5; // Max channel/member items before switching to count-only
 const MEMORY_TRUNCATE_LENGTH = 100; // Max chars per memory snippet
 const ATTRIBUTE_TRUNCATE_LENGTH = 200; // Max chars per attribute snippet
 const DIALOGUE_TRUNCATE_LENGTH = 140; // Max chars per sample dialogue side
+const STATUS_BULLET_TRUNCATE_LENGTH = 48; // Max chars per privacy-safe summary entry
 const MAX_PROMPT_PREVIEW = Number.parseInt(process.env.SYSPROMPT_SHOW_MAX_PREVIEW || "3800", 10); // Max chars shown for system/persona prompts
+
+interface OptApiKeyStatusRow {
+  service_name: string;
+}
+
+interface MatrixLinkStatusRow {
+  channel_disc_id: string;
+}
 
 /**
  * Returns a user-friendly label for a privacy level.
@@ -353,11 +371,42 @@ async function formatRandomTriggers(
           : localizer(locale, "commands.tool.status.random_trigger_persona_random");
       const offsetSegment =
         trigger.random_offset_range != null && trigger.random_offset_range > 0
-          ? ` +/-${trigger.random_offset_range}h`
+          ? ` · ${localizer(locale, "commands.tool.status.random_trigger_offset_segment", {
+              hours: trigger.random_offset_range,
+            })}`
+          : "";
+      const silenceSegment =
+        trigger.silence_threshold_hours != null && trigger.silence_threshold_hours > 0
+          ? ` · ${localizer(locale, "commands.tool.status.random_trigger_silence_segment", {
+              hours: trigger.silence_threshold_hours,
+            })}`
+          : "";
+      const respondToSelfSegment = trigger.respond_to_self
+        ? ` · ${localizer(locale, "commands.tool.status.random_trigger_self_segment")}`
+        : "";
+      const promptSegment = trigger.custom_prompt?.trim()
+        ? ` · ${localizer(locale, "commands.tool.status.random_trigger_prompt_segment")}`
+        : "";
+      const failureSegment =
+        trigger.failure_threshold != null && trigger.failure_threshold > 0
+          ? ` · ${localizer(locale, "commands.tool.status.random_trigger_failure_segment", {
+              count: trigger.failure_threshold,
+            })}`
           : "";
 
-      // 3. Format: "N. #channel · Persona · Xh · Y%"
-      return `${index + 1}. ${mention} · ${personaName} · ${trigger.timer_hours}h${offsetSegment} · ${trigger.chance_percent}%`;
+      // 3. Format: "N. #channel · Persona · Xh · Y% · extra..."
+      return truncateText(
+        `${index + 1}. ${mention} · ${personaName} · ${localizer(
+          locale,
+          "commands.tool.status.random_trigger_timer_segment",
+          {
+            hours: trigger.timer_hours,
+          },
+        )}${offsetSegment} · ${localizer(locale, "commands.tool.status.random_trigger_chance_segment", {
+          chance: trigger.chance_percent,
+        })}${silenceSegment}${respondToSelfSegment}${promptSegment}${failureSegment}`,
+        220,
+      );
     }),
   );
 
@@ -411,6 +460,7 @@ async function formatChannelLlmOverrides(
   overrides: { channelDiscId: string; llm: LlmRow }[],
   locale: string,
   customModelName?: string | null,
+  otherModelCodename?: string | null,
 ): Promise<string> {
   if (overrides.length === 0) {
     return localizer(locale, "commands.choices.none");
@@ -421,7 +471,7 @@ async function formatChannelLlmOverrides(
       // 1. Resolve channel mention
       const mention = await resolveChannelMention(client, entry.channelDiscId, locale);
       // 2. Format: "N. #channel → model (provider)"
-      return `${index + 1}. ${mention} → ${formatLlmDisplayLabel(entry.llm, customModelName)}`;
+      return `${index + 1}. ${mention} → ${formatLlmDisplayLabel(entry.llm, customModelName, otherModelCodename)}`;
     }),
   );
 
@@ -435,7 +485,12 @@ async function formatChannelLlmOverrides(
  * @param locale - User locale
  * @returns Formatted persona LLM override list string, or localized "None" if empty
  */
-function formatPersonaLlmOverrides(personas: TomoriState[], locale: string, customModelName?: string | null): string {
+function formatPersonaLlmOverrides(
+  personas: TomoriState[],
+  locale: string,
+  customModelName?: string | null,
+  otherModelCodename?: string | null,
+): string {
   // 1. Filter to personas with an explicit override, narrowing the type so llm is non-optional
   const overrides = personas.filter((p): p is TomoriState & { persona_llm: LlmRow } => p.persona_llm != null);
 
@@ -446,7 +501,7 @@ function formatPersonaLlmOverrides(personas: TomoriState[], locale: string, cust
   // 2. Format: "N. Persona Name → `model` (provider)"
   return overrides
     .map((p, index) => {
-      return `${index + 1}. **${p.tomori_nickname}** → ${formatLlmDisplayLabel(p.persona_llm, customModelName)}`;
+      return `${index + 1}. **${p.tomori_nickname}** → ${formatLlmDisplayLabel(p.persona_llm, customModelName, otherModelCodename)}`;
     })
     .join("\n");
 }
@@ -484,6 +539,131 @@ async function formatWelcomeChannel(
 
   // 3. Format: "#channel · Persona"
   return `${channelMention} · ${personaName}`;
+}
+
+function formatConfiguredEntryNames(items: string[], locale: string): string {
+  if (items.length === 0) {
+    return localizer(locale, "commands.choices.none");
+  }
+
+  return formatBulletList(items, locale, STATUS_BULLET_TRUNCATE_LENGTH);
+}
+
+function getOptionalApiServiceDisplayName(serviceName: string, locale: string): string {
+  switch (serviceName) {
+    case "brave-search":
+      return localizer(locale, "commands.tool.status.optional_api_service_brave");
+    case "google":
+      return localizer(locale, "commands.tool.status.optional_api_service_google");
+    case "elevenlabs":
+      return localizer(locale, "commands.tool.status.optional_api_service_elevenlabs");
+    case "novelai":
+      return localizer(locale, "commands.tool.status.optional_api_service_novelai");
+    default:
+      return serviceName;
+  }
+}
+
+function formatOptionalApiKeys(serviceNames: string[], locale: string): string {
+  const labels = [...new Set(serviceNames.map((serviceName) => getOptionalApiServiceDisplayName(serviceName, locale)))];
+  return formatConfiguredEntryNames(labels, locale);
+}
+
+function formatSavedProviderConfigs(savedConfigs: SavedProviderConfigRow[], locale: string): string {
+  const providerLabels = [...new Set(savedConfigs.map((config) => getProviderDisplayName(config.provider)))];
+  return formatConfiguredEntryNames(providerLabels, locale);
+}
+
+function getHiddenNoticeLabels(hiddenKeys: readonly string[], locale: string): string[] {
+  return hiddenKeys
+    .map((key) => {
+      const definition = TOOL_NOTICE_DEFINITIONS.find((entry) => entry.key === key);
+      return definition ? localizer(locale, definition.labelKey) : key;
+    })
+    .sort((left, right) => left.localeCompare(right));
+}
+
+function formatHiddenNoticeEmbeds(hiddenKeys: readonly string[], locale: string): string {
+  return formatConfiguredEntryNames(getHiddenNoticeLabels(hiddenKeys, locale), locale);
+}
+
+function getMcpServerTypeLabel(serverType: string | null | undefined, locale: string): string {
+  switch (serverType) {
+    case "web_search":
+      return localizer(locale, "commands.tool.status.mcp_server_type_web_search");
+    case "url_fetcher":
+      return localizer(locale, "commands.tool.status.mcp_server_type_url_fetcher");
+    default:
+      return localizer(locale, "commands.tool.status.mcp_server_type_custom");
+  }
+}
+
+function formatMcpServers(servers: GuildMcpServerRow[], locale: string): string {
+  if (servers.length === 0) {
+    return localizer(locale, "commands.choices.none");
+  }
+
+  return servers
+    .map((server, index) => {
+      const enabledLabel = server.is_enabled
+        ? localizer(locale, "commands.choices.enabled")
+        : localizer(locale, "commands.choices.disabled");
+      const typeLabel = getMcpServerTypeLabel(server.server_type, locale);
+      const authLabel = server.auth_token
+        ? localizer(locale, "commands.tool.status.mcp_server_auth_present")
+        : localizer(locale, "commands.tool.status.mcp_server_auth_absent");
+      return `${index + 1}. **${truncateText(server.name, 32)}** · ${enabledLabel} · ${typeLabel} · ${authLabel}`;
+    })
+    .join("\n");
+}
+
+async function formatMatrixLinks(client: Client, links: MatrixLinkStatusRow[], locale: string): Promise<string> {
+  if (links.length === 0) {
+    return localizer(locale, "commands.choices.none");
+  }
+
+  const channelIds = links.map((link) => link.channel_disc_id);
+  if (channelIds.length > MAX_ITEMS_DISPLAY) {
+    return localizer(locale, "commands.tool.status.item_count", {
+      count: channelIds.length,
+    });
+  }
+
+  const mentions = await Promise.all(channelIds.map((channelId) => resolveChannelMention(client, channelId, locale)));
+  return mentions.map((mention, index) => `${index + 1}. ${mention}`).join("\n");
+}
+
+function formatRotationPoolValue(keys: TomoriState["rotation_keys"], locale: string): string {
+  const rotationKeys = keys ?? [];
+  const totalEntries = rotationKeys.length;
+  const additionalKeys = rotationKeys.filter((key) => !key.is_main_key_pointer).length;
+  const enabledEntries = rotationKeys.filter((key) => key.is_enabled).length;
+  const disabledEntries = totalEntries - enabledEntries;
+
+  return totalEntries === 0
+    ? localizer(locale, "commands.choices.none")
+    : localizer(locale, "commands.tool.status.field_api_key_rotation_pool_value", {
+        total: totalEntries,
+        additional: additionalKeys,
+        enabled: enabledEntries,
+        disabled: disabledEntries,
+      });
+}
+
+function formatActiveStPresetValue(activePreset: StPresetRow | null, locale: string): string {
+  return activePreset?.preset_name ?? localizer(locale, "commands.choices.none");
+}
+
+function formatStPresetNodeSummary(toggleableNodes: StPresetNodeRow[], locale: string): string {
+  if (toggleableNodes.length === 0) {
+    return localizer(locale, "commands.choices.none");
+  }
+
+  const enabledCount = toggleableNodes.filter((node) => node.is_enabled).length;
+  return localizer(locale, "commands.tool.status.field_st_preset_nodes_value", {
+    enabled: enabledCount,
+    total: toggleableNodes.length,
+  });
 }
 
 /**
@@ -650,7 +830,7 @@ export async function execute(
 
         // 2. Load all supporting data in parallel
         const [
-          braveApiKeySet,
+          optApiKeyRows,
           blacklistedMemberIds,
           whitelistPersonas,
           whitelistChannels,
@@ -660,12 +840,22 @@ export async function execute(
           channelLlmOverrides,
           imageQuotaConfig,
           textQuotaConfig,
+          videoQuotaConfig,
           diffusionModel,
           embeddingModel,
           videoModel,
           naiDiffusionModel,
+          savedProviderConfigs,
+          guildMcpServers,
+          matrixLinks,
+          stPresets,
         ] = await Promise.all([
-          getBraveApiKeyStatus(tomoriState.server_id),
+          sql<OptApiKeyStatusRow[]>`
+            SELECT service_name
+            FROM opt_api_keys
+            WHERE server_id = ${tomoriState.server_id}
+            ORDER BY service_name ASC
+          `,
           getBlacklistedMemberIds(tomoriState.server_id),
           getAllWhitelistPersonas(tomoriState.server_id),
           getAllWhitelistChannels(tomoriState.server_id),
@@ -675,13 +865,27 @@ export async function execute(
           getAllChannelLlmOverridesForServer(tomoriState.server_id),
           getQuotaConfig(tomoriState.server_id),
           getTextQuotaConfig(tomoriState.server_id),
+          getVideoQuotaConfig(tomoriState.server_id),
           // 2a. Resolve shared image, embedding, and video models by ID (null if unset)
           config.diffusion_model_id ? getDiffusionModelById(config.diffusion_model_id) : Promise.resolve(null),
           config.embedding_model_id ? loadEmbeddingModelById(config.embedding_model_id) : Promise.resolve(null),
           config.video_model_id ? loadVideoModelById(config.video_model_id) : Promise.resolve(null),
           // 2b. Resolve NAI-specific diffusion model (separate from shared model)
           config.nai_diffusion_model_id ? getDiffusionModelById(config.nai_diffusion_model_id) : Promise.resolve(null),
+          loadSavedProviderConfigs(tomoriState.server_id),
+          loadGuildMcpServers(tomoriState.server_id),
+          sql<MatrixLinkStatusRow[]>`
+            SELECT channel_disc_id
+            FROM matrix_channel_links
+            WHERE server_id = ${tomoriState.server_id}
+            ORDER BY created_at ASC
+          `,
+          loadPresetsForServer(tomoriState.server_id),
         ]);
+
+        const activeStPreset = stPresets.find((preset) => preset.is_active) ?? null;
+        const activeStPresetNodes =
+          activeStPreset?.preset_id != null ? await loadToggleableNodes(activeStPreset.preset_id) : [];
 
         // 3. Build a persona name map for random trigger display (tomori_id -> nickname)
         const personaNameMap = new Map<number, string>();
@@ -693,6 +897,8 @@ export async function execute(
         const mainPersonaName =
           allPersonas.find((persona) => !persona.is_alter)?.tomori_nickname ??
           localizer(locale, "commands.choices.none");
+        const optApiKeyServiceNames = optApiKeyRows.map((row) => row.service_name);
+        const braveApiKeySet = optApiKeyServiceNames.includes("brave-search");
 
         // 4. Format timezone (UTC+08:00 style)
         const timezoneOffset = config.timezone_offset;
@@ -731,7 +937,7 @@ export async function execute(
                   current: blacklistedCount,
                 });
 
-        // 7. Format channel lists (auto-chat, RP, private, cross-channel blocklist, welcome, whitelist, random triggers, channel model overrides)
+        // 7. Format channel lists (auto-chat, RP, private, cross-channel blocklist, welcome, whitelist, random triggers, channel model overrides, Matrix links)
         const [
           autoChannelsValue,
           rpChannelsValue,
@@ -744,6 +950,7 @@ export async function execute(
           whitelistRolesValue,
           randomTriggersValue,
           channelLlmOverridesValue,
+          matrixLinksValue,
         ] = await Promise.all([
           formatAutochatChannels(client, config, personaNameMap, mainPersonaName, locale),
           formatChannelList(client, config.rp_channel_ids, locale),
@@ -759,8 +966,16 @@ export async function execute(
           formatWhitelistEntries(client, whitelistChannels, locale),
           formatWhitelistRolesEntries(whitelistRoles, locale),
           formatRandomTriggers(client, randomTriggers, personaNameMap, locale),
-          formatChannelLlmOverrides(client, channelLlmOverrides, locale, config.custom_model_name),
+          formatChannelLlmOverrides(
+            client,
+            channelLlmOverrides,
+            locale,
+            config.custom_model_name,
+            config.other_model_codename,
+          ),
+          formatMatrixLinks(client, matrixLinks, locale),
         ]);
+        const welcomePromptConfiguredValue = formatBooleanLocalized(!!config.welcome_prompt?.trim(), locale);
 
         // 8. Format system prompt preview (code block, up to MAX_PROMPT_PREVIEW chars)
         const rawSystemPrompt = config.system_prompt ?? null;
@@ -783,12 +998,15 @@ export async function execute(
 
         // 10. Format vision and fallback model display labels
         const visionModelValue = tomoriState.vision_llm
-          ? formatLlmDisplayLabel(tomoriState.vision_llm, config.custom_model_name)
+          ? formatLlmDisplayLabel(tomoriState.vision_llm, config.custom_model_name, config.other_model_codename)
           : localizer(locale, "commands.choices.none");
         const fallbackModelsValue =
           (tomoriState.fallback_llms?.length ?? 0) > 0
             ? tomoriState.fallback_llms
-                ?.map((m, i) => `${i + 1}. ${formatLlmDisplayLabel(m, config.custom_model_name)}`)
+                ?.map(
+                  (m, i) =>
+                    `${i + 1}. ${formatLlmDisplayLabel(m, config.custom_model_name, config.other_model_codename)}`,
+                )
                 .join("\n")
             : localizer(locale, "commands.choices.none");
 
@@ -813,6 +1031,27 @@ export async function execute(
         const naiDiffusionModelValue = naiDiffusionModel
           ? `${naiDiffusionModel.codename} (${naiDiffusionModel.provider})`
           : localizer(locale, "commands.choices.none");
+        const customEndpointConfiguredValue = formatBooleanLocalized(!!config.custom_endpoint_url, locale);
+        const rotationKeys = tomoriState.rotation_keys ?? [];
+        const rotationStatusValue =
+          rotationKeys.length >= 2
+            ? localizer(locale, "commands.choices.enabled")
+            : localizer(locale, "commands.choices.disabled");
+        const rotationPoolValue = formatRotationPoolValue(tomoriState.rotation_keys, locale);
+        const optionalApiKeyCount = new Set(optApiKeyServiceNames.map((serviceName) => serviceName.toLowerCase())).size;
+        const optionalApiKeysValue = formatOptionalApiKeys(optApiKeyServiceNames, locale);
+        const savedProviderConfigCount = new Set(
+          savedProviderConfigs.map((savedConfig) => savedConfig.provider.toLowerCase()),
+        ).size;
+        const savedProviderConfigsValue = formatSavedProviderConfigs(savedProviderConfigs, locale);
+        const hiddenNoticeKeys = config.tool_notice_hidden_keys ?? [];
+        const hiddenNoticeEmbedsValue = formatHiddenNoticeEmbeds(hiddenNoticeKeys, locale);
+        const stPresetLibraryValue = localizer(locale, "commands.tool.status.field_st_preset_library_value", {
+          count: stPresets.length,
+        });
+        const activeStPresetValue = formatActiveStPresetValue(activeStPreset, locale);
+        const stPresetNodeSummaryValue = formatStPresetNodeSummary(activeStPresetNodes, locale);
+        const mcpServersValue = formatMcpServers(guildMcpServers, locale);
 
         // ── Page 1: Model & Sampling ───────────────────────────────────
         const serverPage1: SummaryEmbedOptions = {
@@ -822,7 +1061,7 @@ export async function execute(
           fields: [
             {
               nameKey: "commands.tool.status.field_model",
-              value: formatLlmDisplayLabel(llm, config.custom_model_name),
+              value: formatLlmDisplayLabel(llm, config.custom_model_name, config.other_model_codename),
               inline: false,
             },
             {
@@ -893,6 +1132,11 @@ export async function execute(
             {
               nameKey: "commands.tool.status.field_embedding_model",
               value: embeddingModelValue,
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_custom_endpoint",
+              value: customEndpointConfiguredValue,
               inline: true,
             },
           ],
@@ -992,6 +1236,11 @@ export async function execute(
               nameKey: "commands.tool.status.field_welcome_channel",
               value: welcomeChannelValue,
               inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_welcome_prompt",
+              value: welcomePromptConfiguredValue,
+              inline: true,
             },
             {
               nameKey: "commands.tool.status.field_thought_logs_channel",
@@ -1176,7 +1425,12 @@ export async function execute(
         };
 
         // ── Page 6: Model Overrides ─────────────────────────────────────
-        const personaLlmOverridesValue = formatPersonaLlmOverrides(allPersonas, locale, config.custom_model_name);
+        const personaLlmOverridesValue = formatPersonaLlmOverrides(
+          allPersonas,
+          locale,
+          config.custom_model_name,
+          config.other_model_codename,
+        );
 
         const serverPage6: SummaryEmbedOptions = {
           titleKey: "commands.tool.status.server_page6_title",
@@ -1246,6 +1500,28 @@ export async function execute(
               }),
               inline: true,
             },
+            {
+              nameKey: "commands.tool.status.field_video_quota_enabled",
+              value: formatBooleanLocalized(videoQuotaConfig.enabled, locale),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_video_quota_daily_user",
+              value: formatQuotaLimitValue(locale, videoQuotaConfig.daily_user_quota),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_video_quota_serverwide",
+              value: formatQuotaLimitValue(locale, videoQuotaConfig.serverwide_quota),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_video_quota_reset_days",
+              value: localizer(locale, "commands.tool.status.field_quota_reset_days_value", {
+                days: videoQuotaConfig.serverwide_quota_resets_in,
+              }),
+              inline: true,
+            },
           ],
         };
 
@@ -1312,10 +1588,94 @@ export async function execute(
           ],
         };
 
+        // ── Page 9: Integrations & Access ───────────────────────────────
+        const serverPage9: SummaryEmbedOptions = {
+          titleKey: "commands.tool.status.server_page9_title",
+          descriptionKey: "commands.tool.status.server_page9_description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.tool.status.field_api_key_rotation_status",
+              value: rotationStatusValue,
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_api_key_rotation_pool",
+              value: rotationPoolValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_optional_api_keys_with_count",
+              nameVars: {
+                count: optionalApiKeyCount,
+              },
+              value: optionalApiKeysValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_saved_provider_configs_with_count",
+              nameVars: {
+                count: savedProviderConfigCount,
+              },
+              value: savedProviderConfigsValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_mcp_servers_with_count",
+              nameVars: {
+                count: guildMcpServers.length,
+              },
+              value: mcpServersValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_matrix_links_with_count",
+              nameVars: {
+                count: matrixLinks.length,
+              },
+              value: matrixLinksValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_hidden_notice_embeds_with_count",
+              nameVars: {
+                count: hiddenNoticeKeys.length,
+              },
+              value: hiddenNoticeEmbedsValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_st_preset_active",
+              value: activeStPresetValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_st_preset_library",
+              value: stPresetLibraryValue,
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_st_preset_nodes",
+              value: stPresetNodeSummaryValue,
+              inline: true,
+            },
+          ],
+        };
+
         await replyPaginatedStatusPages(
           interaction,
           locale,
-          [serverPage1, serverPage2, serverPage3, serverPage4, serverPage5, serverPage6, serverPage7, serverPage8],
+          [
+            serverPage1,
+            serverPage2,
+            serverPage3,
+            serverPage4,
+            serverPage5,
+            serverPage6,
+            serverPage7,
+            serverPage8,
+            serverPage9,
+          ],
           MessageFlags.Ephemeral,
         );
         break;
@@ -1425,7 +1785,11 @@ export async function execute(
         // 10. Build persona model override value
         //     Shows the persona-specific LLM if set, otherwise "Server default"
         const personaModelValue = selectedPersona.persona_llm
-          ? formatLlmDisplayLabel(selectedPersona.persona_llm, selectedPersona.config.custom_model_name)
+          ? formatLlmDisplayLabel(
+              selectedPersona.persona_llm,
+              selectedPersona.config.custom_model_name,
+              selectedPersona.config.other_model_codename,
+            )
           : localizer(locale, "commands.tool.status.persona_model_server_default");
 
         // 11. Format ATTG metadata block
