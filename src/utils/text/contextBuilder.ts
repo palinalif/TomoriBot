@@ -604,11 +604,13 @@ async function buildShortTermMemoryContext(
     // Private channels isolate their STMs — they cannot leak into non-private channels.
     // The reverse is allowed: non-private STMs can still appear in private channels.
     // Also treat a thread as private when its parent channel is private.
+    // This guard is skipped entirely when stm_privacy_bypass is enabled by the server admin.
     const privateChannelIds = tomoriState?.config.private_channel_ids ?? [];
+    const stmPrivacyBypass = tomoriState?.config.stm_privacy_bypass ?? false;
     const isCurrentChannelPrivate =
       privateChannelIds.includes(currentChannelId) ||
       (currentParentChannelId != null && privateChannelIds.includes(currentParentChannelId));
-    if (!isCurrentChannelPrivate && privateChannelIds.length > 0) {
+    if (!stmPrivacyBypass && !isCurrentChannelPrivate && privateChannelIds.length > 0) {
       otherChannelMemories = otherChannelMemories.filter((memory) => !privateChannelIds.includes(memory.channelId));
     }
 

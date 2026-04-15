@@ -821,6 +821,66 @@ async function resolveImpersonatedIdentity(
   };
 }
 
+/**
+ * Determines whether a message is a direct persona invocation that should bypass whitelist restrictions.
+ *
+ * Two conditions qualify as a direct invocation:
+ * 1. The message is a reply to the main bot or any persona webhook (including alters).
+ * 2. The message explicitly addresses a persona — either by Discord @-mentioning the main bot,
+ *    or by prefixing any persona trigger word with `@` (e.g. `@Miku`). The `@` prefix form
+ *    is the workaround for alter personas, which are webhooks and cannot be Discord-mentioned.
+ *
+ * @param message - The incoming Discord message to evaluate.
+ * @param allPersonas - All loaded persona states for this server (main + alters).
+ * @returns `true` if the message is a direct invocation and whitelists should be bypassed.
+ */
+function isDirectPersonaInvocation(message: Message, allPersonas: TomoriState[]): boolean {
+  // 1. Check if the message is a reply to the bot or a persona webhook.
+  if (message.reference?.messageId) {
+    const referenceMessage = message.channel.messages.cache.get(message.reference.messageId);
+    // biome-ignore lint/style/noNonNullAssertion: client.user is available in messageCreate event
+    if (referenceMessage?.author.id === message.client.user!.id) {
+      return true;
+    }
+    if (referenceMessage?.webhookId) {
+      const personaByNickname = new Map<string, TomoriState>();
+      for (const persona of allPersonas) {
+        const nicknameKey = persona.tomori_nickname?.toLowerCase();
+        if (!nicknameKey || personaByNickname.has(nicknameKey)) continue;
+        personaByNickname.set(nicknameKey, persona);
+      }
+      const webhookTarget = resolveReferencedWebhookTarget(referenceMessage, personaByNickname, message.guild);
+      if (webhookTarget.replyPersona || webhookTarget.impersonatedUserId) {
+        return true;
+      }
+    }
+  }
+
+  // 2. Check if the main bot is Discord @-mentioned.
+  // biome-ignore lint/style/noNonNullAssertion: client.user is available in messageCreate event
+  if (message.mentions.users.has(message.client.user!.id)) {
+    return true;
+  }
+
+  // 3. Check if any persona trigger word is prefixed with `@` in the message content.
+  // This covers alter personas (webhooks, not Discord users) that cannot be Discord-mentioned.
+  // The match is case-insensitive to be consistent with how trigger words are matched elsewhere.
+  const contentLower = message.content.toLowerCase();
+  for (const persona of allPersonas) {
+    const triggers =
+      persona.trigger_words ??
+      (persona.is_alter ? (persona.alter_triggers ?? []) : (persona.config?.trigger_words ?? []));
+
+    for (const trigger of triggers) {
+      if (trigger && contentLower.includes(`@${trigger.toLowerCase()}`)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function resolveReferencedWebhookTarget(
   referenceMessage: Message,
   personaByNickname: Map<string, TomoriState>,
@@ -2693,24 +2753,28 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
           // 2a. Check cooldown BEFORE queuing (skip for manual triggers)
           if (!isManuallyTriggered && !isStopResponse && !message.author.bot && !message.webhookId) {
-            // Check whitelist status
-            const memberRoleDiscIds = message.member ? message.member.roles.cache.map((role) => role.id) : undefined;
-            // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
-            const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
-            const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
-            const whitelistStatus = await getCachedWhitelistStatus(
-              guild?.id ?? message.author.id,
-              message.channelId,
-              memberRoleDiscIds,
-              parentChannelId,
-            );
-
-            // If whitelist rules block this trigger, silently ignore
-            if (!whitelistStatus.isTriggerAllowed) {
-              log.info(
-                `Message ${message.id} in channel ${message.channelId} rejected by whitelist policy (${whitelistStatus.blockReason ?? "unknown"})`,
+            // Check whitelist status, but bypass if the user directly addressed a persona
+            // (reply to bot/persona or @{trigger} prefix), which always grants access.
+            const isDirectInvocation = isDirectPersonaInvocation(message, earlyAllPersonas);
+            if (!isDirectInvocation) {
+              const memberRoleDiscIds = message.member ? message.member.roles.cache.map((role) => role.id) : undefined;
+              // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
+              const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
+              const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
+              const whitelistStatus = await getCachedWhitelistStatus(
+                guild?.id ?? message.author.id,
+                message.channelId,
+                memberRoleDiscIds,
+                parentChannelId,
               );
-              return; // Silent rejection
+
+              // If whitelist rules block this trigger, silently ignore
+              if (!whitelistStatus.isTriggerAllowed) {
+                log.info(
+                  `Message ${message.id} in channel ${message.channelId} rejected by whitelist policy (${whitelistStatus.blockReason ?? "unknown"})`,
+                );
+                return; // Silent rejection
+              }
             }
 
             // Continue with cooldown check
@@ -3471,25 +3535,29 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         }
       }
 
-      // 6.5. Check whitelist status (skip for manual triggers, stop responses, and self messages)
+      // 6.5. Check whitelist status (skip for manual triggers, stop responses, and self messages).
+      // Also bypass if the user directly addressed a persona (reply or @{trigger} prefix).
       if (!isManuallyTriggered && !isStopResponse && !isSelfMessage) {
-        const memberRoleDiscIds = message.member ? message.member.roles.cache.map((role) => role.id) : undefined;
-        // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
-        const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
-        const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
-        const whitelistStatus = await getCachedWhitelistStatus(
-          guild?.id ?? message.author.id,
-          message.channelId,
-          memberRoleDiscIds,
-          parentChannelId,
-        );
-
-        // If whitelist rules block this trigger, silently ignore
-        if (!whitelistStatus.isTriggerAllowed) {
-          log.info(
-            `Message ${message.id} in channel ${message.channelId} rejected by whitelist policy (${whitelistStatus.blockReason ?? "unknown"})`,
+        const isDirectInvocation = isDirectPersonaInvocation(message, allPersonas);
+        if (!isDirectInvocation) {
+          const memberRoleDiscIds = message.member ? message.member.roles.cache.map((role) => role.id) : undefined;
+          // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
+          const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
+          const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
+          const whitelistStatus = await getCachedWhitelistStatus(
+            guild?.id ?? message.author.id,
+            message.channelId,
+            memberRoleDiscIds,
+            parentChannelId,
           );
-          return; // Silent rejection
+
+          // If whitelist rules block this trigger, silently ignore
+          if (!whitelistStatus.isTriggerAllowed) {
+            log.info(
+              `Message ${message.id} in channel ${message.channelId} rejected by whitelist policy (${whitelistStatus.blockReason ?? "unknown"})`,
+            );
+            return; // Silent rejection
+          }
         }
       }
 

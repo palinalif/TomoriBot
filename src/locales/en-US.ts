@@ -3329,6 +3329,13 @@ A malicious server may send misleading instructions, collect data sent to its to
       },
       stm: {
         description: `Manage server-shared STM entries for all personas`,
+        "privacy-bypass": {
+          description: `Toggle whether private-channel STMs can leak into non-private channels.`,
+          enabled_title: `STM Privacy Bypass Enabled`,
+          enabled_description: `Private-channel STMs will now appear in non-private channels. The isolation guard has been lifted.`,
+          disabled_title: `STM Privacy Bypass Disabled`,
+          disabled_description: `Private-channel STMs are now isolated again and will not appear outside their channels.`,
+        },
         manage: {
           description: `Review and clear active server-shared STMs across personas.`,
           modal_title: `Manage Active Server STMs`,

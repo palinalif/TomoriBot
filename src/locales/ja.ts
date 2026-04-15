@@ -3348,6 +3348,13 @@ Prompt Guidance Rescale: {cfg_rescale}
       },
       stm: {
         description: `全ペルソナのサーバー共有STMを管理`,
+        "privacy-bypass": {
+          description: `プライベートチャンネルのSTMが非プライベートチャンネルに漏れるかどうかを切り替えます。`,
+          enabled_title: `STMプライバシーバイパス有効`,
+          enabled_description: `プライベートチャンネルのSTMが非プライベートチャンネルにも表示されるようになりました。隔離ガードが解除されています。`,
+          disabled_title: `STMプライバシーバイパス無効`,
+          disabled_description: `プライベートチャンネルのSTMは再び隔離され、そのチャンネル外には表示されなくなりました。`,
+        },
         manage: {
           description: `各ペルソナの有効なサーバー共有STMを確認してクリアします。`,
           modal_title: `有効なサーバーSTMを管理`,

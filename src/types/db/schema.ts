@@ -286,6 +286,7 @@ export const tomoriConfigSchema = z.object({
   ), // Added April 2026 - Optional per-channel persona assignment for auto-trigger channels
   rp_channel_ids: z.array(z.string()).default([]), // Added February 2026 - Channels where emojis/stickers are always suppressed
   private_channel_ids: z.array(z.string()).default([]), // Added March 2026 - Channels where STMs cannot leak out and thought logs are suppressed
+  stm_privacy_bypass: z.boolean().default(false), // Added April 2026 - When true, private-channel STMs are allowed to leak into non-private channels
   crosschannel_blocklist_ids: z.array(z.string()).default([]), // Added April 2026 - Channels blocked as cross_channel_message targets; thread parents also apply
   welcome_channel_disc_id: z.string().nullable().optional(), // Added March 2026 - Channel used for member join welcomes
   thought_log_channel_disc_id: z.string().nullable().optional(), // Added March 2026 - Channel used for reasoning/thought log embeds
