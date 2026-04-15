@@ -621,7 +621,7 @@ SELECT add_column_if_not_exists('tomori_configs', 'welcome_prompt', 'TEXT', 'NUL
 SELECT add_column_if_not_exists('tomori_configs', 'welcome_persona_id', 'INTEGER', 'NULL');
 SELECT add_column_if_not_exists('tomori_configs', 'autoch_persona_overrides', 'JSONB', '''[]''::JSONB');
 
--- Add hidden tool notice registry (April 2026)
+-- Add hidden notice embed registry (April 2026)
 -- Stores hidden notice keys only; missing entries remain visible by default
 SELECT add_column_if_not_exists('tomori_configs', 'tool_notice_hidden_keys', 'TEXT[]', 'ARRAY[]::TEXT[]');
 

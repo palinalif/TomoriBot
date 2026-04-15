@@ -4,6 +4,23 @@ SELECT add_column_if_not_exists('tomori_configs', 'other_model_codename', 'TEXT'
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_capabilities', 'JSONB');
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_capabilities_fetched_at', 'TIMESTAMP');
 SELECT add_column_if_not_exists('tomori_configs', 'autoch_persona_overrides', 'JSONB', '''[]''::JSONB');
+SELECT add_column_if_not_exists('tomori_configs', 'hide_respond_embed', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('tomori_configs', 'hide_impersonation_embeds', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('tomori_configs', 'tool_notice_hidden_keys', 'TEXT[]', 'ARRAY[]::TEXT[]');
+
+-- Migrate legacy notice visibility booleans into the shared hidden-key registry
+UPDATE tomori_configs
+SET tool_notice_hidden_keys = ARRAY(
+  SELECT DISTINCT notice_key
+  FROM unnest(
+    COALESCE(tool_notice_hidden_keys, ARRAY[]::TEXT[]) ||
+    CASE WHEN hide_respond_embed THEN ARRAY['respond_embed'] ELSE ARRAY[]::TEXT[] END ||
+    CASE WHEN hide_impersonation_embeds THEN ARRAY['impersonation_notice'] ELSE ARRAY[]::TEXT[] END
+  ) AS notice_key
+  ORDER BY notice_key
+)
+WHERE hide_respond_embed = true
+   OR hide_impersonation_embeds = true;
 
 -- Ensure all required columns exist in persona_configs table
 SELECT add_column_if_not_exists('persona_configs', 'reward_conditioning_enabled', 'BOOLEAN', 'true');

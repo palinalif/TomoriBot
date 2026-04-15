@@ -15,6 +15,7 @@ import {
 } from "../../utils/db/cooldownManager";
 import { CooldownType } from "../../types/db/schema";
 import { getCooldownTypeFooterKey } from "../../utils/db/messageCooldown";
+import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
 
 /**
  * Configure the respond subcommand
@@ -217,7 +218,7 @@ export async function execute(
 
   // 5. Defer the modal submission immediately — it opens a new 3-second window
   // and async work (e.g. loadSmartestModel) must not run before acknowledgment
-  const hideEmbed = tomoriState.config.hide_respond_embed;
+  const hideEmbed = !isNoticeEmbedVisible(tomoriState.config, "respond_embed");
   await replyInteraction.deferReply({
     flags: hideEmbed ? MessageFlags.Ephemeral | MessageFlags.SuppressNotifications : MessageFlags.SuppressNotifications,
   });

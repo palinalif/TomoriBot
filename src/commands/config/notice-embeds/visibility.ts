@@ -14,8 +14,8 @@ import { promptWithRawModal, replyInfoEmbed, safeSelectOptionText } from "@/util
 import { log, ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
-const MODAL_CUSTOM_ID = "config_toolnotices_visibility_modal";
-const NOTICE_CHECKBOX_ID_PREFIX = "config_toolnotices_visibility_group";
+const MODAL_CUSTOM_ID = "config_noticeembeds_visibility_modal";
+const NOTICE_CHECKBOX_ID_PREFIX = "config_noticeembeds_visibility_group";
 const MAX_OPTIONS_PER_GROUP = 10;
 const MAX_GROUPS_PER_MODAL = 5;
 const MAX_ENTRIES_PER_MODAL = MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL;
@@ -23,7 +23,7 @@ const MAX_ENTRIES_PER_MODAL = MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL;
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("visibility")
-    .setDescription(localizer("en-US", "commands.config.tool-notices.visibility.description"));
+    .setDescription(localizer("en-US", "commands.config.notice-embeds.visibility.description"));
 
 export async function execute(
   _client: Client,
@@ -57,8 +57,8 @@ export async function execute(
     const groupCount = Math.ceil(TOOL_NOTICE_DEFINITIONS.length / MAX_OPTIONS_PER_GROUP);
     if (groupCount > MAX_GROUPS_PER_MODAL) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.tool-notices.visibility.too_many_title",
-        descriptionKey: "commands.config.tool-notices.visibility.too_many_description",
+        titleKey: "commands.config.notice-embeds.visibility.too_many_title",
+        descriptionKey: "commands.config.notice-embeds.visibility.too_many_description",
         descriptionVars: {
           count: TOOL_NOTICE_DEFINITIONS.length.toString(),
           max_entries: MAX_ENTRIES_PER_MODAL.toString(),
@@ -76,19 +76,19 @@ export async function execute(
       locale,
       {
         modalCustomId: MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.config.tool-notices.visibility.modal_title",
+        modalTitleKey: "commands.config.notice-embeds.visibility.modal_title",
         components: checkboxGroups,
       },
       MessageFlags.Ephemeral,
     );
 
     if (modalResult.outcome !== "submit") {
-      log.info(`Tool notice visibility modal ${modalResult.outcome} for user ${userData.user_id}`);
+      log.info(`Notice embed visibility modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
     if (!modalResult.interaction) {
-      log.error("Tool notice visibility modal unexpectedly missing interaction");
+      log.error("Notice embed visibility modal unexpectedly missing interaction");
       return;
     }
 
@@ -108,8 +108,8 @@ export async function execute(
 
     if (hiddenNow.length === 0 && restoredNow.length === 0) {
       await replyInfoEmbed(modalResult.interaction, locale, {
-        titleKey: "commands.config.tool-notices.visibility.no_changes_title",
-        descriptionKey: "commands.config.tool-notices.visibility.no_changes_description",
+        titleKey: "commands.config.notice-embeds.visibility.no_changes_title",
+        descriptionKey: "commands.config.notice-embeds.visibility.no_changes_description",
         color: ColorCode.INFO,
       });
       return;
@@ -129,10 +129,10 @@ export async function execute(
         tomoriId: tomoriState.tomori_id,
         errorType: "DatabaseUpdateError",
         metadata: {
-          command: "config toolnotices visibility",
+          command: "config notice-embeds visibility",
         },
       };
-      await log.error("Failed to update tool notice visibility config", new Error("Database update failed"), context);
+      await log.error("Failed to update notice embed visibility config", new Error("Database update failed"), context);
       await replyInfoEmbed(modalResult.interaction, locale, {
         titleKey: "general.errors.update_failed_title",
         descriptionKey: "general.errors.update_failed_description",
@@ -149,11 +149,11 @@ export async function execute(
         tomoriId: tomoriState.tomori_id,
         errorType: "SchemaValidationError",
         metadata: {
-          command: "config toolnotices visibility",
+          command: "config notice-embeds visibility",
           validationErrors: validatedConfig.error.flatten(),
         },
       };
-      await log.error("Failed to validate updated tool notice visibility config", validatedConfig.error, context);
+      await log.error("Failed to validate updated notice embed visibility config", validatedConfig.error, context);
       await replyInfoEmbed(modalResult.interaction, locale, {
         titleKey: "general.errors.update_failed_title",
         descriptionKey: "general.errors.update_failed_description",
@@ -165,8 +165,8 @@ export async function execute(
     invalidateTomoriStateCache(serverDiscId);
 
     await replyInfoEmbed(modalResult.interaction, locale, {
-      titleKey: "commands.config.tool-notices.visibility.success_title",
-      descriptionKey: "commands.config.tool-notices.visibility.success_description",
+      titleKey: "commands.config.notice-embeds.visibility.success_title",
+      descriptionKey: "commands.config.notice-embeds.visibility.success_description",
       descriptionVars: {
         hidden_count: hiddenNow.length.toString(),
         hidden_list: formatNoticeList(hiddenNow, locale),
@@ -180,11 +180,11 @@ export async function execute(
       userId: userData.user_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "config toolnotices visibility",
+        command: "config notice-embeds visibility",
         guildId: interaction.guild?.id ?? interaction.user.id,
       },
     };
-    await log.error("Error executing /config tool-notices visibility", error as Error, context);
+    await log.error("Error executing /config notice-embeds visibility", error as Error, context);
 
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
@@ -213,9 +213,9 @@ function buildCheckboxGroups(locale: string, hiddenKeys: ToolNoticeKey[]): Modal
       customId: `${NOTICE_CHECKBOX_ID_PREFIX}_${groupIndex}`,
       labelKey:
         groupIndex === 0
-          ? "commands.config.tool-notices.visibility.checkbox_label"
-          : "commands.config.tool-notices.visibility.checkbox_label_continued",
-      descriptionKey: groupIndex === 0 ? "commands.config.tool-notices.visibility.checkbox_description" : undefined,
+          ? "commands.config.notice-embeds.visibility.checkbox_label"
+          : "commands.config.notice-embeds.visibility.checkbox_label_continued",
+      descriptionKey: groupIndex === 0 ? "commands.config.notice-embeds.visibility.checkbox_description" : undefined,
       minValues: 0,
       maxValues: options.length,
       required: false,

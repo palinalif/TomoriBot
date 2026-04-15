@@ -261,10 +261,10 @@ Behavior notes:
 
 - visibility is server-scoped via `tomori_configs.tool_notice_hidden_keys`
 - an empty hidden-key list means all current and future notice types remain visible by default
-- `/config tool-notices visibility` manages the hidden-key list through checkbox groups
+- `/config notice-embeds visibility` manages the hidden-key list through checkbox groups
 - visible notices are posted in the source channel as normal
-- hidden notices are rerouted to the configured thought-log channel when one exists
+- hidden tool notices are rerouted to the configured thought-log channel when one exists; non-tool command notices covered by this registry are simply suppressed
 - hidden notices from private channels are suppressed instead of being rerouted, so private-channel activity never leaks to thoughtlogs
 - hidden notices in DMs are suppressed because DMs have no guild thought-log destination
-- all tool notices include a footer hint pointing users to `/config tool-notices visibility`
+- all tool notices include a footer hint pointing users to `/config notice-embeds visibility`
 - image-generation, image-editing, and video-generation notices now append the active model codename and a trimmed copy of the raw tool-call prompt, plus lightweight execution hints such as configured style tags, per-character NAI tags, or reference-image usage; server-side style-tag contents, defaults, and other system-added prompt material are not shown

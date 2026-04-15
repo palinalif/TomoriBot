@@ -182,6 +182,7 @@ The chain resets (depth → 0) when:
 **Exception:** if the active user sends a natural-language stop message while a generation is already running, TomoriBot preserves the current depth and clears queued self-reply work for that chain instead of resetting it.
 
 Auto-trigger note: auto-chat / always-reply channel behavior only qualifies on real user-like messages. Persona self-messages do not advance the shared auto-chat counter and do not auto-trigger fresh self turns by themselves. When a channel has an auto-trigger persona assignment, that persona owns the auto-trigger fallback for that channel; explicit trigger-word matches still take priority.
+With deliberate trigger mode enabled, only deliberate trigger invocations count as explicit matches. Plain trigger words no longer override the channel fallback persona unless that persona is the channel's exempt auto-chat owner.
 
 ### Configuration
 

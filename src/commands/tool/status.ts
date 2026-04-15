@@ -42,6 +42,7 @@ import { getMemoryLimits } from "@/utils/db/memoryLimits";
 import { DEFAULT_SYSTEM_PROMPT } from "@/utils/text/contextBuilder";
 import { formatLlmDisplayLabel } from "@/utils/provider/modelDisplay";
 import { SUPPORTED_PARAM_STATUS_FIELD_KEYS, SUPPORTED_PARAM_VALUES } from "@/constants/supportedParams";
+import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
 
 // Constants
 const MAX_ITEMS_DISPLAY = 5; // Max channel/member items before switching to count-only
@@ -920,12 +921,12 @@ export async function execute(
             },
             {
               nameKey: "commands.tool.status.field_hide_impersonation",
-              value: formatBooleanLocalized(config.hide_impersonation_embeds, locale),
+              value: formatBooleanLocalized(!isNoticeEmbedVisible(config, "impersonation_notice"), locale),
               inline: true,
             },
             {
               nameKey: "commands.tool.status.field_hide_respond_embed",
-              value: formatBooleanLocalized(config.hide_respond_embed, locale),
+              value: formatBooleanLocalized(!isNoticeEmbedVisible(config, "respond_embed"), locale),
               inline: true,
             },
             {

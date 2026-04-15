@@ -31,6 +31,7 @@ import {
 import { CooldownType } from "@/types/db/schema";
 import { getCooldownTypeFooterKey } from "@/utils/db/messageCooldown";
 import { sendCooldownDM } from "@/utils/discord/cooldownDM";
+import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
 
 /**
  * Configures the /bot impersonate subcommand
@@ -227,13 +228,15 @@ async function handlePersonaImpersonation(
   }
 
   try {
-    // 5. Check hide_impersonation_embeds permission
-    const tomoriState = allPersonas[0]; // Main persona has config
-    const shouldHideEmbed = tomoriState?.config?.hide_impersonation_embeds ?? false;
+    // 5. Check notice embed visibility for impersonation notices
+    const tomoriState = allPersonas.find((persona) => !persona.is_alter) ?? allPersonas[0];
+    const shouldShowNotice = tomoriState?.config
+      ? isNoticeEmbedVisible(tomoriState.config, "impersonation_notice")
+      : true;
 
     // 6. Build impersonation notice embed if needed
     const embeds: EmbedBuilder[] = [];
-    if (!shouldHideEmbed) {
+    if (shouldShowNotice) {
       const invokerAvatarUrl = interaction.member
         ? (interaction.member as import("discord.js").GuildMember).displayAvatarURL({
             size: 64,
@@ -459,8 +462,8 @@ async function handleUserImpersonation(
     const member = interaction.guild.members.cache.get(impersonatedUserId);
     const displayName = impersonatedDisplayName || member?.displayName || member?.user.displayName || "User";
 
-    // 5. Show public impersonation notice if enabled in permissions
-    if (!(tomoriState.config.hide_impersonation_embeds ?? false)) {
+    // 5. Show public impersonation notice when that notice embed is visible
+    if (isNoticeEmbedVisible(tomoriState.config, "impersonation_notice")) {
       try {
         const invokerAvatarUrl = interaction.member
           ? (interaction.member as import("discord.js").GuildMember).displayAvatarURL({

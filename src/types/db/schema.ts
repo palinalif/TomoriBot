@@ -311,12 +311,12 @@ export const tomoriConfigSchema = z.object({
   sticker_usage_enabled: z.boolean().default(true), // Added May 5, 2025
   manage_message_enabled: z.boolean().default(true), // Added November 5, 2025 - Permission gate for message management tools
   imagegen_enabled: z.boolean().default(true), // Added January 2026 - Permission for image generation
-  hide_respond_embed: z.boolean().default(false), // Added January 2026 - Hide respond command success embed
-  hide_impersonation_embeds: z.boolean().default(false), // Added February 2026 - Hide impersonation confirmation embeds
+  hide_respond_embed: z.boolean().default(false), // Added January 2026 - Legacy migration source for respond notice visibility
+  hide_impersonation_embeds: z.boolean().default(false), // Added February 2026 - Legacy migration source for impersonation notice visibility
   tool_notice_hidden_keys: z.preprocess(
     (value) => normalizeToolNoticeHiddenKeys(value),
     z.array(toolNoticeKeySchema).default([]),
-  ), // Added April 2026 - Hidden tool notice types; missing entries remain visible by default
+  ), // Added April 2026 - Hidden notice embed types; missing entries remain visible by default
   voice_message_enabled: z.boolean().default(true), // Added March 2026 - Allow Tomori to send ElevenLabs TTS voice messages
   voice_transcript_chat_mode: z.boolean().default(false), // Added March 2026 - Post voice transcripts as webhook chat messages instead of using internal cache
   self_debug_enabled: z.boolean().default(false), // Added March 2026 - Include Tomori error embeds in context as [System: ...]

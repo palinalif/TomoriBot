@@ -368,7 +368,7 @@ Implemented examples:
 - `/server private-channels` manages the full saved private-channel set in one modal, with paginated fallback beyond 50 channels.
 - `/server rp-channels` manages the full saved RP-channel set in one modal, with paginated fallback beyond 50 channels.
 - `/server crosschannel-blocklist` manages a persistent channel blocklist with saved check states and paginated fallback beyond 50 channels.
-- `/config tool-notices visibility` manages visible tool notice embed types in one modal.
+- `/config notice-embeds visibility` manages visible notice embed types in one modal.
 - `/config remove modeloverride` manages channel and persona overrides together in one modal.
 - `/config mcp remove` manages registered MCP servers in one modal.
 - `/config remove modelfallback` manages the fallback chain in one modal while preserving remaining order.

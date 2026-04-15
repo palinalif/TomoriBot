@@ -104,6 +104,7 @@ import {
 import { isAudioAttachment, transcribeMessageAudioAttachment } from "@/utils/audio/audioAttachmentTranscription";
 import { getCachedVoiceTranscript, setCachedVoiceTranscript } from "@/utils/audio/voiceTranscriptCache";
 import { getCachedRenderedMarkdownTable } from "@/utils/text/markdownTableCache";
+import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
 
 // Base trigger words that will always work (with or without spaces for English)
 const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map((word) => word.trim()) || [
@@ -1011,7 +1012,7 @@ function createDeliberateTriggerRegex(trigger: string): RegExp {
  * Used to resolve multi-persona trigger order deterministically.
  * Returns Infinity when the trigger is not present.
  */
-function getTriggerFirstMatchIndex(message: Message, trigger: string): number {
+function getTriggerFirstMatchIndex(message: Message, trigger: string, deliberateOnly = false): number {
   // Mention trigger format: <@123...> or <@!123...>
   if (trigger.startsWith("<@")) {
     const userId = trigger.replace(/[<@!>]/g, "");
@@ -1023,6 +1024,11 @@ function getTriggerFirstMatchIndex(message: Message, trigger: string): number {
     const mentionMatch = message.content.match(mentionPattern);
     // If Discord resolved the mention but we can't find raw text, still treat as matched.
     return mentionMatch?.index ?? Number.MAX_SAFE_INTEGER;
+  }
+
+  if (deliberateOnly) {
+    const deliberateMatch = message.content.match(createDeliberateTriggerRegex(trigger));
+    return deliberateMatch?.index ?? Number.POSITIVE_INFINITY;
   }
 
   // Japanese triggers: direct substring check
@@ -3708,10 +3714,12 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           isAutochatQualifyingMessage(message, isSelfMessage) &&
           isAutochatCounterHit(tomoriState, effectiveChannelId);
         const autoTriggerPersonaId = config ? getAutochatAssignedPersonaId(config, effectiveChannelId) : null;
+        const isAutochatConfigured = !!config && isAutochatConfiguredChannel(config, effectiveChannelId);
         const isScopedAlwaysReplyActive =
           !!config &&
           isAutochatAlwaysReplyChannelActive(config, effectiveChannelId) &&
           isAutochatQualifyingMessage(message, isSelfMessage);
+        const isDtmActive = !!config?.deliberate_trigger_mode && !!message.guild && !isMatrixRelay;
 
         // Check if always-reply mode applies to this message:
         // Must be enabled, must be a real user message (not bot/webhook/self), and in a guild channel
@@ -3731,6 +3739,8 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           isAlwaysReplyActive,
           autoTriggerPersonaId,
           isScopedAlwaysReplyActive ? autoTriggerPersonaId : null,
+          isDtmActive,
+          isAutochatConfigured,
         );
 
         // Consecutive persona filter: prevent the same persona from triggering in
@@ -7594,7 +7604,12 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
               // If a fallback model was used successfully, send a blue info embed so
               // the user knows which model actually responded and what failed before it.
-              if (!isUserImpersonation && fallbackRunResult.fallbackUsed && fallbackRunResult.successModel) {
+              if (
+                !isUserImpersonation &&
+                fallbackRunResult.fallbackUsed &&
+                fallbackRunResult.successModel &&
+                isNoticeEmbedVisible(tomoriState.config, "fallback_model_usage")
+              ) {
                 const chain = fallbackRunResult.fallbackUsed
                   .map((f) => `\`${f.modelCodename}\` (errored ${f.errorCode})`)
                   .join(" → ");
@@ -8176,6 +8191,8 @@ function isAutochatCounterHit(tomoriState: TomoriState, channelId: string): bool
  * @param isBotMentioned - Whether bot is mentioned in the message
  * @param isAutoMsgHit - Whether the shared auto-chat range hit
  * @param isAlwaysReply - Whether always-reply mode triggered this message
+ * @param deliberateTriggerMode - Whether deliberate trigger mode is active for this message
+ * @param isAutochatDtmExemptChannel - Whether this channel exempts one fallback persona from DTM
  * @returns Array of matching personas in deterministic trigger order
  */
 export function determineMatchingPersonas(
@@ -8189,6 +8206,8 @@ export function determineMatchingPersonas(
   isAlwaysReply = false,
   autoTriggerPersonaId?: number | null,
   alwaysReplyFallbackPersonaId?: number | null,
+  deliberateTriggerMode = false,
+  isAutochatDtmExemptChannel = false,
 ): TomoriState[] {
   const mainPersona = allPersonas.find((persona) => !persona.is_alter);
   const resolveFallbackPersona = (personaId?: number | null): TomoriState | undefined =>
@@ -8270,7 +8289,10 @@ export function determineMatchingPersonas(
     let firstMatchIndex = Number.MAX_SAFE_INTEGER;
 
     for (const trigger of triggers) {
-      const matchIndex = getTriggerFirstMatchIndex(message, trigger);
+      const isPersonaDtmExempt =
+        isAutochatDtmExemptChannel &&
+        (autoTriggerPersonaId === null ? !persona.is_alter : autoTriggerPersonaId === persona.tomori_id);
+      const matchIndex = getTriggerFirstMatchIndex(message, trigger, deliberateTriggerMode && !isPersonaDtmExempt);
       if (matchIndex !== Number.POSITIVE_INFINITY) {
         hasMatch = true;
         if (matchIndex < firstMatchIndex) {
@@ -8480,8 +8502,13 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
         const isPersonaDtmExempt =
           isAutoTriggerChannel &&
           (autochatPersonaId === null ? !persona.is_alter : autochatPersonaId === persona.tomori_id);
+        // For multi-word triggers like "evil lilya", users type "@evil" (just the first word) —
+        // the screaming regex already confirmed the full phrase is present, so only @{firstWord} is needed.
+        const firstTriggerWord = trigger.split(/\s+/)[0] ?? trigger;
         isDeliberate =
-          isDtmActive && !isPersonaDtmExempt ? createDeliberateTriggerRegex(trigger).test(message.content) : true; // DTM off or persona exempt → all matches treated as deliberate
+          isDtmActive && !isPersonaDtmExempt
+            ? createDeliberateTriggerRegex(firstTriggerWord).test(message.content)
+            : true; // DTM off or persona exempt → all matches treated as deliberate
       }
 
       if (matched) {

@@ -160,8 +160,12 @@ export function buildVideoToolNoticeDescription(
   );
 }
 
-export function isToolNoticeVisible(config: TomoriConfigRow, key: ToolNoticeKey): boolean {
+export function isNoticeEmbedVisible(config: TomoriConfigRow, key: ToolNoticeKey): boolean {
   return !(config.tool_notice_hidden_keys ?? []).includes(key);
+}
+
+export function isToolNoticeVisible(config: TomoriConfigRow, key: ToolNoticeKey): boolean {
+  return isNoticeEmbedVisible(config, key);
 }
 
 export async function routeToolNoticeToThoughtLog(

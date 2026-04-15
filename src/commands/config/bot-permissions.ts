@@ -105,20 +105,6 @@ const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     getState: (c) => c.videogen_enabled,
   },
   {
-    value: "hiderespondembed",
-    dbColumn: "hide_respond_embed",
-    labelKey: "commands.config.permissions.hiderespondembed_option",
-    descKey: "commands.config.permissions.hiderespondembed_desc",
-    getState: (c) => c.hide_respond_embed,
-  },
-  {
-    value: "hideimpersonationembeds",
-    dbColumn: "hide_impersonation_embeds",
-    labelKey: "commands.config.permissions.hideimpersonationembeds_option",
-    descKey: "commands.config.permissions.hideimpersonationembeds_desc",
-    getState: (c) => c.hide_impersonation_embeds,
-  },
-  {
     value: "voicemessage",
     dbColumn: "voice_message_enabled",
     labelKey: "commands.config.permissions.voicemessage_option",
