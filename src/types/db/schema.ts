@@ -583,7 +583,7 @@ export type RoleWhitelistRow = z.infer<typeof roleWhitelistSchema>;
 
 /**
  * Channel Persona Whitelist Schema
- * Defines channel-specific persona allowlists for automatic message triggers.
+ * Defines persona-specific channel allowlists for automatic message triggers.
  * If a channel has no entries, all personas remain eligible in that channel.
  */
 export const channelPersonaWhitelistSchema = z.object({

@@ -536,10 +536,10 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_crosschannel_blocklist: `Cross-Channel Blocklist`,
         field_thought_logs_channel: `Thought Logs Channel`,
         field_welcome_channel: `Welcome Channel`,
-        field_whitelist_personas: `Persona Whitelist`,
+        field_whitelist_personas: `Persona Channel Whitelist`,
         field_whitelist_channels: `Channel Whitelist`,
         field_whitelist_roles: `Role Whitelist`,
-        whitelist_personas_all_allowed: `None (all personas can trigger)`,
+        whitelist_personas_all_allowed: `None (all personas can trigger in all channels)`,
         whitelist_all_allowed: `None (all channels can trigger)`,
         whitelist_roles_all_allowed: `None (all roles can trigger)`,
         field_random_triggers: `Random Triggers`,
@@ -1556,7 +1556,7 @@ Triggers & Appearance:
 Channel Whitelist & Cooldowns:
 - {configCooldown} - Set global cooldown between my responses
 - {serverWhitelistChannel} - Add a channel to the whitelist (only whitelisted channels can trigger me)
-- {serverWhitelistPersona} - Limit which personas can trigger in a specific channel
+- {serverWhitelistPersona} - Limit which channels a persona can trigger in
 - {serverWhitelistRole} - Add/remove roles allowed to trigger me when role whitelist is active
 - {serverWhitelistRemove} - Remove whitelist entries
 - Whitelisted channels inherit the global cooldown unless you set a channel-specific override
@@ -3614,7 +3614,7 @@ Currently blacklisted: **{selected_count}**.`,
         cleared_description: `Thought logs will no longer be posted.`,
       },
       whitelist: {
-        description: `Manage trigger whitelist (channels, channel-specific personas, and roles)`,
+        description: `Manage trigger whitelist (channels, persona channel restrictions, and roles)`,
         channel: {
           description: `Add a channel to the whitelist, optionally overriding the global cooldown`,
           channel_description: `The channel to whitelist`,
@@ -3642,26 +3642,29 @@ Currently blacklisted: **{selected_count}**.`,
 **Note:** When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.`,
         },
         persona: {
-          description: `Restrict which personas can trigger in a selected channel`,
-          channel_description: `The channel whose persona whitelist you want to edit`,
-          modal_title: `Whitelist Personas`,
-          checkbox_label: `Whitelisted Personas`,
-          checkbox_label_continued: `Whitelisted Personas (Continued)`,
-          checkbox_description: `Checked personas may respond in this channel. Keep all personas checked to clear the channel-specific persona whitelist.`,
-          invalid_channel_title: `Invalid Channel Type`,
-          invalid_channel_description: `Only text channels can have a persona whitelist.`,
+          description: `Restrict which channels a persona can trigger in`,
+          modal_title: `Whitelist Channels`,
+          checkbox_label: `Whitelisted Channels`,
+          checkbox_label_continued: `Whitelisted Channels (Continued)`,
+          checkbox_description: `Check the channels where this persona is allowed to trigger. Leave everything unchecked to keep the persona unrestricted in all channels.`,
           no_personas_title: `No Personas Found`,
           no_personas_description: `This server does not have any personas available to whitelist yet.`,
-          too_many_personas_title: `Too Many Personas`,
-          too_many_personas_description: `This server has **{persona_count}** personas. Discord only allows **{max_groups}** checkbox groups (**{max_entries}** total options) per modal.`,
-          no_personas_selected_title: `No Personas Selected`,
-          no_personas_selected_description: `Select at least one persona. To clear this channel's persona whitelist, keep every persona checked instead.`,
-          already_set_title: `Already Set`,
-          already_set_description: `Channel **{channel_name}** already has this exact persona whitelist.`,
+          no_channels_title: `No Channels Found`,
+          no_channels_description: `There are no text channels available to whitelist for **{persona_name}**.`,
+          select_page_title: `Select Channel Page`,
+          select_page_description: `Choose a page to edit the channel whitelist for **{persona_name}**.
+
+Selected channels: **{selected_count}** / **{channel_count}** across **{total_pages}** pages.
+Leave everything unchecked to keep this persona unrestricted in all channels.`,
+          done_button: `Done`,
+          too_many_pages_title: `Too Many Channel Pages`,
+          too_many_pages_description: `**{persona_name}** can be whitelisted across **{channel_count}** text channels, which needs more than Discord's **{max_pages}** page buttons.`,
+          no_changes_title: `No Changes`,
+          no_changes_description: `No channel whitelist changes were made for **{persona_name}**.`,
           success_title: `Persona Whitelist Updated`,
-          success_description: `Only {persona_names} can trigger in **{channel_name}** now.`,
+          success_description: `**{persona_name}** can now only trigger in **{selected_count}** channel(s): {selected_channels}`,
           success_clear_title: `Persona Whitelist Cleared`,
-          success_clear_description: `Channel **{channel_name}** no longer has a channel-specific persona whitelist. All personas can trigger there again.`,
+          success_clear_description: `**{persona_name}** is no longer restricted to specific channels and can trigger in all channels again.`,
           main_persona_description: `Main Persona`,
           alter_persona_description: `Alter Persona`,
         },

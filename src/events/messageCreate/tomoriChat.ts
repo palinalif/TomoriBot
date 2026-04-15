@@ -3704,10 +3704,16 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       // 7. Multi-Persona: Determine which personas should respond
       // For manual triggers, respond with the selected persona (if provided)
       // For reminders/stop responses, only the main persona responds
-      const allowedPersonaIds =
-        whitelistStatus?.hasActivePersonaWhitelist && (whitelistStatus.whitelistedPersonaIds?.length ?? 0) > 0
-          ? new Set(whitelistStatus.whitelistedPersonaIds)
-          : null;
+      const allowedPersonaIds = whitelistStatus?.hasActivePersonaWhitelist
+        ? new Set(
+            allPersonas.flatMap((persona) =>
+              typeof persona.tomori_id === "number" &&
+              isPersonaAllowedByWhitelistStatus(whitelistStatus, persona.tomori_id)
+                ? [persona.tomori_id]
+                : [],
+            ),
+          )
+        : null;
       let personasToRespond: TomoriState[];
       if (isManuallyTriggered) {
         if (selectedPersona && isPersonaAllowedByWhitelistStatus(whitelistStatus, selectedPersona.tomori_id)) {
@@ -8310,7 +8316,7 @@ function isAutochatCounterHit(tomoriState: TomoriState, channelId: string): bool
  * @param isAlwaysReply - Whether always-reply mode triggered this message
  * @param deliberateTriggerMode - Whether deliberate trigger mode is active for this message
  * @param isAutochatDtmExemptChannel - Whether this channel exempts one fallback persona from DTM
- * @param allowedPersonaIds - Optional channel-specific persona whitelist for this turn
+ * @param allowedPersonaIds - Optional set of personas allowed for this turn after whitelist filtering
  * @returns Array of matching personas in deterministic trigger order
  */
 export function determineMatchingPersonas(
@@ -8638,6 +8644,7 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
         triggersActive = true;
         if (isDeliberate) {
           triggersActiveDeliberate = true;
+          break; // Deliberate match found for this persona, no need to check later triggers
         }
         // Log diagnostic for self-messages to trace cross-persona trigger chains
         if (isSelfMessage) {
@@ -8649,7 +8656,13 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
             contentSnippet: message.content.slice(0, 120),
           };
         }
-        break; // Found a match for this persona, stop checking triggers
+        // Under DTM, a short plain trigger like "lilya" may match before a later
+        // multi-word deliberate trigger like "evil lilya" on the same persona.
+        // Keep scanning this persona's remaining triggers unless we already found
+        // a deliberate match or DTM is inactive.
+        if (!isDtmActive) {
+          break;
+        }
       }
     }
     // When DTM is active and the match wasn't deliberate, keep checking other personas for a deliberate match

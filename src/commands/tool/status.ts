@@ -281,17 +281,26 @@ async function formatWhitelistPersonaEntries(
     return localizer(locale, "commands.tool.status.whitelist_personas_all_allowed");
   }
 
-  const personasByChannel = new Map<string, string[]>();
+  const channelsByPersona = new Map<number, string[]>();
   for (const entry of entries) {
-    const personaNames = personasByChannel.get(entry.channel_disc_id) ?? [];
-    personaNames.push(personaNameMap.get(entry.tomori_id) ?? `ID:${entry.tomori_id}`);
-    personasByChannel.set(entry.channel_disc_id, personaNames);
+    const channelIds = channelsByPersona.get(entry.tomori_id) ?? [];
+    channelIds.push(entry.channel_disc_id);
+    channelsByPersona.set(entry.tomori_id, channelIds);
   }
 
   const lines = await Promise.all(
-    Array.from(personasByChannel.entries()).map(async ([channelId, personaNames], index) => {
-      const mention = await resolveChannelMention(client, channelId, locale);
-      return `${index + 1}. ${mention}: ${personaNames.join(", ")}`;
+    Array.from(channelsByPersona.entries()).map(async ([tomoriId, channelIds], index) => {
+      const personaName = personaNameMap.get(tomoriId) ?? `ID:${tomoriId}`;
+      const sortedChannelIds = [...new Set(channelIds)].sort((left, right) => left.localeCompare(right));
+      const channelsValue =
+        sortedChannelIds.length <= MAX_ITEMS_DISPLAY
+          ? (
+              await Promise.all(sortedChannelIds.map((channelId) => resolveChannelMention(client, channelId, locale)))
+            ).join(", ")
+          : localizer(locale, "commands.tool.status.item_count", {
+              count: sortedChannelIds.length,
+            });
+      return `${index + 1}. **${personaName}**: ${channelsValue}`;
     }),
   );
 

@@ -45,7 +45,7 @@ Used for automatic message-triggered chat flow.
 2. If the trigger is in a thread, first check the thread itself, then fall back to its parent channel's whitelist entry.
 3. If channel whitelist is active and current channel (or its parent channel for threads) is not whitelisted -> blocked.
 4. If role whitelist is active and triggering member has no whitelisted role -> blocked.
-5. If the channel (or parent channel for threads) has a persona whitelist, only those personas remain eligible there; disallowed automatic persona matches fail silently and manual persona selections (for example `/bot respond`, `/bot impersonate`, conditioning, and scene-image sender selection) are rejected.
+5. If a persona has a channel whitelist configured anywhere in the server, that persona is only eligible in its whitelisted channels (threads inherit the parent channel entry); personas with no rows remain eligible everywhere. Disallowed automatic persona matches fail silently and manual persona selections (for example `/bot respond`, `/bot impersonate`, conditioning, and scene-image sender selection) are rejected.
 6. If channel is whitelisted and has an explicit override, use that channel-specific cooldown type/length.
 7. If channel is whitelisted without an override, inherit global `tomori_configs.cooldown_type/cooldown_length`.
 8. Otherwise use global `tomori_configs.cooldown_type/cooldown_length`.

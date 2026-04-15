@@ -3,6 +3,20 @@ import type { ChannelWhitelistRow, CooldownType } from "@/types/db/schema";
 import type { WhitelistCheckResult } from "@/types/misc/channelWhitelist";
 import { log } from "@/utils/misc/logger";
 
+function normalizeTomoriIds(rows: Array<{ tomori_id: number | string | bigint }>): number[] {
+  return rows
+    .map((row) => {
+      if (typeof row.tomori_id === "bigint") {
+        return Number(row.tomori_id);
+      }
+      if (typeof row.tomori_id === "string") {
+        return Number.parseInt(row.tomori_id, 10);
+      }
+      return row.tomori_id;
+    })
+    .filter((tomoriId): tomoriId is number => Number.isInteger(tomoriId) && tomoriId > 0);
+}
+
 /**
  * Check whitelist status (channel + role + persona metadata) and get channel cooldown settings.
  * @param serverDiscId - Discord server ID (snowflake) or user ID for DMs
@@ -108,12 +122,20 @@ export async function checkChannelWhitelist(
       });
     }
 
-    // 4. Load role whitelist entries for this server
-    const roleRows = await sql<Array<{ role_disc_id: string }>>`
-			SELECT role_disc_id
-			FROM role_whitelist
-			WHERE server_id = ${serverId}
-		`;
+    // 4. Load role whitelist entries and persona restriction metadata for this server
+    const [roleRows, restrictedPersonaRows] = await Promise.all([
+      sql<Array<{ role_disc_id: string }>>`
+			  SELECT role_disc_id
+			  FROM role_whitelist
+			  WHERE server_id = ${serverId}
+		  `,
+      sql<Array<{ tomori_id: number | string | bigint }>>`
+			  SELECT DISTINCT tomori_id
+			  FROM channel_persona_whitelist
+			  WHERE server_id = ${serverId}
+			  ORDER BY tomori_id ASC
+		  `,
+    ]);
     const hasActiveRoleWhitelist = roleRows.length > 0;
 
     // 5. Role whitelist check (fail-open if role data is unavailable)
@@ -129,35 +151,28 @@ export async function checkChannelWhitelist(
       }
     }
 
-    // 6. Channel-specific persona whitelist (threads inherit from parent channel)
-    let personaRows = await sql<Array<{ tomori_id: number | string | bigint }>>`
+    // 6. Persona-channel whitelist (threads inherit from parent channel)
+    const restrictedPersonaIds = normalizeTomoriIds(restrictedPersonaRows);
+    const hasActivePersonaWhitelist = restrictedPersonaIds.length > 0;
+
+    let allowedRestrictedPersonaRows = await sql<Array<{ tomori_id: number | string | bigint }>>`
 			SELECT tomori_id
 			FROM channel_persona_whitelist
 			WHERE server_id = ${serverId} AND channel_disc_id = ${channelDiscId}
 			ORDER BY created_at ASC, tomori_id ASC
 		`;
 
-    if (personaRows.length === 0 && parentChannelDiscId) {
-      personaRows = await sql<Array<{ tomori_id: number | string | bigint }>>`
+    if (parentChannelDiscId) {
+      const parentRestrictedPersonaRows = await sql<Array<{ tomori_id: number | string | bigint }>>`
 				SELECT tomori_id
 				FROM channel_persona_whitelist
 				WHERE server_id = ${serverId} AND channel_disc_id = ${parentChannelDiscId}
 				ORDER BY created_at ASC, tomori_id ASC
 			`;
+      allowedRestrictedPersonaRows = [...allowedRestrictedPersonaRows, ...parentRestrictedPersonaRows];
     }
 
-    const whitelistedPersonaIds = personaRows
-      .map((row) => {
-        if (typeof row.tomori_id === "bigint") {
-          return Number(row.tomori_id);
-        }
-        if (typeof row.tomori_id === "string") {
-          return Number.parseInt(row.tomori_id, 10);
-        }
-        return row.tomori_id;
-      })
-      .filter((tomoriId): tomoriId is number => Number.isInteger(tomoriId) && tomoriId > 0);
-    const hasActivePersonaWhitelist = whitelistedPersonaIds.length > 0;
+    const whitelistedPersonaIds = [...new Set(normalizeTomoriIds(allowedRestrictedPersonaRows))];
 
     const isChannelAllowed = !hasActiveChannelWhitelist || isChannelWhitelisted;
     const isRoleAllowed = !hasActiveRoleWhitelist || isRoleWhitelisted;
@@ -184,6 +199,7 @@ export async function checkChannelWhitelist(
       hasActiveRoleWhitelist,
       isRoleWhitelisted,
       hasActivePersonaWhitelist,
+      restrictedPersonaIds: hasActivePersonaWhitelist ? restrictedPersonaIds : undefined,
       whitelistedPersonaIds: hasActivePersonaWhitelist ? whitelistedPersonaIds : undefined,
       isTriggerAllowed,
       blockReason,

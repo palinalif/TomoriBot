@@ -152,11 +152,12 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `cooldown_type` / `cooldown_length` both `NULL` -> inherit the server-wide cooldown
 - `cooldown_type` / `cooldown_length` both set -> override the server-wide cooldown for that channel
 
-`channel_persona_whitelist` stores channel-specific automatic persona restrictions:
+`channel_persona_whitelist` stores persona-specific channel restrictions:
 
 - rows are keyed by `server_id + channel_disc_id + tomori_id`
-- if a channel has one or more rows, only those personas are eligible for automatic triggers there
-- if a channel has no rows, all personas remain eligible there
+- if a persona has one or more rows, that persona is only eligible in those channels
+- if a persona has no rows, that persona remains eligible in all channels
+- thread checks inherit parent-channel entries when evaluating a restricted persona
 
 ### API key security
 

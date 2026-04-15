@@ -241,7 +241,7 @@ export function createConditioningInteractionCommand(type: ConditioningType, act
 
       if (!isPersonaAllowedByWhitelistStatus(whitelistStatus, selectedPersona.tomori_id)) {
         log.info(
-          `${type} ${actionKey} interaction completed without chat response because persona ${selectedPersona.tomori_id} is blocked by the channel persona whitelist in ${interaction.channel.id}`,
+          `${type} ${actionKey} interaction completed without chat response because persona ${selectedPersona.tomori_id} is blocked by its channel whitelist in ${interaction.channel.id}`,
         );
         return;
       }

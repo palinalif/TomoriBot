@@ -36,13 +36,20 @@ export interface WhitelistCheckResult {
   isRoleWhitelisted: boolean;
 
   /**
-   * Whether this channel (or its parent, for threads) has a persona whitelist.
-   * When false, all personas remain eligible in this channel.
+   * Whether this server has any persona-channel restrictions configured.
+   * When false, all personas remain eligible in every channel.
    */
   hasActivePersonaWhitelist: boolean;
 
   /**
-   * The tomori_id values explicitly allowed in this channel when a persona whitelist is active.
+   * The tomori_id values that are restricted somewhere in this server.
+   * Personas not listed here remain unrestricted and can trigger in any channel.
+   */
+  restrictedPersonaIds?: number[];
+
+  /**
+   * The restricted tomori_id values explicitly allowed in this channel (or its parent, for threads).
+   * Unrestricted personas do not need to appear in this list.
    */
   whitelistedPersonaIds?: number[];
 
