@@ -66,6 +66,7 @@ import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
 import { getLinkedMatrixRoom, pendingMatrixReplyChannels, sendMatrixTypingIndicator } from "@/utils/matrix";
 import { isBridgeUserId, stripBridgePrefix, extractBridgeUserId, isMatrixBridgeWebhookUsername } from "@/utils/bridge";
+import { isPersonaAllowedByWhitelistStatus } from "@/utils/db/personaWhitelist";
 
 import type { TomoriState, TomoriConfigRow, ServerEmojiRow, ServerStickerRow } from "@/types/db/schema";
 import { PrivacyLevel } from "@/types/db/schema";
@@ -931,6 +932,46 @@ function buildTailDirectiveMessage(directive: string | null | undefined): Struct
   return buildCombinedTailDirectiveMessage([directive]);
 }
 
+function buildSpeakerGuardRetryDirective(activePersonaName?: string | null): StructuredContextItem | null {
+  const normalizedPersonaName = compactWhitespace(activePersonaName ?? "") || process.env.DEFAULT_BOTNAME || "Tomori";
+  const sanitizedPersonaName = normalizedPersonaName.replaceAll('"', "'");
+
+  return buildTailDirectiveMessage(
+    `Your previous attempt started as the wrong speaker and was discarded. Reply only as ${sanitizedPersonaName}. Start exactly with "${sanitizedPersonaName}:". Do not start with any other speaker name or write dialogue for anyone else.`,
+  );
+}
+
+function mergeInjectedContextItems(
+  existingItems: StructuredContextItem[] | undefined,
+  extraItem: StructuredContextItem | null,
+): StructuredContextItem[] | undefined {
+  if (!extraItem) {
+    return existingItems;
+  }
+
+  if (!existingItems || existingItems.length === 0) {
+    return [extraItem];
+  }
+
+  const extraText = extraItem.parts
+    .filter((part): part is { type: "text"; text: string } => part.type === "text")
+    .map((part) => part.text)
+    .join("\n");
+  const alreadyPresent = existingItems.some((item) => {
+    const itemText = item.parts
+      .filter((part): part is { type: "text"; text: string } => part.type === "text")
+      .map((part) => part.text)
+      .join("\n");
+    return item.role === extraItem.role && item.metadataTag === extraItem.metadataTag && itemText === extraText;
+  });
+
+  if (alreadyPresent) {
+    return existingItems;
+  }
+
+  return [...existingItems, extraItem];
+}
+
 function insertBeforeLatestDialoguePair(
   contextSegments: StructuredContextItem[],
   injectedItem: StructuredContextItem,
@@ -1008,6 +1049,35 @@ function createDeliberateTriggerRegex(trigger: string): RegExp {
 }
 
 /**
+ * Returns the deliberate-invocation match for a trigger, if any.
+ *
+ * Multi-word triggers support two deliberate forms:
+ * 1. `@full trigger`
+ * 2. `@firstWord` only, but only when the full trigger phrase is also present elsewhere
+ *    in the message. This preserves existing DTM behavior without allowing a lone
+ *    `@firstWord` to accidentally trigger a multi-word persona.
+ */
+function getDeliberateTriggerMatch(content: string, trigger: string): RegExpMatchArray | null {
+  const fullTriggerMatch = content.match(createDeliberateTriggerRegex(trigger));
+  if (fullTriggerMatch) {
+    return fullTriggerMatch;
+  }
+
+  const firstTriggerWord = trigger.split(/\s+/)[0]?.trim() ?? trigger;
+  if (!firstTriggerWord || firstTriggerWord === trigger) {
+    return null;
+  }
+
+  const isJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(trigger);
+  const hasFullTriggerMatch = isJapanese ? content.includes(trigger) : createScreamingRegex(trigger).test(content);
+  if (!hasFullTriggerMatch) {
+    return null;
+  }
+
+  return content.match(createDeliberateTriggerRegex(firstTriggerWord));
+}
+
+/**
  * Returns the first index where a trigger appears in a message.
  * Used to resolve multi-persona trigger order deterministically.
  * Returns Infinity when the trigger is not present.
@@ -1027,7 +1097,7 @@ function getTriggerFirstMatchIndex(message: Message, trigger: string, deliberate
   }
 
   if (deliberateOnly) {
-    const deliberateMatch = message.content.match(createDeliberateTriggerRegex(trigger));
+    const deliberateMatch = getDeliberateTriggerMatch(message.content, trigger);
     return deliberateMatch?.index ?? Number.POSITIVE_INFINITY;
   }
 
@@ -3596,6 +3666,141 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         return;
       }
 
+      // Pre-compute channel context shared by the whitelist, persona selection,
+      // and cooldown checks below
+      const msgIsThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
+      const msgParentChannelId = msgIsThread && "parent" in channel ? channel.parent?.id : undefined;
+      // Autochat-override channels (auto-trigger, always-reply) bypass the whitelist gate —
+      // computed here so it is in scope for both the whitelist and cooldown checks below
+      const msgEffectiveChannelId = msgParentChannelId ?? message.channelId;
+      const isAutochatOverride = isAutochatOverrideChannel(tomoriState.config, msgEffectiveChannelId);
+
+      // 6.5. Check whitelist status.
+      // Automatic self-trigger chains still skip the channel/role gate, but manual turns
+      // are always enforced and persona whitelist metadata is loaded for all non-stop turns.
+      let whitelistStatus: Awaited<ReturnType<typeof getCachedWhitelistStatus>> | null = null;
+      if (!isStopResponse) {
+        const memberRoleDiscIds = manualTriggerInvoker?.member
+          ? manualTriggerInvoker.member.roles.cache.map((role) => role.id)
+          : (message.member?.roles.cache.map((role) => role.id) ?? undefined);
+        whitelistStatus = await getCachedWhitelistStatus(
+          guild?.id ?? message.author.id,
+          message.channelId,
+          memberRoleDiscIds,
+          msgParentChannelId,
+        );
+
+        // If whitelist rules block this trigger, silently ignore
+        // Exception: autochat-override channels are always allowed regardless of whitelist policy
+        const shouldEnforceWhitelistGate = isManuallyTriggered || !isSelfMessage;
+        if (shouldEnforceWhitelistGate && !whitelistStatus.isTriggerAllowed && !isAutochatOverride) {
+          log.info(
+            `Message ${message.id} in channel ${message.channelId} rejected by whitelist policy (${whitelistStatus.blockReason ?? "unknown"})`,
+          );
+          return; // Silent rejection
+        }
+      }
+
+      // 7. Multi-Persona: Determine which personas should respond
+      // For manual triggers, respond with the selected persona (if provided)
+      // For reminders/stop responses, only the main persona responds
+      const allowedPersonaIds =
+        whitelistStatus?.hasActivePersonaWhitelist && (whitelistStatus.whitelistedPersonaIds?.length ?? 0) > 0
+          ? new Set(whitelistStatus.whitelistedPersonaIds)
+          : null;
+      let personasToRespond: TomoriState[];
+      if (isManuallyTriggered) {
+        if (selectedPersona && isPersonaAllowedByWhitelistStatus(whitelistStatus, selectedPersona.tomori_id)) {
+          personasToRespond = [selectedPersona];
+        } else {
+          if (selectedPersona && whitelistStatus?.hasActivePersonaWhitelist) {
+            log.info(
+              `Manual trigger for persona ${selectedPersona.tomori_id ?? "unknown"} in channel ${message.channelId} rejected by persona whitelist`,
+            );
+          }
+          personasToRespond = [];
+        }
+      } else if (reminderRecipientID || reminderData?.self_reminder || isStopResponse) {
+        // Only main persona for reminders and stop responses
+        personasToRespond = tomoriState ? [tomoriState] : [];
+        if (!isStopResponse && personasToRespond.length > 0) {
+          personasToRespond = personasToRespond.filter((persona) =>
+            isPersonaAllowedByWhitelistStatus(whitelistStatus, persona.tomori_id),
+          );
+        }
+      } else {
+        // Check if the shared auto-chat range hit for this message
+        const config = tomoriState?.config;
+        const isAutoMsgHit =
+          !!config &&
+          isAutochatQualifyingMessage(message, isSelfMessage) &&
+          isAutochatCounterHit(tomoriState, effectiveChannelId);
+        const autoTriggerPersonaId = config ? getAutochatAssignedPersonaId(config, effectiveChannelId) : null;
+        const isAutochatConfigured = !!config && isAutochatConfiguredChannel(config, effectiveChannelId);
+        const isScopedAlwaysReplyActive =
+          !!config &&
+          isAutochatAlwaysReplyChannelActive(config, effectiveChannelId) &&
+          isAutochatQualifyingMessage(message, isSelfMessage);
+        const isDtmActive = !!config?.deliberate_trigger_mode && !!message.guild && !isMatrixRelay;
+
+        // Check if always-reply mode applies to this message:
+        // Must be enabled, must be a real user message (not bot/webhook/self), and in a guild channel
+        const isAlwaysReplyActive =
+          (!!config?.always_reply_enabled && isAutochatQualifyingMessage(message, isSelfMessage)) ||
+          isScopedAlwaysReplyActive;
+
+        // Determine matching personas using the helper function
+        personasToRespond = determineMatchingPersonas(
+          message,
+          allPersonas,
+          client,
+          isReplyToBot,
+          replyPersona,
+          isBotMentioned,
+          !!isAutoMsgHit, // Convert to boolean
+          isAlwaysReplyActive,
+          autoTriggerPersonaId,
+          isScopedAlwaysReplyActive ? autoTriggerPersonaId : null,
+          isDtmActive,
+          isAutochatConfigured,
+          allowedPersonaIds,
+        );
+
+        // Consecutive persona filter: prevent the same persona from triggering in
+        // back-to-back depth levels. E.g. if C responded last at depth N, skip C at depth N+1.
+        if (isSelfMessage && personasToRespond.length > 0) {
+          const lastRespondedId = getLastRespondedPersonaId(channel.id);
+          if (lastRespondedId != null) {
+            const before = personasToRespond.length;
+            personasToRespond = personasToRespond.filter((p) => p.tomori_id !== lastRespondedId);
+            if (personasToRespond.length < before) {
+              const skippedPersona = allPersonas.find((p) => p.tomori_id === lastRespondedId);
+              log.info(
+                `Consecutive persona filter: skipped "${skippedPersona?.tomori_nickname ?? lastRespondedId}" (last responder) for message ${message.id} in channel ${channel.id}`,
+              );
+            }
+          }
+        }
+
+        // Apply per-message multi-trigger cap for automatic trigger matching.
+        if (personasToRespond.length > triggeredPersonaLimit) {
+          const droppedPersonas = personasToRespond
+            .slice(triggeredPersonaLimit)
+            .map((p) => p.tomori_nickname)
+            .join(", ");
+          personasToRespond = personasToRespond.slice(0, triggeredPersonaLimit);
+          log.info(
+            `Multi-trigger cap applied (${triggeredPersonaLimit}) for message ${message.id}. Dropped personas: ${droppedPersonas || "none"}`,
+          );
+        }
+      }
+
+      // If no personas match, return early
+      if (personasToRespond.length === 0) {
+        log.info(`No personas matched trigger for message ${message.id} in server ${serverDiscId}`);
+        return;
+      }
+
       if (!skipLock && !isStopResponse && !isPersonaJob) {
         const shouldExcludeCurrent =
           lockEntry?.currentMessageId === message.id &&
@@ -3617,35 +3822,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         }
       }
 
-      // Pre-compute channel context shared by the whitelist and cooldown checks below
-      const msgIsThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
-      const msgParentChannelId = msgIsThread && "parent" in channel ? channel.parent?.id : undefined;
-      // Autochat-override channels (auto-trigger, always-reply) bypass the whitelist gate —
-      // computed here so it is in scope for both the whitelist and cooldown checks below
-      const msgEffectiveChannelId = msgParentChannelId ?? message.channelId;
-      const isAutochatOverride = isAutochatOverrideChannel(tomoriState.config, msgEffectiveChannelId);
-
-      // 6.5. Check whitelist status (skip for stop responses and self messages)
-      if (!isStopResponse && !isSelfMessage) {
-        const memberRoleDiscIds = message.member ? message.member.roles.cache.map((role) => role.id) : undefined;
-        const whitelistStatus = await getCachedWhitelistStatus(
-          guild?.id ?? message.author.id,
-          message.channelId,
-          memberRoleDiscIds,
-          msgParentChannelId,
-        );
-
-        // If whitelist rules block this trigger, silently ignore
-        // Exception: autochat-override channels are always allowed regardless of whitelist policy
-        if (!whitelistStatus.isTriggerAllowed && !isAutochatOverride) {
-          log.info(
-            `Message ${message.id} in channel ${message.channelId} rejected by whitelist policy (${whitelistStatus.blockReason ?? "unknown"})`,
-          );
-          return; // Silent rejection
-        }
-      }
-
-      // 7. Check message trigger cooldown (skip for stop responses and self messages)
+      // 8. Check message trigger cooldown (skip for stop responses and self messages)
       if (!isStopResponse && !isSelfMessage) {
         const cooldownResult = await checkMessageTriggerCooldownWithWhitelist(
           guild?.id ?? message.author.id,
@@ -3684,7 +3861,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
       log.info(`Conditions met for reply in server ${serverDiscId}`);
 
-      // 8. Set message trigger cooldown (skip for stop responses and self messages)
+      // 8.5. Set message trigger cooldown (skip for stop responses and self messages)
       // Set early to prevent race conditions with concurrent triggers
       if (!isStopResponse && !isSelfMessage) {
         await setMessageTriggerCooldownWithWhitelist(
@@ -3695,87 +3872,6 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           tomoriState.config.cooldown_length ?? 5,
           message.member,
         );
-      }
-
-      // 8.5. Multi-Persona: Determine which personas should respond
-      // For manual triggers, respond with the selected persona (if provided)
-      // For reminders/stop responses, only the main persona responds
-      let personasToRespond: TomoriState[];
-      if (isManuallyTriggered) {
-        personasToRespond = selectedPersona ? [selectedPersona] : [];
-      } else if (reminderRecipientID || reminderData?.self_reminder || isStopResponse) {
-        // Only main persona for reminders and stop responses
-        personasToRespond = tomoriState ? [tomoriState] : [];
-      } else {
-        // Check if the shared auto-chat range hit for this message
-        const config = tomoriState?.config;
-        const isAutoMsgHit =
-          !!config &&
-          isAutochatQualifyingMessage(message, isSelfMessage) &&
-          isAutochatCounterHit(tomoriState, effectiveChannelId);
-        const autoTriggerPersonaId = config ? getAutochatAssignedPersonaId(config, effectiveChannelId) : null;
-        const isAutochatConfigured = !!config && isAutochatConfiguredChannel(config, effectiveChannelId);
-        const isScopedAlwaysReplyActive =
-          !!config &&
-          isAutochatAlwaysReplyChannelActive(config, effectiveChannelId) &&
-          isAutochatQualifyingMessage(message, isSelfMessage);
-        const isDtmActive = !!config?.deliberate_trigger_mode && !!message.guild && !isMatrixRelay;
-
-        // Check if always-reply mode applies to this message:
-        // Must be enabled, must be a real user message (not bot/webhook/self), and in a guild channel
-        const isAlwaysReplyActive =
-          (!!config?.always_reply_enabled && isAutochatQualifyingMessage(message, isSelfMessage)) ||
-          isScopedAlwaysReplyActive;
-
-        // Determine matching personas using the helper function
-        personasToRespond = determineMatchingPersonas(
-          message,
-          allPersonas,
-          client,
-          isReplyToBot,
-          replyPersona,
-          isBotMentioned,
-          !!isAutoMsgHit, // Convert to boolean
-          isAlwaysReplyActive,
-          autoTriggerPersonaId,
-          isScopedAlwaysReplyActive ? autoTriggerPersonaId : null,
-          isDtmActive,
-          isAutochatConfigured,
-        );
-
-        // Consecutive persona filter: prevent the same persona from triggering in
-        // back-to-back depth levels. E.g. if C responded last at depth N, skip C at depth N+1.
-        if (isSelfMessage && personasToRespond.length > 0) {
-          const lastRespondedId = getLastRespondedPersonaId(channel.id);
-          if (lastRespondedId != null) {
-            const before = personasToRespond.length;
-            personasToRespond = personasToRespond.filter((p) => p.tomori_id !== lastRespondedId);
-            if (personasToRespond.length < before) {
-              const skippedPersona = allPersonas.find((p) => p.tomori_id === lastRespondedId);
-              log.info(
-                `Consecutive persona filter: skipped "${skippedPersona?.tomori_nickname ?? lastRespondedId}" (last responder) for message ${message.id} in channel ${channel.id}`,
-              );
-            }
-          }
-        }
-
-        // Apply per-message multi-trigger cap for automatic trigger matching.
-        if (personasToRespond.length > triggeredPersonaLimit) {
-          const droppedPersonas = personasToRespond
-            .slice(triggeredPersonaLimit)
-            .map((p) => p.tomori_nickname)
-            .join(", ");
-          personasToRespond = personasToRespond.slice(0, triggeredPersonaLimit);
-          log.info(
-            `Multi-trigger cap applied (${triggeredPersonaLimit}) for message ${message.id}. Dropped personas: ${droppedPersonas || "none"}`,
-          );
-        }
-      }
-
-      // If no personas match, return early
-      if (personasToRespond.length === 0) {
-        log.info(`No personas matched trigger for message ${message.id} in server ${serverDiscId}`);
-        return;
       }
 
       if (lockEntry) {
@@ -6367,13 +6463,34 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       : undefined;
                   const terminalFinishReason =
                     typeof streamResultData?.finishReason === "string" ? streamResultData.finishReason : undefined;
+                  const emptyResponseReason =
+                    typeof streamResultData?.emptyResponseReason === "string"
+                      ? streamResultData.emptyResponseReason
+                      : undefined;
                   const isOpenRouterLengthEmptyResponse = terminalFinishReason === "length";
+                  const speakerGuardRetryDirective =
+                    emptyResponseReason === "speaker_guard"
+                      ? buildSpeakerGuardRetryDirective(
+                          currentPersona.tomori_nickname ??
+                            selectedPersona?.tomori_nickname ??
+                            tomoriState?.tomori_nickname,
+                        )
+                      : null;
+                  const retryInjectedContextItems = mergeInjectedContextItems(
+                    injectedContextItems,
+                    speakerGuardRetryDirective,
+                  );
 
                   if (retryCount < MAX_EMPTY_RESPONSE_RETRIES) {
                     log.info(
                       `Empty response detected (attempt ${retryCount + 1}/${MAX_EMPTY_RESPONSE_RETRIES + 1}). ` +
                         `finishReason=${terminalFinishReason ?? "unknown"}. Retrying with fresh context in ${RETRY_DELAY_MS}ms...`,
                     );
+                    if (emptyResponseReason === "speaker_guard") {
+                      log.info(
+                        `Empty response retry will inject active-speaker guidance for persona "${currentPersona.tomori_nickname ?? tomoriState?.tomori_nickname ?? "Tomori"}".`,
+                      );
+                    }
 
                     // Wait before retry
                     await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
@@ -6408,7 +6525,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       // NAI GLM-4.6: pass trailing fragment so next call appends it to the prompt
                       streamResult.naiContinuationPrefill,
                       isOpenRouterLengthEmptyResponse ? "length" : undefined,
-                      injectedContextItems,
+                      retryInjectedContextItems,
                       forcedMentions,
                       manualTriggerInvoker,
                       manualStreamingContextOverrides,
@@ -8193,6 +8310,7 @@ function isAutochatCounterHit(tomoriState: TomoriState, channelId: string): bool
  * @param isAlwaysReply - Whether always-reply mode triggered this message
  * @param deliberateTriggerMode - Whether deliberate trigger mode is active for this message
  * @param isAutochatDtmExemptChannel - Whether this channel exempts one fallback persona from DTM
+ * @param allowedPersonaIds - Optional channel-specific persona whitelist for this turn
  * @returns Array of matching personas in deterministic trigger order
  */
 export function determineMatchingPersonas(
@@ -8208,22 +8326,28 @@ export function determineMatchingPersonas(
   alwaysReplyFallbackPersonaId?: number | null,
   deliberateTriggerMode = false,
   isAutochatDtmExemptChannel = false,
+  allowedPersonaIds?: ReadonlySet<number> | null,
 ): TomoriState[] {
   const mainPersona = allPersonas.find((persona) => !persona.is_alter);
   const resolveFallbackPersona = (personaId?: number | null): TomoriState | undefined =>
     (personaId ? allPersonas.find((persona) => persona.tomori_id === personaId) : undefined) ?? mainPersona;
+  const isPersonaAllowed = (persona?: TomoriState | null): persona is TomoriState =>
+    Boolean(
+      persona &&
+        (!allowedPersonaIds || (typeof persona.tomori_id === "number" && allowedPersonaIds.has(persona.tomori_id))),
+    );
 
   // 1. Special cases: Only main persona responds
   // (reply to a persona, reply to bot, bot mentioned, shared auto-chat hit)
   if (replyPersona) {
-    return [replyPersona];
+    return isPersonaAllowed(replyPersona) ? [replyPersona] : [];
   }
   if (isReplyToBot || isBotMentioned) {
-    return mainPersona ? [mainPersona] : [];
+    return isPersonaAllowed(mainPersona) ? [mainPersona] : [];
   }
   if (isAutoMsgHit) {
     const autoTriggerPersona = resolveFallbackPersona(autoTriggerPersonaId);
-    return autoTriggerPersona ? [autoTriggerPersona] : [];
+    return isPersonaAllowed(autoTriggerPersona) ? [autoTriggerPersona] : [];
   }
 
   // Determine which persona (if any) sent this message for self-trigger prevention
@@ -8270,6 +8394,10 @@ export function determineMatchingPersonas(
   }> = [];
 
   for (const [insertionOrder, persona] of allPersonas.entries()) {
+    if (!isPersonaAllowed(persona)) {
+      continue;
+    }
+
     // Prevent self-triggers: skip if this persona sent the message OR is being replied to
     if (senderPersona && persona.tomori_id === senderPersona.tomori_id) {
       continue;
@@ -8329,7 +8457,7 @@ export function determineMatchingPersonas(
   // so no duplicate is added.
   if (isAlwaysReply && result.length === 0) {
     const fallbackPersona = resolveFallbackPersona(alwaysReplyFallbackPersonaId);
-    if (fallbackPersona) {
+    if (isPersonaAllowed(fallbackPersona)) {
       return [fallbackPersona];
     }
   }
@@ -8494,21 +8622,16 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
           const regex = createScreamingRegex(trigger);
           matched = regex.test(message.content);
         }
-        // DTM deliberate check: @{trigger} prefix in text counts as explicit addressing.
-        // Uses a regex (not plain includes) so multi-word triggers and screaming mode
-        // are handled consistently with the plain-match check above.
-        // Per-persona exemption: auto-trigger channel only exempts the assigned persona.
-        // null override → main (non-alter) persona is exempt; otherwise only the assigned tomori_id is.
+        // DTM deliberate check: multi-word triggers share one rule everywhere.
+        // Exact @{trigger} always works, while @{firstWord} only counts if the full
+        // trigger phrase is also present in the message. Per-persona exemption:
+        // auto-trigger channel only exempts the assigned persona. null override →
+        // main (non-alter) persona is exempt; otherwise only the assigned tomori_id is.
         const isPersonaDtmExempt =
           isAutoTriggerChannel &&
           (autochatPersonaId === null ? !persona.is_alter : autochatPersonaId === persona.tomori_id);
-        // For multi-word triggers like "evil lilya", users type "@evil" (just the first word) —
-        // the screaming regex already confirmed the full phrase is present, so only @{firstWord} is needed.
-        const firstTriggerWord = trigger.split(/\s+/)[0] ?? trigger;
         isDeliberate =
-          isDtmActive && !isPersonaDtmExempt
-            ? createDeliberateTriggerRegex(firstTriggerWord).test(message.content)
-            : true; // DTM off or persona exempt → all matches treated as deliberate
+          isDtmActive && !isPersonaDtmExempt ? getDeliberateTriggerMatch(message.content, trigger) !== null : true; // DTM off or persona exempt → all matches treated as deliberate
       }
 
       if (matched) {

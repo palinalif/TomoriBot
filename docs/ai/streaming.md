@@ -211,6 +211,7 @@ Loop control and max iterations are managed by `tomoriChat` (function-call safet
 - checked before processing/sending to avoid duplicate or late sends
 - special handling avoids duplicate flush-limit embeds
 - internal speaker-boundary stops that send no visible text are promoted into the empty-response retry path instead of silently ending as a normal user stop
+- speaker-guard-triggered empty-response retries append an in-band `[System: ...]` reminder telling the model to continue only as the active persona and, if it emits a speaker label, to start with that persona's name
 
 ### Final flush auto-close
 - if final buffer still has incomplete semantic markers, orchestrator auto-closes markers before sending to avoid text loss

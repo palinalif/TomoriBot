@@ -397,6 +397,17 @@ export class CrossChannelMessageTool extends BaseTool {
     const sourcePersonaId = context.activePersonaId ?? context.tomoriState.tomori_id ?? undefined;
     const isSourceUserImpersonation = context.isUserImpersonation === true;
     const sourceImpersonatedUserId = context.impersonatedUserId;
+    const invokingMember =
+      context.message?.member ??
+      (context.userId ? await targetChannel.guild.members.fetch(context.userId).catch(() => null) : null);
+    const manualTriggerInvoker = context.userId
+      ? {
+          userDiscId: context.userId,
+          username: context.message?.author.username ?? "System",
+          locale: context.locale,
+          member: invokingMember,
+        }
+      : undefined;
 
     try {
       await tomoriChat(
@@ -425,7 +436,7 @@ export class CrossChannelMessageTool extends BaseTool {
         undefined, // emptyResponseFinishReason
         [taskInjection], // injectedContextItems
         undefined, // forcedMentions
-        undefined, // manualTriggerInvoker
+        manualTriggerInvoker, // manualTriggerInvoker
         { disableCrossChannelMessage: true }, // manualStreamingContextOverrides
       );
 

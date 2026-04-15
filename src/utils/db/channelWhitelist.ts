@@ -4,7 +4,7 @@ import type { WhitelistCheckResult } from "@/types/misc/channelWhitelist";
 import { log } from "@/utils/misc/logger";
 
 /**
- * Check whitelist status (channel + role) and get channel cooldown settings.
+ * Check whitelist status (channel + role + persona metadata) and get channel cooldown settings.
  * @param serverDiscId - Discord server ID (snowflake) or user ID for DMs
  * @param channelDiscId - Discord channel ID (snowflake)
  * @param memberRoleDiscIds - Optional role IDs for the triggering member
@@ -23,6 +23,7 @@ export async function checkChannelWhitelist(
     isChannelWhitelisted: false,
     hasActiveRoleWhitelist: false,
     isRoleWhitelisted: false,
+    hasActivePersonaWhitelist: false,
     isTriggerAllowed: true,
     hasChannelCooldownOverride: false,
   };
@@ -128,10 +129,40 @@ export async function checkChannelWhitelist(
       }
     }
 
+    // 6. Channel-specific persona whitelist (threads inherit from parent channel)
+    let personaRows = await sql<Array<{ tomori_id: number | string | bigint }>>`
+			SELECT tomori_id
+			FROM channel_persona_whitelist
+			WHERE server_id = ${serverId} AND channel_disc_id = ${channelDiscId}
+			ORDER BY created_at ASC, tomori_id ASC
+		`;
+
+    if (personaRows.length === 0 && parentChannelDiscId) {
+      personaRows = await sql<Array<{ tomori_id: number | string | bigint }>>`
+				SELECT tomori_id
+				FROM channel_persona_whitelist
+				WHERE server_id = ${serverId} AND channel_disc_id = ${parentChannelDiscId}
+				ORDER BY created_at ASC, tomori_id ASC
+			`;
+    }
+
+    const whitelistedPersonaIds = personaRows
+      .map((row) => {
+        if (typeof row.tomori_id === "bigint") {
+          return Number(row.tomori_id);
+        }
+        if (typeof row.tomori_id === "string") {
+          return Number.parseInt(row.tomori_id, 10);
+        }
+        return row.tomori_id;
+      })
+      .filter((tomoriId): tomoriId is number => Number.isInteger(tomoriId) && tomoriId > 0);
+    const hasActivePersonaWhitelist = whitelistedPersonaIds.length > 0;
+
     const isChannelAllowed = !hasActiveChannelWhitelist || isChannelWhitelisted;
     const isRoleAllowed = !hasActiveRoleWhitelist || isRoleWhitelisted;
     const isTriggerAllowed = isChannelAllowed && isRoleAllowed;
-    const hasActiveWhitelist = hasActiveChannelWhitelist || hasActiveRoleWhitelist;
+    const hasActiveWhitelist = hasActiveChannelWhitelist || hasActiveRoleWhitelist || hasActivePersonaWhitelist;
 
     let blockReason: WhitelistCheckResult["blockReason"];
     if (!isTriggerAllowed) {
@@ -152,6 +183,8 @@ export async function checkChannelWhitelist(
       isChannelWhitelisted,
       hasActiveRoleWhitelist,
       isRoleWhitelisted,
+      hasActivePersonaWhitelist,
+      whitelistedPersonaIds: hasActivePersonaWhitelist ? whitelistedPersonaIds : undefined,
       isTriggerAllowed,
       blockReason,
       hasChannelCooldownOverride,

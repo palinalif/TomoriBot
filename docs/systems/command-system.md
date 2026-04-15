@@ -161,6 +161,7 @@ Use when the user is managing an existing set of configured entries and batch ke
 Examples:
 
 - `/server whitelist remove`
+- `/server whitelist persona`
 - `/config remove modeloverride` (channels + personas together)
 - `/server stm manage` (active server-shared STM entries)
 - `/server private-channels`
@@ -290,9 +291,9 @@ Rules:
 - `config`: setup, model(text/image/embedding), api-key(set/delete/rotation), system-prompt(set/remove/preset), context-note(set), params(*), timezone, message-fetch-limit, bot-permissions, notice-embeds(visibility)
 - `nsfw`: jailbreaks
 - `optional-key`: google/set/remove, brave/set/remove, elevenlabs/set/remove, novelai/set/remove
-- `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(channels/threshold), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove), member-permissions, always-reply, thought-logs-channel
+- `server`: trigger(add/delete), whitelist(channel/persona/role/remove), stm(manage), cooldown(triggers), auto-trigger(channels/threshold), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove), member-permissions, always-reply, thought-logs-channel
 - `novelai`: attg, image(model/params/generate), image-tags(style/me/character/negative), character-reference
-- `server`: trigger(add/delete), whitelist(channel/role/remove), stm(manage), cooldown(triggers), auto-trigger(*), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove)
+- `server`: trigger(add/delete), whitelist(channel/persona/role/remove), stm(manage), cooldown(triggers), auto-trigger(*), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove)
 - `persona`: create, generate, import, export, default, swap, remove, attribute(add/edit/remove), sample-dialogue(add/edit/remove), prompt(set/remove), history(import/remove)
 - `memory`: document(add/remove), personal(add/edit/remove/import/export), server(add/edit/remove/import/export)
 - `personal`: privacy, language, nickname, cache, config(import/export/remove), impersonate(prompt)

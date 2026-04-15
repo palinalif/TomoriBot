@@ -24,12 +24,14 @@ import {
   getAllChannelLlmOverridesForServer,
 } from "../../utils/db/dbRead";
 import { getAllWhitelistChannels } from "../../utils/db/channelWhitelist";
+import { getAllWhitelistPersonas } from "@/utils/db/personaWhitelist";
 import { getAllWhitelistRoles } from "@/utils/db/roleWhitelist";
 import { getQuotaConfig } from "@/utils/quota/imageQuotaManager";
 import { getTextQuotaConfig } from "@/utils/quota/textQuotaManager";
 import type {
   UserRow,
   ChannelWhitelistRow,
+  ChannelPersonaWhitelistRow,
   RoleWhitelistRow,
   RandomTriggerRow,
   LlmRow,
@@ -267,6 +269,33 @@ function formatWhitelistRolesEntries(entries: RoleWhitelistRow[], locale: string
       return `${index + 1}. <@&${entry.role_disc_id}>`;
     })
     .join("\n");
+}
+
+async function formatWhitelistPersonaEntries(
+  client: Client,
+  entries: ChannelPersonaWhitelistRow[],
+  personaNameMap: Map<number, string>,
+  locale: string,
+): Promise<string> {
+  if (entries.length === 0) {
+    return localizer(locale, "commands.tool.status.whitelist_personas_all_allowed");
+  }
+
+  const personasByChannel = new Map<string, string[]>();
+  for (const entry of entries) {
+    const personaNames = personasByChannel.get(entry.channel_disc_id) ?? [];
+    personaNames.push(personaNameMap.get(entry.tomori_id) ?? `ID:${entry.tomori_id}`);
+    personasByChannel.set(entry.channel_disc_id, personaNames);
+  }
+
+  const lines = await Promise.all(
+    Array.from(personasByChannel.entries()).map(async ([channelId, personaNames], index) => {
+      const mention = await resolveChannelMention(client, channelId, locale);
+      return `${index + 1}. ${mention}: ${personaNames.join(", ")}`;
+    }),
+  );
+
+  return lines.join("\n");
 }
 
 /**
@@ -576,6 +605,7 @@ export async function execute(
         const [
           braveApiKeySet,
           blacklistedMemberIds,
+          whitelistPersonas,
           whitelistChannels,
           whitelistRoles,
           randomTriggers,
@@ -586,6 +616,7 @@ export async function execute(
         ] = await Promise.all([
           getBraveApiKeyStatus(tomoriState.server_id),
           getBlacklistedMemberIds(tomoriState.server_id),
+          getAllWhitelistPersonas(tomoriState.server_id),
           getAllWhitelistChannels(tomoriState.server_id),
           getAllWhitelistRoles(tomoriState.server_id),
           getServerRandomTriggers(tomoriState.server_id),
@@ -651,6 +682,7 @@ export async function execute(
           crosschannelBlocklistValue,
           welcomeChannelValue,
           thoughtLogChannelValue,
+          whitelistPersonasValue,
           whitelistValue,
           whitelistRolesValue,
           randomTriggersValue,
@@ -666,6 +698,7 @@ export async function execute(
             config.thought_log_channel_disc_id ? [config.thought_log_channel_disc_id] : [],
             locale,
           ),
+          formatWhitelistPersonaEntries(client, whitelistPersonas, personaNameMap, locale),
           formatWhitelistEntries(client, whitelistChannels, locale),
           formatWhitelistRolesEntries(whitelistRoles, locale),
           formatRandomTriggers(client, randomTriggers, personaNameMap, locale),
@@ -828,6 +861,11 @@ export async function execute(
             {
               nameKey: "commands.tool.status.field_thought_logs_channel",
               value: thoughtLogChannelValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_whitelist_personas",
+              value: whitelistPersonasValue,
               inline: false,
             },
             {

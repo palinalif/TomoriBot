@@ -51,7 +51,8 @@ function getCacheKey(
  * @param channelDiscId - Discord channel ID (snowflake)
  * @param memberRoleDiscIds - Optional member role IDs used for role-whitelist checks
  * @param parentChannelDiscId - Optional parent channel ID for threads; threads inherit whitelist from parent
- * @returns WhitelistCheckResult with whitelist status and settings
+ * @returns WhitelistCheckResult with channel/role gating, persona allowlist metadata,
+ * and any channel-specific cooldown settings
  */
 export async function getCachedWhitelistStatus(
   serverDiscId: string,

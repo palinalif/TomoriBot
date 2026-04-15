@@ -581,6 +581,20 @@ export const roleWhitelistSchema = z.object({
 });
 export type RoleWhitelistRow = z.infer<typeof roleWhitelistSchema>;
 
+/**
+ * Channel Persona Whitelist Schema
+ * Defines channel-specific persona allowlists for automatic message triggers.
+ * If a channel has no entries, all personas remain eligible in that channel.
+ */
+export const channelPersonaWhitelistSchema = z.object({
+  server_id: z.number(),
+  channel_disc_id: z.string(),
+  tomori_id: z.number().int(),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
+});
+export type ChannelPersonaWhitelistRow = z.infer<typeof channelPersonaWhitelistSchema>;
+
 export const errorLogSchema = z.object({
   error_log_id: z.number().optional(), // Primary key, optional as it's generated
   // Context IDs - Optional because errors can occur outside specific contexts

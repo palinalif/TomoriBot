@@ -1,12 +1,18 @@
-import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
-import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
+import {
+  MessageFlags,
+  type ChatInputCommandInteraction,
+  type Client,
+  type SlashCommandSubcommandBuilder,
+} from "discord.js";
+import { getCachedAllPersonas, getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { getAllWhitelistChannels, removeChannelWhitelist } from "@/utils/db/channelWhitelist";
+import { getAllWhitelistPersonas, removeChannelPersonaWhitelist } from "@/utils/db/personaWhitelist";
 import { getAllWhitelistRoles, removeRoleWhitelist } from "@/utils/db/roleWhitelist";
 import { invalidateWhitelistCache } from "@/utils/cache/channelWhitelistCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed, promptWithRawModal } from "@/utils/discord/interactionHelper";
-import type { ErrorContext, RoleWhitelistRow, UserRow } from "@/types/db/schema";
+import type { ChannelPersonaWhitelistRow, ErrorContext, RoleWhitelistRow, UserRow } from "@/types/db/schema";
 import type { CheckboxGroupOption, ModalCheckboxGroupField } from "@/types/discord/modal";
 import { CooldownType } from "@/types/db/schema";
 
@@ -14,6 +20,7 @@ import { CooldownType } from "@/types/db/schema";
  * Modal custom ID for channel whitelist removal
  */
 const MODAL_CUSTOM_ID = "server_whitelist_remove_modal";
+const PERSONA_CHECKBOX_ID_PREFIX = "persona_checkbox_group";
 const CHANNEL_CHECKBOX_ID_PREFIX = "channel_checkbox_group";
 const ROLE_CHECKBOX_ID_PREFIX = "role_checkbox_group";
 const MAX_OPTIONS_PER_GROUP = 10;
@@ -22,14 +29,14 @@ const MAX_ENTRIES_PER_MODAL = MAX_OPTIONS_PER_GROUP * MAX_GROUPS_PER_MODAL;
 
 /**
  * Configure the /server whitelist remove subcommand
- * Allows server managers to remove channels and roles from the whitelist
+ * Allows server managers to remove persona, channel, and role whitelist entries
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand.setName("remove").setDescription(localizer("en-US", "commands.server.whitelist.remove.description"));
 
 /**
  * Execute the /server whitelist remove command
- * Shows a modal with all whitelisted channels and roles as checkboxes (all checked by default)
+ * Shows a modal with all whitelisted personas, channels, and roles as checkboxes (all checked by default)
  * Unchecked entries will be removed from the whitelist
  */
 export async function execute(
@@ -69,14 +76,22 @@ export async function execute(
     errorContext.serverId = tomoriState.server_id;
     errorContext.tomoriId = tomoriState.tomori_id;
 
-    // 3. Get all whitelisted channels and roles for this server
-    const [whitelistChannels, whitelistRoles] = await Promise.all([
+    // 3. Get all whitelisted personas, channels, and roles for this server
+    const [allPersonas, whitelistPersonas, whitelistChannels, whitelistRoles] = await Promise.all([
+      getCachedAllPersonas(interaction.guildId),
+      getAllWhitelistPersonas(tomoriState.server_id),
       getAllWhitelistChannels(tomoriState.server_id),
       getAllWhitelistRoles(tomoriState.server_id),
     ]);
+    const personaNameMap = new Map<number, string>();
+    for (const persona of allPersonas) {
+      if (typeof persona.tomori_id === "number") {
+        personaNameMap.set(persona.tomori_id, persona.tomori_nickname);
+      }
+    }
 
     // 4. Check if there are any whitelisted entries
-    if (whitelistChannels.length === 0 && whitelistRoles.length === 0) {
+    if (whitelistPersonas.length === 0 && whitelistChannels.length === 0 && whitelistRoles.length === 0) {
       await replyInfoEmbed(interaction, locale, {
         color: ColorCode.WARN,
         titleKey: "commands.server.whitelist.remove.no_entries_title",
@@ -86,9 +101,10 @@ export async function execute(
     }
 
     // 5. Discord checkbox groups allow at most 10 options each and 5 groups per modal
+    const personaGroupCount = Math.ceil(whitelistPersonas.length / MAX_OPTIONS_PER_GROUP);
     const channelGroupCount = Math.ceil(whitelistChannels.length / MAX_OPTIONS_PER_GROUP);
     const roleGroupCount = Math.ceil(whitelistRoles.length / MAX_OPTIONS_PER_GROUP);
-    const totalGroupCount = channelGroupCount + roleGroupCount;
+    const totalGroupCount = personaGroupCount + channelGroupCount + roleGroupCount;
 
     if (totalGroupCount > MAX_GROUPS_PER_MODAL) {
       await replyInfoEmbed(interaction, locale, {
@@ -96,6 +112,7 @@ export async function execute(
         titleKey: "commands.server.whitelist.remove.too_many_entries_title",
         descriptionKey: "commands.server.whitelist.remove.too_many_entries_description",
         descriptionVars: {
+          persona_count: whitelistPersonas.length.toString(),
           channel_count: whitelistChannels.length.toString(),
           role_count: whitelistRoles.length.toString(),
           max_entries: MAX_ENTRIES_PER_MODAL.toString(),
@@ -105,8 +122,27 @@ export async function execute(
       return;
     }
 
-    // 6. Build checkbox groups by chunking whitelisted channels and roles into groups of 10
+    // 6. Build checkbox groups by chunking whitelisted personas, channels, and roles into groups of 10
     const checkboxGroups: ModalCheckboxGroupField[] = [];
+
+    for (let i = 0; i < whitelistPersonas.length; i += MAX_OPTIONS_PER_GROUP) {
+      const chunk = whitelistPersonas.slice(i, i + MAX_OPTIONS_PER_GROUP);
+      const groupIndex = Math.floor(i / MAX_OPTIONS_PER_GROUP);
+      const options = await buildPersonaCheckboxOptions(interaction, chunk, personaNameMap, locale);
+
+      checkboxGroups.push({
+        kind: "checkboxGroup" as const,
+        customId: `${PERSONA_CHECKBOX_ID_PREFIX}_${groupIndex}`,
+        labelKey:
+          groupIndex === 0
+            ? "commands.server.whitelist.remove.persona_checkbox_label"
+            : "commands.server.whitelist.remove.persona_checkbox_label_continued",
+        descriptionKey: groupIndex === 0 ? "commands.server.whitelist.remove.persona_checkbox_description" : undefined,
+        minValues: 0,
+        required: false,
+        options,
+      });
+    }
 
     for (let i = 0; i < whitelistChannels.length; i += MAX_OPTIONS_PER_GROUP) {
       const chunk = whitelistChannels.slice(i, i + MAX_OPTIONS_PER_GROUP);
@@ -172,11 +208,16 @@ export async function execute(
     }
 
     // 7. Show the modal with checkbox groups for whitelist removal
-    const modalResult = await promptWithRawModal(interaction, locale, {
-      modalCustomId: MODAL_CUSTOM_ID,
-      modalTitleKey: "commands.server.whitelist.remove.modal_title",
-      components: checkboxGroups,
-    });
+    const modalResult = await promptWithRawModal(
+      interaction,
+      locale,
+      {
+        modalCustomId: MODAL_CUSTOM_ID,
+        modalTitleKey: "commands.server.whitelist.remove.modal_title",
+        components: checkboxGroups,
+      },
+      MessageFlags.Ephemeral,
+    );
 
     // 8. Handle modal outcome
     if (modalResult.outcome !== "submit") {
@@ -186,8 +227,16 @@ export async function execute(
 
     // 9. Extract checked entry IDs from all checkbox groups in the modal
     const modalSubmitInteraction = modalResult.interaction;
+    const checkedPersonaEntries = new Set<string>();
     const checkedChannelIds = new Set<string>();
     const checkedRoleIds = new Set<string>();
+
+    for (let groupIndex = 0; groupIndex < personaGroupCount; groupIndex++) {
+      const groupValues = modalResult.multiValues?.[`${PERSONA_CHECKBOX_ID_PREFIX}_${groupIndex}`] ?? [];
+      for (const personaEntryValue of groupValues) {
+        checkedPersonaEntries.add(personaEntryValue);
+      }
+    }
 
     for (let groupIndex = 0; groupIndex < channelGroupCount; groupIndex++) {
       const groupValues = modalResult.multiValues?.[`${CHANNEL_CHECKBOX_ID_PREFIX}_${groupIndex}`] ?? [];
@@ -209,6 +258,10 @@ export async function execute(
     }
 
     // 10. Find entries to remove (those NOT checked in the modal)
+    const personasToRemove = whitelistPersonas.filter(
+      (entry) => !checkedPersonaEntries.has(getPersonaWhitelistEntryValue(entry)),
+    );
+
     const channelsToRemove: string[] = [];
     for (const entry of whitelistChannels) {
       if (!checkedChannelIds.has(entry.channel_disc_id)) {
@@ -224,7 +277,7 @@ export async function execute(
     }
 
     // 11. If no entries selected for removal, inform user
-    if (channelsToRemove.length === 0 && rolesToRemove.length === 0) {
+    if (personasToRemove.length === 0 && channelsToRemove.length === 0 && rolesToRemove.length === 0) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         color: ColorCode.INFO,
         titleKey: "commands.server.whitelist.remove.no_removals_title",
@@ -234,13 +287,20 @@ export async function execute(
     }
 
     // 12. Remove all unchecked entries from the whitelist
-    const [channelResults, roleResults] = await Promise.all([
+    const [personaResults, channelResults, roleResults] = await Promise.all([
+      Promise.all(
+        personasToRemove.map((entry) =>
+          removeChannelPersonaWhitelist(tomoriState.server_id, entry.channel_disc_id, entry.tomori_id),
+        ),
+      ),
       Promise.all(channelsToRemove.map((channelId) => removeChannelWhitelist(tomoriState.server_id, channelId))),
       Promise.all(rolesToRemove.map((roleId) => removeRoleWhitelist(tomoriState.server_id, roleId))),
     ]);
 
     const failedRemovals =
-      channelResults.filter((result) => !result).length + roleResults.filter((result) => !result).length;
+      personaResults.filter((result) => !result).length +
+      channelResults.filter((result) => !result).length +
+      roleResults.filter((result) => !result).length;
 
     if (failedRemovals > 0) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -265,6 +325,10 @@ export async function execute(
       }
     }
 
+    const removedPersonaNames = await Promise.all(
+      personasToRemove.map((entry) => formatPersonaWhitelistEntryLabel(interaction, entry, personaNameMap, locale)),
+    );
+
     const removedRoleNames: string[] = [];
     for (const roleId of rolesToRemove) {
       try {
@@ -284,6 +348,10 @@ export async function execute(
         titleKey: "commands.server.whitelist.remove.success_title",
         descriptionKey: "commands.server.whitelist.remove.success_description",
         descriptionVars: {
+          personas_removed:
+            removedPersonaNames.length > 0
+              ? formatRemovedNames(removedPersonaNames)
+              : localizer(locale, "general.none"),
           channels_removed:
             removedChannelNames.length > 0
               ? formatRemovedNames(removedChannelNames)
@@ -296,7 +364,7 @@ export async function execute(
     );
 
     log.info(
-      `Whitelist entries removed in server ${interaction.guildId}: channels=[${channelsToRemove.join(", ")}], roles=[${rolesToRemove.join(", ")}]`,
+      `Whitelist entries removed in server ${interaction.guildId}: personas=[${personasToRemove.map((entry) => `${entry.channel_disc_id}:${entry.tomori_id}`).join(", ")}], channels=[${channelsToRemove.join(", ")}], roles=[${rolesToRemove.join(", ")}]`,
     );
   } catch (error) {
     log.error("Error executing /server whitelist remove command", error, errorContext);
@@ -309,6 +377,21 @@ export async function execute(
       });
     }
   }
+}
+
+async function buildPersonaCheckboxOptions(
+  interaction: ChatInputCommandInteraction,
+  entries: ChannelPersonaWhitelistRow[],
+  personaNameMap: Map<number, string>,
+  locale: string,
+): Promise<CheckboxGroupOption[]> {
+  return await Promise.all(
+    entries.map(async (entry) => ({
+      label: await formatPersonaWhitelistEntryLabel(interaction, entry, personaNameMap, locale),
+      value: getPersonaWhitelistEntryValue(entry),
+      default: true,
+    })),
+  );
 }
 
 async function buildRoleCheckboxOptions(
@@ -336,6 +419,28 @@ async function buildRoleCheckboxOptions(
   }
 
   return options;
+}
+
+function getPersonaWhitelistEntryValue(entry: ChannelPersonaWhitelistRow): string {
+  return `${entry.channel_disc_id}:${entry.tomori_id}`;
+}
+
+async function formatPersonaWhitelistEntryLabel(
+  interaction: ChatInputCommandInteraction,
+  entry: ChannelPersonaWhitelistRow,
+  personaNameMap: Map<number, string>,
+  locale: string,
+): Promise<string> {
+  const personaName = personaNameMap.get(entry.tomori_id) ?? `ID:${entry.tomori_id}`;
+
+  try {
+    const channel = await interaction.guild?.channels.fetch(entry.channel_disc_id);
+    const channelName = channel?.name ?? entry.channel_disc_id;
+    return `${personaName} (#${channelName})`;
+  } catch (error) {
+    log.warn("Failed to fetch channel for persona whitelist remove", error);
+    return `${personaName} (${localizer(locale, "general.unknown")}: ${entry.channel_disc_id})`;
+  }
 }
 
 /**

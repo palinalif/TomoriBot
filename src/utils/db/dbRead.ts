@@ -393,7 +393,10 @@ export async function loadTomoriState(serverDiscId: string): Promise<TomoriState
       ...tomoriData,
       config: configData,
       llm: llmData, // Add the LLM data to match schema
-      trigger_words: personaConfig?.trigger_words ?? fallbackTriggerWords,
+      // Use persona-scoped trigger_words only when non-empty; an empty array (Zod default when
+      // the persona_configs row exists but the column is NULL/unset) should fall back to the
+      // legacy alter_triggers / config trigger_words so existing alters aren't silently broken.
+      trigger_words: personaConfig?.trigger_words?.length ? personaConfig.trigger_words : fallbackTriggerWords,
       persona_prompt: personaConfig?.persona_prompt ?? null,
       reward_conditioning_enabled: personaConfig?.reward_conditioning_enabled ?? true,
       punish_conditioning_enabled: personaConfig?.punish_conditioning_enabled ?? true,
@@ -614,7 +617,10 @@ export async function loadAllPersonasForServer(serverDiscId: string): Promise<To
             ...tomoriRow,
             config: configData,
             llm: llmData,
-            trigger_words: personaConfig?.trigger_words ?? fallbackTriggerWords,
+            // Use persona-scoped trigger_words only when non-empty; an empty array (Zod default when
+            // the persona_configs row exists but the column is NULL/unset) should fall back to the
+            // legacy alter_triggers / config trigger_words so existing alters aren't silently broken.
+            trigger_words: personaConfig?.trigger_words?.length ? personaConfig.trigger_words : fallbackTriggerWords,
             persona_prompt: personaConfig?.persona_prompt ?? null,
             reward_conditioning_enabled: personaConfig?.reward_conditioning_enabled ?? true,
             punish_conditioning_enabled: personaConfig?.punish_conditioning_enabled ?? true,

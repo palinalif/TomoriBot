@@ -25,6 +25,8 @@ import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
 import { runHiddenImageTurn } from "@/utils/provider/hiddenImageTurn";
+import { getCachedWhitelistStatus } from "@/utils/cache/channelWhitelistCache";
+import { filterPersonasByWhitelist, isPersonaAllowedByWhitelistStatus } from "@/utils/db/personaWhitelist";
 
 // ─── Modal field identifiers ──────────────────────────────────────────────────
 
@@ -342,6 +344,7 @@ export async function execute(
 
   // 4a. Load all persona summaries for the sender selector.
   const personaSummaries = await loadServerPersonaSummaries(tomoriState.server_id);
+  const invokingMember = interaction.member as import("discord.js").GuildMember | null;
 
   // 5. Cooldown check.
   const cooldownType = tomoriState.config.cooldown_type ?? CooldownType.OFF;
@@ -351,7 +354,7 @@ export async function execute(
     interaction.user.id,
     interaction.channel.id,
     cooldownType,
-    interaction.member as import("discord.js").GuildMember | null,
+    invokingMember,
   );
 
   if (cooldownResult.isOnCooldown) {
@@ -381,6 +384,29 @@ export async function execute(
     );
     return;
   }
+
+  const parentChannelId =
+    "isThread" in guildChannel && typeof guildChannel.isThread === "function" && guildChannel.isThread()
+      ? guildChannel.parent?.id
+      : undefined;
+  const whitelistStatus = await getCachedWhitelistStatus(
+    interaction.guild.id,
+    interaction.channel.id,
+    invokingMember?.roles.cache.map((role) => role.id),
+    parentChannelId,
+  );
+  const availablePersonaSummaries = filterPersonasByWhitelist(personaSummaries, whitelistStatus);
+
+  if (availablePersonaSummaries.length === 0) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.message_cooldown_title",
+      descriptionKey: "commands.bot.generate.image.channel_not_whitelisted",
+      color: ColorCode.WARN,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+  const fallbackPersonaSummary = availablePersonaSummaries[0];
 
   // 6. Image generation feature flag.
   if (!tomoriState.config.imagegen_enabled) {
@@ -444,6 +470,9 @@ export async function execute(
   }
 
   // 11. Show the modal (fire-and-forget UX — no public bot response until image posts).
+  const defaultPersonaId = availablePersonaSummaries.some((persona) => persona.tomori_id === tomoriState.tomori_id)
+    ? (tomoriState.tomori_id ?? fallbackPersonaSummary?.tomori_id ?? -1)
+    : (fallbackPersonaSummary?.tomori_id ?? -1);
   const modalResult = await promptWithRawModal(
     interaction,
     locale,
@@ -456,7 +485,7 @@ export async function execute(
           labelKey: "commands.bot.generate.image.modal.persona_label",
           descriptionKey: "commands.bot.generate.image.modal.persona_description",
           required: true,
-          options: getPersonaSelectOptions(personaSummaries, tomoriState.tomori_id ?? -1),
+          options: getPersonaSelectOptions(availablePersonaSummaries, defaultPersonaId),
         },
         {
           customId: PROMPT_INPUT_ID,
@@ -529,7 +558,17 @@ export async function execute(
     // 13. Resolve the selected sender persona and its webhook identity.
     const selectedPersonaIdStr = modalResult.values?.[PERSONA_INPUT_ID];
     const selectedPersonaId = selectedPersonaIdStr ? Number.parseInt(selectedPersonaIdStr, 10) : tomoriState.tomori_id;
-    const selectedPersona = personaSummaries.find((p) => p.tomori_id === selectedPersonaId) ?? personaSummaries[0];
+    const selectedPersona =
+      availablePersonaSummaries.find((p) => p.tomori_id === selectedPersonaId) ?? fallbackPersonaSummary;
+
+    if (!selectedPersona || !isPersonaAllowedByWhitelistStatus(whitelistStatus, selectedPersona.tomori_id)) {
+      await replyInfoEmbed(modalSubmitInteraction, locale, {
+        titleKey: "general.message_cooldown_title",
+        descriptionKey: "commands.bot.generate.image.channel_not_whitelisted",
+        color: ColorCode.WARN,
+      });
+      return;
+    }
 
     let senderWebhook: import("discord.js").Webhook | undefined;
     let senderPersonaUsername: string | undefined;
@@ -632,7 +671,7 @@ export async function execute(
       interaction.channel.id,
       cooldownType,
       cooldownLength,
-      interaction.member as import("discord.js").GuildMember | null,
+      invokingMember,
     );
   } catch (error) {
     log.error("Error in /bot generate image", error as Error, {

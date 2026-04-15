@@ -425,6 +425,18 @@ export async function execute(
             "user", // textQuotaSource
             interaction.id, // textQuotaTriggerKey
             interaction.user.id, // textQuotaUserDiscId
+            undefined, // manualSystemPrompt
+            undefined, // manualPrefill
+            undefined, // naiContinuationPrefill
+            undefined, // emptyResponseFinishReason
+            undefined, // injectedContextItems
+            undefined, // forcedMentions
+            {
+              userDiscId: interaction.user.id,
+              username: interaction.user.username,
+              locale,
+              member: interaction.member as import("discord.js").GuildMember | null,
+            },
           );
         }
       } catch (regenError) {

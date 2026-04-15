@@ -40,6 +40,7 @@ This document summarizes the current PostgreSQL schema used by TomoriBot.
 ### Permissions/privacy/routing
 
 - `personalization_blacklist`
+- `channel_persona_whitelist`
 - `channel_whitelist`
 - `role_whitelist`
 
@@ -150,6 +151,12 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 
 - `cooldown_type` / `cooldown_length` both `NULL` -> inherit the server-wide cooldown
 - `cooldown_type` / `cooldown_length` both set -> override the server-wide cooldown for that channel
+
+`channel_persona_whitelist` stores channel-specific automatic persona restrictions:
+
+- rows are keyed by `server_id + channel_disc_id + tomori_id`
+- if a channel has one or more rows, only those personas are eligible for automatic triggers there
+- if a channel has no rows, all personas remain eligible there
 
 ### API key security
 

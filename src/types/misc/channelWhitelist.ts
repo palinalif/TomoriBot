@@ -4,12 +4,12 @@ export type WhitelistBlockReason = "channel" | "role" | "channel_and_role";
 
 /**
  * Result of checking channel whitelist status
- * Used to determine if a channel should be allowed to trigger the bot
- * and what cooldown settings to apply
+ * Used to determine if a channel should be allowed to trigger the bot,
+ * which personas are eligible there, and what cooldown settings to apply
  */
 export interface WhitelistCheckResult {
   /**
-   * Whether this server has ANY active whitelist entries (channel or role)
+   * Whether this server has ANY active whitelist entries (channel, role, or persona)
    */
   hasActiveWhitelist: boolean;
 
@@ -34,6 +34,17 @@ export interface WhitelistCheckResult {
    * Only relevant if hasActiveRoleWhitelist is true.
    */
   isRoleWhitelisted: boolean;
+
+  /**
+   * Whether this channel (or its parent, for threads) has a persona whitelist.
+   * When false, all personas remain eligible in this channel.
+   */
+  hasActivePersonaWhitelist: boolean;
+
+  /**
+   * The tomori_id values explicitly allowed in this channel when a persona whitelist is active.
+   */
+  whitelistedPersonaIds?: number[];
 
   /**
    * Final allow/deny decision after combining channel and role whitelist checks.

@@ -32,6 +32,8 @@ import { CooldownType } from "@/types/db/schema";
 import { getCooldownTypeFooterKey } from "@/utils/db/messageCooldown";
 import { sendCooldownDM } from "@/utils/discord/cooldownDM";
 import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
+import { getCachedWhitelistStatus } from "@/utils/cache/channelWhitelistCache";
+import { filterPersonasByWhitelist, isPersonaAllowedByWhitelistStatus } from "@/utils/db/personaWhitelist";
 
 /**
  * Configures the /bot impersonate subcommand
@@ -157,6 +159,7 @@ async function handlePersonaImpersonation(
 
   const serverId = interaction.guild.id;
   const channel = interaction.channel;
+  const invokingMember = interaction.member as import("discord.js").GuildMember | null;
 
   // 1. Load all personas (main + alters) - keep this under 3 seconds
   const allPersonas = await loadAllPersonasForServer(serverId);
@@ -170,8 +173,38 @@ async function handlePersonaImpersonation(
     return;
   }
 
+  const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
+  const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
+  const whitelistStatus = await getCachedWhitelistStatus(
+    serverId,
+    channel.id,
+    invokingMember?.roles.cache.map((role) => role.id),
+    parentChannelId,
+  );
+
+  if (!whitelistStatus.isTriggerAllowed) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.message_cooldown_title",
+      descriptionKey: "commands.bot.impersonate.channel_not_whitelisted",
+      color: ColorCode.WARN,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const availablePersonas = filterPersonasByWhitelist(allPersonas, whitelistStatus);
+  if (availablePersonas.length === 0) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.message_cooldown_title",
+      descriptionKey: "commands.bot.impersonate.channel_not_whitelisted",
+      color: ColorCode.WARN,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
   // 2. Build select options for modal
-  const personaSelectOptions: SelectOption[] = allPersonas.map((persona, index) => ({
+  const personaSelectOptions: SelectOption[] = availablePersonas.map((persona, index) => ({
     label: safeSelectOptionText(persona.tomori_nickname),
     value: index.toString(), // Use index to avoid ID truncation issues
     description: persona.is_alter ? "Alter Persona" : "Main Persona",
@@ -215,13 +248,15 @@ async function handlePersonaImpersonation(
   const selectedIndex = Number.parseInt(modalResult.values.persona_select || "0", 10);
   const messageContent = modalResult.values.message_content || "";
 
-  const selectedPersona = allPersonas[selectedIndex];
-  if (!selectedPersona?.tomori_id) {
-    log.error(`Selected persona at index ${selectedIndex} not found in persona list`);
+  const selectedPersona = availablePersonas[selectedIndex];
+  if (!selectedPersona?.tomori_id || !isPersonaAllowedByWhitelistStatus(whitelistStatus, selectedPersona.tomori_id)) {
+    log.info(
+      `[/bot impersonate persona] Rejected persona selection at index ${selectedIndex} in channel ${channel.id} due to whitelist or stale modal state`,
+    );
     await replyInfoEmbed(modalResult.interaction, locale, {
-      titleKey: "general.errors.unknown_error_title",
-      descriptionKey: "general.errors.unknown_error_description",
-      color: ColorCode.ERROR,
+      titleKey: "general.message_cooldown_title",
+      descriptionKey: "commands.bot.impersonate.channel_not_whitelisted",
+      color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -364,6 +399,7 @@ async function handleUserImpersonation(
   }
 
   const channel = interaction.channel;
+  const invokingMember = interaction.member as import("discord.js").GuildMember | null;
   const commandTarget = invokedTarget;
   const cooldownActiveKey =
     invokedTarget === "me"
@@ -409,7 +445,7 @@ async function handleUserImpersonation(
       interaction.user.id,
       interaction.channel.id,
       cooldownType,
-      interaction.member as import("discord.js").GuildMember | null,
+      invokingMember,
     );
 
     log.info(
@@ -442,6 +478,24 @@ async function handleUserImpersonation(
         interaction,
         MessageFlags.Ephemeral,
       );
+      return;
+    }
+
+    const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
+    const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
+    const whitelistStatus = await getCachedWhitelistStatus(
+      interaction.guild.id,
+      channel.id,
+      invokingMember?.roles.cache.map((role) => role.id),
+      parentChannelId,
+    );
+
+    if (!isPersonaAllowedByWhitelistStatus(whitelistStatus, tomoriState.tomori_id)) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.message_cooldown_title",
+        descriptionKey: channelWhitelistKey,
+        color: ColorCode.WARN,
+      });
       return;
     }
 
@@ -550,7 +604,7 @@ async function handleUserImpersonation(
       interaction.channel.id,
       cooldownType,
       cooldownLength,
-      interaction.member as import("discord.js").GuildMember | null,
+      invokingMember,
     );
     log.info(`[/bot impersonate ${commandTarget}] Cooldown set successfully`);
 

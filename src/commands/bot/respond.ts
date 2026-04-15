@@ -13,6 +13,8 @@ import {
   checkMessageTriggerCooldownWithWhitelist,
   setMessageTriggerCooldownWithWhitelist,
 } from "../../utils/db/cooldownManager";
+import { getCachedWhitelistStatus } from "../../utils/cache/channelWhitelistCache";
+import { filterPersonasByWhitelist, isPersonaAllowedByWhitelistStatus } from "../../utils/db/personaWhitelist";
 import { CooldownType } from "../../types/db/schema";
 import { getCooldownTypeFooterKey } from "../../utils/db/messageCooldown";
 import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
@@ -95,6 +97,8 @@ export async function execute(
     return;
   }
 
+  const invokingMember = interaction.member as import("discord.js").GuildMember | null;
+
   // 3.5. Check cooldown (shares cooldown pool with message triggers)
   const cooldownType = tomoriState.config.cooldown_type ?? CooldownType.OFF;
   const cooldownLength = tomoriState.config.cooldown_length ?? 5;
@@ -105,7 +109,7 @@ export async function execute(
     interaction.user.id,
     interaction.channel.id,
     cooldownType,
-    interaction.member as import("discord.js").GuildMember | null,
+    invokingMember,
   );
 
   if (cooldownResult.isOnCooldown) {
@@ -139,29 +143,55 @@ export async function execute(
 
   // 4. Load all personas and check if alters exist
   const allPersonas = await loadAllPersonasForServer(interaction.guild.id);
-  const alterPersonas = allPersonas.filter((p) => p.is_alter);
-  const mainPersona = allPersonas.find((p) => !p.is_alter);
+  const isThread = "isThread" in guildChannel && typeof guildChannel.isThread === "function" && guildChannel.isThread();
+  const parentChannelId = isThread && "parent" in guildChannel ? guildChannel.parent?.id : undefined;
+  const whitelistStatus = await getCachedWhitelistStatus(
+    interaction.guild.id,
+    interaction.channel.id,
+    invokingMember?.roles.cache.map((role) => role.id),
+    parentChannelId,
+  );
+  const availablePersonas = filterPersonasByWhitelist(allPersonas, whitelistStatus);
 
-  let selectedPersona = mainPersona;
+  if (availablePersonas.length === 0) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.message_cooldown_title",
+      descriptionKey: "commands.bot.respond.channel_not_whitelisted",
+      color: ColorCode.WARN,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const fallbackPersona = availablePersonas[0];
+  if (!fallbackPersona) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.errors.unknown_error_title",
+      descriptionKey: "general.errors.unknown_error_description",
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  let selectedPersona = fallbackPersona;
   let replyInteraction: ChatInputCommandInteraction | import("discord.js").ModalSubmitInteraction = interaction;
   let manualPrompt: string | undefined;
 
   // Build modal components (persona select if alters exist, plus optional prompt)
   const modalComponents: ModalComponent[] = [];
 
-  if (alterPersonas.length > 0 && mainPersona) {
-    const personaOptions: SelectOption[] = [
-      {
-        label: safeSelectOptionText(mainPersona.tomori_nickname),
-        value: "0", // main is index 0
-        description: localizer(locale, "commands.bot.respond.main_persona_description"),
-      },
-      ...alterPersonas.map((persona, index) => ({
-        label: safeSelectOptionText(persona.tomori_nickname),
-        value: (index + 1).toString(), // alters start at index 1
-        description: localizer(locale, "commands.bot.respond.alter_persona_description"),
-      })),
-    ];
+  if (availablePersonas.length > 1) {
+    const personaOptions: SelectOption[] = availablePersonas.map((persona, index) => ({
+      label: safeSelectOptionText(persona.tomori_nickname),
+      value: index.toString(),
+      description: localizer(
+        locale,
+        persona.is_alter
+          ? "commands.bot.respond.alter_persona_description"
+          : "commands.bot.respond.main_persona_description",
+      ),
+    }));
     modalComponents.push({
       customId: "persona_choice",
       labelKey: "commands.bot.respond.select_persona_label",
@@ -224,11 +254,23 @@ export async function execute(
   });
 
   const selectedIndex = Number.parseInt(modalResult.values?.persona_choice ?? "0", 10);
-  if (alterPersonas.length > 0 && mainPersona) {
-    selectedPersona = selectedIndex === 0 ? mainPersona : alterPersonas[selectedIndex - 1];
+  if (availablePersonas.length > 1) {
+    selectedPersona = availablePersonas[selectedIndex] ?? fallbackPersona;
     log.info(
       `User ${interaction.user.id} selected persona ${selectedPersona.tomori_nickname} (ID: ${selectedPersona.tomori_id}) for manual respond`,
     );
+  }
+
+  if (!isPersonaAllowedByWhitelistStatus(whitelistStatus, selectedPersona?.tomori_id)) {
+    await replyInteraction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle(localizer(locale, "general.message_cooldown_title"))
+          .setDescription(localizer(locale, "commands.bot.respond.channel_not_whitelisted"))
+          .setColor(ColorCode.WARN),
+      ],
+    });
+    return;
   }
 
   const manualPromptRaw = modalResult.values?.prompt;
@@ -323,7 +365,7 @@ export async function execute(
       false, // skipLock
       undefined, // reminderRecipientID
       undefined, // reminderData
-      selectedPersona?.tomori_id, // selectedPersonaId
+      selectedPersona?.tomori_id ?? undefined, // selectedPersonaId
       undefined, // isPersonaJob
       undefined, // isUserImpersonation
       undefined, // impersonatedUserId
@@ -352,7 +394,7 @@ export async function execute(
       interaction.channel.id,
       cooldownType,
       cooldownLength,
-      interaction.member as import("discord.js").GuildMember | null,
+      invokingMember,
     );
   } catch (error) {
     log.error("Error in bot respond command:", error, {

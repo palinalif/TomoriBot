@@ -1253,6 +1253,33 @@ BEFORE UPDATE ON role_whitelist
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 
+-- Channel Persona Whitelist Table
+-- Restricts automatic persona triggering to a channel-specific subset when active
+-- If a channel has no persona whitelist entries, all personas remain eligible there
+CREATE TABLE IF NOT EXISTS channel_persona_whitelist (
+	server_id INT NOT NULL,
+	channel_disc_id TEXT NOT NULL,
+	tomori_id INT NOT NULL,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY (server_id, channel_disc_id, tomori_id),
+	FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+	FOREIGN KEY (tomori_id) REFERENCES tomoris(tomori_id) ON DELETE CASCADE
+);
+
+-- Create indexes for channel_persona_whitelist
+CREATE INDEX IF NOT EXISTS idx_channel_persona_whitelist_server
+ON channel_persona_whitelist(server_id);
+CREATE INDEX IF NOT EXISTS idx_channel_persona_whitelist_channel
+ON channel_persona_whitelist(server_id, channel_disc_id);
+
+-- Create updated_at trigger for channel_persona_whitelist table
+DROP TRIGGER IF EXISTS update_channel_persona_whitelist_timestamp ON channel_persona_whitelist;
+CREATE TRIGGER update_channel_persona_whitelist_timestamp
+BEFORE UPDATE ON channel_persona_whitelist
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
 CREATE TABLE IF NOT EXISTS error_logs (
   error_log_id SERIAL PRIMARY KEY,
   -- Context IDs - Made nullable as errors can happen outside these contexts

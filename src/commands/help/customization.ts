@@ -53,7 +53,7 @@ export async function execute(
     const serverAutotriggerChannelsMention = commandRegistry.getCommandMention("server", "auto-trigger", "channels");
     const serverAutotriggerThresholdMention = commandRegistry.getCommandMention("server", "auto-trigger", "threshold");
     const serverTriggerAddMention = commandRegistry.getCommandMention("server", "trigger", "add");
-    const serverTriggerDeleteMention = commandRegistry.getCommandMention("server", "trigger", "delete");
+    const serverTriggerRemoveMention = commandRegistry.getCommandMention("server", "trigger", "remove");
     const configModelMention = commandRegistry.getCommandMention("config", "model", "text");
     const configTemperatureMention = commandRegistry.getCommandMention("config", "temperature");
     const configHumanizerMention = commandRegistry.getCommandMention("config", "humanizer");
@@ -65,6 +65,7 @@ export async function execute(
     const configPermissionsMention = commandRegistry.getCommandMention("config", "bot-permissions");
     const personaRemoveMention = commandRegistry.getCommandMention("persona", "remove");
     const serverWhitelistChannelMention = commandRegistry.getCommandMention("server", "whitelist", "channel");
+    const serverWhitelistPersonaMention = commandRegistry.getCommandMention("server", "whitelist", "persona");
     const serverWhitelistRoleMention = commandRegistry.getCommandMention("server", "whitelist", "role");
     const serverWhitelistRemoveMention = commandRegistry.getCommandMention("server", "whitelist", "remove");
     const memoryDocumentAddMention = commandRegistry.getCommandMention("memory", "document", "add");
@@ -151,9 +152,10 @@ export async function execute(
         serverAutotriggerChannels: serverAutotriggerChannelsMention,
         serverAutotriggerThreshold: serverAutotriggerThresholdMention,
         serverTriggerAdd: serverTriggerAddMention,
-        serverTriggerDelete: serverTriggerDeleteMention,
+        serverTriggerRemove: serverTriggerRemoveMention,
         serverAvatar: serverAvatarMention,
         serverWhitelistChannel: serverWhitelistChannelMention,
+        serverWhitelistPersona: serverWhitelistPersonaMention,
         serverWhitelistRole: serverWhitelistRoleMention,
         serverWhitelistRemove: serverWhitelistRemoveMention,
         memoryDocumentAdd: memoryDocumentAddMention,

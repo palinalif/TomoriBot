@@ -364,7 +364,7 @@ When a modal is editing an existing list of configured items, prefer Checkbox Gr
 
 Implemented examples:
 
-- `/server whitelist remove` manages channels and roles in one modal.
+- `/server whitelist remove` manages personas, channels, and roles in one modal.
 - `/server private-channels` manages the full saved private-channel set in one modal, with paginated fallback beyond 50 channels.
 - `/server rp-channels` manages the full saved RP-channel set in one modal, with paginated fallback beyond 50 channels.
 - `/server crosschannel-blocklist` manages a persistent channel blocklist with saved check states and paginated fallback beyond 50 channels.
@@ -373,7 +373,7 @@ Implemented examples:
 - `/config mcp remove` manages registered MCP servers in one modal.
 - `/config remove modelfallback` manages the fallback chain in one modal while preserving remaining order.
 - `/config random-trigger remove` manages random triggers in one modal when the set fits, with paginated fallback beyond modal limits.
-- `/server trigger delete` manages trigger words for the selected persona in one modal when the set fits, with paginated fallback beyond modal limits.
+- `/server trigger remove` manages trigger words for the selected persona in one modal when the set fits, with paginated fallback beyond modal limits.
 
 ---
 

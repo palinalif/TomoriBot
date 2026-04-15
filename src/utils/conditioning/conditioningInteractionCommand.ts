@@ -20,6 +20,7 @@ import {
   type ConditioningActionKey,
 } from "@/utils/conditioning/conditioning";
 import { recordConditioningEvent } from "@/utils/db/conditioningDb";
+import { isPersonaAllowedByWhitelistStatus } from "@/utils/db/personaWhitelist";
 
 const EMBED_COLOR_BY_TYPE: Record<ConditioningType, ColorCode> = {
   reward: ColorCode.AFFECTION,
@@ -238,6 +239,13 @@ export function createConditioningInteractionCommand(type: ConditioningType, act
         return;
       }
 
+      if (!isPersonaAllowedByWhitelistStatus(whitelistStatus, selectedPersona.tomori_id)) {
+        log.info(
+          `${type} ${actionKey} interaction completed without chat response because persona ${selectedPersona.tomori_id} is blocked by the channel persona whitelist in ${interaction.channel.id}`,
+        );
+        return;
+      }
+
       const messages = await interaction.channel.messages.fetch({ limit: 1 });
       const latestMessage = messages.first();
 
@@ -271,6 +279,17 @@ export function createConditioningInteractionCommand(type: ConditioningType, act
         interaction.id,
         interaction.user.id,
         undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          userDiscId: interaction.user.id,
+          username: interaction.user.username,
+          locale,
+          member: interaction.member as import("discord.js").GuildMember | null,
+        },
       );
     } catch (error) {
       await log.error(`Error in ${type} ${actionKey} command`, error, {

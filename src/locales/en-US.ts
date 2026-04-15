@@ -536,8 +536,10 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_crosschannel_blocklist: `Cross-Channel Blocklist`,
         field_thought_logs_channel: `Thought Logs Channel`,
         field_welcome_channel: `Welcome Channel`,
+        field_whitelist_personas: `Persona Whitelist`,
         field_whitelist_channels: `Channel Whitelist`,
         field_whitelist_roles: `Role Whitelist`,
+        whitelist_personas_all_allowed: `None (all personas can trigger)`,
         whitelist_all_allowed: `None (all channels can trigger)`,
         whitelist_roles_all_allowed: `None (all roles can trigger)`,
         field_random_triggers: `Random Triggers`,
@@ -1548,14 +1550,15 @@ Auto-Trigger Behavior:
 
 Triggers & Appearance:
 - {serverTriggerAdd} - Add custom trigger words I respond to (also works with alter personas)
-- {serverTriggerDelete} - Remove trigger words
+- {serverTriggerRemove} - Remove trigger words
 - {serverAvatar} - Set my custom profile picture for this server
 
 Channel Whitelist & Cooldowns:
 - {configCooldown} - Set global cooldown between my responses
 - {serverWhitelistChannel} - Add a channel to the whitelist (only whitelisted channels can trigger me)
+- {serverWhitelistPersona} - Limit which personas can trigger in a specific channel
 - {serverWhitelistRole} - Add/remove roles allowed to trigger me when role whitelist is active
-- {serverWhitelistRemove} - Remove a channel from the whitelist
+- {serverWhitelistRemove} - Remove whitelist entries
 - Whitelisted channels inherit the global cooldown unless you set a channel-specific override
 
 Documents:
@@ -1943,7 +1946,7 @@ Prompt Guidance Rescale: {cfg_rescale}
           missing_permissions_title: `Missing Permissions`,
           missing_permissions_description: `I need permission to view this channel, read message history, send messages, and attach files before I can generate a scene image here.`,
           cooldown_active: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot generate image\` again. This cooldown is shared with message triggers and other manual /bot actions.`,
-          channel_not_whitelisted: `This server has whitelist restrictions active. \`/bot generate image\` can only be used in whitelisted channels by members with whitelisted roles.`,
+          channel_not_whitelisted: `This server has whitelist restrictions active. \`/bot generate image\` can only be used in whitelisted channels by members with whitelisted roles, and only with personas allowed in this channel.`,
           no_backend_title: `No Image Backend Available`,
           no_backend_description: `I couldn't find a usable image backend for this server right now. Configure **{current_provider}** with a valid image model, or add a NovelAI optional key if you want to use the NovelAI renderer instead.`,
           planner_unavailable_title: `No Planning Model Available`,
@@ -2004,7 +2007,7 @@ Prompt Guidance Rescale: {cfg_rescale}
         no_messages_title: `No Messages Found`,
         no_messages_description: `No messages found in this channel. Send at least one message before using \`/bot respond\`.`,
         cooldown_active: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot respond\` again. This cooldown is shared with message triggers.`,
-        channel_not_whitelisted: `This server has whitelist restrictions active. \`/bot respond\` can only be used in whitelisted channels by members with whitelisted roles.`,
+        channel_not_whitelisted: `This server has whitelist restrictions active. \`/bot respond\` can only be used in whitelisted channels by members with whitelisted roles, and only with personas allowed in this channel.`,
       },
       kill: {
         description: `Immediately stop the current stream and clear queued responses in this channel.`,
@@ -2039,8 +2042,8 @@ Prompt Guidance Rescale: {cfg_rescale}
         no_messages_description: `No messages found in this channel. Send at least one message before using user impersonation.`,
         cooldown_active: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot impersonate me\` again. This cooldown is shared with message triggers and \`/bot respond\`.`,
         cooldown_active_user: `This server's managers have configured a cooldown. Please wait **{seconds}** seconds before using \`/bot impersonate user\` again. This cooldown is shared with message triggers and \`/bot respond\`.`,
-        channel_not_whitelisted: `This server has whitelist restrictions active. \`/bot impersonate me\` can only be used in whitelisted channels by members with whitelisted roles.`,
-        channel_not_whitelisted_user: `This server has whitelist restrictions active. \`/bot impersonate user\` can only be used in whitelisted channels by members with whitelisted roles.`,
+        channel_not_whitelisted: `This server has whitelist restrictions active. \`/bot impersonate\` can only be used in whitelisted channels by members with whitelisted roles, and only with personas allowed in this channel.`,
+        channel_not_whitelisted_user: `This server has whitelist restrictions active. \`/bot impersonate user\` can only be used in whitelisted channels by members with whitelisted roles, and only with personas allowed in this channel.`,
         system_modal_title: `System Prompt Injection`,
         system_content_label: `System Prompt`,
         system_content_placeholder: `Enter system instructions...`,
@@ -3512,11 +3515,11 @@ Disabled auto-trigger on **{disabled_count}** channel(s): {disabled_channels}
           already_exists_description: `The word \`{word}\` is already in the trigger list.`,
           already_exists_multiple_description: `These trigger words already exist: {words}.`,
           limit_exceeded_title: `Trigger Word Limit Exceeded`,
-          limit_exceeded_description: `This server can have up to {max_allowed} trigger words (currently has {current_count}). Please remove some trigger words with \`/server trigger delete\` before adding new ones.`,
+          limit_exceeded_description: `This server can have up to {max_allowed} trigger words (currently has {current_count}). Please remove some trigger words with \`/server trigger remove\` before adding new ones.`,
           success_title: `Trigger Word Added`,
           success_description: `Added {added_count} trigger word(s) to {persona_name}: {added_words}. There are now {word_count} trigger words.`,
         },
-        delete: {
+        remove: {
           description: `Remove a word that makes me respond when mentioned.`,
           no_triggers_title: `No Trigger Words`,
           no_triggers_description: `There are no custom trigger words set to remove. Add some with \`/server trigger add\`.`,
@@ -3611,7 +3614,7 @@ Currently blacklisted: **{selected_count}**.`,
         cleared_description: `Thought logs will no longer be posted.`,
       },
       whitelist: {
-        description: `Manage trigger whitelist (channels + roles; channels can inherit or override the global cooldown)`,
+        description: `Manage trigger whitelist (channels, channel-specific personas, and roles)`,
         channel: {
           description: `Add a channel to the whitelist, optionally overriding the global cooldown`,
           channel_description: `The channel to whitelist`,
@@ -3638,6 +3641,30 @@ Currently blacklisted: **{selected_count}**.`,
 
 **Note:** When ANY channel is whitelisted, ONLY whitelisted channels can trigger the bot.`,
         },
+        persona: {
+          description: `Restrict which personas can trigger in a selected channel`,
+          channel_description: `The channel whose persona whitelist you want to edit`,
+          modal_title: `Whitelist Personas`,
+          checkbox_label: `Whitelisted Personas`,
+          checkbox_label_continued: `Whitelisted Personas (Continued)`,
+          checkbox_description: `Checked personas may respond in this channel. Keep all personas checked to clear the channel-specific persona whitelist.`,
+          invalid_channel_title: `Invalid Channel Type`,
+          invalid_channel_description: `Only text channels can have a persona whitelist.`,
+          no_personas_title: `No Personas Found`,
+          no_personas_description: `This server does not have any personas available to whitelist yet.`,
+          too_many_personas_title: `Too Many Personas`,
+          too_many_personas_description: `This server has **{persona_count}** personas. Discord only allows **{max_groups}** checkbox groups (**{max_entries}** total options) per modal.`,
+          no_personas_selected_title: `No Personas Selected`,
+          no_personas_selected_description: `Select at least one persona. To clear this channel's persona whitelist, keep every persona checked instead.`,
+          already_set_title: `Already Set`,
+          already_set_description: `Channel **{channel_name}** already has this exact persona whitelist.`,
+          success_title: `Persona Whitelist Updated`,
+          success_description: `Only {persona_names} can trigger in **{channel_name}** now.`,
+          success_clear_title: `Persona Whitelist Cleared`,
+          success_clear_description: `Channel **{channel_name}** no longer has a channel-specific persona whitelist. All personas can trigger there again.`,
+          main_persona_description: `Main Persona`,
+          alter_persona_description: `Alter Persona`,
+        },
         role: {
           description: `Add or remove whitelisted roles that can trigger the bot`,
           role_description: `The role to add or remove from whitelist`,
@@ -3656,8 +3683,11 @@ Currently blacklisted: **{selected_count}**.`,
           success_remove_description: `Role {role_mention} has been removed from the whitelist.`,
         },
         remove: {
-          description: `Remove channels or roles from whitelist`,
+          description: `Remove personas, channels, or roles from whitelist`,
           modal_title: `Remove Whitelist Entries`,
+          persona_checkbox_label: `Whitelisted Personas`,
+          persona_checkbox_label_continued: `Whitelisted Personas (Continued)`,
+          persona_checkbox_description: `Uncheck any persona whitelist entries you want to remove.`,
           checkbox_label: `Whitelisted Channels`,
           checkbox_label_continued: `Whitelisted Channels (Continued)`,
           checkbox_description: `Uncheck any channels you want to remove from the whitelist.`,
@@ -3665,13 +3695,14 @@ Currently blacklisted: **{selected_count}**.`,
           role_checkbox_label_continued: `Whitelisted Roles (Continued)`,
           role_checkbox_description: `Uncheck any roles you want to remove from the whitelist.`,
           no_entries_title: `No Whitelist Entries`,
-          no_entries_description: `There are no whitelisted channels or roles to remove.`,
+          no_entries_description: `There are no whitelisted personas, channels, or roles to remove.`,
           too_many_entries_title: `Too Many Whitelist Entries`,
-          too_many_entries_description: `This server has **{channel_count}** whitelisted channels and **{role_count}** whitelisted roles. Discord only allows **{max_groups}** checkbox groups (**{max_entries}** total options) per modal.`,
+          too_many_entries_description: `This server has **{persona_count}** whitelisted personas, **{channel_count}** whitelisted channels, and **{role_count}** whitelisted roles. Discord only allows **{max_groups}** checkbox groups (**{max_entries}** total options) per modal.`,
           no_removals_title: `No Whitelist Entries Removed`,
           no_removals_description: `No whitelist entries were unchecked. The whitelist remains unchanged.`,
           success_title: `Whitelist Updated`,
           success_description: `Removed the following whitelist entries.
+**Personas:** {personas_removed}
 **Channels:** {channels_removed}
 **Roles:** {roles_removed}`,
         },
