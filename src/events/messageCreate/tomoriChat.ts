@@ -1285,6 +1285,8 @@ type SimplifiedMessageForContext = {
   createdAt?: number; // Discord message creation timestamp in milliseconds (message.createdTimestamp)
   mediaSourceMessageIds?: string[]; // Array of message IDs that host media (for combined messages)
   remoteMediaSourceKind?: "reply" | "forwarded";
+  combinedMessageIds?: string[]; // All Discord message IDs when messages are combined
+  individualContents?: string[]; // Per-message content pieces (stored during combining)
   imageAttachments: Array<{
     url: string; // Original URL of the image
     proxyUrl: string; // Discord's proxy URL, often more stable for fetching
@@ -1521,6 +1523,69 @@ function annotateRecentMessageMetadataInContext(params: {
   }
 
   return { annotatedCount, patchedReplyReferenceCount };
+}
+
+/**
+ * Decompress combined SimplifiedMessageForContext entries into individual entries,
+ * one per original Discord message. Uses the `combinedMessageIds` and `individualContents`
+ * tracking fields (populated during message combining) to split entries accurately
+ * without relying on fragile text boundary detection.
+ *
+ * @param simplifiedMessages - The (possibly combined) simplified message array
+ * @param relevantMessagesArray - All individual Discord Message objects for timestamp lookups
+ * @returns A new array where combined entries are split into individual ones
+ */
+function decompressSimplifiedMessages(
+  simplifiedMessages: SimplifiedMessageForContext[],
+  relevantMessagesArray: Message[],
+): SimplifiedMessageForContext[] {
+  const messageById = new Map(relevantMessagesArray.map((m) => [m.id, m]));
+  const result: SimplifiedMessageForContext[] = [];
+
+  for (const entry of simplifiedMessages) {
+    // 1. Pass through entries that were never combined.
+    // NOTE: the <= 1 branch is currently unreachable — the combining logic always
+    // initializes combinedMessageIds with 2+ IDs, so a combined entry is never length 1.
+    // The check is kept as defensive dead code in case that invariant changes.
+    if (!entry.combinedMessageIds || entry.combinedMessageIds.length <= 1) {
+      result.push(entry);
+      continue;
+    }
+
+    const ids = entry.combinedMessageIds;
+    const contents = entry.individualContents;
+
+    // 2. Safety: if tracking data is missing or mismatched, keep the entry combined.
+    // NOTE: this fallback silently reverts to pre-fix behavior (one ref_N for the whole group).
+    if (!contents || contents.length !== ids.length) {
+      log.warn(
+        `decompressSimplifiedMessages: tracking data missing or mismatched for combined entry ${entry.id} ` +
+          `(ids=${ids.length}, contents=${contents?.length ?? "none"}) — keeping combined`,
+      );
+      result.push(entry);
+      continue;
+    }
+
+    // 3. Create individual entries for each combined message
+    for (let i = 0; i < ids.length; i++) {
+      const individualMsg = messageById.get(ids[i]);
+      result.push({
+        id: ids[i],
+        authorId: entry.authorId,
+        authorName: entry.authorName,
+        authorType: entry.authorType,
+        personaName: entry.personaName,
+        content: contents[i] || null,
+        createdAt: individualMsg?.createdTimestamp ?? entry.createdAt,
+        // Combined entries never have media (enforced by shouldKeepSeparateMediaTurn guard),
+        // so decompressed entries are always text-only
+        imageAttachments: [],
+        videoAttachments: [],
+      });
+    }
+  }
+
+  return result;
 }
 
 function formatSystemProducedEmbedHint(embedBody: string): string {
@@ -4817,6 +4882,14 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         const shouldKeepSeparateMediaTurn = currentMessageHasMedia || prevMessageHasMedia;
 
         if (isSameEffectiveAuthor && messageContentForLlm && prevMessageHasContent && !shouldKeepSeparateMediaTurn) {
+          // Track constituent message IDs and contents for decompression by reveal_message_metadata
+          if (!prevMessage.combinedMessageIds) {
+            prevMessage.combinedMessageIds = [prevMessage.id];
+            prevMessage.individualContents = [prevMessage.content ?? ""];
+          }
+          prevMessage.combinedMessageIds.push(msg.id);
+          prevMessage.individualContents!.push(messageContentForLlm);
+
           // Append this message's content to the previous message with a newline
           prevMessage.content += `\n${messageContentForLlm}`; // If this message has images, add them to the previous message's images
           if (imageAttachments.length > 0) {
@@ -6970,22 +7043,281 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       continue;
                     }
 
-                    // Handle recent message metadata reveal signal (in-place context annotation)
+                    // Handle recent message metadata reveal signal
+                    // Decompresses combined messages and rebuilds context so each individual
+                    // Discord message gets its own context item with a unique ref_N handle.
                     if (
                       funcName === "reveal_message_metadata" &&
                       toolResult.data &&
                       (toolResult.data as Record<string, unknown>).type === "context_restart_with_message_metadata"
                     ) {
-                      log.info("Recent message metadata reveal detected. Annotating existing context items in place.");
+                      log.info(
+                        "Recent message metadata reveal detected. Decompressing combined messages and rebuilding context.",
+                      );
 
                       streamingContext.disableMessageMetadataContext = true;
 
-                      const visibleMessageIds = new Set(simplifiedMessages.map((msg) => msg.id));
+                      // 1. Decompress combined messages so each Discord message gets its own entry
+                      const decompressedMessages = decompressSimplifiedMessages(
+                        simplifiedMessages,
+                        relevantMessagesArray,
+                      );
+                      const originalCount = simplifiedMessages.length;
+                      const decompressedCount = decompressedMessages.length;
+                      if (decompressedCount > originalCount) {
+                        log.info(
+                          `Decompressed ${originalCount} simplified entries into ${decompressedCount} individual entries.`,
+                        );
+                      }
+
+                      // 2. Rebuild context with decompressed messages (fresh MessageIdMap)
+                      const rebuildMessageIdMap = new MessageIdMap();
+                      const contextBuild = await buildContext({
+                        guildId: serverDiscId,
+                        serverName,
+                        serverDescription: serverDescription ?? null,
+                        simplifiedMessageHistory: decompressedMessages,
+                        userList,
+                        matrixUsers: matrixUserMap,
+                        syntheticUsers: syntheticUserMap,
+                        channelDesc,
+                        channelName,
+                        channelId: channel.id,
+                        parentChannelId: channel.isThread() ? channel.parentId : null,
+                        client,
+                        triggererName,
+                        emojiStrings,
+                        tomoriNickname:
+                          currentPersona.tomori_nickname ??
+                          // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
+                          tomoriState!.tomori_nickname,
+                        // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
+                        tomoriAttributes: tomoriState!.attribute_list,
+                        tomoriConfig: effectiveTomoriConfig,
+                        // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
+                        personaPrompt: tomoriState!.persona_prompt ?? null,
+                        // biome-ignore lint/style/noNonNullAssertion: tomoriState is checked above
+                        personaLineageId: tomoriState!.persona_lineage_id,
+                        isDMChannel,
+                        snapshot: personaSnapshot,
+                        preloadedEmojis: loadedEmojis,
+                        preloadedStickers: loadedStickers,
+                        isUserImpersonation,
+                        impersonatedUserId,
+                        impersonatedUserNickname: impersonatedIdentityName ?? impersonatedUserDbNickname,
+                        impersonatedUserPrompt,
+                        explicitLongTermMemoryIntent,
+                        seesImages: effectiveContextSeesImages,
+                        seesVideos: effectiveContextSeesVideos,
+                        hasVisionTool:
+                          !!tomoriState?.vision_llm && !(effectiveContextSeesImages ?? tomoriState?.llm.sees_images),
+                        messageIdMap: rebuildMessageIdMap,
+                      });
+                      contextSegments = appendInjectedContextItems(contextBuild.contextItems, injectedContextItems);
+
+                      // 3. Update the streaming context's message ID map to match the rebuilt context
+                      streamingContext.messageIdMap = rebuildMessageIdMap;
+
+                      // 4. Truncate oldest dialogue history pairs if the conversation is approaching
+                      // the context window limit, ensuring the output budget is always preserved.
+                      if (
+                        tomoriState.llm.llm_provider === "openrouter" &&
+                        tomoriState.llm.llm_codename !== "other-model" &&
+                        isOpenRouterCapabilityCacheReady()
+                      ) {
+                        const tokenLimits = getOpenRouterTokenLimits(tomoriState.llm.llm_codename);
+                        const openrouterTruncationOutputCap = Number.parseInt(
+                          process.env.OPENROUTER_MAX_OUTPUT_TOKENS || "8192",
+                          10,
+                        );
+                        if (tokenLimits && tokenLimits.contextLength > 0 && tokenLimits.maxCompletionTokens) {
+                          const truncationMaxCompletionTokens = Math.min(
+                            tokenLimits.maxCompletionTokens,
+                            openrouterTruncationOutputCap,
+                          );
+                          const { truncated, historyPairsDropped, sampleItemsDropped, totalDropped } =
+                            truncateDialogueHistory(
+                              contextSegments,
+                              tokenLimits.contextLength,
+                              truncationMaxCompletionTokens,
+                            );
+                          if (totalDropped > 0) {
+                            log.warn(
+                              `History truncation: dropped ${historyPairsDropped} history exchange pair(s) and ` +
+                                `${sampleItemsDropped} sample dialogue item(s) for ` +
+                                `${tomoriState.llm.llm_codename} to preserve output budget`,
+                            );
+                            contextSegments = truncated;
+                          }
+                        }
+                      } else if (tomoriState.llm.llm_provider === "google") {
+                        const tokenLimits = getGeminiTokenLimits(tomoriState.llm.llm_codename);
+                        if (tokenLimits && tokenLimits.contextLength > 0 && tokenLimits.maxCompletionTokens) {
+                          const { truncated, historyPairsDropped, sampleItemsDropped, totalDropped } =
+                            truncateDialogueHistory(
+                              contextSegments,
+                              tokenLimits.contextLength,
+                              tokenLimits.maxCompletionTokens,
+                            );
+                          if (totalDropped > 0) {
+                            log.warn(
+                              `History truncation: dropped ${historyPairsDropped} history exchange pair(s) and ` +
+                                `${sampleItemsDropped} sample dialogue item(s) for ` +
+                                `${tomoriState.llm.llm_codename} to preserve output budget`,
+                            );
+                            contextSegments = truncated;
+                          }
+                        }
+                      } else if (tomoriState.llm.llm_provider === "novelai") {
+                        let naiSubscriptionTokens = getCachedContextTokens(serverDiscId);
+                        if (naiSubscriptionTokens === undefined && tomoriState.config.api_key) {
+                          try {
+                            const tempKey = await decryptApiKey(
+                              tomoriState.config.api_key,
+                              tomoriState.config.key_version || 1,
+                            );
+                            naiSubscriptionTokens = await refreshNovelAISubscription(serverDiscId, tempKey);
+                          } catch {
+                            // Subscription fetch failed; getNovelAITokenLimits will use env var fallback
+                          }
+                        }
+                        const tokenLimits = getNovelAITokenLimits(tomoriState.llm.llm_codename, naiSubscriptionTokens);
+                        if (tokenLimits && tokenLimits.contextLength > 0 && tokenLimits.maxCompletionTokens) {
+                          const { truncated, historyPairsDropped, sampleItemsDropped, totalDropped } =
+                            truncateDialogueHistory(
+                              contextSegments,
+                              tokenLimits.contextLength,
+                              tokenLimits.maxCompletionTokens,
+                            );
+                          if (totalDropped > 0) {
+                            log.warn(
+                              `History truncation: dropped ${historyPairsDropped} history exchange pair(s) and ` +
+                                `${sampleItemsDropped} sample dialogue item(s) for ` +
+                                `${tomoriState.llm.llm_codename} to preserve output budget`,
+                            );
+                            contextSegments = truncated;
+                          }
+                        }
+                      }
+
+                      // 5. Length retry trim (same as media expansion handler)
+                      const shouldApplyOpenRouterLengthRetryTrim =
+                        emptyResponseFinishReason === "length" &&
+                        retryCount > 0 &&
+                        tomoriState.llm.llm_provider === "openrouter";
+                      if (shouldApplyOpenRouterLengthRetryTrim) {
+                        const requestedPairDrops = OPENROUTER_LENGTH_EMPTY_RETRY_DROP_PAIRS * retryCount;
+                        const { truncated, historyPairsDropped } = dropOldestHistoryExchangePairs(
+                          contextSegments,
+                          requestedPairDrops,
+                        );
+                        if (historyPairsDropped > 0) {
+                          log.warn(
+                            `OpenRouter length-empty retry trimming: dropped ${historyPairsDropped}/${requestedPairDrops} oldest history exchange pair(s) on retry ${retryCount}.`,
+                          );
+                          contextSegments = truncated;
+                        } else {
+                          log.warn(
+                            `OpenRouter length-empty retry trimming requested ${requestedPairDrops} pair drop(s), but no droppable history remained on retry ${retryCount}.`,
+                          );
+                        }
+                      }
+
+                      // 6. Rebuild tail directives from the fresh context build
+                      const lowerPriorityTailDirectives: string[] = [...contextBuild.lowerPriorityTailDirectives];
+                      const tailDirectives: string[] = [...contextBuild.tailDirectives];
+                      const uncensorDirective = contextBuild.uncensorDirective;
+                      if (manualContinuationDirective) {
+                        tailDirectives.push(manualContinuationDirective);
+                      }
+
+                      log.success(
+                        `Rebuilt context with decompressed messages (${decompressedCount} entries). Total context items: ${contextSegments.length}`,
+                      );
+
+                      // 7. Apply emoji repetition penalty after rebuilding context
+                      const emojiPenaltyDirective = getEmojiPenaltyDirective(
+                        contextSegments,
+                        isUserImpersonation
+                          ? null
+                          : (tomoriState?.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori"),
+                      );
+                      if (emojiPenaltyDirective) {
+                        lowerPriorityTailDirectives.push(emojiPenaltyDirective);
+                      }
+
+                      // 8. Inject system context for stop responses (if applicable)
+                      if (isStopResponse) {
+                        let lastUserContext: StructuredContextItem | undefined;
+                        for (let j = contextSegments.length - 1; j >= 0; j--) {
+                          if (contextSegments[j].role === "user") {
+                            lastUserContext = contextSegments[j];
+                            break;
+                          }
+                        }
+
+                        if (lastUserContext) {
+                          const originalContent = lastUserContext.parts
+                            .filter((part) => part.type === "text")
+                            .map((part) => (part as { type: "text"; text: string }).text)
+                            .join(" ");
+                          tailDirectives.push(
+                            `The user has requested you to stop your current generation. Original message: "${originalContent}"`,
+                          );
+                          log.info(`Captured stop response context. Original content: "${originalContent}"`);
+                        } else {
+                          tailDirectives.push("The user has requested you to stop your current generation.");
+                          log.info("Captured stop response context (no user context found)");
+                        }
+                      }
+
+                      // 9. Inject reasoning query as user message in dialogue if provided
+                      if (reasoningQuery) {
+                        tailDirectives.push(
+                          `The user has activated reasoning mode with the following query: "${reasoningQuery}". Please provide a thoughtful, well-reasoned response to this query.`,
+                        );
+                        log.info(`Captured reasoning query for tail directives: "${reasoningQuery}"`);
+                      }
+
+                      // 10. Inject manual system prompt at the end (for manual commands)
+                      if (manualSystemPrompt?.trim()) {
+                        const trimmedPrompt = manualSystemPrompt.trim();
+                        const directiveText = normalizeTailDirective(trimmedPrompt);
+                        if (directiveText) {
+                          tailDirectives.push(directiveText);
+                        }
+                        log.info(`Injected manual system prompt: "${trimmedPrompt}"`);
+                      }
+
+                      const lowerPriorityTailMessage = buildCombinedTailDirectiveMessage(lowerPriorityTailDirectives);
+                      if (lowerPriorityTailMessage) {
+                        insertBeforeLatestDialoguePair(contextSegments, lowerPriorityTailMessage);
+                      }
+
+                      const combinedTailMessage = buildCombinedTailDirectiveMessage(tailDirectives);
+                      if (combinedTailMessage) {
+                        contextSegments.push(combinedTailMessage);
+                      }
+
+                      const queuedReplyTailMessage = buildTailDirectiveMessage(
+                        getQueuedReplyDirective(currentPersona.tomori_nickname ?? tomoriState?.tomori_nickname),
+                      );
+                      if (queuedReplyTailMessage) {
+                        contextSegments.push(queuedReplyTailMessage);
+                      }
+
+                      const uncensorTailMessage = buildTailDirectiveMessage(uncensorDirective);
+                      if (uncensorTailMessage) {
+                        contextSegments.push(uncensorTailMessage);
+                      }
+
+                      // 11. Annotate the rebuilt context with metadata for each individual message
+                      const visibleMessageIds = new Set(decompressedMessages.map((msg) => msg.id));
                       const { annotatedCount, patchedReplyReferenceCount } = annotateRecentMessageMetadataInContext({
                         recentMessages: relevantMessagesArray,
                         visibleMessageIds,
                         contextSegments,
-                        messageIdMap: streamingContext.messageIdMap ?? messageIdMap,
+                        messageIdMap: rebuildMessageIdMap,
                       });
 
                       if (annotatedCount > 0 || patchedReplyReferenceCount > 0) {

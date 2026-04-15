@@ -100,6 +100,8 @@ export type SimplifiedMessageForContext = {
   createdAt?: number; // Discord message creation timestamp in milliseconds (message.createdTimestamp)
   mediaSourceMessageIds?: string[]; // Array of message IDs that host media (for combined messages)
   remoteMediaSourceKind?: "reply" | "forwarded";
+  combinedMessageIds?: string[]; // All Discord message IDs when messages are combined
+  individualContents?: string[]; // Per-message content pieces (stored during combining)
   imageAttachments: Array<{
     url: string;
     proxyUrl: string;
