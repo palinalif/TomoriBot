@@ -110,7 +110,8 @@ export class ManageMessageTool extends BaseTool {
       },
       message_id: {
         type: "string",
-        description: "The target message reference, usually a `ref_N` handle from recent message metadata.",
+        description:
+          "The target message reference. Accepts a `ref_N` handle from recent message metadata or a `media_N` handle from an image or video in the current context.",
       },
       end_message_id: {
         type: "string",

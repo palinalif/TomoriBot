@@ -246,6 +246,9 @@ export async function setCooldown(
  * @param channelId - Discord channel ID
  * @param globalCooldownType - Global cooldown type from config
  * @param member - Guild member (for exemption check)
+ * @param bypassWhitelistGate - When true, whitelist blocks are skipped entirely. Pass this for channels
+ *   that have an autochat override (auto-trigger or always-reply) so they are never blocked by whitelist
+ *   policy, while still being subject to any configured cooldowns.
  * @returns CooldownCheckResult with cooldown status and remaining time
  */
 export async function checkMessageTriggerCooldownWithWhitelist(
@@ -254,6 +257,7 @@ export async function checkMessageTriggerCooldownWithWhitelist(
   channelId: string,
   globalCooldownType: CooldownType,
   member: GuildMember | null = null,
+  bypassWhitelistGate = false,
 ): Promise<CooldownCheckResult> {
   // 1. Check whitelist status FIRST (before checking cooldown type)
   const memberRoleDiscIds = member ? member.roles.cache.map((role) => role.id) : undefined;
@@ -266,7 +270,9 @@ export async function checkMessageTriggerCooldownWithWhitelist(
   const whitelistStatus = await getCachedWhitelistStatus(serverId, channelId, memberRoleDiscIds, parentChannelId);
 
   // 2. Block if whitelist policy disallows this trigger
-  if (!whitelistStatus.isTriggerAllowed) {
+  // Exception: bypassWhitelistGate skips this block for autochat-override channels (auto-trigger, always-reply)
+  // that are implicitly whitelisted. Actual cooldowns (step 4) still apply regardless.
+  if (!whitelistStatus.isTriggerAllowed && !bypassWhitelistGate) {
     return {
       isOnCooldown: true,
       remainingSeconds: 0,

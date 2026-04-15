@@ -541,13 +541,19 @@ export async function execute(
     // 14.5. Success message (include model info if provider changed)
     // When switching specifically to NovelAI, use the dedicated key that also
     // notifies the user that emoji/sticker usage were automatically disabled.
+    // When switching to Z.ai, use the dedicated key that warns about ToS restrictions.
+    const isZaiProvider = newProvider === "zai" || newProvider === "zaicoding";
     const successDescriptionKey = isCustomProvider(newProvider)
       ? "commands.config.api-key.set.custom_success_with_model_description"
       : currentProvider !== newProvider && newProvider === "novelai"
         ? "commands.config.api-key.set.novelai_success_with_model_description"
-        : currentProvider !== newProvider
-          ? "commands.config.api-key.set.success_with_model_description"
-          : "commands.config.api-key.set.success_description";
+        : currentProvider !== newProvider && isZaiProvider
+          ? "commands.config.api-key.set.zai_success_with_model_description"
+          : isZaiProvider
+            ? "commands.config.api-key.set.zai_success_description"
+            : currentProvider !== newProvider
+              ? "commands.config.api-key.set.success_with_model_description"
+              : "commands.config.api-key.set.success_description";
 
     const descriptionVars: Record<string, string> = {
       provider: getProviderDisplayName(selectedProvider),

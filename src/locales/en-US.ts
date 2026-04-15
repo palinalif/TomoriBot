@@ -1185,7 +1185,7 @@ Please try again with different inputs or check your API key.`,
   - **NVIDIA NIM** — hosted NVIDIA models
   - **Anthropic** — Claude models
   - **Vertex AI** — Google Cloud models
-  - **Z.ai (Zhipu)** — Chinese AI models with a coding plan
+  - **Z.ai (Zhipu)** — Chinese AI models with a coding plan ⚠️ *ToS restricts usage to coding/agent scenarios only*
   - **Custom** — any OpenAI-compatible endpoint (Ollama, vLLM, LiteLLM, etc.)
 - Do **NOT** share this API key with anyone else
 - Custom endpoints can add a Bearer auth token after setup via {configApiKeySet} or {configProviderSwitch}`,
@@ -1362,7 +1362,9 @@ Leave unset for endpoints that require no authentication (e.g. local Ollama).`,
 - Native image generation uses NVIDIA's hosted \`ai.api.nvidia.com\` Stability endpoint`,
         nvidia_footer: `After setting up this provider, you may change text, embedding, and image models with {configModel}, {configModelEmbedding}, and {configModelImage}`,
         zai_title: `Setting Up Z.ai API Key`,
-        zai_description: `Z.ai provides access to the GLM family through a general API and a separate coding endpoint.`,
+        zai_description: `Z.ai provides access to the GLM family through a general API and a separate coding endpoint.
+
+⚠️ **Terms of Service Update:** Z.ai's ToS have been updated to only permit coding/agent use cases. Using the general endpoint for non-coding chat is at your own risk and may violate their terms.`,
         zai_getting_key_title: `Getting Your API Key:`,
         zai_getting_key_description: `1. Visit the [Z.ai Platform](https://z.ai)
 2. Sign in or create an account
@@ -1371,7 +1373,8 @@ Leave unset for endpoints that require no authentication (e.g. local Ollama).`,
 5. Copy this API key into {configSetup} or {configApikeySet}`,
         zai_important_title: `Important Notes:`,
         zai_important_description: `- Use the general endpoint for normal chat, reasoning, and native image generation
-  - The dedicated Coding endpoint is separate and intended for coding-specific workflows`,
+  - The dedicated Coding endpoint is separate and intended for coding-specific workflows
+  - ⚠️ Z.ai's ToS restricts usage to coding/agent scenarios only, general chat/roleplay use is at your own risk`,
         zai_footer: `After setting up this provider, you may change its default model with {configModel}`,
         novelai_title: `Setting Up NovelAI API Key`,
         novelai_description: `NovelAI is a subscription-based service focused on creative storytelling and roleplay.
@@ -2248,6 +2251,8 @@ Your donations help:
           success_with_model_description: `The {provider} API key has been successfully validated, encrypted, and saved. Your model has been automatically changed to \`{model_name}\` (the default for this provider).`,
           custom_success_with_model_description: `Your custom OpenAI-compatible endpoint has been saved successfully. I will use \`{model_name}\` when sending requests to this endpoint.`,
           novelai_success_with_model_description: `The NovelAI API key has been successfully validated, encrypted, and saved. Your model has been automatically changed to \`{model_name}\`. ⚠️ **Emoji and sticker usage have been automatically disabled** to keep NovelAI's context lean and stable. You can re-enable them anytime with \`/config bot-permissions\`.`,
+          zai_success_description: `The {provider} API key has been successfully validated, encrypted, and saved. ⚠️ **Note:** Z.ai's ToS now restricts usage to coding/agent scenarios only, general chat/roleplay use is at your own risk.`,
+          zai_success_with_model_description: `The {provider} API key has been successfully validated, encrypted, and saved. Your model has been automatically changed to \`{model_name}\`. ⚠️ **Note:** Z.ai's ToS now restricts usage to coding/agent scenarios only, general chat/roleplay use is at your own risk.`,
         },
         delete: {
           description: `Remove the currently configured AI provider API key.`,
@@ -2351,7 +2356,7 @@ Your donations help:
           sampler_min_p_label: `Min P`,
           sampler_logit_biases_label: `Logit Biases`,
           success_novelai_description: `Switched to **{provider}**. Your model is now \`{model_name}\`. ⚠️ **Emoji and sticker usage have been automatically disabled** to keep NovelAI's context lean. Re-enable anytime with \`/config bot-permissions\`.`,
-          success_zai_description: `Switched to **{provider}**. Your model is now \`{model_name}\`.`,
+          success_zai_description: `Switched to **{provider}**. Your model is now \`{model_name}\`. ⚠️ **Note:** Z.ai's ToS now restricts usage to coding/agent scenarios only — general chat use is at your own risk.`,
         },
         remove: {
           description: `Remove a saved provider configuration.`,
@@ -2748,6 +2753,8 @@ Click the button below and enter your OpenRouter model codename (e.g., \`xai/gro
         next_steps_description: `Use {helpFeatures} to see all my features, or just ask me in chat! I can also tell you what slash commands are available.`,
         novelai_expressions_warning_field: `⚠️ Expressions Disabled`,
         novelai_expressions_warning_value: `Emoji and sticker usage have been automatically disabled to keep NovelAI's context lean and stable. You can re-enable them anytime with .`,
+        zai_tos_warning_field: `⚠️ Z.ai Terms of Service`,
+        zai_tos_warning_value: `Z.ai's ToS have been updated to only permit coding/agent use cases. Using Z.ai for general chat is at your own risk and may violate their terms.`,
         custom_bearer_hint_field: `Bearer Token`,
         custom_bearer_hint_value: `If your endpoint requires authentication, use {apiKeySet} or {providerSwitch} to add a Bearer token.`,
         preset_field: `Personality Preset`,
@@ -3228,7 +3235,9 @@ A malicious server may send misleading instructions, collect data sent to its to
           key_validation_failed_title: `Brave API Key Validation Failed`,
           key_validation_failed_description: `The provided Brave Search API key is not valid. Please check the key and try again.`,
           success_title: `Brave API Key Set`,
-          success_description: `The Brave Search API key has been successfully validated, encrypted, and saved.`,
+          success_description: `The Brave Search API key has been successfully validated, encrypted, and saved.
+
+⚠️ **Important:** Brave provides $5 in free monthly credits wherein usage beyond that is billed. To avoid unexpected charges, set a $5 usage limit in your [Brave usage limits dashboard](https://api-dashboard.search.brave.com/app/subscriptions/usage-limits).`,
         },
         remove: {
           description: `Remove the currently configured Brave Search API key.`,
@@ -3840,6 +3849,13 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
         enabled_description: `**{persona_name}** will now reply to all messages in this server, even without a trigger word. Alter personas still require their trigger words. If an alter is triggered, **{persona_name}** will stay quiet to avoid doubling up.`,
         disabled_title: `Always-Reply Disabled`,
         disabled_description: `**{persona_name}** will now only reply when triggered by a trigger word, mention, or reply.`,
+      },
+      deliberatetriggermode: {
+        description: `Toggle deliberate trigger mode (DTM) for this server.`,
+        enabled_title: `Deliberate Trigger Mode Enabled`,
+        enabled_description: `**{persona_name}** will now only respond to direct invocations: \`@{trigger}\` prefix, replies, Discord mentions, or \`/bot respond\`. Plain trigger words are no longer enough.`,
+        disabled_title: `Deliberate Trigger Mode Disabled`,
+        disabled_description: `**{persona_name}** will respond to plain trigger words again.`,
       },
     },
     personal: {

@@ -19,7 +19,7 @@ const DISCORD_API_BASE = "https://discord.com/api/v10";
 export class GenerateVoiceMessageTool extends BaseTool {
   name = "generate_voice_message";
   description =
-    "Generate a spoken Discord audio message using the active persona's configured ElevenLabs voice. Use this only when voice delivery materially improves the reply. You may include bracketed expression tags anywhere in the script to shape delivery — both emotional states (e.g. [happy], [sad], [tired], [nervous]) and actions (e.g. [whispers], [laughs], [sighs softly]) are supported. Use them when they naturally fit the character and tone. The tool sends the audio attachment directly to the channel with no text caption.";
+    "Generate a spoken Discord audio message using the active persona's configured ElevenLabs voice. Use this only when voice delivery materially improves the reply. You may include bracketed expression tags anywhere in the script to shape delivery: both emotional states (e.g. [happy], [sad], [tired], [nervous]) and actions (e.g. [whispers], [laughs], [sighs softly]) are supported. Use them when they naturally fit the character and tone. The tool sends the audio attachment directly to the channel with no text caption.";
   category = "discord" as const;
 
   parameters: ToolParameterSchema = {

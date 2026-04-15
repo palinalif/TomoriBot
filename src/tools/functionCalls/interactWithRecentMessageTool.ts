@@ -392,7 +392,11 @@ export class InteractWithRecentMessageTool extends BaseTool {
             status: "message_reacted_successfully",
             message_ref: targetRef,
             emoji: interactionContent,
-            author: getReplyContextAuthorName(targetMessage),
+            author: getReplyContextAuthorName(
+              targetMessage,
+              context.client.user?.id,
+              context.tomoriState.tomori_nickname,
+            ),
             preview: buildMessagePreview(targetMessage),
           },
         };
@@ -509,7 +513,11 @@ export class InteractWithRecentMessageTool extends BaseTool {
           status: "message_replied_successfully",
           message_ref: targetRef,
           reply_message_ref: sentMessageRef,
-          author: getReplyContextAuthorName(targetMessage),
+          author: getReplyContextAuthorName(
+            targetMessage,
+            context.client.user?.id,
+            context.tomoriState.tomori_nickname,
+          ),
           preview: normalizePreview(sanitizedReplyContent),
           used_webhook_context: Boolean(webhookReplyContext && context.personaUsername),
         },

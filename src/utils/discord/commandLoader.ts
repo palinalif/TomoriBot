@@ -94,6 +94,7 @@ function getCommandLocalizationAliases(key: string): string[] {
     "commands.config.bot-permissions.description": "commands.config.permissions.description",
     "commands.config.send-limit.description": "commands.config.sendlimit.description",
     "commands.server.always-reply.description": "commands.server.alwaysreply.description",
+    "commands.server.deliberate-trigger-mode.description": "commands.server.deliberatetriggermode.description",
     "commands.server.quota.image-generation.description": "commands.server.quota.imagegen.description",
     "commands.server.quota.text-generation.description": "commands.server.quota.textgen.description",
     "commands.server.quota.video-generation.description": "commands.server.quota.videogen.description",

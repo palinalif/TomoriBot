@@ -1956,6 +1956,8 @@ export class StreamOrchestrator implements IStreamOrchestrator {
               identity,
               {
                 threadId,
+                botUserId: context.client.user?.id,
+                botName: context.tomoriState.tomori_nickname,
               },
             );
             context.replyNoticeState.sent = true;

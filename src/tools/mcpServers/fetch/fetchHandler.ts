@@ -178,7 +178,7 @@ export class FetchHandler implements MCPServerBehaviorHandler {
         const startIndex = Number(args.start_index) || 0;
         const endOfContentMessage =
           startIndex > 0
-            ? `[End of page content — no further content found at character offset ${startIndex}. All sections of this page have been read.]`
+            ? `[End of page content. No further content found at character offset ${startIndex}. All sections of this page have been read.]`
             : `[The page returned no readable content.]`;
 
         return {

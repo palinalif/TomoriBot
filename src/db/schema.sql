@@ -576,6 +576,10 @@ SELECT add_column_if_not_exists('tomori_configs', 'send_message_limit', 'INTEGER
 -- Alter personas still require explicit trigger words; main persona defers if an alter is triggered
 SELECT add_column_if_not_exists('tomori_configs', 'always_reply_enabled', 'BOOLEAN', 'false');
 
+-- Deliberate trigger mode (April 2026)
+-- When enabled, plain {trigger} words are blocked; only @{trigger}, replies, mentions, and /bot respond work
+SELECT add_column_if_not_exists('tomori_configs', 'deliberate_trigger_mode', 'BOOLEAN', 'false');
+
 -- Auto-chat shared range state (March 2026)
 SELECT add_column_if_not_exists('tomoris', 'autoch_next_target', 'INTEGER', '0');
 SELECT add_column_if_not_exists('tomori_configs', 'autoch_threshold_max', 'INTEGER', '0');

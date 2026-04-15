@@ -723,6 +723,14 @@ export async function execute(
         });
       }
 
+      // Add Z.ai ToS warning field if provider is Z.ai or Z.aiCoding
+      if (normalizedProvider === "zai" || normalizedProvider === "zaicoding") {
+        successFields.push({
+          nameKey: "commands.config.setup.zai_tos_warning_field",
+          value: localizer(locale, "commands.config.setup.zai_tos_warning_value"),
+        });
+      }
+
       // Add Bearer token hint for custom providers
       if (isCustomProvider(normalizedProvider)) {
         const apiKeySetMention = commandRegistry.getCommandMention("config", "api-key set");

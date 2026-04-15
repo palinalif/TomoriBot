@@ -822,63 +822,33 @@ async function resolveImpersonatedIdentity(
 }
 
 /**
- * Determines whether a message is a direct persona invocation that should bypass whitelist restrictions.
+ * Strips the `@` prefix from any persona trigger word found in text.
  *
- * Two conditions qualify as a direct invocation:
- * 1. The message is a reply to the main bot or any persona webhook (including alters).
- * 2. The message explicitly addresses a persona — either by Discord @-mentioning the main bot,
- *    or by prefixing any persona trigger word with `@` (e.g. `@Miku`). The `@` prefix form
- *    is the workaround for alter personas, which are webhooks and cannot be Discord-mentioned.
+ * When a user types `@{trigger}` to directly invoke an alter persona (which cannot be
+ * Discord-mentioned because alters are webhooks), the raw `@` appears in the LLM context.
+ * This function replaces `@{trigger}` with `{trigger}` so the context reads cleanly,
+ * matching the behavior of Discord user mentions where `<@userId>` is resolved to a plain name.
  *
- * @param message - The incoming Discord message to evaluate.
+ * @param content - The message content to process.
  * @param allPersonas - All loaded persona states for this server (main + alters).
- * @returns `true` if the message is a direct invocation and whitelists should be bypassed.
+ * @returns Content with `@{trigger}` patterns replaced by `{trigger}`.
  */
-function isDirectPersonaInvocation(message: Message, allPersonas: TomoriState[]): boolean {
-  // 1. Check if the message is a reply to the bot or a persona webhook.
-  if (message.reference?.messageId) {
-    const referenceMessage = message.channel.messages.cache.get(message.reference.messageId);
-    // biome-ignore lint/style/noNonNullAssertion: client.user is available in messageCreate event
-    if (referenceMessage?.author.id === message.client.user!.id) {
-      return true;
-    }
-    if (referenceMessage?.webhookId) {
-      const personaByNickname = new Map<string, TomoriState>();
-      for (const persona of allPersonas) {
-        const nicknameKey = persona.tomori_nickname?.toLowerCase();
-        if (!nicknameKey || personaByNickname.has(nicknameKey)) continue;
-        personaByNickname.set(nicknameKey, persona);
-      }
-      const webhookTarget = resolveReferencedWebhookTarget(referenceMessage, personaByNickname, message.guild);
-      if (webhookTarget.replyPersona || webhookTarget.impersonatedUserId) {
-        return true;
-      }
-    }
-  }
-
-  // 2. Check if the main bot is Discord @-mentioned.
-  // biome-ignore lint/style/noNonNullAssertion: client.user is available in messageCreate event
-  if (message.mentions.users.has(message.client.user!.id)) {
-    return true;
-  }
-
-  // 3. Check if any persona trigger word is prefixed with `@` in the message content.
-  // This covers alter personas (webhooks, not Discord users) that cannot be Discord-mentioned.
-  // The match is case-insensitive to be consistent with how trigger words are matched elsewhere.
-  const contentLower = message.content.toLowerCase();
+function stripAtPersonaTriggers(content: string, allPersonas: TomoriState[]): string {
+  let result = content;
   for (const persona of allPersonas) {
     const triggers =
       persona.trigger_words ??
       (persona.is_alter ? (persona.alter_triggers ?? []) : (persona.config?.trigger_words ?? []));
 
     for (const trigger of triggers) {
-      if (trigger && contentLower.includes(`@${trigger.toLowerCase()}`)) {
-        return true;
-      }
+      if (!trigger) continue;
+      // Match @{trigger} that is not preceded by a word character (avoids matching emails
+      // like user@trigger.com). Replacement preserves the stored trigger casing.
+      const pattern = new RegExp(`(?<![\\w])@${trigger.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gi");
+      result = result.replace(pattern, trigger);
     }
   }
-
-  return false;
+  return result;
 }
 
 function resolveReferencedWebhookTarget(
@@ -1008,6 +978,32 @@ function createScreamingRegex(trigger: string): RegExp {
   // Add word boundaries and create case-insensitive regex
   const fullPattern = `\\b${pattern}\\b`;
   return new RegExp(fullPattern, "i");
+}
+
+/**
+ * Creates a case-insensitive regex to detect a deliberate trigger invocation:
+ * an "@" prefix followed by the trigger word(s). Mirrors createScreamingRegex semantics —
+ * letters allow repetition (screaming mode) and whitespace between words is flexible (\s+).
+ * This ensures the deliberate check accepts the same content variants that the plain match does.
+ * @param trigger - The trigger word or phrase (may contain spaces for multi-word triggers)
+ */
+function createDeliberateTriggerRegex(trigger: string): RegExp {
+  let pattern = "";
+
+  for (const char of trigger) {
+    if (/[a-zA-Z]/.test(char)) {
+      // Alphabetic character: allow repetition (consistent with screaming mode)
+      pattern += `${char}+`;
+    } else if (/\s/.test(char)) {
+      // Whitespace between words: allow flexible spacing (avoids exact-space mismatch)
+      pattern += "\\s+";
+    } else {
+      // Non-alphabetic, non-whitespace: escape special regex characters
+      pattern += char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+  }
+
+  return new RegExp(`@${pattern}`, "i");
 }
 
 /**
@@ -2359,7 +2355,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
   const userDiscId = manualTriggerInvoker?.userDiscId ?? message.author.id;
   const triggererUsername = manualTriggerInvoker?.username ?? message.author.username;
-  const queuedReplyTargetName = manualTriggerInvoker?.member?.displayName ?? triggererUsername;
+  let queuedReplyTargetName = manualTriggerInvoker?.member?.displayName ?? triggererUsername;
   const getQueuedReplyDirective = (activePersonaName: string | null | undefined): string | null =>
     isFromQueue && !isStopResponse
       ? buildQueuedReplyDirective(
@@ -2816,30 +2812,29 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
             }
           }
 
-          // 2a. Check cooldown BEFORE queuing (skip for manual triggers)
-          if (!isManuallyTriggered && !isStopResponse && !message.author.bot && !message.webhookId) {
-            // Check whitelist status, but bypass if the user directly addressed a persona
-            // (reply to bot/persona or @{trigger} prefix), which always grants access.
-            const isDirectInvocation = isDirectPersonaInvocation(message, earlyAllPersonas);
-            if (!isDirectInvocation) {
-              const memberRoleDiscIds = message.member ? message.member.roles.cache.map((role) => role.id) : undefined;
-              // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
-              const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
-              const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
-              const whitelistStatus = await getCachedWhitelistStatus(
-                guild?.id ?? message.author.id,
-                message.channelId,
-                memberRoleDiscIds,
-                parentChannelId,
-              );
+          // 2a. Check whitelist and cooldown BEFORE queuing (skip for stop responses)
+          if (!isStopResponse && !message.author.bot && !message.webhookId) {
+            const memberRoleDiscIds = message.member ? message.member.roles.cache.map((role) => role.id) : undefined;
+            // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
+            const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
+            const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
+            // Autochat-override channels (auto-trigger, always-reply) bypass the whitelist gate
+            const effectiveChannelId = parentChannelId ?? message.channelId;
+            const isAutochatOverride = isAutochatOverrideChannel(earlyTomoriState.config, effectiveChannelId);
+            const whitelistStatus = await getCachedWhitelistStatus(
+              guild?.id ?? message.author.id,
+              message.channelId,
+              memberRoleDiscIds,
+              parentChannelId,
+            );
 
-              // If whitelist rules block this trigger, silently ignore
-              if (!whitelistStatus.isTriggerAllowed) {
-                log.info(
-                  `Message ${message.id} in channel ${message.channelId} rejected by whitelist policy (${whitelistStatus.blockReason ?? "unknown"})`,
-                );
-                return; // Silent rejection
-              }
+            // If whitelist rules block this trigger, silently ignore
+            // Exception: autochat-override channels are always allowed regardless of whitelist policy
+            if (!whitelistStatus.isTriggerAllowed && !isAutochatOverride) {
+              log.info(
+                `Message ${message.id} in channel ${message.channelId} rejected by whitelist policy (${whitelistStatus.blockReason ?? "unknown"})`,
+              );
+              return; // Silent rejection
             }
 
             // Continue with cooldown check
@@ -2849,6 +2844,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               message.channelId,
               earlyTomoriState.config.cooldown_type ?? CooldownType.OFF,
               message.member,
+              isAutochatOverride,
             );
             if (preQueueCooldownResult.isOnCooldown) {
               // Show cooldown warning via DM and don't queue
@@ -3098,6 +3094,21 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         const nicknameKey = persona.tomori_nickname?.toLowerCase();
         if (!nicknameKey || personaByNickname.has(nicknameKey)) continue;
         personaByNickname.set(nicknameKey, persona);
+      }
+
+      // Resolve the queued reply target name now that persona state is available.
+      // The initial value used the raw Discord username (e.g. "Tomori(α)"), which is wrong
+      // when the triggering message was sent by the bot itself or one of its webhook personas.
+      if (isFromQueue) {
+        if (message.author.id === client.user?.id) {
+          // Direct bot account message — use the main persona's configured nickname
+          queuedReplyTargetName = mainPersona?.tomori_nickname ?? tomoriState?.tomori_nickname ?? queuedReplyTargetName;
+        } else if (message.webhookId) {
+          // Webhook persona message — look up the persona by the webhook's display name
+          const webhookName = stripBridgePrefix(message.author.username);
+          queuedReplyTargetName =
+            personaByNickname.get(webhookName.toLowerCase())?.tomori_nickname ?? queuedReplyTargetName;
+        }
       }
 
       // Function to check for base trigger words - stays contained within the try block
@@ -3600,40 +3611,43 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         }
       }
 
-      // 6.5. Check whitelist status (skip for manual triggers, stop responses, and self messages).
-      // Also bypass if the user directly addressed a persona (reply or @{trigger} prefix).
-      if (!isManuallyTriggered && !isStopResponse && !isSelfMessage) {
-        const isDirectInvocation = isDirectPersonaInvocation(message, allPersonas);
-        if (!isDirectInvocation) {
-          const memberRoleDiscIds = message.member ? message.member.roles.cache.map((role) => role.id) : undefined;
-          // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
-          const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
-          const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
-          const whitelistStatus = await getCachedWhitelistStatus(
-            guild?.id ?? message.author.id,
-            message.channelId,
-            memberRoleDiscIds,
-            parentChannelId,
-          );
+      // Pre-compute channel context shared by the whitelist and cooldown checks below
+      const msgIsThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
+      const msgParentChannelId = msgIsThread && "parent" in channel ? channel.parent?.id : undefined;
+      // Autochat-override channels (auto-trigger, always-reply) bypass the whitelist gate —
+      // computed here so it is in scope for both the whitelist and cooldown checks below
+      const msgEffectiveChannelId = msgParentChannelId ?? message.channelId;
+      const isAutochatOverride = isAutochatOverrideChannel(tomoriState.config, msgEffectiveChannelId);
 
-          // If whitelist rules block this trigger, silently ignore
-          if (!whitelistStatus.isTriggerAllowed) {
-            log.info(
-              `Message ${message.id} in channel ${message.channelId} rejected by whitelist policy (${whitelistStatus.blockReason ?? "unknown"})`,
-            );
-            return; // Silent rejection
-          }
+      // 6.5. Check whitelist status (skip for stop responses and self messages)
+      if (!isStopResponse && !isSelfMessage) {
+        const memberRoleDiscIds = message.member ? message.member.roles.cache.map((role) => role.id) : undefined;
+        const whitelistStatus = await getCachedWhitelistStatus(
+          guild?.id ?? message.author.id,
+          message.channelId,
+          memberRoleDiscIds,
+          msgParentChannelId,
+        );
+
+        // If whitelist rules block this trigger, silently ignore
+        // Exception: autochat-override channels are always allowed regardless of whitelist policy
+        if (!whitelistStatus.isTriggerAllowed && !isAutochatOverride) {
+          log.info(
+            `Message ${message.id} in channel ${message.channelId} rejected by whitelist policy (${whitelistStatus.blockReason ?? "unknown"})`,
+          );
+          return; // Silent rejection
         }
       }
 
-      // 7. Check message trigger cooldown (skip for manual triggers and stop responses)
-      if (!isManuallyTriggered && !isStopResponse && !isSelfMessage) {
+      // 7. Check message trigger cooldown (skip for stop responses and self messages)
+      if (!isStopResponse && !isSelfMessage) {
         const cooldownResult = await checkMessageTriggerCooldownWithWhitelist(
           guild?.id ?? message.author.id,
           cooldownUserDiscId,
           message.channelId,
           tomoriState.config.cooldown_type ?? CooldownType.OFF,
           message.member,
+          isAutochatOverride,
         );
         if (cooldownResult.isOnCooldown) {
           // Send cooldown warning via DM
@@ -3664,9 +3678,9 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
       log.info(`Conditions met for reply in server ${serverDiscId}`);
 
-      // 8. Set message trigger cooldown (skip for manual triggers and stop responses)
+      // 8. Set message trigger cooldown (skip for stop responses and self messages)
       // Set early to prevent race conditions with concurrent triggers
-      if (!isManuallyTriggered && !isStopResponse && !isSelfMessage) {
+      if (!isStopResponse && !isSelfMessage) {
         await setMessageTriggerCooldownWithWhitelist(
           guild?.id ?? message.author.id,
           cooldownUserDiscId,
@@ -4314,7 +4328,14 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         const selfDebugEnabled = tomoriState.config.self_debug_enabled ?? false;
         const isTomoriAuthoredMessage =
           msg.author.id === client.user?.id || (isWebhookMessage && authorType === "persona");
-        let messageContentForLlm: string | null = processedContent; // Use processed content (with reference context and "$:" removed if present)
+        // Strip @{trigger} → trigger from user messages so direct invocation markers don't appear
+        // raw in the LLM context. Mirrors how <@userId> is resolved to a plain name by convertMentions.
+        // Only applied to non-bot messages to avoid touching the bot's own formatted output.
+        const strippedProcessedContent =
+          processedContent && !isTomoriAuthoredMessage
+            ? stripAtPersonaTriggers(processedContent, allPersonas)
+            : processedContent;
+        let messageContentForLlm: string | null = strippedProcessedContent; // Use processed content (with reference context and "$:" removed if present)
         let hasProcessedEmbed = false; // Track if this message contains a processed embed
         const mediaSourceMessageIds: string[] = []; // Array to collect all message IDs with media
         let hasLocalMedia = false;
@@ -4888,7 +4909,8 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
             prevMessage.individualContents = [prevMessage.content ?? ""];
           }
           prevMessage.combinedMessageIds.push(msg.id);
-          prevMessage.individualContents!.push(messageContentForLlm);
+          prevMessage.individualContents ??= [];
+          prevMessage.individualContents.push(messageContentForLlm);
 
           // Append this message's content to the previous message with a newline
           prevMessage.content += `\n${messageContentForLlm}`; // If this message has images, add them to the previous message's images
@@ -8121,6 +8143,16 @@ function isAutochatAlwaysReplyChannelActive(config: TomoriConfigRow, channelId: 
   return minThreshold === 0 && maxThreshold === 0 && isAutochatConfiguredChannel(config, channelId);
 }
 
+/**
+ * Returns true if the channel has any autochat override active — either a channel-level
+ * auto-trigger/always-reply entry in autoch_disc_ids, or the global always_reply_enabled flag.
+ * These channels are implicitly whitelisted and should bypass whitelist rejection gates
+ * (while still being subject to actual configured cooldowns).
+ */
+function isAutochatOverrideChannel(config: TomoriConfigRow, channelId: string): boolean {
+  return (config.always_reply_enabled ?? false) || isAutochatConfiguredChannel(config, channelId);
+}
+
 function isAutochatCounterHit(tomoriState: TomoriState, channelId: string): boolean {
   if (!isAutochatCounterChannelActive(tomoriState.config, channelId)) {
     return false;
@@ -8377,8 +8409,24 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
     senderPersona = allPersonas.find((p) => !p.is_alter);
   }
 
-  // 4. Check if the message content triggers ANY persona (main or alters)
+  // 4. Check if the message content triggers ANY persona (main or alters).
+  // Threads inherit autochat settings from their parent channel.
+  const msgEffectiveChannelId = message.channel.isThread()
+    ? (message.channel.parentId ?? message.channel.id)
+    : message.channel.id;
+
+  // DTM: block plain trigger words unless the message is a deliberate invocation.
+  // Exempt: DMs and Matrix relay messages. Auto-trigger channel exemption is per-persona
+  // (only the persona assigned to the channel bypasses DTM; other personas still require @{trigger}).
+  const isDtmActive = (config.deliberate_trigger_mode ?? false) && !!message.guild && !isMatrixRelayMessage;
+
+  // Pre-compute auto-trigger channel info for per-persona DTM exemption inside the loop.
+  const isAutoTriggerChannel = isAutochatConfiguredChannel(config, msgEffectiveChannelId);
+  // null → no persona override, so the main (non-alter) persona is exempt; otherwise only the assigned ID is.
+  const autochatPersonaId = isAutoTriggerChannel ? getAutochatAssignedPersonaId(config, msgEffectiveChannelId) : null;
+
   let triggersActive = false;
+  let triggersActiveDeliberate = false;
   let selfMsgTriggerDiag: {
     matchedPersona: string;
     matchedTrigger: string;
@@ -8405,11 +8453,14 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
 
     for (const trigger of triggers) {
       let matched = false;
+      let isDeliberate = false;
 
       // Check if trigger is a mention (starts with <@)
       if (trigger.startsWith("<@")) {
         const userId = trigger.replace(/[<@!>]/g, ""); // Extract user ID
         matched = message.mentions.users.has(userId);
+        // Mention triggers are always deliberate (direct address)
+        isDeliberate = true;
       } else {
         // Check if trigger contains Japanese characters
         const isJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]/.test(trigger);
@@ -8421,10 +8472,23 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
           const regex = createScreamingRegex(trigger);
           matched = regex.test(message.content);
         }
+        // DTM deliberate check: @{trigger} prefix in text counts as explicit addressing.
+        // Uses a regex (not plain includes) so multi-word triggers and screaming mode
+        // are handled consistently with the plain-match check above.
+        // Per-persona exemption: auto-trigger channel only exempts the assigned persona.
+        // null override → main (non-alter) persona is exempt; otherwise only the assigned tomori_id is.
+        const isPersonaDtmExempt =
+          isAutoTriggerChannel &&
+          (autochatPersonaId === null ? !persona.is_alter : autochatPersonaId === persona.tomori_id);
+        isDeliberate =
+          isDtmActive && !isPersonaDtmExempt ? createDeliberateTriggerRegex(trigger).test(message.content) : true; // DTM off or persona exempt → all matches treated as deliberate
       }
 
       if (matched) {
         triggersActive = true;
+        if (isDeliberate) {
+          triggersActiveDeliberate = true;
+        }
         // Log diagnostic for self-messages to trace cross-persona trigger chains
         if (isSelfMessage) {
           selfMsgTriggerDiag = {
@@ -8438,7 +8502,8 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
         break; // Found a match for this persona, stop checking triggers
       }
     }
-    if (triggersActive) break; // Found a matching persona, stop iterating
+    // When DTM is active and the match wasn't deliberate, keep checking other personas for a deliberate match
+    if (triggersActive && (!isDtmActive || triggersActiveDeliberate)) break;
   }
 
   if (selfMsgTriggerDiag) {
@@ -8451,10 +8516,7 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
   }
 
   // 5. Check if the shared auto-chat range hit for this message.
-  // Threads inherit autochat settings from their parent channel.
-  const msgEffectiveChannelId = message.channel.isThread()
-    ? (message.channel.parentId ?? message.channel.id)
-    : message.channel.id;
+  // msgEffectiveChannelId is already computed above (before the trigger loop).
   const isAutoMsgHit =
     isAutochatQualifyingMessage(message, isSelfMessage) && isAutochatCounterHit(tomoriState, msgEffectiveChannelId);
   const isScopedAlwaysReplyHit =
@@ -8479,11 +8541,14 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
   // and removes it atomically — one-shot consumption prevents stale triggers.
   const isMatrixReplyToPersona = isMatrixRelayMessage && pendingMatrixReplyChannels.delete(message.channelId);
 
+  // When DTM is active, plain trigger matches don't count — only deliberate invocations do.
+  const effectiveTriggersActive = isDtmActive ? triggersActiveDeliberate : triggersActive;
+
   const wouldReply =
     isReplyToBot ||
     isReplyToPersona ||
     isBotMentioned ||
-    triggersActive ||
+    effectiveTriggersActive ||
     isAutoMsgHit ||
     isAlwaysReplyHit ||
     isMatrixReplyToPersona;
@@ -8495,7 +8560,7 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
       isReplyToBot && "isReplyToBot",
       isReplyToPersona && "isReplyToPersona",
       isBotMentioned && "isBotMentioned",
-      triggersActive && "triggersActive",
+      effectiveTriggersActive && "effectiveTriggersActive",
       isAutoMsgHit && "isAutoMsgHit",
       isAlwaysReplyHit && "isAlwaysReplyHit",
       isMatrixReplyToPersona && "isMatrixReplyToPersona",

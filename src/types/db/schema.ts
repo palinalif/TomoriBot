@@ -295,6 +295,7 @@ export const tomoriConfigSchema = z.object({
   autoch_threshold: z.number().default(0),
   autoch_threshold_max: z.number().default(0),
   always_reply_enabled: z.boolean().default(false), // Added March 2026 - Main persona replies to all user messages (guild only, alters still require triggers)
+  deliberate_trigger_mode: z.boolean().default(false), // Added April 2026 - Blocks plain trigger words; requires @{trigger}, reply, mention, or /bot respond
   self_reply_limit: z.number().int().min(0).max(10).default(3), // Added January 2026 - Self-reply chain limit for persona-to-persona triggering
   send_message_limit: z.number().int().min(0).max(40).default(0), // Added March 2026 - Max Discord messages per response (0 = unlimited, capped by MAX_FLUSH_COUNT)
   triggered_persona_limit: z.number().int().min(1).max(10).default(3), // Added February 2026 - Max personas triggered by a single message

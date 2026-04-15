@@ -107,7 +107,7 @@ export function buildBoomerangContext(boomerang: PendingBoomerang): StructuredCo
 export class CrossChannelMessageTool extends BaseTool {
   name = "cross_channel_message";
   description =
-    "Send an instant message to a different channel or thread in the same server. Use this when you want to immediately say something, ask a question, or perform a task in another channel or thread — NOT for scheduled or recurring posts (use create_task for those). You will generate a natural conversational message in the target channel or thread. Optionally enable 'boomerang' to report back to the current channel about what you did.";
+    "Send an instant message to a different channel or thread in the same server. Use this when you want to immediately say something, ask a question, or perform a task in another channel or thread (NOT for scheduled or recurring posts; use create_task for those). You will generate a natural conversational message in the target channel or thread. Optionally enable 'boomerang' to report back to the current channel about what you did.";
   category = "discord" as const;
 
   parameters: ToolParameterSchema = {
