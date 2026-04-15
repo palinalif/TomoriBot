@@ -361,6 +361,25 @@ If webhook creation or sending fails:
 - A localized warning embed is shown (rate-limited).
 - The bot falls back to normal messages.
 
+### Identity Resolution for Historic Messages
+
+Main persona and alter messages carry their identity through **different Discord primitives**. Any code that needs to recover the author label for an older message (reply-context embeds, quote headers, memory extraction, etc.) must handle both.
+
+| Persona type | Send path | Identity stored as | Recover via |
+|--------------|-----------|--------------------|-------------|
+| **Main persona** | Bot's own Discord user (direct reply) | Bot's **guild member nickname at send time** | `message.member.displayName` |
+| **Alter persona** | Shared channel webhook with per-send override | Per-message `username` override baked into the webhook send | `message.author.username` (+ `stripBridgePrefix`) |
+
+**Why the asymmetry matters:** the currently active `tomoriState.tomori_nickname` is **not** a safe proxy for the author of a historic message. It reflects "who is talking right now," not "who sent that older message." Using it to label prior messages causes cross-persona mislabeling whenever an alter switch has happened between send and now (e.g. Evil Lilya replying to an earlier Aphel message would render "Replying to Evil Lilya").
+
+**Resolution order** (implemented in `src/utils/discord/webhookReply.ts` → `getReplyContextAuthorName`):
+
+1. `message.webhookId` set → webhook message → use `stripBridgePrefix(message.author.username)`.
+2. `message.author.id === botUserId` (non-webhook bot message) → prefer `message.member.displayName` (Discord snapshots this per message), fall back to current `botName` only if the member snapshot is missing.
+3. Normal user message → `message.member.displayName ?? author.globalName ?? author.username`.
+
+**Implication:** this works because TomoriBot renames its own guild member when the main persona is active. If a deployment disables that renaming, branch 2 will collapse back to `botName` and the same cross-persona mislabeling returns for main-persona history. Keep the guild-member rename tied to main-persona activation.
+
 ## Tool Calls, Embeds, and Stickers
 
 ### Tool-call embeds

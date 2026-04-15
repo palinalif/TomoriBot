@@ -42,6 +42,7 @@ export const userSchema = z.object({
   nai_char_ref_url: z.string().nullable().optional(), // Added March 2026 - User-specific NovelAI character reference image
   impersonation_prompt: z.string().nullable().optional(), // Added March 2026 - Global user-owned prompt for user impersonation replies
   shortterm_cache_crossserver_opt_in: z.boolean().default(false), // Short-term memory cross-server sharing
+  personal_dtm: z.boolean().default(false), // Added April 2026 - User-scoped deliberate trigger mode (requires @{trigger}, reply, mention, or /bot respond)
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });

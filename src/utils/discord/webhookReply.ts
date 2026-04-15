@@ -3,10 +3,30 @@ import { stripBridgePrefix } from "@/utils/bridge";
 import { localizer } from "@/utils/text/localizer";
 import { sendWebhookMessageWithIdentity, type ResolvedWebhookIdentity } from "@/utils/discord/webhookManager";
 
+/**
+ * Resolves the author label for a historic message in the reply-context embed.
+ *
+ * Main personas and alters carry identity through different Discord primitives, so this
+ * function has to branch on send mechanism. See
+ * `docs/ai/multi-persona.md` → "Identity Resolution for Historic Messages" for the full
+ * rationale and the resolution order.
+ */
 export function getReplyContextAuthorName(message: Message, botUserId?: string, botName?: string): string {
-  // When the target message is from the bot's own Discord account, use the configured
-  // persona nickname instead of the raw Discord global name (e.g. "Tomori()").
-  if (botUserId && botName && message.author.id === botUserId) return botName;
+  // 1. Webhook-delivered messages: the per-message `username` override captures the
+  //    persona identity at send time.
+  if (message.webhookId) {
+    return stripBridgePrefix(message.author.username);
+  }
+  // 2. Non-webhook bot-authored messages (direct reply fallback). Discord snapshots the
+  //    author's guild member on each message, so `message.member.displayName` reflects
+  //    the bot's nickname *at send time* — which, for persona-aware bots that rename
+  //    themselves per persona, is the persona that actually sent that message. Prefer it
+  //    over `botName` (the *currently* active persona), which is stale whenever an alter
+  //    switch happened between send and now.
+  if (botUserId && message.author.id === botUserId) {
+    return message.member?.displayName ?? botName ?? stripBridgePrefix(message.author.username);
+  }
+  // 3. Normal user messages.
   return message.member?.displayName ?? message.author.globalName ?? stripBridgePrefix(message.author.username);
 }
 

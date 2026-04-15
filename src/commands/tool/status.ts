@@ -22,7 +22,10 @@ import {
   loadAllPersonasForServer,
   getServerRandomTriggers,
   getAllChannelLlmOverridesForServer,
+  loadEmbeddingModelById,
 } from "../../utils/db/dbRead";
+import { getDiffusionModelById } from "@/utils/image/naiDiffusionModels";
+import { sql } from "@/utils/db/client";
 import { getAllWhitelistChannels } from "../../utils/db/channelWhitelist";
 import { getAllWhitelistPersonas } from "@/utils/db/personaWhitelist";
 import { getAllWhitelistRoles } from "@/utils/db/roleWhitelist";
@@ -98,6 +101,18 @@ function getCooldownTypeLabel(locale: string, type: CooldownType): string {
 
 function truncateText(input: string, maxLength: number): string {
   return input.length > maxLength ? `${input.substring(0, maxLength)}...` : input;
+}
+
+/**
+ * Loads the codename and provider of a video generation model by ID.
+ * @param videoModelId - The video model ID to look up
+ * @returns An object with codename and provider, or null if not found
+ */
+async function loadVideoModelById(videoModelId: number): Promise<{ codename: string; provider: string } | null> {
+  const [row] = await sql<{ codename: string; provider: string }[]>`
+    SELECT codename, provider FROM video_generation_models WHERE video_model_id = ${videoModelId} LIMIT 1
+  `;
+  return row ?? null;
 }
 
 function formatQuotaLimitValue(locale: string, limit: number): string {
@@ -485,12 +500,12 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
         .setRequired(true)
         .addChoices(
           {
-            name: localizer("en-US", "commands.tool.status.scope_choice_personal"),
-            value: "personal",
-          },
-          {
             name: localizer("en-US", "commands.tool.status.scope_choice_server"),
             value: "server",
+          },
+          {
+            name: localizer("en-US", "commands.tool.status.scope_choice_personal"),
+            value: "personal",
           },
           {
             name: localizer("en-US", "commands.tool.status.scope_choice_persona"),
@@ -579,6 +594,29 @@ export async function execute(
               inline: true,
             },
             {
+              nameKey: "commands.tool.status.field_personal_dtm",
+              value: formatBooleanLocalized(userData.personal_dtm ?? false, locale),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_crossserver_stm",
+              value: formatBooleanLocalized(userData.shortterm_cache_crossserver_opt_in ?? false, locale),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_nai_char_tags",
+              value:
+                (userData.nai_char_tags?.length ?? 0) > 0
+                  ? `${userData.nai_char_tags.length} tags`
+                  : localizer(locale, "commands.choices.none"),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_nai_char_ref",
+              value: formatBooleanLocalized(!!userData.nai_char_ref_url, locale),
+              inline: true,
+            },
+            {
               nameKey: "commands.tool.status.field_global_personal_memories_with_count",
               nameVars: {
                 current: globalPersonalMemoriesCount,
@@ -622,6 +660,10 @@ export async function execute(
           channelLlmOverrides,
           imageQuotaConfig,
           textQuotaConfig,
+          diffusionModel,
+          embeddingModel,
+          videoModel,
+          naiDiffusionModel,
         ] = await Promise.all([
           getBraveApiKeyStatus(tomoriState.server_id),
           getBlacklistedMemberIds(tomoriState.server_id),
@@ -633,6 +675,12 @@ export async function execute(
           getAllChannelLlmOverridesForServer(tomoriState.server_id),
           getQuotaConfig(tomoriState.server_id),
           getTextQuotaConfig(tomoriState.server_id),
+          // 2a. Resolve shared image, embedding, and video models by ID (null if unset)
+          config.diffusion_model_id ? getDiffusionModelById(config.diffusion_model_id) : Promise.resolve(null),
+          config.embedding_model_id ? loadEmbeddingModelById(config.embedding_model_id) : Promise.resolve(null),
+          config.video_model_id ? loadVideoModelById(config.video_model_id) : Promise.resolve(null),
+          // 2b. Resolve NAI-specific diffusion model (separate from shared model)
+          config.nai_diffusion_model_id ? getDiffusionModelById(config.nai_diffusion_model_id) : Promise.resolve(null),
         ]);
 
         // 3. Build a persona name map for random trigger display (tomori_id -> nickname)
@@ -723,6 +771,49 @@ export async function execute(
           : DEFAULT_SYSTEM_PROMPT.trim();
         const systemPromptValue = `\`\`\`\n${systemPromptText}\n\`\`\``;
 
+        // 9. Format server author's note (context_note) preview for Page 5
+        const rawContextNote = config.context_note ?? null;
+        const contextNoteValue = rawContextNote
+          ? `\`\`\`\n${
+              rawContextNote.length > MAX_PROMPT_PREVIEW
+                ? `${rawContextNote.slice(0, MAX_PROMPT_PREVIEW)}...`
+                : rawContextNote
+            }\n\`\`\``
+          : localizer(locale, "commands.tool.status.field_context_note_not_set");
+
+        // 10. Format vision and fallback model display labels
+        const visionModelValue = tomoriState.vision_llm
+          ? formatLlmDisplayLabel(tomoriState.vision_llm, config.custom_model_name)
+          : localizer(locale, "commands.choices.none");
+        const fallbackModelsValue =
+          (tomoriState.fallback_llms?.length ?? 0) > 0
+            ? tomoriState.fallback_llms
+                ?.map((m, i) => `${i + 1}. ${formatLlmDisplayLabel(m, config.custom_model_name)}`)
+                .join("\n")
+            : localizer(locale, "commands.choices.none");
+
+        // 11. Format logit biases count
+        const logitBiasesValue =
+          config.llm_logit_biases.length > 0
+            ? localizer(locale, "commands.tool.status.item_count", { count: config.llm_logit_biases.length })
+            : localizer(locale, "commands.choices.none");
+
+        // 12. Format resolved model labels for image, video, and embedding models
+        const diffusionModelValue = diffusionModel
+          ? `${diffusionModel.codename} (${diffusionModel.provider})`
+          : localizer(locale, "commands.choices.none");
+        const videoModelValue = videoModel
+          ? `${videoModel.codename} (${videoModel.provider})`
+          : localizer(locale, "commands.choices.none");
+        const embeddingModelValue = embeddingModel
+          ? `${embeddingModel.codename} (${embeddingModel.provider})`
+          : localizer(locale, "commands.choices.none");
+
+        // 13. Format NAI-specific image config display values
+        const naiDiffusionModelValue = naiDiffusionModel
+          ? `${naiDiffusionModel.codename} (${naiDiffusionModel.provider})`
+          : localizer(locale, "commands.choices.none");
+
         // ── Page 1: Model & Sampling ───────────────────────────────────
         const serverPage1: SummaryEmbedOptions = {
           titleKey: "commands.tool.status.server_page1_title",
@@ -772,6 +863,36 @@ export async function execute(
             {
               nameKey: "commands.tool.status.field_humanizer",
               value: String(config.humanizer_degree),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_vision_model",
+              value: visionModelValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_fallback_models",
+              value: fallbackModelsValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_logit_biases",
+              value: logitBiasesValue,
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_diffusion_model",
+              value: diffusionModelValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_video_model",
+              value: videoModelValue,
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_embedding_model",
+              value: embeddingModelValue,
               inline: true,
             },
           ],
@@ -831,6 +952,11 @@ export async function execute(
             {
               nameKey: "commands.tool.status.field_autoch_threshold",
               value: autochModeValue,
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_deliberate_trigger",
+              value: formatBooleanLocalized(config.deliberate_trigger_mode ?? false, locale),
               inline: true,
             },
           ],
@@ -997,6 +1123,26 @@ export async function execute(
               inline: true,
             },
             {
+              nameKey: "commands.tool.status.field_stm_privacy_bypass",
+              value: formatBooleanLocalized(config.stm_privacy_bypass ?? false, locale),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_voice_messages",
+              value: formatBooleanLocalized(config.voice_message_enabled ?? true, locale),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_voice_transcript_mode",
+              value: formatBooleanLocalized(config.voice_transcript_chat_mode ?? false, locale),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_nai_exclusive_imggen",
+              value: formatBooleanLocalized(config.nai_exclusive_imggen ?? false, locale),
+              inline: true,
+            },
+            {
               nameKey: "commands.tool.status.field_blacklisted_members",
               value: blacklistedValue,
               inline: blacklistedCount <= MAX_ITEMS_DISPLAY,
@@ -1004,7 +1150,7 @@ export async function execute(
           ],
         };
 
-        // ── Page 5: System Prompt ───────────────────────────────────────
+        // ── Page 5: System Prompt & Author's Note ───────────────────────
         const serverPage5: SummaryEmbedOptions = {
           titleKey: "commands.tool.status.server_page5_title",
           descriptionKey: "commands.tool.status.server_page5_description",
@@ -1015,6 +1161,16 @@ export async function execute(
               nameKey: "commands.tool.status.field_system_prompt",
               value: systemPromptValue,
               inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_context_note",
+              value: contextNoteValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_context_note_depth",
+              value: String(config.context_note_depth ?? 0),
+              inline: true,
             },
           ],
         };
@@ -1093,10 +1249,73 @@ export async function execute(
           ],
         };
 
+        // ── Page 8: NAI Image Config ────────────────────────────────────
+        const serverPage8: SummaryEmbedOptions = {
+          titleKey: "commands.tool.status.server_page8_title",
+          descriptionKey: "commands.tool.status.server_page8_description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.tool.status.field_nai_diffusion_model",
+              value: naiDiffusionModelValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_nai_preset",
+              value: config.nai_preset_name ?? localizer(locale, "commands.choices.none"),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_nai_sampler",
+              value: config.nai_sampler ?? localizer(locale, "commands.choices.none"),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_nai_steps",
+              value: config.nai_steps != null ? String(config.nai_steps) : localizer(locale, "commands.choices.none"),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_nai_scale",
+              value: config.nai_scale != null ? String(config.nai_scale) : localizer(locale, "commands.choices.none"),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_nai_noise_schedule",
+              value: config.nai_noise_schedule ?? localizer(locale, "commands.choices.none"),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_nai_cfg_rescale",
+              value:
+                config.nai_cfg_rescale != null
+                  ? String(config.nai_cfg_rescale)
+                  : localizer(locale, "commands.choices.none"),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_nai_style_tags",
+              value:
+                config.nai_style_tags.length > 0
+                  ? config.nai_style_tags.join(", ")
+                  : localizer(locale, "commands.choices.none"),
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_nai_negative_tags",
+              value:
+                config.nai_negative_tags.length > 0
+                  ? config.nai_negative_tags.join(", ")
+                  : localizer(locale, "commands.choices.none"),
+              inline: false,
+            },
+          ],
+        };
+
         await replyPaginatedStatusPages(
           interaction,
           locale,
-          [serverPage1, serverPage2, serverPage3, serverPage4, serverPage5, serverPage6, serverPage7],
+          [serverPage1, serverPage2, serverPage3, serverPage4, serverPage5, serverPage6, serverPage7, serverPage8],
           MessageFlags.Ephemeral,
         );
         break;
@@ -1237,6 +1456,16 @@ export async function execute(
             }\n\`\`\``
           : localizer(locale, "commands.tool.status.field_persona_prompt_not_set");
 
+        // 14. Format persona author's note (context_note) preview for Page 5
+        const rawPersonaContextNote = selectedPersona.context_note ?? null;
+        const personaContextNoteValue = rawPersonaContextNote
+          ? `\`\`\`\n${
+              rawPersonaContextNote.length > MAX_PROMPT_PREVIEW
+                ? `${rawPersonaContextNote.slice(0, MAX_PROMPT_PREVIEW)}...`
+                : rawPersonaContextNote
+            }\n\`\`\``
+          : localizer(locale, "commands.tool.status.field_persona_context_note_not_set");
+
         // ── Page 1: Identity ───────────────────────────────────────────
         const personaPage1: SummaryEmbedOptions = {
           titleKey: "commands.tool.status.persona_page1_title",
@@ -1267,6 +1496,33 @@ export async function execute(
             {
               nameKey: "commands.tool.status.field_persona_model",
               value: personaModelValue,
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_avatar",
+              value: selectedPersona.webhook_avatar_url
+                ? localizer(locale, "general.yes")
+                : localizer(locale, "commands.choices.none"),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_voice",
+              value: selectedPersona.elevenlabs_voice_name ?? localizer(locale, "commands.choices.none"),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_persona_nai_ref",
+              value: formatBooleanLocalized(!!selectedPersona.nai_char_ref_url, locale),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_reward_conditioning",
+              value: formatBooleanLocalized(selectedPersona.reward_conditioning_enabled ?? true, locale),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_punish_conditioning",
+              value: formatBooleanLocalized(selectedPersona.punish_conditioning_enabled ?? true, locale),
               inline: true,
             },
           ],
@@ -1363,10 +1619,20 @@ export async function execute(
               value: attgValue,
               inline: false,
             },
+            {
+              nameKey: "commands.tool.status.field_persona_context_note",
+              value: personaContextNoteValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_persona_context_note_depth",
+              value: String(selectedPersona.context_note_depth ?? 0),
+              inline: true,
+            },
           ],
         };
 
-        // 14. Display paginated persona status from the preserved ButtonInteraction
+        // 15. Display paginated persona status from the preserved ButtonInteraction
         await replyPaginatedStatusPages(
           personaInteraction,
           locale,

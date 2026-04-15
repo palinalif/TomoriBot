@@ -613,6 +613,51 @@ export default {
         field_persona_personal_memories_with_count: `ペルソナ個人メモリ ({current}/{max} 枠使用中)`,
         field_persona_server_memories_with_count: `ペルソナサーバーメモリ ({current}/{max} 枠使用中)`,
         field_blacklisted_members_with_count: `{current} 人`,
+        // Personal scope additions
+        field_personal_dtm: `個人DTM`,
+        field_crossserver_stm: `クロスサーバーSTM`,
+        field_nai_char_tags: `NAIキャラクタータグ`,
+        field_nai_char_ref: `NAIキャラクター参照画像`,
+        // Server scope - Page 1 additions
+        field_vision_model: `ビジョンモデル`,
+        field_fallback_models: `フォールバックモデル`,
+        field_logit_biases: `ロジットバイアス`,
+        field_diffusion_model: `画像生成モデル`,
+        field_video_model: `動画生成モデル`,
+        field_embedding_model: `埋め込みモデル`,
+        // Server scope - Page 2 additions
+        field_deliberate_trigger: `明示的トリガーモード`,
+        // Server scope - Page 4 additions
+        field_stm_privacy_bypass: `STMプライバシーバイパス`,
+        field_voice_messages: `音声メッセージ`,
+        field_voice_transcript_mode: `音声文字起こしチャットモード`,
+        field_nai_exclusive_imggen: `NAI専用画像生成`,
+        // Server scope - Page 5 additions (merged author's note)
+        field_context_note: `作者注`,
+        field_context_note_depth: `注の深さ`,
+        field_context_note_not_set: `*(未設定)*`,
+        // Server scope - Page 8 (NAI Image Config)
+        server_page8_title: `サーバーステータス: NAI画像設定`,
+        server_page8_description: `NovelAI画像生成パラメーター`,
+        field_nai_diffusion_model: `NAI画像モデル`,
+        field_nai_preset: `NAIサンプリングプリセット`,
+        field_nai_style_tags: `NAIスタイルタグ`,
+        field_nai_negative_tags: `NAIネガティブタグ`,
+        field_nai_sampler: `NAIサンプラー`,
+        field_nai_steps: `NAIステップ数`,
+        field_nai_scale: `NAIスケール`,
+        field_nai_noise_schedule: `NAIノイズスケジュール`,
+        field_nai_cfg_rescale: `NAI CFGリスケール`,
+        // Persona scope - Page 1 additions
+        field_avatar: `アバター`,
+        field_voice: `音声`,
+        field_persona_nai_ref: `NAIキャラクター参照画像`,
+        field_reward_conditioning: `報酬コンディショニング`,
+        field_punish_conditioning: `罰コンディショニング`,
+        // Persona scope - Page 5 additions
+        field_persona_context_note: `ペルソナ作者注`,
+        field_persona_context_note_depth: `注の深さ`,
+        field_persona_context_note_not_set: `*(未設定)*`,
       },
       comment: {
         description: `チャットに表示されるが、コンテキストには表示されないコメントを送信します。`,
@@ -4011,6 +4056,13 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
           title: `STMがクリアされました`,
           success: `ユーザー固有のSTMがすべてのチャンネルでクリアされました。`,
         },
+      },
+      deliberatetriggermode: {
+        description: `自分自身の明示的トリガーモード（DTM）をグローバルに切り替えます。`,
+        enabled_title: `個人DTMが有効になりました`,
+        enabled_description: `ペルソナをトリガーするには直接的な呼びかけが必要になりました：\`@{trigger}\`プレフィックス、リプライ、Discordメンション、または\`/bot respond\`。通常のトリガーワードはあなたには機能しなくなります。サーバーがすでにDTMを有効にしている場合、追加の効果はありません。`,
+        disabled_title: `個人DTMが無効になりました`,
+        disabled_description: `通常のトリガーワードで再びペルソナをトリガーできるようになりました（サーバーがDTMを有効にしていない限り）。`,
       },
     },
     "scheduled-task": {

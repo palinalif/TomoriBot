@@ -1,13 +1,19 @@
 import {
+  ButtonStyle,
+  ComponentType,
   MessageFlags,
+  type ActionRowData,
+  type ButtonComponentData,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Client,
+  type ComponentInContainerData,
+  type ContainerComponentData,
   type ModalSubmitInteraction,
   type SlashCommandSubcommandBuilder,
+  type TopLevelComponentData,
 } from "discord.js";
 import type { ModalCheckboxGroupField } from "@/types/discord/modal";
-import { createStandardEmbed } from "@/utils/discord/embedHelper";
 import { getCachedAllPersonas, getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { invalidateWhitelistCache } from "@/utils/cache/channelWhitelistCache";
 import { getPersonaWhitelistChannels, replacePersonaWhitelistChannels } from "@/utils/db/personaWhitelist";
@@ -16,13 +22,19 @@ import {
   CHECKLIST_MAX_PAGE_BUTTONS,
   CHECKLIST_PAGE_SELECT_TIMEOUT_MS,
   buildChannelCheckboxGroups,
-  buildChecklistPageActionRows,
   collectCheckedIds,
   formatChecklistChannelMentions,
   loadGuildTextChecklistChannels,
   type ChecklistChannelTarget,
 } from "@/utils/discord/channelChecklistManager";
-import { promptWithRawModal, replyInfoEmbed, replyPaginatedPersonaChoicesV2 } from "@/utils/discord/interactionHelper";
+import {
+  acknowledgeModalSubmitForRefresh,
+  promptWithRawModal,
+  replyComponentsV2Status,
+  replyInfoEmbed,
+  replyPaginatedPersonaChoicesV2,
+  updateButtonComponentsV2Status,
+} from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
@@ -34,6 +46,15 @@ const DONE_BUTTON_ID = "server_whitelist_persona_done";
 
 type PersonaWithId = TomoriState & { tomori_id: number };
 type ResponseInteraction = ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction;
+type PageSelectionResult =
+  | {
+      outcome: "selected";
+      interaction: ButtonInteraction;
+      pageChannels: ChecklistChannelTarget[];
+    }
+  | {
+      outcome: "done" | "timeout";
+    };
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand.setName("persona").setDescription(localizer("en-US", "commands.server.whitelist.persona.description"));
@@ -90,252 +111,190 @@ export async function execute(
       return;
     }
 
-    const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
-      personas: allPersonas,
-      color: ColorCode.INFO,
-      preserveSelectedInteraction: true,
-      onSelect: async () => {},
-    });
-
-    if (!personaSelection.success) {
-      return;
-    }
-
-    if (personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
-      return;
-    }
-
-    responseInteraction = personaSelection.interaction;
-    const personaButtonInteraction = personaSelection.interaction;
-    const selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
-    if (!selectedPersona?.tomori_id) {
-      await replyInfoEmbed(personaButtonInteraction, locale, {
-        color: ColorCode.ERROR,
-        titleKey: "general.errors.invalid_option_title",
-        descriptionKey: "general.errors.invalid_option_description",
+    while (true) {
+      const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+        personas: allPersonas,
+        color: ColorCode.INFO,
+        preserveSelectedInteraction: true,
+        onSelect: async () => {},
       });
-      return;
-    }
 
-    errorContext.tomoriId = selectedPersona.tomori_id;
+      if (!personaSelection.success) {
+        if (personaSelection.reason === "cancelled" || personaSelection.reason === "fatal") return;
+        continue;
+      }
+      if (personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
+        return;
+      }
 
-    if (availableChannels.length === 0) {
-      await replyInfoEmbed(personaButtonInteraction, locale, {
-        color: ColorCode.WARN,
-        titleKey: "commands.server.whitelist.persona.no_channels_title",
-        descriptionKey: "commands.server.whitelist.persona.no_channels_description",
-        descriptionVars: {
-          persona_name: selectedPersona.tomori_nickname,
-        },
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
+      responseInteraction = personaSelection.interaction;
+      const personaSelectionInteraction = personaSelection.interaction;
+      const selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
+      if (!selectedPersona?.tomori_id) {
+        await updateButtonComponentsV2Status(
+          personaSelectionInteraction,
+          locale,
+          "general.errors.invalid_option_title",
+          "general.errors.invalid_option_description",
+          ColorCode.ERROR,
+          undefined,
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
+      }
 
-    const currentEntries = await getPersonaWhitelistChannels(tomoriState.server_id, selectedPersona.tomori_id);
-    const initialSelectedIds = new Set(currentEntries.map((entry) => entry.channel_disc_id));
+      errorContext.tomoriId = selectedPersona.tomori_id;
 
-    if (availableChannels.length <= CHECKLIST_CHANNELS_PER_PAGE) {
-      await executeSinglePage(
-        personaButtonInteraction,
+      if (availableChannels.length === 0) {
+        await updateButtonComponentsV2Status(
+          personaSelectionInteraction,
+          locale,
+          "commands.server.whitelist.persona.no_channels_title",
+          "commands.server.whitelist.persona.no_channels_description",
+          ColorCode.WARN,
+          {
+            persona_name: selectedPersona.tomori_nickname,
+          },
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
+      }
+
+      if (availableChannels.length > CHECKLIST_MAX_PAGE_BUTTONS * CHECKLIST_CHANNELS_PER_PAGE) {
+        await updateButtonComponentsV2Status(
+          personaSelectionInteraction,
+          locale,
+          "commands.server.whitelist.persona.too_many_pages_title",
+          "commands.server.whitelist.persona.too_many_pages_description",
+          ColorCode.WARN,
+          {
+            persona_name: selectedPersona.tomori_nickname,
+            channel_count: availableChannels.length.toString(),
+            max_pages: CHECKLIST_MAX_PAGE_BUTTONS.toString(),
+          },
+          "general.pagination.reloading_persona_picker",
+        );
+        continue;
+      }
+
+      const currentEntries = await getPersonaWhitelistChannels(tomoriState.server_id, selectedPersona.tomori_id);
+      const currentSelectedIds = new Set(currentEntries.map((entry) => entry.channel_disc_id));
+
+      if (availableChannels.length <= CHECKLIST_CHANNELS_PER_PAGE) {
+        const checkboxGroups = buildCheckboxGroups(availableChannels, currentSelectedIds, locale);
+        const modalResult = await promptWithRawModal(personaSelectionInteraction, locale, {
+          modalCustomId: MODAL_CUSTOM_ID,
+          modalTitleKey: "commands.server.whitelist.persona.modal_title",
+          components: checkboxGroups,
+        });
+
+        if (modalResult.outcome !== "submit" || !modalResult.interaction) {
+          log.info(`Persona whitelist modal ${modalResult.outcome} for user ${user.user_id}`);
+          await replyComponentsV2Status(
+            interaction,
+            locale,
+            "general.pagination.select_persona_title",
+            "general.pagination.reloading_persona_picker",
+            ColorCode.INFO,
+          );
+          continue;
+        }
+
+        responseInteraction = modalResult.interaction;
+        await acknowledgeModalSubmitForRefresh(modalResult.interaction);
+        const nextSelectedIds = collectCheckedIds(modalResult.multiValues, CHECKBOX_ID_PREFIX, checkboxGroups.length);
+        await persistUpdateAndRefreshPicker(
+          interaction,
+          locale,
+          tomoriState.server_id,
+          interaction.guildId,
+          selectedPersona,
+          currentSelectedIds,
+          nextSelectedIds,
+          availableChannels,
+        );
+        continue;
+      }
+
+      const pageSelection = await promptForPageSelection(
+        personaSelectionInteraction,
         locale,
-        tomoriState.server_id,
-        interaction.guildId,
         selectedPersona,
         availableChannels,
-        initialSelectedIds,
+        currentSelectedIds,
       );
-      return;
-    }
 
-    await executeMultiPage(
-      personaButtonInteraction,
-      locale,
-      tomoriState.server_id,
-      interaction.guildId,
-      selectedPersona,
-      availableChannels,
-      initialSelectedIds,
-    );
-  } catch (error) {
-    log.error("Error executing /server whitelist persona command", error, errorContext);
+      if (pageSelection.outcome !== "selected") {
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "general.pagination.select_persona_title",
+          "general.pagination.reloading_persona_picker",
+          ColorCode.INFO,
+        );
+        continue;
+      }
 
-    if (!responseInteraction.replied && !responseInteraction.deferred) {
-      await replyInfoEmbed(responseInteraction, locale, {
-        color: ColorCode.ERROR,
-        titleKey: "general.errors.unknown_error_title",
-        descriptionKey: "general.errors.unknown_error_description",
-      });
-    }
-  }
-}
-
-async function executeSinglePage(
-  interaction: ButtonInteraction,
-  locale: string,
-  serverId: number,
-  guildId: string,
-  persona: PersonaWithId,
-  availableChannels: ChecklistChannelTarget[],
-  selectedIds: Set<string>,
-): Promise<void> {
-  const checkboxGroups = buildCheckboxGroups(availableChannels, selectedIds, locale);
-  const modalResult = await promptWithRawModal(
-    interaction,
-    locale,
-    {
-      modalCustomId: MODAL_CUSTOM_ID,
-      modalTitleKey: "commands.server.whitelist.persona.modal_title",
-      components: checkboxGroups,
-    },
-    MessageFlags.Ephemeral,
-  );
-
-  if (modalResult.outcome !== "submit" || !modalResult.interaction) {
-    return;
-  }
-
-  const nextSelectedIds = collectCheckedIds(modalResult.multiValues, CHECKBOX_ID_PREFIX, checkboxGroups.length);
-  await persistUpdate(
-    modalResult.interaction,
-    locale,
-    serverId,
-    guildId,
-    persona,
-    selectedIds,
-    nextSelectedIds,
-    availableChannels,
-  );
-}
-
-async function executeMultiPage(
-  interaction: ButtonInteraction,
-  locale: string,
-  serverId: number,
-  guildId: string,
-  persona: PersonaWithId,
-  availableChannels: ChecklistChannelTarget[],
-  initialSelectedIds: Set<string>,
-): Promise<void> {
-  const totalPages = Math.ceil(availableChannels.length / CHECKLIST_CHANNELS_PER_PAGE);
-  let selectedIds = new Set(initialSelectedIds);
-
-  if (totalPages > CHECKLIST_MAX_PAGE_BUTTONS) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.server.whitelist.persona.too_many_pages_title",
-      descriptionKey: "commands.server.whitelist.persona.too_many_pages_description",
-      descriptionVars: {
-        persona_name: persona.tomori_nickname,
-        channel_count: availableChannels.length.toString(),
-        max_pages: CHECKLIST_MAX_PAGE_BUTTONS.toString(),
-      },
-      color: ColorCode.WARN,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  await interaction.reply({
-    embeds: [buildPageSelectEmbed(locale, persona, availableChannels.length, totalPages, selectedIds.size)],
-    components: buildChecklistPageActionRows(
-      totalPages,
-      availableChannels.length,
-      localizer(locale, "commands.server.whitelist.persona.done_button"),
-      PAGE_BUTTON_PREFIX,
-      DONE_BUTTON_ID,
-    ),
-    flags: MessageFlags.Ephemeral,
-  });
-
-  const pageSelectMessage = await interaction.fetchReply();
-
-  while (true) {
-    let buttonInteraction: ButtonInteraction;
-
-    try {
-      buttonInteraction = (await pageSelectMessage.awaitMessageComponent({
-        filter: (i) =>
-          i.user.id === interaction.user.id &&
-          (i.customId.startsWith(PAGE_BUTTON_PREFIX) || i.customId === DONE_BUTTON_ID),
-        time: CHECKLIST_PAGE_SELECT_TIMEOUT_MS,
-      })) as ButtonInteraction;
-    } catch {
-      log.info("[WhitelistPersona] Page selection timed out");
-      break;
-    }
-
-    if (buttonInteraction.customId === DONE_BUTTON_ID) {
-      await buttonInteraction.deferUpdate();
-      break;
-    }
-
-    const selectedPage = Number.parseInt(buttonInteraction.customId.replace(PAGE_BUTTON_PREFIX, ""), 10);
-    if (!Number.isInteger(selectedPage) || selectedPage < 1 || selectedPage > totalPages) {
-      await buttonInteraction.deferUpdate();
-      continue;
-    }
-
-    const startIndex = (selectedPage - 1) * CHECKLIST_CHANNELS_PER_PAGE;
-    const pageChannels = availableChannels.slice(startIndex, startIndex + CHECKLIST_CHANNELS_PER_PAGE);
-    const checkboxGroups = buildCheckboxGroups(pageChannels, selectedIds, locale);
-
-    const modalResult = await promptWithRawModal(
-      buttonInteraction,
-      locale,
-      {
+      responseInteraction = pageSelection.interaction;
+      const checkboxGroups = buildCheckboxGroups(pageSelection.pageChannels, currentSelectedIds, locale);
+      const modalResult = await promptWithRawModal(pageSelection.interaction, locale, {
         modalCustomId: MODAL_CUSTOM_ID,
         modalTitleKey: "commands.server.whitelist.persona.modal_title",
         components: checkboxGroups,
-      },
-      MessageFlags.Ephemeral,
-    );
+      });
 
-    if (modalResult.outcome === "submit" && modalResult.interaction) {
+      if (modalResult.outcome !== "submit" || !modalResult.interaction) {
+        log.info(`Persona whitelist page modal ${modalResult.outcome} for user ${user.user_id}`);
+        await replyComponentsV2Status(
+          interaction,
+          locale,
+          "general.pagination.select_persona_title",
+          "general.pagination.reloading_persona_picker",
+          ColorCode.INFO,
+        );
+        continue;
+      }
+
+      responseInteraction = modalResult.interaction;
+      await acknowledgeModalSubmitForRefresh(modalResult.interaction);
       const pageSelectedIds = collectCheckedIds(modalResult.multiValues, CHECKBOX_ID_PREFIX, checkboxGroups.length);
-      const nextSelectedIds = new Set(selectedIds);
+      const nextSelectedIds = new Set(currentSelectedIds);
 
-      for (const channel of pageChannels) {
+      for (const channel of pageSelection.pageChannels) {
         nextSelectedIds.delete(channel.id);
       }
       for (const channelId of pageSelectedIds) {
         nextSelectedIds.add(channelId);
       }
 
-      selectedIds = await persistUpdate(
-        modalResult.interaction,
+      await persistUpdateAndRefreshPicker(
+        interaction,
         locale,
-        serverId,
-        guildId,
-        persona,
-        selectedIds,
+        tomoriState.server_id,
+        interaction.guildId,
+        selectedPersona,
+        currentSelectedIds,
         nextSelectedIds,
         availableChannels,
       );
     }
+  } catch (error) {
+    log.error("Error executing /server whitelist persona command", error, errorContext);
 
-    try {
-      await interaction.editReply({
-        embeds: [buildPageSelectEmbed(locale, persona, availableChannels.length, totalPages, selectedIds.size)],
-        components: buildChecklistPageActionRows(
-          totalPages,
-          availableChannels.length,
-          localizer(locale, "commands.server.whitelist.persona.done_button"),
-          PAGE_BUTTON_PREFIX,
-          DONE_BUTTON_ID,
-        ),
+    if (responseInteraction.deferred || responseInteraction.replied) {
+      await replyInfoEmbed(responseInteraction, locale, {
+        color: ColorCode.ERROR,
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
       });
-    } catch {
-      break;
+    } else {
+      await replyInfoEmbed(responseInteraction, locale, {
+        color: ColorCode.ERROR,
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        flags: MessageFlags.Ephemeral,
+      });
     }
-  }
-
-  try {
-    await interaction.editReply({
-      embeds: [buildPageSelectEmbed(locale, persona, availableChannels.length, totalPages, selectedIds.size)],
-      components: [],
-    });
-  } catch {
-    // Best effort cleanup.
   }
 }
 
@@ -355,28 +314,54 @@ function buildCheckboxGroups(
   });
 }
 
-function buildPageSelectEmbed(
+async function promptForPageSelection(
+  interaction: ButtonInteraction,
   locale: string,
   persona: PersonaWithId,
-  channelCount: number,
-  totalPages: number,
-  selectedCount: number,
-) {
-  return createStandardEmbed(locale, {
-    titleKey: "commands.server.whitelist.persona.select_page_title",
-    descriptionKey: "commands.server.whitelist.persona.select_page_description",
-    descriptionVars: {
-      persona_name: persona.tomori_nickname,
-      channel_count: channelCount.toString(),
-      total_pages: totalPages.toString(),
-      selected_count: selectedCount.toString(),
-    },
-    color: ColorCode.INFO,
+  availableChannels: ChecklistChannelTarget[],
+  selectedIds: Set<string>,
+): Promise<PageSelectionResult> {
+  const totalPages = Math.ceil(availableChannels.length / CHECKLIST_CHANNELS_PER_PAGE);
+  const visibleSelectedCount = availableChannels.filter((channel) => selectedIds.has(channel.id)).length;
+
+  await interaction.update({
+    components: buildPageSelectComponents(locale, persona, availableChannels.length, totalPages, visibleSelectedCount),
+    flags: MessageFlags.IsComponentsV2,
   });
+
+  try {
+    const pageButtonInteraction = (await interaction.message.awaitMessageComponent({
+      filter: (i) =>
+        i.user.id === interaction.user.id &&
+        (i.customId.startsWith(PAGE_BUTTON_PREFIX) || i.customId === DONE_BUTTON_ID),
+      time: CHECKLIST_PAGE_SELECT_TIMEOUT_MS,
+    })) as ButtonInteraction;
+
+    if (pageButtonInteraction.customId === DONE_BUTTON_ID) {
+      await pageButtonInteraction.deferUpdate();
+      return { outcome: "done" };
+    }
+
+    const selectedPage = Number.parseInt(pageButtonInteraction.customId.replace(PAGE_BUTTON_PREFIX, ""), 10);
+    if (!Number.isInteger(selectedPage) || selectedPage < 1 || selectedPage > totalPages) {
+      await pageButtonInteraction.deferUpdate();
+      return { outcome: "done" };
+    }
+
+    const startIndex = (selectedPage - 1) * CHECKLIST_CHANNELS_PER_PAGE;
+    return {
+      outcome: "selected",
+      interaction: pageButtonInteraction,
+      pageChannels: availableChannels.slice(startIndex, startIndex + CHECKLIST_CHANNELS_PER_PAGE),
+    };
+  } catch {
+    log.info("[WhitelistPersona] Page selection timed out");
+    return { outcome: "timeout" };
+  }
 }
 
-async function persistUpdate(
-  responseInteraction: ModalSubmitInteraction,
+async function persistUpdateAndRefreshPicker(
+  interaction: ChatInputCommandInteraction,
   locale: string,
   serverId: number,
   guildId: string,
@@ -384,7 +369,7 @@ async function persistUpdate(
   previousSelectedIds: Set<string>,
   nextSelectedIds: Set<string>,
   availableChannels: ChecklistChannelTarget[],
-): Promise<Set<string>> {
+): Promise<void> {
   const normalizedSelectedIds = availableChannels
     .filter((channel) => nextSelectedIds.has(channel.id))
     .map((channel) => channel.id);
@@ -392,48 +377,126 @@ async function persistUpdate(
   const disabledIds = [...previousSelectedIds].filter((channelId) => !nextSelectedIds.has(channelId));
 
   if (enabledIds.length === 0 && disabledIds.length === 0) {
-    await replyInfoEmbed(responseInteraction, locale, {
-      titleKey: "commands.server.whitelist.persona.no_changes_title",
-      descriptionKey: "commands.server.whitelist.persona.no_changes_description",
-      descriptionVars: {
+    await replyComponentsV2Status(
+      interaction,
+      locale,
+      "commands.server.whitelist.persona.no_changes_title",
+      "commands.server.whitelist.persona.no_changes_description",
+      ColorCode.INFO,
+      {
         persona_name: persona.tomori_nickname,
       },
-      color: ColorCode.INFO,
-    });
-    return previousSelectedIds;
+      "general.pagination.reloading_persona_picker",
+    );
+    return;
   }
 
   await replacePersonaWhitelistChannels(serverId, persona.tomori_id, normalizedSelectedIds);
   invalidateWhitelistCache(guildId);
 
   if (normalizedSelectedIds.length === 0) {
-    await replyInfoEmbed(responseInteraction, locale, {
-      titleKey: "commands.server.whitelist.persona.success_clear_title",
-      descriptionKey: "commands.server.whitelist.persona.success_clear_description",
-      descriptionVars: {
+    await replyComponentsV2Status(
+      interaction,
+      locale,
+      "commands.server.whitelist.persona.success_clear_title",
+      "commands.server.whitelist.persona.success_clear_description",
+      ColorCode.SUCCESS,
+      {
         persona_name: persona.tomori_nickname,
       },
-      color: ColorCode.SUCCESS,
-    });
+      "general.pagination.reloading_persona_picker",
+    );
 
     log.info(`Cleared channel whitelist restriction for persona ${persona.tomori_id} in server ${guildId}`);
-    return new Set<string>();
+    return;
   }
 
-  await replyInfoEmbed(responseInteraction, locale, {
-    titleKey: "commands.server.whitelist.persona.success_title",
-    descriptionKey: "commands.server.whitelist.persona.success_description",
-    descriptionVars: {
+  await replyComponentsV2Status(
+    interaction,
+    locale,
+    "commands.server.whitelist.persona.success_title",
+    "commands.server.whitelist.persona.success_description",
+    ColorCode.SUCCESS,
+    {
       persona_name: persona.tomori_nickname,
       selected_count: normalizedSelectedIds.length.toString(),
       selected_channels: formatChecklistChannelMentions(normalizedSelectedIds, availableChannels, locale),
     },
-    color: ColorCode.SUCCESS,
-  });
+    "general.pagination.reloading_persona_picker",
+  );
 
   log.info(
     `Updated channel whitelist restriction for persona ${persona.tomori_id} in server ${guildId}: [${normalizedSelectedIds.join(", ")}]`,
   );
+}
 
-  return new Set(normalizedSelectedIds);
+function buildPageSelectComponents(
+  locale: string,
+  persona: PersonaWithId,
+  channelCount: number,
+  totalPages: number,
+  selectedCount: number,
+): TopLevelComponentData[] {
+  const pageButtons: ButtonComponentData[] = [];
+
+  for (let page = 1; page <= totalPages; page++) {
+    const start = (page - 1) * CHECKLIST_CHANNELS_PER_PAGE + 1;
+    const end = Math.min(page * CHECKLIST_CHANNELS_PER_PAGE, channelCount);
+    pageButtons.push({
+      type: ComponentType.Button,
+      style: ButtonStyle.Primary,
+      customId: `${PAGE_BUTTON_PREFIX}${page}`,
+      label: `${start}-${end}`,
+    });
+  }
+
+  pageButtons.push({
+    type: ComponentType.Button,
+    style: ButtonStyle.Secondary,
+    customId: DONE_BUTTON_ID,
+    label: localizer(locale, "commands.server.whitelist.persona.done_button"),
+  });
+
+  const actionRows: ActionRowData<ButtonComponentData>[] = [];
+  for (let index = 0; index < pageButtons.length; index += 5) {
+    actionRows.push({
+      type: ComponentType.ActionRow,
+      components: pageButtons.slice(index, index + 5),
+    });
+  }
+
+  const container: ContainerComponentData<ComponentInContainerData> = {
+    type: ComponentType.Container,
+    accentColor: resolveAccentColor(ColorCode.INFO),
+    components: [
+      {
+        type: ComponentType.TextDisplay,
+        content: `## ${localizer(locale, "commands.server.whitelist.persona.select_page_title")}`,
+      },
+      {
+        type: ComponentType.TextDisplay,
+        content: localizer(locale, "commands.server.whitelist.persona.select_page_description", {
+          persona_name: persona.tomori_nickname,
+          channel_count: channelCount.toString(),
+          total_pages: totalPages.toString(),
+          selected_count: selectedCount.toString(),
+        }),
+      },
+      ...actionRows,
+    ],
+  };
+
+  return [container];
+}
+
+function resolveAccentColor(color: string | number): number {
+  if (typeof color === "number") {
+    return color;
+  }
+
+  if (typeof color === "string" && color.startsWith("#")) {
+    return Number.parseInt(color.replace("#", ""), 16);
+  }
+
+  return Number.parseInt(ColorCode.INFO.replace("#", ""), 16);
 }

@@ -875,6 +875,8 @@ SELECT add_column_if_not_exists('users', 'nai_char_tags', 'TEXT[]', 'ARRAY[]::TE
 SELECT add_column_if_not_exists('users', 'nai_char_ref_url', 'TEXT');
 -- User-specific prompt used during /bot impersonate user-mode replies (March 2026)
 SELECT add_column_if_not_exists('users', 'impersonation_prompt', 'TEXT');
+-- Personal deliberate trigger mode (April 2026) - User-scoped DTM: requires @{trigger}, reply, mention, or /bot respond
+SELECT add_column_if_not_exists('users', 'personal_dtm', 'BOOLEAN', 'false');
 
 -- Create updated_at trigger for users table
 DROP TRIGGER IF EXISTS update_users_timestamp ON users;
