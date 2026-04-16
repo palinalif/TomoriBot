@@ -600,7 +600,8 @@ export async function execute(
               newTomoriState.server_id,
               customEndpointUrl,
               customLlmId,
-              customCapabilitiesResult.modelName || undefined, // Pass model name from capabilities result
+              customCapabilitiesResult.modelName || undefined,
+              customCapabilitiesResult.numCtx,
             );
             log.success(
               `[Setup] Saved custom endpoint config for server ${serverId}: endpoint=${customEndpointUrl}, llmId=${customLlmId}, modelName=${customCapabilitiesResult.modelName || "default"}`,

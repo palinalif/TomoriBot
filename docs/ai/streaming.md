@@ -189,7 +189,10 @@ Provider adapter safeguards:
 Stream-level safeguard:
 - Right before Discord send, `StreamOrchestrator` truncates any flushed segment at the first line that starts with a registered non-active speaker label (`Name:`) or reserved `Assistant:` label, then stops the stream. This applies to every provider, including providers that already have adapter-level speaker guards, but speaker-like lines inside fenced or inline backtick code are ignored.
 
-Loop control and max iterations are managed by `tomoriChat` (function-call safety loop).
+Loop control and max iterations are managed by `tomoriChat` (function-call safety loop). Two distinct guards protect the turn:
+
+- `BOT_MAX_FUNCTION_CALL_ITERATIONS` (default 100) — hard ceiling on total tool-call round-trips, fires the "Thinking Loop" embed.
+- `BOT_MAX_CONSECUTIVE_TOOL_ERRORS` (default 5) — provider-agnostic flail guard. Counts consecutive tool-execution failures (any `success:false`, including recoverable sticker misses), resets on any successful tool call, and fires the "Tool Error Loop" embed when the threshold is hit. Aborts the turn well before the iteration ceiling so a model stuck repeating the same failing call stops burning API credits.
 
 ## Error, Timeout, and Stop Handling
 

@@ -281,6 +281,7 @@ export async function execute(
     let customCapabilitiesResult: CustomCapabilitiesResult | null = null;
     let customEndpointUrl: string | null = null;
     let customModelName: string | null = null;
+    let customNumCtx: number | null = null;
     let newLlmId = tomoriState.config.llm_id;
     let newDiffusionModelId = tomoriState.config.diffusion_model_id;
     let newEmbeddingModelId = tomoriState.config.embedding_model_id;
@@ -320,6 +321,7 @@ export async function execute(
       version = savedConfig.key_version;
       customEndpointUrl = savedConfig.custom_endpoint_url;
       customModelName = savedConfig.custom_model_name;
+      customNumCtx = savedConfig.custom_num_ctx ?? null;
       // Restore sampler settings from snapshot
       newTemperature = savedConfig.llm_temperature ?? null;
       newTopP = savedConfig.llm_top_p ?? null;
@@ -452,6 +454,7 @@ export async function execute(
       }
 
       customModelName = customCapabilitiesResult.modelName || null;
+      customNumCtx = customCapabilitiesResult.numCtx;
 
       // Use placeholder API key for custom provider, unless a Bearer token was provided
       if (bearerTokenInput && bearerTokenInput.length >= 8) {
@@ -719,6 +722,7 @@ export async function execute(
 			    nai_preset_name = ${newNaiPresetName},
 			    custom_endpoint_url = ${customEndpointUrl},
 			    custom_model_name = ${customModelName},
+			    custom_num_ctx = ${customNumCtx},
 			    fallback_llm_ids = ${JSON.stringify(newFallbackLlmIds)}::jsonb,
 			    llm_temperature = COALESCE(${newTemperature}, llm_temperature),
 			    llm_top_p = COALESCE(${newTopP}, llm_top_p),

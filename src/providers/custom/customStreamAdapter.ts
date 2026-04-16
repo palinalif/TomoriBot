@@ -1,8 +1,11 @@
 import { OpenAICompatibleStreamAdapter } from "@/providers/openaiCompatible/openaiCompatibleStreamAdapter";
 import type { OpenAICompatibleStreamConfig } from "@/providers/openaiCompatible/openaiCompatibleTypes";
+import { log } from "@/utils/misc/logger";
 
 export interface CustomStreamConfig extends OpenAICompatibleStreamConfig {
   endpointUrl: string;
+  /** Optional context window override sent as options.num_ctx (Ollama extension) */
+  numCtx?: number | null;
 }
 
 export const CUSTOM_PROVIDER_PLACEHOLDER_API_KEY = "custom-endpoint-configured";
@@ -36,6 +39,24 @@ export class CustomStreamAdapter extends OpenAICompatibleStreamAdapter {
       // system-role turns before forwarding to the underlying model.
       // Detect it by URL so the adapter falls back to an in-band user turn.
       supportsSystemRole: (apiUrl) => !isChatmockEndpoint(apiUrl),
+      // Inject Ollama-style options.num_ctx when the user has configured a
+      // context window override. This travels outside the messages array so it
+      // is unaffected by the context window it controls.
+      mutateRequestBody: ({ requestBody, config }) => {
+        const customConfig = config as CustomStreamConfig;
+        if (customConfig.numCtx != null) {
+          // Ollama reads options.num_ctx; KoboldCPP reads top-level max_context_length.
+          // Both are injected so each server picks up what it understands and ignores the other.
+          requestBody.options = {
+            ...((requestBody.options as Record<string, unknown>) ?? {}),
+            num_ctx: customConfig.numCtx,
+          };
+          requestBody.max_context_length = customConfig.numCtx;
+          log.info(
+            `CustomStreamAdapter: Injecting num_ctx=${customConfig.numCtx} (options.num_ctx + max_context_length)`,
+          );
+        }
+      },
     });
   }
 }

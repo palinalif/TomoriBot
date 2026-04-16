@@ -28,6 +28,7 @@ import type { StreamingContext } from "../../types/tool/interfaces";
 import { getCachedAllPersonas, getLastDbError } from "../../utils/cache/tomoriStateCache";
 import { getCachedUserRow, getCachedPrivacyLevel, getCachedBlacklistStatus } from "../../utils/cache/userCache";
 import { getCachedWhitelistStatus } from "../../utils/cache/channelWhitelistCache";
+import { getCachedPersonalSpotlightStatus } from "@/utils/cache/personalSpotlightCache";
 import { getCachedChannelLlm } from "../../utils/cache/channelLlmCache";
 import { storeShortTermMemory } from "../../utils/cache/shortTermMemoryCache";
 import { incrementTomoriCounter, registerUser } from "@/utils/db/dbWrite";
@@ -273,6 +274,14 @@ const MAX_FUNCTION_CALL_ITERATIONS = parseIntegerEnvFlag(process.env.BOT_MAX_FUN
 /** Iteration index (0-based) at which a soft "still working" embed is sent, reminding users they can /bot kill. */
 const SOFT_WARN_ITERATION_THRESHOLD = 20;
 const NAI_TOOL_FAILURE_RETRY_THRESHOLD = Number.parseInt(process.env.NAI_TOOL_FAILURE_RETRY_THRESHOLD || "3", 10); // Max consecutive tool failures before showing error embed (NAI GLM only)
+/**
+ * Provider-agnostic flail-detection cap. If the model's tool calls fail this many times
+ * in a row (e.g., invalid args, nonexistent targets, repeated "not found" misses) we
+ * assume the model is stuck in an error loop and abort the turn early — long before
+ * `MAX_FUNCTION_CALL_ITERATIONS` would fire. Any successful tool execution resets the
+ * counter. Configurable via BOT_MAX_CONSECUTIVE_TOOL_ERRORS (min: 1).
+ */
+const MAX_CONSECUTIVE_TOOL_ERRORS = parseIntegerEnvFlag(process.env.BOT_MAX_CONSECUTIVE_TOOL_ERRORS, 5, 1);
 const TOOLS_SUPPRESS_FOLLOWUP_AFTER_PRETOOL_TEXT = new Set([
   "update_short_term_memory",
   //"update_long_term_memory",
@@ -1935,6 +1944,7 @@ interface SelfReplyChainState {
   lastWasSelf: boolean;
   updatedAt: number;
   lastRespondedPersonaId: number | null; // Prevents same persona from triggering in consecutive depth levels
+  originUserDiscId: string | null;
 }
 
 const selfReplyChainStates = new Map<string, SelfReplyChainState>();
@@ -1952,6 +1962,7 @@ function getSelfReplyChainState(channelId: string): SelfReplyChainState {
     lastWasSelf: false,
     updatedAt: now,
     lastRespondedPersonaId: null,
+    originUserDiscId: null,
   };
   selfReplyChainStates.set(channelId, fresh);
   return fresh;
@@ -1965,6 +1976,7 @@ function updateSelfReplyChainState(channelId: string, isSelfMessage: boolean): S
     state.depth = 0;
     state.lastWasSelf = false;
     state.lastRespondedPersonaId = null;
+    state.originUserDiscId = null;
     return state;
   }
 
@@ -2004,6 +2016,17 @@ function setLastRespondedPersona(channelId: string, personaId: number): void {
 function getLastRespondedPersonaId(channelId: string): number | null {
   const state = getSelfReplyChainState(channelId);
   return state.lastRespondedPersonaId;
+}
+
+function setSelfReplyChainOriginUser(channelId: string, userDiscId: string | null): void {
+  const state = getSelfReplyChainState(channelId);
+  state.originUserDiscId = userDiscId;
+  state.updatedAt = Date.now();
+}
+
+function getSelfReplyChainOriginUser(channelId: string): string | null {
+  const state = getSelfReplyChainState(channelId);
+  return state.originUserDiscId;
 }
 
 /**
@@ -2429,7 +2452,9 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
   const queuedStreamingContextOverrides: Pick<StreamingContext, "disableCrossChannelMessage"> | undefined =
     streamingContext.disableCrossChannelMessage ? { disableCrossChannelMessage: true } : undefined;
 
-  const userDiscId = manualTriggerInvoker?.userDiscId ?? message.author.id;
+  const chainOriginUserDiscId =
+    !isManuallyTriggered && isLikelySelfMessage ? getSelfReplyChainOriginUser(channel.id) : null;
+  const userDiscId = manualTriggerInvoker?.userDiscId ?? chainOriginUserDiscId ?? message.author.id;
   const triggererUsername = manualTriggerInvoker?.username ?? message.author.username;
   let queuedReplyTargetName = manualTriggerInvoker?.member?.displayName ?? triggererUsername;
   const getQueuedReplyDirective = (activePersonaName: string | null | undefined): string | null =>
@@ -2445,6 +2470,10 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
   const cooldownUserDiscId = matrixRelayUserId ?? userDiscId;
   const effectiveTextQuotaTriggerKey = textQuotaTriggerKey ?? message.id;
   const effectiveTextQuotaUserDiscId = textQuotaUserDiscId ?? cooldownUserDiscId;
+
+  if (isManuallyTriggered || !isLikelySelfMessage) {
+    setSelfReplyChainOriginUser(channel.id, userDiscId);
+  }
 
   // Check if user is allowed to trigger bot (Level 2 FULL privacy users cannot trigger)
   // Skip this check for manual triggers and reminders
@@ -2870,10 +2899,29 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           ...earlyTomoriState,
           autoch_counter: 0,
         };
+        const earlyEffectiveChannelId =
+          "isThread" in channel && typeof channel.isThread === "function" && channel.isThread()
+            ? (channel.parent?.id ?? message.channelId)
+            : message.channelId;
+        const cachedTriggerUser =
+          !isDMChannel && earlyTomoriState.server_id ? await getCachedUserRow(userDiscId) : null;
+        const earlyPersonalSpotlightStatus =
+          !isDMChannel && cachedTriggerUser?.user_id
+            ? await getCachedPersonalSpotlightStatus(
+                earlyTomoriState.server_id,
+                cachedTriggerUser.user_id,
+                earlyEffectiveChannelId,
+              )
+            : null;
 
         // 2. Decide whether to enqueue based on the modified state.
         // Always enqueue if it's a manual command, otherwise use shouldBotReply logic
-        if (isManuallyTriggered || shouldBotReply(message, modifiedEarlyTomoriStateForCheck, earlyAllPersonas)) {
+        if (
+          isManuallyTriggered ||
+          shouldBotReply(message, modifiedEarlyTomoriStateForCheck, earlyAllPersonas, {
+            personalAutoTriggerPersonaId: earlyPersonalSpotlightStatus?.autoTriggerPersonaId ?? null,
+          })
+        ) {
           if (!isStopResponse && !isPersonaJob) {
             const rateLimitAllowed = await enforceGlobalRateLimit({
               userDiscId,
@@ -5937,6 +5985,10 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           let personaThoughtLog: ThoughtLogPayload | undefined;
           let personaStreamCompletedSuccessfully = false;
           let naiConsecutiveToolFailures = 0; // Tracks consecutive tool failures for NAI GLM retry logic (Case 2)
+          // 1. Provider-agnostic flail detector: counts any consecutive tool execution failure
+          //    (success:false, including recoverable sticker misses). Resets on any successful
+          //    tool call. Breaks the turn with an error embed once MAX_CONSECUTIVE_TOOL_ERRORS is hit.
+          let consecutiveToolErrors = 0;
 
           for (let i = 0; i < MAX_FUNCTION_CALL_ITERATIONS; i++) {
             // Between tool-call iterations, check for stop requests (but NOT follow-ups).
@@ -6730,6 +6782,9 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                   let functionExecutionResult: Record<string, unknown>;
 
                   if (toolResult.success) {
+                    // Any successful tool execution resets the flail counter — includes
+                    // context-restart continuations (YouTube/GIF/metadata reveal) below.
+                    consecutiveToolErrors = 0;
                     functionExecutionResult = (toolResult.data as Record<string, unknown>) || { status: "completed" };
 
                     // Capture fetch tool content for thought-logs
@@ -7537,6 +7592,39 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       );
                     } else {
                       log.error(`Tool execution failed for ${funcName}: ${toolResult.error}`);
+                    }
+
+                    // Provider-agnostic flail guard: increment on any tool failure (including
+                    // recoverable sticker misses — 5 wrong-name picks in a row is still flailing).
+                    // If the threshold is hit, send an error embed and abort the turn before the
+                    // larger MAX_FUNCTION_CALL_ITERATIONS ceiling burns through more API credits.
+                    consecutiveToolErrors++;
+                    if (consecutiveToolErrors >= MAX_CONSECUTIVE_TOOL_ERRORS) {
+                      log.warn(
+                        `Consecutive tool-error threshold reached (${consecutiveToolErrors}/${MAX_CONSECUTIVE_TOOL_ERRORS}) in channel ${channel.id} — last failed tool: "${funcName}". Aborting turn.`,
+                      );
+                      if (isUserImpersonation) {
+                        throw new Error(
+                          `User impersonation aborted: model failed ${consecutiveToolErrors} tool calls in a row.`,
+                        );
+                      }
+                      await sendStandardEmbed(
+                        channel,
+                        locale,
+                        {
+                          color: ColorCode.ERROR,
+                          titleKey: "genai.tool_error_loop_title",
+                          descriptionKey: "genai.tool_error_loop_description",
+                          footerKey: "genai.generic_error_footer",
+                        },
+                        {
+                          webhook: personaWebhook ?? undefined,
+                          personaUsername,
+                          personaAvatarUrl,
+                        },
+                      );
+                      finalStreamCompleted = true;
+                      break;
                     }
 
                     // Case 2: NAI GLM tool failure with text already sent
@@ -8484,7 +8572,16 @@ export function determineMatchingPersonas(
  * @param tomoriState - The current state of the bot for the server (TomoriRow + TomoriConfigRow).
  * @returns True if the bot should reply, false otherwise.
  */
-export function shouldBotReply(message: Message, tomoriState: TomoriState, allPersonas: TomoriState[]): boolean {
+type ShouldBotReplyOptions = {
+  personalAutoTriggerPersonaId?: number | null;
+};
+
+export function shouldBotReply(
+  message: Message,
+  tomoriState: TomoriState,
+  allPersonas: TomoriState[],
+  options: ShouldBotReplyOptions = {},
+): boolean {
   const isSelfMessage = isSelfTriggerMessage(message, allPersonas);
   const isMatrixRelayMessage = Boolean(message.webhookId) && isMatrixBridgeWebhookUsername(message.author.username);
   const rawSelfReplyLimit = tomoriState.config.self_reply_limit ?? DEFAULT_SELF_REPLY_LIMIT;
@@ -8584,9 +8681,15 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
   const isDtmActive = (config.deliberate_trigger_mode ?? false) && !!message.guild && !isMatrixRelayMessage;
 
   // Pre-compute auto-trigger channel info for per-persona DTM exemption inside the loop.
-  const isAutoTriggerChannel = isAutochatConfiguredChannel(config, msgEffectiveChannelId);
+  const personalAutoTriggerPersonaId = options.personalAutoTriggerPersonaId ?? null;
+  const hasPersonalAutoTrigger = Number.isInteger(personalAutoTriggerPersonaId);
+  const isAutoTriggerChannel = isAutochatConfiguredChannel(config, msgEffectiveChannelId) || hasPersonalAutoTrigger;
   // null → no persona override, so the main (non-alter) persona is exempt; otherwise only the assigned ID is.
-  const autochatPersonaId = isAutoTriggerChannel ? getAutochatAssignedPersonaId(config, msgEffectiveChannelId) : null;
+  const autochatPersonaId = hasPersonalAutoTrigger
+    ? personalAutoTriggerPersonaId
+    : isAutochatConfiguredChannel(config, msgEffectiveChannelId)
+      ? getAutochatAssignedPersonaId(config, msgEffectiveChannelId)
+      : null;
 
   let triggersActive = false;
   let triggersActiveDeliberate = false;
@@ -8693,6 +8796,8 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
     !isMatrixRelayMessage &&
     isAutochatAlwaysReplyChannelActive(config, msgEffectiveChannelId) &&
     isAutochatQualifyingMessage(message, isSelfMessage);
+  const isPersonalAutoTriggerHit =
+    !isMatrixRelayMessage && hasPersonalAutoTrigger && isAutochatQualifyingMessage(message, isSelfMessage);
 
   // 6. Check always-reply mode:
   // When enabled, main persona replies to all real user messages in guild channels.
@@ -8701,7 +8806,8 @@ export function shouldBotReply(message: Message, tomoriState: TomoriState, allPe
   // Persona selection (main vs alter) is handled downstream in determineMatchingPersonas().
   const isAlwaysReplyHit =
     (config.always_reply_enabled && !isMatrixRelayMessage && isAutochatQualifyingMessage(message, isSelfMessage)) ||
-    isScopedAlwaysReplyHit;
+    isScopedAlwaysReplyHit ||
+    isPersonalAutoTriggerHit;
 
   // 7. Determine if bot should reply:
   // Reply if (it's a reply to the bot OR bot is mentioned OR triggers are active) OR if the shared auto-chat range hit.

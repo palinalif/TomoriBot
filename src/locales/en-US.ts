@@ -130,6 +130,8 @@ export default {
     still_working_description: `This task is taking more steps than usual. Use \`/bot kill\` if you think I'm stuck.`,
     nai_tool_retry_exhausted_title: `Tool Error`,
     nai_tool_retry_exhausted_description: `A tool failed multiple times and couldn't complete the request. Please try again or use \`/tool refresh\` if this issue persists.`,
+    tool_error_loop_title: `Tool Error Loop`,
+    tool_error_loop_description: `I kept running into tool errors and couldn't complete the request. Try rephrasing or use \`/tool refresh\` if this issue persists.`,
     fallback_used_title: `Fallback Model Used`,
     fallback_used_description: `\`{success_model}\` was used instead of {chain}`,
     no_response_title: `No Response`,
@@ -2393,6 +2395,9 @@ Your donations help:
         capability_structoutput_yes: `Supports Structured Output`,
         capability_structoutput_no: `No Structured Output`,
         capabilities_timeout: `Model capabilities configuration timed out. Please try again.`,
+        num_ctx_label: `Context Window (Ollama / KoboldCPP)`,
+        num_ctx_placeholder: `e.g., 8192 or 16384. Only overrides Ollama & KoboldCPP.`,
+        num_ctx_invalid: `Context window size must be a number of at least 512. Leave blank to use the endpoint default.`,
       },
       provider: {
         description: `Manage saved provider configurations`,

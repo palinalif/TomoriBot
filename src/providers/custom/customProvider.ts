@@ -90,6 +90,8 @@ export interface CustomProviderConfig extends ProviderConfig {
   frequencyPenalty?: number;
   presencePenalty?: number;
   repetitionPenalty?: number;
+  /** Optional context window override sent as options.num_ctx (Ollama extension) */
+  numCtx?: number | null;
 }
 
 /**
@@ -375,6 +377,7 @@ export class CustomProvider
       seesVideos: tomoriState.llm.sees_videos,
       ...samplingParams,
       repetitionPenalty: 1.1,
+      numCtx: tomoriState.config.custom_num_ctx ?? null,
     };
 
     // Only add tools if the model supports them (user-declared)

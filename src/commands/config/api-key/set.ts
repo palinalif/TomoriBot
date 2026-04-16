@@ -453,8 +453,9 @@ export async function execute(
       }
     }
 
-    // 12. Update the config in the database (includes llm_id, diffusion_model_id, embedding_model_id, custom_endpoint_url, and custom_model_name if provider changed)
+    // 12. Update the config in the database (includes llm_id, diffusion_model_id, embedding_model_id, custom_endpoint_url, custom_model_name, and custom_num_ctx if provider changed)
     const customModelName = customCapabilitiesResult?.modelName || null;
+    const customNumCtx = customCapabilitiesResult?.numCtx ?? null;
     const targetLlm = newLlmId === tomoriState.config.llm_id ? tomoriState.llm : await loadLlmById(newLlmId);
     const resolvedLogitBiases = resolveLogitBiasEntriesForLlm(tomoriState.config.llm_logit_biases ?? [], targetLlm);
     const resolvedLogitBiasesJson = JSON.stringify(resolvedLogitBiases.entries);
@@ -467,7 +468,8 @@ export async function execute(
 			    embedding_model_id = ${newEmbeddingModelId},
 			    llm_logit_biases = ${resolvedLogitBiasesJson}::jsonb,
 			    custom_endpoint_url = ${customEndpointUrl},
-			    custom_model_name = ${customModelName}
+			    custom_model_name = ${customModelName},
+			    custom_num_ctx = ${customNumCtx}
 			WHERE server_id = ${tomoriState.server_id}
 			RETURNING *
 		`;

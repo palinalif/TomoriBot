@@ -51,6 +51,8 @@ export interface CustomCapabilitiesResult {
   seesImages: boolean;
   seesVideos: boolean;
   supportsStructOutput: boolean;
+  /** Optional context window override (e.g. Ollama num_ctx). Null means use endpoint default. */
+  numCtx: number | null;
   llmId?: number;
   error?: string;
 }
@@ -136,10 +138,15 @@ export async function promptCustomCapabilities(
         },
       ]);
 
-    // Create buttons: model name input and confirm
+    // Create buttons: model name input, context window input, and confirm
     const modelNameButton = new ButtonBuilder()
       .setCustomId("set_model_name")
       .setLabel(localizer(locale, "commands.config.custom.model_name_label"))
+      .setStyle(ButtonStyle.Secondary);
+
+    const numCtxButton = new ButtonBuilder()
+      .setCustomId("set_num_ctx")
+      .setLabel(localizer(locale, "commands.config.custom.num_ctx_label"))
       .setStyle(ButtonStyle.Secondary);
 
     const confirmButton = new ButtonBuilder()
@@ -152,7 +159,7 @@ export async function promptCustomCapabilities(
     const imagesRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(imagesSelect);
     const videosRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(videosSelect);
     const structOutputRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(structOutputSelect);
-    const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(modelNameButton, confirmButton);
+    const buttonRow = new ActionRowBuilder<ButtonBuilder>().addComponents(modelNameButton, numCtxButton, confirmButton);
 
     // Track selected values (defaults match the select menu defaults)
     let hasTools = true;
@@ -160,6 +167,7 @@ export async function promptCustomCapabilities(
     let seesVideos = false;
     let supportsStructOutput = false;
     let customModelName = "";
+    let customNumCtx: number | null = null;
 
     // Helper function to update the message content with current model name
     const updateMessageContent = () => {
@@ -248,6 +256,67 @@ export async function promptCustomCapabilities(
             // Timeout or error - just log and continue
             log.warn("Model name modal timed out or errored:", modalError);
           }
+        } else if (i.isButton() && i.customId === "set_num_ctx") {
+          // Show modal for context window size input
+          const modal = new ModalBuilder()
+            .setCustomId("num_ctx_modal")
+            .setTitle(localizer(locale, "commands.config.custom.num_ctx_label"));
+
+          const numCtxInput = new TextInputBuilder()
+            .setCustomId("num_ctx_input")
+            .setLabel(localizer(locale, "commands.config.custom.num_ctx_label"))
+            .setPlaceholder(localizer(locale, "commands.config.custom.num_ctx_placeholder"))
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false)
+            .setMaxLength(8);
+
+          // Pre-fill with current value if set
+          if (customNumCtx !== null) {
+            numCtxInput.setValue(String(customNumCtx));
+          }
+
+          const row = new ActionRowBuilder<TextInputBuilder>().addComponents(numCtxInput);
+          modal.addComponents(row);
+
+          await i.showModal(modal);
+
+          try {
+            const modalSubmit = await i.awaitModalSubmit({
+              filter: (modalI) => modalI.customId === "num_ctx_modal" && modalI.user.id === i.user.id,
+              time: 300000,
+            });
+
+            const rawValue = modalSubmit.fields.getTextInputValue("num_ctx_input").trim();
+
+            if (rawValue === "") {
+              // User cleared the field — reset to no override
+              customNumCtx = null;
+            } else {
+              const parsed = Number.parseInt(rawValue, 10);
+              if (Number.isNaN(parsed) || parsed < 512) {
+                // Invalid input — inform user and leave current value unchanged
+                await modalSubmit.reply({
+                  content: localizer(locale, "commands.config.custom.num_ctx_invalid"),
+                  ephemeral: true,
+                });
+                return;
+              }
+              customNumCtx = parsed;
+            }
+
+            await modalSubmit.deferUpdate();
+
+            // Update the display to reflect the new context window size
+            const modelNameDisplay =
+              customModelName || localizer(locale, "commands.config.custom.model_name_placeholder");
+            const numCtxDisplay = customNumCtx !== null ? String(customNumCtx) : localizer(locale, "general.none");
+            await interaction.editReply({
+              content: `${localizer(locale, "commands.config.custom.capabilities_prompt")}\n\n**${localizer(locale, "commands.config.custom.model_name_label")}:** \`${modelNameDisplay}\`\n**${localizer(locale, "commands.config.custom.num_ctx_label")}:** \`${numCtxDisplay}\``,
+              components: [toolsRow, imagesRow, videosRow, structOutputRow, buttonRow],
+            });
+          } catch (modalError) {
+            log.warn("Context window modal timed out or errored:", modalError);
+          }
         } else if (i.isButton() && i.customId === "confirm_capabilities") {
           if (!customModelName.trim()) {
             await i.reply({
@@ -267,11 +336,12 @@ export async function promptCustomCapabilities(
 
           resolve({
             success: true,
-            modelName: customModelName, // Return the custom model name (or empty string for default)
+            modelName: customModelName,
             hasTools,
             seesImages,
             seesVideos,
             supportsStructOutput,
+            numCtx: customNumCtx,
             llmId,
           });
         }
@@ -286,6 +356,7 @@ export async function promptCustomCapabilities(
             seesImages: false,
             seesVideos: false,
             supportsStructOutput: false,
+            numCtx: null,
             error: localizer(locale, "commands.config.custom.capabilities_timeout"),
           });
         }
@@ -300,6 +371,7 @@ export async function promptCustomCapabilities(
       seesImages: false,
       seesVideos: false,
       supportsStructOutput: false,
+      numCtx: null,
       error: error instanceof Error ? error.message : "Unknown error",
     };
   }
@@ -404,25 +476,28 @@ export async function deleteCustomLLMEntry(serverId: string | number): Promise<v
  * @param endpointUrl - The custom endpoint URL
  * @param llmId - The llm_id of the custom model
  * @param customModelName - Optional custom model name (e.g., "gemma3:latest" for Ollama)
+ * @param numCtx - Optional context window size override (e.g., 8192 for Ollama num_ctx)
  */
 export async function saveCustomEndpointConfig(
   serverId: number,
   endpointUrl: string,
   llmId: number,
   customModelName?: string,
+  numCtx?: number | null,
 ): Promise<void> {
   await sql`
 		UPDATE tomori_configs
 		SET
 			custom_endpoint_url = ${endpointUrl},
 			custom_model_name = ${customModelName || null},
+			custom_num_ctx = ${numCtx ?? null},
 			llm_id = ${llmId},
 			updated_at = CURRENT_TIMESTAMP
 		WHERE server_id = ${serverId}
 	`;
 
   log.info(
-    `Saved custom endpoint config for server ${serverId}${customModelName ? ` with model name: ${customModelName}` : ""}`,
+    `Saved custom endpoint config for server ${serverId}${customModelName ? ` with model name: ${customModelName}` : ""}${numCtx ? ` with num_ctx: ${numCtx}` : ""}`,
   );
 }
 

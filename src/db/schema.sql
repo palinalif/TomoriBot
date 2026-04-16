@@ -597,6 +597,10 @@ SELECT add_column_if_not_exists('tomori_configs', 'custom_endpoint_url', 'TEXT')
 -- Optional field - if empty, provider will fall back to llm_codename
 SELECT add_column_if_not_exists('tomori_configs', 'custom_model_name', 'TEXT');
 
+-- Add context window size for custom endpoints (April 2026)
+-- Sent as options.num_ctx in Ollama-compatible requests; null means use endpoint default
+SELECT add_column_if_not_exists('tomori_configs', 'custom_num_ctx', 'INT');
+
 -- Add RP channel IDs for per-channel emoji/sticker suppression (February 2026)
 -- Channels in this list always suppress emojis and stickers regardless of global settings
 SELECT add_column_if_not_exists('tomori_configs', 'rp_channel_ids', 'TEXT[]', 'ARRAY[]::TEXT[]');
@@ -1298,6 +1302,55 @@ ON channel_persona_whitelist(server_id, channel_disc_id);
 DROP TRIGGER IF EXISTS update_channel_persona_whitelist_timestamp ON channel_persona_whitelist;
 CREATE TRIGGER update_channel_persona_whitelist_timestamp
 BEFORE UPDATE ON channel_persona_whitelist
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+-- Personal Spotlight Tables
+-- User + channel scoped persona restrictions with optional per-user auto-trigger persona
+CREATE TABLE IF NOT EXISTS personal_spotlights (
+	server_id INT NOT NULL,
+	user_id INT NOT NULL,
+	channel_disc_id TEXT NOT NULL,
+	auto_trigger_tomori_id INT NULL,
+	expires_at TIMESTAMP NULL,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY (server_id, user_id, channel_disc_id),
+	FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+	FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+	FOREIGN KEY (auto_trigger_tomori_id) REFERENCES tomoris(tomori_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS personal_spotlight_personas (
+	server_id INT NOT NULL,
+	user_id INT NOT NULL,
+	channel_disc_id TEXT NOT NULL,
+	tomori_id INT NOT NULL,
+	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	PRIMARY KEY (server_id, user_id, channel_disc_id, tomori_id),
+	FOREIGN KEY (server_id, user_id, channel_disc_id)
+		REFERENCES personal_spotlights(server_id, user_id, channel_disc_id)
+		ON DELETE CASCADE,
+	FOREIGN KEY (tomori_id) REFERENCES tomoris(tomori_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_personal_spotlights_server_user
+ON personal_spotlights(server_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_personal_spotlights_expires_at
+ON personal_spotlights(expires_at);
+CREATE INDEX IF NOT EXISTS idx_personal_spotlight_personas_lookup
+ON personal_spotlight_personas(server_id, user_id, channel_disc_id);
+
+DROP TRIGGER IF EXISTS update_personal_spotlights_timestamp ON personal_spotlights;
+CREATE TRIGGER update_personal_spotlights_timestamp
+BEFORE UPDATE ON personal_spotlights
+FOR EACH ROW
+EXECUTE FUNCTION update_timestamp();
+
+DROP TRIGGER IF EXISTS update_personal_spotlight_personas_timestamp ON personal_spotlight_personas;
+CREATE TRIGGER update_personal_spotlight_personas_timestamp
+BEFORE UPDATE ON personal_spotlight_personas
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 
@@ -2108,6 +2161,7 @@ CREATE TABLE IF NOT EXISTS saved_provider_configs (
   nai_preset_name TEXT,                       -- NovelAI sampling preset at time of save
   custom_endpoint_url TEXT,                   -- Custom provider endpoint URL
   custom_model_name TEXT,                     -- Custom provider model name
+  custom_num_ctx INT,                         -- Custom provider context window size (e.g., Ollama num_ctx)
   fallback_llm_ids JSONB DEFAULT '[]'::JSONB, -- Ordered fallback model IDs
   channel_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- Snapshot: [{channel_disc_id, llm_id}, ...]
   persona_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- Snapshot: [{tomori_id, llm_id}, ...]

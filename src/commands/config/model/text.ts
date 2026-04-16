@@ -181,7 +181,8 @@ export async function execute(
         const [updatedRow] = await sql`
 					UPDATE tomori_configs
 					SET llm_id = ${capabilitiesResult.llmId},
-					    custom_model_name = ${capabilitiesResult.modelName || null}
+					    custom_model_name = ${capabilitiesResult.modelName || null},
+					    custom_num_ctx = ${capabilitiesResult.numCtx ?? null}
 					WHERE server_id = ${tomoriState.server_id}
 					RETURNING *
 				`;

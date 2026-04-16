@@ -130,6 +130,8 @@ export default {
     still_working_description: `このタスクは通常より多くのステップが必要です。もし止まっていると思ったら、\`/bot kill\` を使用してください。`,
     nai_tool_retry_exhausted_title: `ツールエラー`,
     nai_tool_retry_exhausted_description: `ツールが複数回失敗し、リクエストを完了できませんでした。もう一度お試しいただくか、問題が解決しない場合は \`/tool refresh\` を使用してください。`,
+    tool_error_loop_title: `ツールエラーループ`,
+    tool_error_loop_description: `ツールエラーが続いたため、リクエストを完了できませんでした。言い回しを変えるか、問題が解決しない場合は \`/tool refresh\` を使用してください。`,
     fallback_used_title: `フォールバックモデルを使用しました`,
     fallback_used_description: `{chain} の代わりに \`{success_model}\` が使用されました`,
     no_response_title: `応答なし`,
@@ -2413,6 +2415,9 @@ Prompt Guidance Rescale: {cfg_rescale}
         capability_structoutput_yes: `構造化出力をサポート`,
         capability_structoutput_no: `構造化出力非対応`,
         capabilities_timeout: `モデル機能の設定がタイムアウトしました。もう一度お試しください。`,
+        num_ctx_label: `コンテキストウィンドウ（Ollama / KoboldCPP）`,
+        num_ctx_placeholder: `例：8192 または 16384 — OllamaとKoboldCPPのみに適用。`,
+        num_ctx_invalid: `コンテキストウィンドウサイズは512以上の数値を入力してください。空欄のままにするとエンドポイントのデフォルト値が使用されます。`,
       },
       provider: {
         description: `保存されたプロバイダー設定を管理`,

@@ -597,6 +597,27 @@ export const channelPersonaWhitelistSchema = z.object({
 });
 export type ChannelPersonaWhitelistRow = z.infer<typeof channelPersonaWhitelistSchema>;
 
+export const personalSpotlightSchema = z.object({
+  server_id: z.number(),
+  user_id: z.number(),
+  channel_disc_id: z.string(),
+  auto_trigger_tomori_id: z.number().int().nullable().optional(),
+  expires_at: z.date().nullable().optional(),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
+});
+export type PersonalSpotlightRow = z.infer<typeof personalSpotlightSchema>;
+
+export const personalSpotlightPersonaSchema = z.object({
+  server_id: z.number(),
+  user_id: z.number(),
+  channel_disc_id: z.string(),
+  tomori_id: z.number().int(),
+  created_at: z.date().optional(),
+  updated_at: z.date().optional(),
+});
+export type PersonalSpotlightPersonaRow = z.infer<typeof personalSpotlightPersonaSchema>;
+
 export const errorLogSchema = z.object({
   error_log_id: z.number().optional(), // Primary key, optional as it's generated
   // Context IDs - Optional because errors can occur outside specific contexts
@@ -988,6 +1009,7 @@ export const savedProviderConfigSchema = z.object({
   ), // Added March 2026 - Logit bias snapshot
   custom_endpoint_url: z.string().nullable(),
   custom_model_name: z.string().nullable(),
+  custom_num_ctx: z.number().int().min(512).nullable().optional(),
   fallback_llm_ids: z.preprocess((value) => normalizeFallbackLlmIds(value), z.array(z.number().int()).default([])),
   channel_llm_overrides: z.preprocess(
     (value) => normalizeJsonbArray(value),
