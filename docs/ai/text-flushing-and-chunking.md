@@ -137,6 +137,24 @@ Safety guard in `filterDuplicateCustomEmojis(...)`:
 - If removing duplicate emojis would collapse output to punctuation-only/whitespace-only (or empty), filtering is skipped and original segment is kept.
 - This prevents weird outputs like lone `","` and avoids dropping emoji-only lines entirely.
 
+## Orphan Punctuation Hold-and-Prepend
+
+`mergeStandalonePunctuationChunks(...)` only de-orphans punctuation **within a single flush**. When the model emits a deliberate punctuation expression on its own line (e.g. `prev\n...\nnext`), each segment flushes separately and the merge function never sees them together.
+
+Cross-flush handling in `sendBufferSegment(...)`:
+- If a flushed segment trims to pure sentence-ending punctuation **and** is length ≥ 3 OR contains the unicode horizontal ellipsis `…`, it is held in `state.pendingOrphanPunctuation` instead of sent.
+- The held content is prepended to the next non-empty segment that passes the singleton-drop guards.
+- On final flush (`flushFinalBuffer(...)`), any still-held punctuation is released as a standalone send so model output is never silently dropped.
+
+Why the length/`…` threshold:
+- Length 1 (`.`) and length 2 (`..`) remain handled by the existing singleton-drop guards in `sendBufferSegment(...)` — those are typically hallucination fragments and are intentionally discarded.
+- Length ≥ 3 (`...`, `....`, `?!?!`) and `…` are deliberate expressive punctuation and should reach the user attached to the surrounding text.
+
+Useful log lines:
+- `Stream Orphan: Holding "..." (pending="...") for next segment`
+- `Stream Orphan: Prepending held "..." to next segment`
+- `Stream Orphan: Releasing held "..." as standalone on final flush (no following segment).`
+
 ## Typing and Send Mode
 
 Typing simulation is enabled for degree `>= MEDIUM`:

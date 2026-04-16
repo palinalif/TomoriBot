@@ -42,7 +42,7 @@ export const userSchema = z.object({
   nai_char_ref_url: z.string().nullable().optional(), // Added March 2026 - User-specific NovelAI character reference image
   impersonation_prompt: z.string().nullable().optional(), // Added March 2026 - Global user-owned prompt for user impersonation replies
   shortterm_cache_crossserver_opt_in: z.boolean().default(false), // Short-term memory cross-server sharing
-  personal_dtm: z.boolean().default(false), // Added April 2026 - User-scoped deliberate trigger mode (requires @{trigger}, reply, mention, or /bot respond)
+  personal_dtm: z.enum(["off", "follow", "on"]).default("follow"), // Added April 2026 - User-scoped DTM tri-state: 'off' (always disabled), 'follow' (server setting), 'on' (always enabled)
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
@@ -333,6 +333,7 @@ export const tomoriConfigSchema = z.object({
   cooldown_length: z.number().int().min(1).max(86400).default(5), // Added January 2026 - Cooldown duration in seconds
   custom_endpoint_url: z.string().nullable().optional(), // Added January 2026 - Custom OpenAI-compatible endpoint URL (non-production only)
   custom_model_name: z.string().nullable().optional(), // Added January 2026 - Actual model name for custom endpoints (e.g., "gemma3:latest" for Ollama)
+  custom_num_ctx: z.number().int().min(512).nullable().optional(), // Added April 2026 - Context window size for custom endpoints (e.g., Ollama num_ctx)
   nai_preset_name: z.string().nullable().optional(), // Added March 2026 - Active NovelAI sampling preset name (null for non-NAI providers)
   fallback_llm_ids: z.preprocess((value) => normalizeFallbackLlmIds(value), z.array(z.number().int()).default([])), // Added March 2026 - Ordered fallback llm_ids for provider failover (stored as JSONB)
   nai_exclusive_imggen: z.boolean().default(false), // Added March 2026 - Hides standard generate_image when NovelAI opt key is present

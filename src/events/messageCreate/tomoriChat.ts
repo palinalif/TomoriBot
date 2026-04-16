@@ -3747,9 +3747,14 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           !!config &&
           isAutochatAlwaysReplyChannelActive(config, effectiveChannelId) &&
           isAutochatQualifyingMessage(message, isSelfMessage);
-        // Server DTM applies to all users; personal DTM lets individual users opt in even if the server hasn't enabled it
-        const isDtmActive =
-          (!!config?.deliberate_trigger_mode || !!userRow?.personal_dtm) && !!message.guild && !isMatrixRelay;
+        // Resolve DTM for this user using the three-state personal preference:
+        //   'off'    → DTM disabled regardless of server setting
+        //   'follow' → DTM mirrors the server setting (default)
+        //   'on'     → DTM enabled regardless of server setting
+        const serverDtmEnabled = !!config?.deliberate_trigger_mode;
+        const personalDtmMode = userRow?.personal_dtm ?? "follow";
+        const userDtmEnabled = personalDtmMode === "on" || (personalDtmMode === "follow" && serverDtmEnabled);
+        const isDtmActive = userDtmEnabled && !!message.guild && !isMatrixRelay;
 
         // Check if always-reply mode applies to this message:
         // Must be enabled, must be a real user message (not bot/webhook/self), and in a guild channel

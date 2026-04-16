@@ -62,6 +62,12 @@ export interface StreamState {
   thoughtSummarySegments: string[];
   thoughtRawSegments: string[];
   firstReplyUrl?: string;
+  /**
+   * Holds orphan punctuation segments (e.g. a lone "..." flushed on its own line)
+   * across flush boundaries so they can be prepended to the next non-empty segment
+   * instead of being sent as standalone Discord messages. Released on final flush.
+   */
+  pendingOrphanPunctuation?: string;
 }
 
 /**
@@ -233,6 +239,7 @@ export function createDefaultStreamState(): StreamState {
     thoughtSummarySegments: [],
     thoughtRawSegments: [],
     firstReplyUrl: undefined,
+    pendingOrphanPunctuation: undefined,
   };
 }
 

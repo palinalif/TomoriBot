@@ -11,23 +11,46 @@ import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import { type UserRow, type ErrorContext, userSchema } from "../../types/db/schema";
 import { invalidateUserCache } from "../../utils/cache/userCache";
 
+/** Valid personal DTM mode values */
+const DTM_MODES = ["off", "follow", "on"] as const;
+type DtmMode = (typeof DTM_MODES)[number];
+
 /**
  * Configures the `/personal deliberate-trigger-mode` subcommand.
- * Toggles whether this user personally requires explicit invocations instead of
- * plain trigger words, regardless of server-level DTM setting.
+ * Lets users choose one of three DTM states that override (or follow) the server setting.
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("deliberate-trigger-mode")
-    .setDescription(localizer("en-US", "commands.personal.deliberatetriggermode.description"));
+    .setDescription(localizer("en-US", "commands.personal.deliberatetriggermode.description"))
+    .addStringOption((option) =>
+      option
+        .setName("mode")
+        .setDescription(localizer("en-US", "commands.personal.deliberatetriggermode.mode_description"))
+        .setRequired(true)
+        .addChoices(
+          {
+            name: localizer("en-US", "commands.personal.deliberatetriggermode.off_option"),
+            value: "off",
+          },
+          {
+            name: localizer("en-US", "commands.personal.deliberatetriggermode.follow_option"),
+            value: "follow",
+          },
+          {
+            name: localizer("en-US", "commands.personal.deliberatetriggermode.on_option"),
+            value: "on",
+          },
+        ),
+    );
 
 /**
- * Toggles personal deliberate trigger mode for the invoking user.
- * When enabled, plain trigger words no longer fire the bot for this user —
- * only direct invocations work: `@{trigger}` prefix, Discord @mention, replies,
- * or `/bot respond`. The server-level DTM setting applies to all users independently;
- * this flag lets individual users opt into stricter behavior even when the server
- * has DTM disabled.
+ * Sets the personal deliberate trigger mode preference for the invoking user.
+ * - `off`    — DTM is always disabled for this user, even if the server has it enabled.
+ * - `follow` — (default) DTM mirrors the server's setting.
+ * - `on`     — DTM is always enabled for this user, even if the server has it disabled.
+ *              Only direct invocations work: `@{trigger}` prefix, Discord @mention, replies,
+ *              or `/bot respond`.
  * @param _client - Discord client instance
  * @param interaction - Command interaction
  * @param userData - User data from database
@@ -42,14 +65,14 @@ export async function execute(
   // 1. Defer the reply before async work to prevent timeout
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  try {
-    // 2. Toggle the current value
-    const newValue = !(userData.personal_dtm ?? false);
+  // 2. Read the selected mode from the interaction options
+  const selectedMode = interaction.options.getString("mode", true) as DtmMode;
 
-    // 3. Update the database
+  try {
+    // 3. Update the database with the chosen mode
     const [updatedRow] = await sql`
       UPDATE users
-      SET personal_dtm = ${newValue}
+      SET personal_dtm = ${selectedMode}
       WHERE user_disc_id = ${userData.user_disc_id}
       RETURNING *
     `;
@@ -60,7 +83,7 @@ export async function execute(
         errorType: "DatabaseUpdateError",
         metadata: {
           command: "personal deliberatetriggermode",
-          newValue,
+          selectedMode,
           targetTable: "users",
         },
       };
@@ -74,7 +97,7 @@ export async function execute(
       return;
     }
 
-    // 4. Validate the returned data
+    // 4. Validate the returned row against the schema
     const validatedUser = userSchema.safeParse(updatedRow);
     if (!validatedUser.success) {
       const context: ErrorContext = {
@@ -85,7 +108,7 @@ export async function execute(
           validationErrors: validatedUser.error.flatten(),
         },
       };
-      await log.error("Failed to validate updated user after personal_dtm toggle", validatedUser.error, context);
+      await log.error("Failed to validate updated user after personal_dtm change", validatedUser.error, context);
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",
@@ -98,15 +121,18 @@ export async function execute(
     // 5. Invalidate user cache after successful write
     invalidateUserCache(userData.user_disc_id);
 
-    // 6. Send success message reflecting the new state
+    // 6. Map each mode to its result color for visual clarity
+    const colorByMode: Record<DtmMode, ColorCode> = {
+      off: ColorCode.WARN,
+      follow: ColorCode.INFO,
+      on: ColorCode.SUCCESS,
+    };
+
+    // 7. Reply with the localized result for the chosen mode
     await replyInfoEmbed(interaction, locale, {
-      titleKey: newValue
-        ? "commands.personal.deliberatetriggermode.enabled_title"
-        : "commands.personal.deliberatetriggermode.disabled_title",
-      descriptionKey: newValue
-        ? "commands.personal.deliberatetriggermode.enabled_description"
-        : "commands.personal.deliberatetriggermode.disabled_description",
-      color: newValue ? ColorCode.SUCCESS : ColorCode.WARN,
+      titleKey: `commands.personal.deliberatetriggermode.${selectedMode}_title`,
+      descriptionKey: `commands.personal.deliberatetriggermode.${selectedMode}_description`,
+      color: colorByMode[selectedMode],
     });
   } catch (error) {
     const context: ErrorContext = {

@@ -118,6 +118,14 @@ export class StreamOrchestrator implements IStreamOrchestrator {
   private static readonly PREFILL_WHITESPACE_SENTINEL = "\uE000";
   private static readonly STREAM_CHUNK_DEDUP_TAIL_CHARS = 4096;
   private static readonly STREAM_CHUNK_DEDUP_MIN_CHARS = 8;
+  /**
+   * Matches segments that consist entirely of sentence-ending punctuation
+   * (ASCII + full-width + unicode horizontal ellipsis). Used by the orphan
+   * punctuation hold-and-prepend logic in `sendBufferSegment` so that lone
+   * punctuation flushes (e.g. "..." on its own line) attach to the next
+   * non-empty segment instead of being sent as standalone Discord messages.
+   */
+  private static readonly ORPHAN_PUNCTUATION_REGEX = /^[.,!?;。！？、，…]+$/;
 
   private static isSilentSpeakerGuardStop(requesterId: string | undefined, state: StreamState): boolean {
     return requesterId === "speaker_guard" && state.messageSentCount === 0 && !state.accumulatedText.trim();
@@ -1375,25 +1383,50 @@ export class StreamOrchestrator implements IStreamOrchestrator {
   ): Promise<void> {
     if (!segment.trim()) return;
 
-    // Discard lone single-character punctuation/symbol fragments that models
+    const trimmedGuard = segment.trim();
+
+    // 1. Hold deliberate orphan-punctuation segments (e.g. a lone "..." or "…")
+    // across flush boundaries so they can prepend the next non-empty segment
+    // instead of shipping as standalone Discord messages. Length ≥ 3 OR contains
+    // "…" filters in expressive ellipses while leaving the singleton-drop guards
+    // below intact for hallucinated "." and ".." fragments.
+    if (
+      StreamOrchestrator.ORPHAN_PUNCTUATION_REGEX.test(trimmedGuard) &&
+      (trimmedGuard.length >= 3 || trimmedGuard.includes("…"))
+    ) {
+      state.pendingOrphanPunctuation = (state.pendingOrphanPunctuation ?? "") + trimmedGuard;
+      log.info(
+        `Stream Orphan: Holding "${trimmedGuard}" (pending="${state.pendingOrphanPunctuation}") for next segment`,
+      );
+      return;
+    }
+
+    // 2. Discard lone single-character punctuation/symbol fragments that models
     // sometimes hallucinate (e.g. ".", "]", ")"). These look unnatural when
     // sent as standalone Discord messages or line-leading fragments.
     // Also discard ".." — a degenerate ellipsis fragment produced when streaming
     // chunks split "..." across chunk boundaries mid-delivery.
-    const trimmedGuard = segment.trim();
     if (trimmedGuard.length === 1 && !/\w/u.test(trimmedGuard)) return;
     if (trimmedGuard === "..") return;
 
+    // 3. Prepend any held orphan punctuation so it ships inline with this segment.
+    let workingSegment = segment;
+    if (state.pendingOrphanPunctuation) {
+      log.info(`Stream Orphan: Prepending held "${state.pendingOrphanPunctuation}" to next segment`);
+      workingSegment = `${state.pendingOrphanPunctuation}${segment}`;
+      state.pendingOrphanPunctuation = undefined;
+    }
+
     const wasPrefillInjected = state.prefillInjected;
 
-    const leadingWhitespaceMatch = segment.match(/^\s+/);
+    const leadingWhitespaceMatch = workingSegment.match(/^\s+/);
     const leadingWhitespace = leadingWhitespaceMatch?.[0] ?? "";
     const normalizedLeadingWhitespace = textConfig.uncensorUnicodeSpacesEnabled
       ? leadingWhitespace.replace(/\u2800/g, " ")
       : leadingWhitespace;
 
     // Filter duplicate custom emojis BEFORE transformation (while still in :name: format)
-    const filteredSegment = filterDuplicateCustomEmojis(segment, context.contextItems);
+    const filteredSegment = filterDuplicateCustomEmojis(workingSegment, context.contextItems);
 
     // Clean the segment (transforms :emoji: to Discord format)
     const cleanedSegment = cleanLLMOutput(
@@ -2248,6 +2281,16 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       state.buffer = "";
       state.isInsideCodeBlock = false;
       state.hasSemanticMarkers = false;
+    }
+
+    // Release any held orphan punctuation that never found a following segment to
+    // attach to (e.g. stream ended on a lone "..."). Better to ship it standalone
+    // than to silently drop content the model deliberately produced.
+    if (state.pendingOrphanPunctuation) {
+      const orphan = state.pendingOrphanPunctuation;
+      state.pendingOrphanPunctuation = undefined;
+      log.info(`Stream Orphan: Releasing held "${orphan}" as standalone on final flush (no following segment).`);
+      await this.sendSegment(orphan, textConfig, typingConfig, context, state);
     }
 
     // Route any think block content that was still accumulating when the stream ended.

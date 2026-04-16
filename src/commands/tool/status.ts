@@ -775,7 +775,10 @@ export async function execute(
             },
             {
               nameKey: "commands.tool.status.field_personal_dtm",
-              value: formatBooleanLocalized(userData.personal_dtm ?? false, locale),
+              value: localizer(
+                locale,
+                `commands.personal.deliberatetriggermode.${userData.personal_dtm ?? "follow"}_option`,
+              ),
               inline: true,
             },
             {

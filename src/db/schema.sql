@@ -875,8 +875,27 @@ SELECT add_column_if_not_exists('users', 'nai_char_tags', 'TEXT[]', 'ARRAY[]::TE
 SELECT add_column_if_not_exists('users', 'nai_char_ref_url', 'TEXT');
 -- User-specific prompt used during /bot impersonate user-mode replies (March 2026)
 SELECT add_column_if_not_exists('users', 'impersonation_prompt', 'TEXT');
--- Personal deliberate trigger mode (April 2026) - User-scoped DTM: requires @{trigger}, reply, mention, or /bot respond
-SELECT add_column_if_not_exists('users', 'personal_dtm', 'BOOLEAN', 'false');
+-- Personal deliberate trigger mode (April 2026) - User-scoped DTM tri-state: 'off', 'follow' (default), 'on'
+-- If column exists as BOOLEAN (old schema), convert to TEXT preserving intent (true → 'on', false → 'follow')
+-- If column does not exist, add it as TEXT directly
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'users' AND column_name = 'personal_dtm' AND data_type = 'boolean'
+  ) THEN
+    ALTER TABLE users ALTER COLUMN personal_dtm DROP DEFAULT;
+    ALTER TABLE users ALTER COLUMN personal_dtm TYPE TEXT
+      USING CASE WHEN personal_dtm = TRUE THEN 'on' ELSE 'follow' END;
+    ALTER TABLE users ALTER COLUMN personal_dtm SET DEFAULT 'follow';
+  ELSIF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'users' AND column_name = 'personal_dtm'
+  ) THEN
+    ALTER TABLE users ADD COLUMN personal_dtm TEXT DEFAULT 'follow';
+  END IF;
+END;
+$$;
 
 -- Create updated_at trigger for users table
 DROP TRIGGER IF EXISTS update_users_timestamp ON users;
