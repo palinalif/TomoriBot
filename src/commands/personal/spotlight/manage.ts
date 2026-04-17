@@ -222,7 +222,7 @@ function formatEntryDescription(
     entry.expiresAt === null
       ? localizer(locale, "commands.personal.spotlight.manage.permanent_badge")
       : localizer(locale, "commands.personal.spotlight.manage.until_badge", {
-          expires_at: `<t:${Math.floor(entry.expiresAt.getTime() / 1000)}:F>`,
+          expires_at: formatManageExpiry(entry.expiresAt, locale),
         });
   const autoTriggerText =
     entry.autoTriggerPersonaId !== null
@@ -234,6 +234,16 @@ function formatEntryDescription(
     duration: durationText,
     auto_trigger: autoTriggerText,
     personas: personaText,
+  });
+}
+
+function formatManageExpiry(expiresAt: Date, locale: string): string {
+  return expiresAt.toLocaleString(locale, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 

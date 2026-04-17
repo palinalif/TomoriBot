@@ -1,6 +1,16 @@
 import { OpenAICompatibleStreamAdapter } from "@/providers/openaiCompatible/openaiCompatibleStreamAdapter";
 import type { OpenAICompatibleStreamConfig } from "@/providers/openaiCompatible/openaiCompatibleTypes";
+import { GemmaToolCallParser } from "@/providers/custom/customGemmaToolParser";
+import type { ProcessedChunk, RawStreamChunk } from "@/types/stream/interfaces";
 import { log } from "@/utils/misc/logger";
+
+/**
+ * When true, the stream adapter scans `delta.content` for Gemma 4's hallucinated
+ * `<|tool_call>...<tool_call|>` token format and converts matches into proper
+ * function_call chunks. Set CUSTOM_GEMMA_TOOL_PARSER_ENABLED=false to disable if
+ * another local model produces similar token strings unexpectedly.
+ */
+const GEMMA_TOOL_PARSER_ENABLED = (process.env.CUSTOM_GEMMA_TOOL_PARSER_ENABLED ?? "true").toLowerCase() !== "false";
 
 export interface CustomStreamConfig extends OpenAICompatibleStreamConfig {
   endpointUrl: string;
@@ -11,6 +21,8 @@ export interface CustomStreamConfig extends OpenAICompatibleStreamConfig {
 export const CUSTOM_PROVIDER_PLACEHOLDER_API_KEY = "custom-endpoint-configured";
 
 export class CustomStreamAdapter extends OpenAICompatibleStreamAdapter {
+  private readonly gemmaParser = new GemmaToolCallParser();
+
   constructor() {
     super({
       providerName: "custom",
@@ -58,6 +70,54 @@ export class CustomStreamAdapter extends OpenAICompatibleStreamAdapter {
         }
       },
     });
+  }
+
+  /**
+   * Intercept text chunks to detect Gemma 4's hallucinated tool call tokens.
+   *
+   * Gemma 4 at low quantisation leaks `<|tool_call>call:name{...}<tool_call|>`
+   * into `delta.content` instead of using the proper `delta.tool_calls` field.
+   * The GemmaToolCallParser buffers these tokens across chunk boundaries and
+   * converts completed blocks into function_call chunks for the normal tool
+   * execution pipeline.
+   */
+  override processChunk(chunk: RawStreamChunk): ProcessedChunk {
+    const base = super.processChunk(chunk);
+
+    if (!GEMMA_TOOL_PARSER_ENABLED) {
+      return base;
+    }
+
+    // End-of-stream: flush held-back text and/or incomplete tool buffer.
+    if (base.type === "done") {
+      const { pendingText, functionCall } = this.gemmaParser.flush();
+
+      if (functionCall) {
+        log.info("CustomStreamAdapter: Flushed truncated Gemma tool call at stream end");
+        return { ...base, type: "function_call", functionCall };
+      }
+      if (pendingText) {
+        // Held-back scan chars that were never followed by a START_TOKEN.
+        // Return as a text chunk; the stream iterator will exhaust naturally
+        // on the next raw chunk (there isn't one), terminating the loop.
+        log.info(`CustomStreamAdapter: Flushing ${pendingText.length} held-back chars at stream end`);
+        return { ...base, type: "text", content: pendingText };
+      }
+      return base;
+    }
+
+    // Non-text chunks (errors, native delta.tool_calls) pass through untouched.
+    if (base.type !== "text" || typeof base.content !== "string" || base.content.length === 0) {
+      return base;
+    }
+
+    const result = this.gemmaParser.feed(base.content);
+
+    if (result.functionCall) {
+      return { ...base, type: "function_call", functionCall: result.functionCall };
+    }
+
+    return { ...base, content: result.visibleText };
   }
 }
 

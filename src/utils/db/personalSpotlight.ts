@@ -8,7 +8,7 @@ type PersonalSpotlightAggregateRow = {
   expires_at: Date | string | null;
   created_at: Date | string | null;
   updated_at: Date | string | null;
-  persona_ids: Array<number | string | bigint> | null;
+  persona_ids: unknown;
 };
 
 export interface PersonalSpotlightStatus {
@@ -39,10 +39,44 @@ function normalizeNumber(value: number | string | bigint | null | undefined): nu
   return null;
 }
 
-function normalizeNumberArray(values: Array<number | string | bigint> | null | undefined): number[] {
-  const normalized =
-    values?.map((value) => normalizeNumber(value)).filter((value): value is number => value !== null && value > 0) ??
-    [];
+function parsePostgresArrayLiteral(value: string): string[] {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return [];
+  }
+
+  const inner = trimmed.slice(1, -1).trim();
+  if (inner === "") {
+    return [];
+  }
+
+  return inner
+    .split(",")
+    .map((entry) => entry.trim().replace(/^"(.*)"$/u, "$1"))
+    .filter((entry) => entry.length > 0 && entry.toUpperCase() !== "NULL");
+}
+
+function normalizeNumberArray(values: unknown): number[] {
+  let source: unknown = values;
+
+  if (typeof source === "string") {
+    const trimmed = source.trim();
+
+    if (trimmed === "") {
+      source = [];
+    } else {
+      try {
+        const parsed = JSON.parse(trimmed);
+        source = Array.isArray(parsed) ? parsed : parsePostgresArrayLiteral(trimmed);
+      } catch {
+        source = parsePostgresArrayLiteral(trimmed);
+      }
+    }
+  }
+
+  const normalized = (Array.isArray(source) ? source : [])
+    .map((value) => normalizeNumber(value))
+    .filter((value): value is number => value !== null && value > 0);
 
   return [...new Set(normalized)].sort((left, right) => left - right);
 }
@@ -205,8 +239,8 @@ export async function getPersonalSpotlightStatus(
       ps.created_at,
       ps.updated_at,
       COALESCE(
-        ARRAY_AGG(psp.tomori_id ORDER BY psp.tomori_id) FILTER (WHERE psp.tomori_id IS NOT NULL),
-        ARRAY[]::INT[]
+        JSONB_AGG(psp.tomori_id ORDER BY psp.tomori_id) FILTER (WHERE psp.tomori_id IS NOT NULL),
+        '[]'::JSONB
       ) AS persona_ids
     FROM personal_spotlights ps
     LEFT JOIN personal_spotlight_personas psp
@@ -255,8 +289,8 @@ export async function getActivePersonalSpotlightsForUser(
       ps.created_at,
       ps.updated_at,
       COALESCE(
-        ARRAY_AGG(psp.tomori_id ORDER BY psp.tomori_id) FILTER (WHERE psp.tomori_id IS NOT NULL),
-        ARRAY[]::INT[]
+        JSONB_AGG(psp.tomori_id ORDER BY psp.tomori_id) FILTER (WHERE psp.tomori_id IS NOT NULL),
+        '[]'::JSONB
       ) AS persona_ids
     FROM personal_spotlights ps
     LEFT JOIN personal_spotlight_personas psp
