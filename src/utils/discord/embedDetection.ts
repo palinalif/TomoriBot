@@ -4,7 +4,7 @@
  * can be reused by the history fetcher and other utilities.
  */
 
-import type { Embed } from "discord.js";
+import type { Embed, Message } from "discord.js";
 import { localizer, getSupportedLocales } from "@/utils/text/localizer";
 
 /**
@@ -48,4 +48,77 @@ export function isRefreshMarkerEmbed(embed: Embed): boolean {
  */
 export function messageContainsRefreshMarker(embeds: Embed[]): boolean {
   return embeds.some(isRefreshMarkerEmbed);
+}
+
+/**
+ * Classifies a refresh marker embed as either a plain reset (`/refresh`) or a
+ * compact-refresh (`/compact_refresh`). The distinction matters when slicing
+ * history: plain resets drop the marker itself, compact-refreshes keep it
+ * (since the compact summary IS the new conversation opener).
+ *
+ * @param embed - A Discord embed to classify
+ * @returns "compact_refresh" if the embed is a compact-summary refresh marker,
+ *          "reset" if it's a plain `/refresh` marker, null otherwise
+ */
+export function classifyRefreshMarkerEmbed(embed: Embed): "reset" | "compact_refresh" | null {
+  const title = embed.title;
+  if (!title) return null;
+
+  for (const supportedLocale of getSupportedLocales()) {
+    // 1. Plain reset from /refresh
+    if (title === localizer(supportedLocale, "commands.tool.refresh.title")) {
+      return "reset";
+    }
+    // 2. Compact refresh markers — either summary or scene refresh
+    if (
+      title === localizer(supportedLocale, "commands.tool.compact.summary_title_refreshed") ||
+      title === localizer(supportedLocale, "commands.tool.compact.roleplay_scene_title_refreshed")
+    ) {
+      return "compact_refresh";
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Walks an array of Discord messages from newest to oldest, finds the most
+ * recent reset/refresh marker, and returns the sub-range that should be used
+ * as conversation history.
+ *
+ * Exactly mirrors the slicing logic in `tomoriChat.ts`:
+ *   - If no marker is found: return the full array
+ *   - `reset` marker: slice starts at `resetIndex + 1` (drop the marker itself)
+ *   - `compact_refresh` marker: slice starts at `resetIndex` (keep the marker —
+ *     it carries the compact summary that replaces old history)
+ *
+ * @param messages - Messages in chronological order (oldest first, newest last)
+ * @returns An object with the sliced messages and the marker type (or null if none)
+ */
+export function sliceMessagesAtResetMarker<T extends Pick<Message, "embeds">>(
+  messages: T[],
+): { sliced: T[]; markerType: "reset" | "compact_refresh" | null; markerIndex: number } {
+  let resetIndex = -1;
+  let markerType: "reset" | "compact_refresh" | null = null;
+
+  // 1. Walk from newest to oldest to find the most recent marker
+  for (let i = messages.length - 1; i >= 0; i--) {
+    for (const embed of messages[i].embeds) {
+      const classified = classifyRefreshMarkerEmbed(embed);
+      if (classified) {
+        resetIndex = i;
+        markerType = classified;
+        break;
+      }
+    }
+    if (resetIndex !== -1) break;
+  }
+
+  // 2. Compute startIndex based on marker type (or 0 if no marker)
+  const startIndex = resetIndex === -1 ? 0 : markerType === "compact_refresh" ? resetIndex : resetIndex + 1;
+  return {
+    sliced: messages.slice(startIndex),
+    markerType,
+    markerIndex: resetIndex,
+  };
 }

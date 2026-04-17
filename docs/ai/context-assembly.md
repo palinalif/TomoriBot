@@ -235,3 +235,7 @@ When those annotations are present, the dialogue formatter keeps the system line
 | `src/utils/text/stPresetEngine.ts` | ST macro template engine (two-pass resolution) |
 | `src/utils/cache/stPresetCache.ts` | In-memory cache for active preset + nodes |
 | `src/types/misc/context.ts` | `StructuredContextItem`, `ContextPart`, `ContextItemTag` definitions |
+
+## See also
+
+- [`../systems/prompt-snapshot.md`](../systems/prompt-snapshot.md) — `/tool prompt snapshot` exposes the fully-assembled context to admins for debugging; describes what it respects vs. skips compared to the live pipeline.

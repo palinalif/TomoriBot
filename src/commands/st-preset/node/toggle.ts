@@ -46,8 +46,8 @@ const DESCRIPTION_MAX_LENGTH = 100;
 /**
  * Strip SillyTavern macros from node content to produce a human-readable
  * description preview. Removes comment blocks, {{trim}}, {{setvar::...}},
- * and {{getvar::...}} wrappers — but for setvar nodes, extracts the value
- * portion (e.g., `{{setvar::tense::past tense}}` → `past tense`).
+ * {{addvar::...}}, and {{getvar::...}} wrappers — but for setvar/addvar nodes,
+ * extracts the value portion (e.g., `{{setvar::tense::past tense}}` → `past tense`).
  *
  * @param content - Raw node content with ST macros
  * @returns Cleaned text truncated to DESCRIPTION_MAX_LENGTH, or undefined if empty
@@ -58,8 +58,8 @@ function buildNodeDescription(content: string): string | undefined {
     .replace(/\{\{\/\/[^}]*\}\}/g, "")
     // 2. Strip {{trim}} macros
     .replace(/\{\{trim\}\}/g, "")
-    // 3. Extract value from setvar: {{setvar::key::value}} → value
-    .replace(/\{\{setvar::[^:}]+::([^}]*)\}\}/g, "$1")
+    // 3. Extract value from setvar/addvar: {{setvar::key::value}} → value
+    .replace(/\{\{(?:setvar|addvar)::[^:}]+::([^}]*)\}\}/g, "$1")
     // 4. Resolve getvar to placeholder: {{getvar::key}} → [key]
     .replace(/\{\{getvar::([^}]*)\}\}/g, "[$1]")
     // 5. Simplify remaining template vars: {{user}} → user, {{char}} → char

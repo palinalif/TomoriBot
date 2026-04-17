@@ -331,7 +331,7 @@ The selected model requires allowing data for paid model training, but your Open
         file_too_large_description: `The preset file must be under {max_size} MB.`,
         download_failed: `Failed to download the attachment. Please try again.`,
         invalid_json: `The file could not be parsed as valid JSON.`,
-        not_a_preset: `This doesn't look like a SillyTavern preset — no \`prompts\` array found.`,
+        not_a_preset: `This doesn't look like a supported SillyTavern preset — expected a Prompt Manager \`prompts\` array or legacy \`context.story_string\` + \`sysprompt.content\`.`,
         no_nodes: `No usable prompt nodes were found in this preset.`,
         success_title: `Preset Imported`,
         success_description: `**{name}** has been imported.
@@ -343,10 +343,10 @@ The selected model requires allowing data for paid model training, but your Open
 Use {stPresetToggle} to adjust which nodes are active.
 Use {helpStPreset} to learn how imported presets behave here.
 Use {stPresetRemove} to revert to default behavior.`,
-        note_comment_only: `
-> **{count}** comment-only node(s) are visible in \`/st-preset node toggle\` but are never injected into the prompt.`,
-        note_disabled_by_preset: `> **{count}** node(s) are disabled by default in this preset. Use \`/st-preset node toggle\` to enable them.
-`,
+        note_comment_only: `> **{count}** comment-only node(s) are visible in \`/st-preset node toggle\` but are never injected into the prompt.`,
+        note_disabled_by_preset: `> **{count}** node(s) are disabled by default in this preset. Use \`/st-preset node toggle\` to enable them.`,
+        note_unsupported_macros: `> Enabled node(s) still reference unsupported preset macros: {macros}. Those parts may be sent literally or behave differently here.`,
+        note_legacy_text_completion: `> This older text-completions preset was converted best-effort from legacy \`story_string\` fields. ST-only blocks such as \`persona\`, \`scenario\`, anchors, stop strings, and backend settings are still ignored.`,
       },
       remove: {
         description: `Remove the active SillyTavern preset`,
@@ -751,6 +751,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
           dm_hint_try_json: `Run the command again with \`format: JSON\` for the raw format.`,
           dm_hint_try_text: `Run the command again with \`format: Text\` for a more user-readable format.`,
           dm_tools_txt_note: `Tool definitions are omitted from TXT format, please re-run with \`format: JSON\` and \`fetch_tools: true\` to include them.`,
+          dm_config_heading: `**Sampling / request config** (matches what the provider adapter would send at runtime):`,
           dm_failed_title: `Could Not Send DM`,
           dm_failed_description: `I couldn't send a DM. Your snapshot is attached here instead. Enable DMs from server members to receive future snapshots in DMs.`,
           success_title: `Snapshot Sent`,
@@ -1414,9 +1415,16 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - Post-history / depth injection nodes
 - Which imported nodes start enabled or disabled`,
         embed1_still_sent_title: `What It Does Not Fully Replace`,
-        embed1_still_sent_description: `- A custom system prompt from {configSystemPromptSet} if you set one
-- Character description, personality, sample chats, and live chat history
-- Server memory, uploaded document context, emoji/sticker context, and other automatic context`,
+        embed1_still_sent_description: `- The current system/persona blocks still exist: {configSystemPromptSet}, {personaPromptSet}, {personaAttributeAdd}, and {personaSampleDialogueAdd}
+- Live chat history and retrieved document context still exist too
+- Automatic Tomori-only context still exists too: server memory, emoji/sticker context, users-in-conversation, STM, conditioning, and similar blocks`,
+        embed1_mapping_title: `How Native Blocks Usually Map`,
+        embed1_mapping_description: `- \`main\` usually places the current system prompt bucket: {configSystemPromptSet} if set, otherwise the built-in fallback
+- \`charDescription\` usually places {personaPromptSet}
+- \`charPersonality\` usually places {personaAttributeAdd}
+- \`dialogueExamples\` usually places {personaSampleDialogueAdd}
+- \`chatHistory\` usually places live channel history
+- \`worldInfoBefore\` / \`worldInfoAfter\` usually place retrieved document context, not ST lorebooks`,
         embed1_system_prompt_title: `System Prompt Rule`,
         embed1_system_prompt_description: `- While a preset is active, the built-in fallback system prompt is removed
 - If you set your own system prompt with {configSystemPromptSet}, it is still sent
@@ -1427,16 +1435,23 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 
 - Imported does not always mean sent: nodes disabled in \`prompt_order\` stay off until you enable them with {stPresetToggle}
 - Comment-only nodes and nodes that become empty after \`{{trim}}\` are never sent
+- If enabled nodes still contain unsupported preset macros after import, the import summary warns you; those tags may still be sent literally or behave differently here
 - Unknown markers are skipped
 - Order is literal: if you place \`chatHistory\` before \`dialogueExamples\`, live chat comes first
-- Only \`prompt_order\` for \`character_id: 100001\` is used
+- Tomori uses \`prompt_order\` for \`character_id: 100001\`, and falls back to \`100000\` only if \`100001\` is missing
 - If sample chats end up last, the bot adds a short separator so strict providers do not continue the example`,
         embed2_footer: `If something looks missing, compare the imported node list in {stPresetToggle} against your preset JSON`,
         embed3_title: `Limits And Compatibility`,
         embed3_description: `- Post-history / depth injections are merged into existing chat history entries, not inserted as standalone messages
 - Multiple nodes at the same depth are batched together
+- \`{{setvar}}\` and \`{{addvar}}\` work across enabled nodes in node order, but variables are global for the whole preset
+- Most native blocks are moved, not removed: \`main\`, \`charDescription\`, \`charPersonality\`, \`dialogueExamples\`, \`chatHistory\`, and \`worldInfo\` markers reposition Tomori's own system prompt, persona prompt, persona attributes, sample chats, live history, and retrieved docs
+- The real suppressions are narrow: the built-in fallback system prompt is removed only if you did not set {configSystemPromptSet}, and native \`charDescription\` / \`charPersonality\` are skipped only when a custom node already expands \`{{description}}\` / \`{{personality}}\`
+- Tomori-only automatic blocks are not owned by ST markers: server info, memories, emoji/sticker context flush after \`main\` / \`charDescription\` / \`charPersonality\`; users-in-conversation, STM, conditioning, and leftover RAG flush before \`dialogueExamples\` / \`chatHistory\`
 - User impersonation via {botImpersonate} ignores the preset and uses the normal layout
-- Modern Prompt Manager presets with a \`prompts\` array are required; some extra legacy \`post_history\` fields are imported too
+- Older text-completions presets that use \`context.story_string\` + \`sysprompt.content\` are imported through a best-effort conversion path
+- That legacy conversion maps the main system prompt, story layout, and post-history, but ST-only blocks like \`persona\`, \`scenario\`, anchors, stop strings, and old backend settings are still ignored
+- Some extra legacy \`post_history\` fields on modern Prompt Manager presets are imported too
 - Regex post-processing, preset-side temperature/top_p/model overrides, and layered presets are not supported
 - \`worldInfo\` markers use retrieved document context instead of ST lorebooks
 - Some automatic server/context blocks may still be inserted even if your preset does not place explicit ST markers for them

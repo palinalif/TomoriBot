@@ -331,7 +331,7 @@ export default {
         file_too_large_description: `プリセットファイルは{max_size} MB以下にしてください。`,
         download_failed: `添付ファイルのダウンロードに失敗しました。もう一度お試しください。`,
         invalid_json: `ファイルを有効なJSONとして解析できませんでした。`,
-        not_a_preset: `これはSillyTavernプリセットではないようです — \`prompts\`配列が見つかりません。`,
+        not_a_preset: `これは対応しているSillyTavernプリセットではないようです — Prompt Manager の\`prompts\`配列、または legacy の\`context.story_string\` + \`sysprompt.content\` が必要です。`,
         no_nodes: `このプリセットに使用可能なプロンプトノードが見つかりませんでした。`,
         success_title: `プリセットをインポートしました`,
         success_description: `**{name}**をインポートしました。
@@ -343,10 +343,10 @@ export default {
 {stPresetToggle}でアクティブなノードを調整できます。
 {helpStPreset}で、この環境でのプリセットの挙動を確認できます。
 {stPresetRemove}でデフォルトの動作に戻せます。`,
-        note_comment_only: `
-> **{count}** 個のコメントのみのノードが\`/st-preset node toggle\`で表示されますが、プロンプトには挿入されません。`,
-        note_disabled_by_preset: `
-> **{count}** 個のノードがこのプリセットでデフォルトで無効になっています。\`/st-preset node toggle\`で有効にできます。`,
+        note_comment_only: `> **{count}** 個のコメントのみのノードが\`/st-preset node toggle\`で表示されますが、プロンプトには挿入されません。`,
+        note_disabled_by_preset: `> **{count}** 個のノードがこのプリセットでデフォルトで無効になっています。\`/st-preset node toggle\`で有効にできます。`,
+        note_unsupported_macros: `> 有効なノードに未対応のプリセットマクロが残っています: {macros}。その部分はそのまま送信されたり、この環境ではSTどおりに動かない場合があります。`,
+        note_legacy_text_completion: `> この古い text-completions プリセットは、legacy の\`story_string\`からベストエフォートで変換されました。\`persona\`、\`scenario\`、アンカー、stop strings、古いバックエンド設定などの ST 専用要素は引き続き無視されます。`,
       },
       remove: {
         description: `アクティブなSillyTavernプリセットを削除`,
@@ -751,6 +751,7 @@ export default {
           dm_hint_try_json: `生の機械可読フォーマットが必要ですか？コマンドを再実行する際に \`format: JSON\` を指定してください。`,
           dm_hint_try_text: `より人間に読みやすい形式が必要ですか？コマンドを再実行する際に \`format: Text\` を指定してください。`,
           dm_tools_txt_note: `ツール定義はTXT形式からは省略されています。含めるには \`format: JSON\` と \`fetch_tools: true\` を指定して再実行してください。`,
+          dm_config_heading: `**サンプリング / リクエスト設定**（プロバイダーアダプタが実行時に送信する内容と一致）：`,
           dm_failed_title: `DMを送信できませんでした`,
           dm_failed_description: `DMを送信できませんでした。スナップショットをここに添付します。今後DMで受け取るには、サーバーメンバーからのDMを有効にしてください。`,
           success_title: `スナップショットを送信しました`,
@@ -1414,9 +1415,16 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - post-history / depth injection ノード
 - インポート時に有効・無効で始まるノード`,
         embed1_still_sent_title: `それでも完全には置き換えないもの`,
-        embed1_still_sent_description: `- 設定している場合の {configSystemPromptSet} のカスタムシステムプロンプト
-- キャラクター説明、性格、サンプル会話、ライブ会話履歴
-- サーバーメモリ、アップロード文書の文脈、絵文字/ステッカー文脈、その他の自動コンテキスト`,
+        embed1_still_sent_description: `- 現在の system/persona 系ブロックは残ります: {configSystemPromptSet}、{personaPromptSet}、{personaAttributeAdd}、{personaSampleDialogueAdd}
+- ライブ会話履歴と取得済み文書コンテキストも残ります
+- Tomori専用の自動コンテキストも残ります: サーバーメモリ、絵文字/ステッカー文脈、会話参加者一覧、STM、conditioning など`,
+        embed1_mapping_title: `ネイティブブロックの対応関係`,
+        embed1_mapping_description: `- \`main\` は通常、現在の system prompt バケットを置きます: 設定済みなら {configSystemPromptSet}、なければ組み込みのフォールバック
+- \`charDescription\` は通常 {personaPromptSet} を置きます
+- \`charPersonality\` は通常 {personaAttributeAdd} を置きます
+- \`dialogueExamples\` は通常 {personaSampleDialogueAdd} を置きます
+- \`chatHistory\` は通常ライブ会話履歴を置きます
+- \`worldInfoBefore\` / \`worldInfoAfter\` は通常、ST lorebook ではなく取得済み文書コンテキストを置きます`,
         embed1_system_prompt_title: `システムプロンプトのルール`,
         embed1_system_prompt_description: `- プリセットが有効な間は、組み込みのフォールバック用システムプロンプトは外れます
 - {configSystemPromptSet} で自分のシステムプロンプトを設定していれば、それは送信されます
@@ -1427,16 +1435,23 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 
 - インポートされたからといって必ず送信されるとは限りません。 \`prompt_order\` で無効なノードは {stPresetToggle} で有効にするまで送られません
 - コメント専用ノードや \`{{trim}}\` の結果が空になるノードは送信されません
+- 有効なノードに未対応マクロが残っている場合、インポート結果で警告が出ます。そのタグはそのまま送信されたり、ここでは別の挙動になることがあります
 - 未対応のマーカーはスキップされます
 - 順序は文字どおりです。 \`chatHistory\` を \`dialogueExamples\` より前に置くと、ライブ会話が先に来ます
-- 読み取る \`prompt_order\` は \`character_id: 100001\` だけです
+- 基本は \`character_id: 100001\` の \`prompt_order\` を使い、\`100001\` がない場合だけ \`100000\` にフォールバックします
 - サンプル会話が最後になると、厳格なプロバイダーが例文を続けないよう短い区切り文が追加されます`,
         embed2_footer: `何か足りないように見えるときは、{stPresetToggle} のノード一覧と元JSONを見比べてください`,
         embed3_title: `制限と互換性`,
         embed3_description: `- post-history / depth injection は独立したメッセージとして挿入されず、既存の会話履歴項目にマージされます
 - 同じ深さのノードはまとめて1つに束ねられます
+- \`{{setvar}}\` と \`{{addvar}}\` は有効ノードの順番どおりに動きますが、変数はプリセット全体で共有されます
+- 多くの native ブロックは削除ではなく移動です: \`main\`、\`charDescription\`、\`charPersonality\`、\`dialogueExamples\`、\`chatHistory\`、\`worldInfo\` マーカーは、Tomori 側の system prompt、persona prompt、性格属性、サンプル会話、ライブ履歴、取得済み文書を再配置します
+- 実際に抑制されるのは限られています: {configSystemPromptSet} を設定していない場合だけ組み込みフォールバック system prompt が外れ、native の \`charDescription\` / \`charPersonality\` はカスタムノードが \`{{description}}\` / \`{{personality}}\` を展開したときだけスキップされます
+- Tomori専用の自動ブロックは ST マーカーの所有物ではありません: サーバー情報・記憶・絵文字/ステッカー文脈は \`main\` / \`charDescription\` / \`charPersonality\` の後で flush され、会話参加者一覧・STM・conditioning・余った RAG は \`dialogueExamples\` / \`chatHistory\` の前で flush されます
 - {botImpersonate} によるユーザーなりきりではプリセットが無視され、通常レイアウトが使われます
-- 必要なのは \`prompts\` 配列を持つ modern Prompt Manager プリセットです。追加の legacy \`post_history\` フィールドは一部だけ取り込みます
+- \`context.story_string\` + \`sysprompt.content\` を使う古い text-completions プリセットは、ベストエフォートの変換経路でインポートされます
+- その legacy 変換ではメインのシステムプロンプト、story layout、post-history は取り込みますが、\`persona\`、\`scenario\`、アンカー、stop strings、古いバックエンド設定などの ST 専用要素は引き続き無視されます
+- modern Prompt Manager プリセット上にある追加の legacy \`post_history\` フィールドも一部取り込みます
 - regex後処理、プリセット側の temperature/top_p/モデル上書き、多段プリセットは未対応です
 - \`worldInfo\` マーカーは ST lorebook ではなく、取得された文書コンテキストを使います
 - プリセットに明示的なSTマーカーを置かなくても、一部の自動サーバー/文脈ブロックは挿入されることがあります

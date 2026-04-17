@@ -8,6 +8,7 @@ import {
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { localizer } from "@/utils/text/localizer";
+import { findUnsupportedPresetMacros } from "@/utils/text/stPresetEngine";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { safeDownload } from "@/utils/security/safeDownload";
@@ -22,6 +23,8 @@ const MAX_PRESET_FILE_SIZE_MB = 2;
 /** Maximum allowed preset name length (derived from filename) */
 const MAX_PRESET_NAME_LENGTH = 100;
 const LEGACY_POST_HISTORY_INJECTION_ORDER = 10_000;
+const LEGACY_STORY_TRIM_REGEX = /\{\{trim\}\}/gi;
+const LEGACY_STORY_BLOCK_REGEX = /\{\{#if\s+([a-zA-Z_][\w]*)\}\}([\s\S]*?)\{\{\/if\}\}/gi;
 
 /**
  * Regex to detect comment-only content in SillyTavern nodes.
@@ -140,9 +143,18 @@ interface ParseResult {
   disabledByPreset: number;
   /** Number of synthetic nodes added from legacy prompt fields */
   legacyNodeCount: number;
+  /** Source format that was accepted by the importer */
+  sourceKind: "modern" | "legacy_text_completion";
 }
 
 type JsonObject = Record<string, unknown>;
+type PresetSourceKind = "modern" | "legacy_text_completion";
+
+interface NormalizedPresetShape {
+  preset: RawSTPreset;
+  sourceKind: PresetSourceKind;
+  syntheticNodeCount: number;
+}
 
 function asObject(value: unknown): JsonObject | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -164,6 +176,213 @@ function getStringField(obj: JsonObject | null, key: string): string | null {
 
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function sanitizeLegacyStorySegment(content: string): string {
+  return content.replace(LEGACY_STORY_TRIM_REGEX, "");
+}
+
+function hasMeaningfulLegacyStorySegment(content: string): boolean {
+  return sanitizeLegacyStorySegment(content).trim().length > 0;
+}
+
+function createLegacyContentNode(identifier: string, name: string, content: string): RawSTPromptNode | null {
+  const sanitizedContent = sanitizeLegacyStorySegment(content);
+  if (sanitizedContent.trim().length === 0) {
+    return null;
+  }
+
+  return {
+    identifier,
+    name,
+    role: "system",
+    content: sanitizedContent,
+    enabled: true,
+  };
+}
+
+function createLegacyMarkerNode(identifier: string, name: string): RawSTPromptNode {
+  return {
+    identifier,
+    name,
+    role: "system",
+    marker: true,
+    enabled: true,
+  };
+}
+
+function buildLegacyTextCompletionPreset(raw: RawSTPreset): NormalizedPresetShape | null {
+  const root = asObject(raw);
+  const context = asObject(root?.context);
+  const sysprompt = asObject(root?.sysprompt);
+
+  const storyString = getStringField(context, "story_string");
+  const syspromptContent = getStringField(sysprompt, "content");
+  if (!storyString || !syspromptContent) {
+    return null;
+  }
+
+  const prompts: RawSTPromptNode[] = [];
+  let syntheticNodeCount = 0;
+  let contentNodeIndex = 0;
+  const usedMarkers = new Set<string>();
+
+  const addContentNode = (name: string, content: string) => {
+    const identifierSuffix = contentNodeIndex;
+    contentNodeIndex += 1;
+    const identifier = `legacyTextContent_${identifierSuffix}`;
+    const node = createLegacyContentNode(identifier, name, content);
+    if (!node) {
+      return;
+    }
+
+    prompts.push(node);
+    syntheticNodeCount++;
+  };
+
+  const addMarkerNode = (identifier: string, name: string) => {
+    if (usedMarkers.has(identifier)) {
+      return;
+    }
+
+    usedMarkers.add(identifier);
+    prompts.push(createLegacyMarkerNode(identifier, name));
+    syntheticNodeCount++;
+  };
+
+  const insertPlaceholderNodes = (
+    body: string,
+    placeholder: string,
+    prefixName: string,
+    replacementNodes: RawSTPromptNode[],
+    suffixName = prefixName,
+  ) => {
+    const lowerBody = body.toLowerCase();
+    const lowerPlaceholder = placeholder.toLowerCase();
+    const placeholderIndex = lowerBody.indexOf(lowerPlaceholder);
+    if (placeholderIndex === -1) {
+      addContentNode(prefixName, body);
+      return;
+    }
+
+    const prefix = body.slice(0, placeholderIndex);
+    const suffix = body.slice(placeholderIndex + placeholder.length);
+
+    addContentNode(`${prefixName} Prefix`, prefix);
+    for (const node of replacementNodes) {
+      if (node.marker) {
+        addMarkerNode(node.identifier, node.name);
+      } else if (node.content) {
+        addContentNode(node.name, node.content);
+      }
+    }
+    addContentNode(`${suffixName} Suffix`, suffix);
+  };
+
+  let lastIndex = 0;
+  for (const match of storyString.matchAll(LEGACY_STORY_BLOCK_REGEX)) {
+    const matchIndex = match.index ?? 0;
+    const precedingLiteral = storyString.slice(lastIndex, matchIndex);
+    if (hasMeaningfulLegacyStorySegment(precedingLiteral)) {
+      addContentNode("Legacy Story Text", precedingLiteral);
+    }
+
+    const blockKey = match[1]?.trim().toLowerCase();
+    const blockBody = match[2] ?? "";
+
+    switch (blockKey) {
+      case "system":
+        insertPlaceholderNodes(blockBody, "{{system}}", "Legacy System Prompt", [
+          createLegacyMarkerNode("main", "Main System Prompt"),
+          {
+            identifier: "legacyImportedSystemPrompt",
+            name: "Imported Legacy System Prompt",
+            role: "system",
+            content: syspromptContent,
+            enabled: true,
+          },
+        ]);
+        break;
+      case "wibefore":
+        insertPlaceholderNodes(blockBody, "{{wiBefore}}", "Legacy World Info Before", [
+          createLegacyMarkerNode("worldInfoBefore", "World Info Before"),
+        ]);
+        break;
+      case "wiafter":
+        insertPlaceholderNodes(blockBody, "{{wiAfter}}", "Legacy World Info After", [
+          createLegacyMarkerNode("worldInfoAfter", "World Info After"),
+        ]);
+        break;
+      case "description":
+        insertPlaceholderNodes(blockBody, "{{description}}", "Legacy Character Description", [
+          createLegacyMarkerNode("charDescription", "Character Description"),
+        ]);
+        break;
+      case "personality":
+        insertPlaceholderNodes(blockBody, "{{personality}}", "Legacy Character Personality", [
+          createLegacyMarkerNode("charPersonality", "Character Personality"),
+        ]);
+        break;
+      case "mesexamples":
+        insertPlaceholderNodes(blockBody, "{{mesExamples}}", "Legacy Example Dialogue", [
+          createLegacyMarkerNode("dialogueExamples", "Example Dialogues"),
+        ]);
+        break;
+      case "persona":
+      case "scenario":
+      case "anchorbefore":
+      case "anchorafter":
+        break;
+      default:
+        if (hasMeaningfulLegacyStorySegment(blockBody)) {
+          addContentNode(`Legacy ${blockKey ?? "Story"} Block`, blockBody);
+        }
+        break;
+    }
+
+    lastIndex = matchIndex + match[0].length;
+  }
+
+  const trailingLiteral = storyString.slice(lastIndex);
+  if (hasMeaningfulLegacyStorySegment(trailingLiteral)) {
+    addContentNode("Legacy Story Tail", trailingLiteral);
+  }
+
+  addMarkerNode("chatHistory", "Chat History");
+
+  if (prompts.length === 0) {
+    return null;
+  }
+
+  return {
+    preset: {
+      ...raw,
+      prompts,
+      prompt_order: [
+        {
+          character_id: 100001,
+          order: prompts.map((prompt) => ({
+            identifier: prompt.identifier,
+            enabled: prompt.enabled !== false,
+          })),
+        },
+      ],
+    },
+    sourceKind: "legacy_text_completion",
+    syntheticNodeCount,
+  };
+}
+
+function normalizePresetShape(raw: RawSTPreset): NormalizedPresetShape | null {
+  if (Array.isArray(raw.prompts) && raw.prompts.length > 0) {
+    return {
+      preset: raw,
+      sourceKind: "modern",
+      syntheticNodeCount: 0,
+    };
+  }
+
+  return buildLegacyTextCompletionPreset(raw);
 }
 
 /**
@@ -246,13 +465,13 @@ function buildLegacyPromptNodes(raw: RawSTPreset, prompts: RawSTPromptNode[]): R
  * @param raw - Parsed SillyTavern preset JSON
  * @returns Parse result with nodes and stats, or null if the preset is invalid
  */
-function parsePresetNodes(raw: RawSTPreset): ParseResult | null {
-  const basePrompts = raw.prompts;
+function parsePresetNodes(normalizedPreset: NormalizedPresetShape): ParseResult | null {
+  const basePrompts = normalizedPreset.preset.prompts;
   if (!Array.isArray(basePrompts) || basePrompts.length === 0) {
     return null;
   }
 
-  const legacyPromptNodes = buildLegacyPromptNodes(raw, basePrompts);
+  const legacyPromptNodes = buildLegacyPromptNodes(normalizedPreset.preset, basePrompts);
   const prompts = [...basePrompts, ...legacyPromptNodes];
   if (!Array.isArray(prompts) || prompts.length === 0) {
     return null;
@@ -268,7 +487,7 @@ function parsePresetNodes(raw: RawSTPreset): ParseResult | null {
 
   // 2. Find the user-prompt order (character_id 100001)
   //    Falls back to character_id 100000 (system prompt order) if 100001 is missing
-  const promptOrders = raw.prompt_order;
+  const promptOrders = normalizedPreset.preset.prompt_order;
   let orderEntries: RawSTPromptOrderEntry[] | null = null;
 
   if (Array.isArray(promptOrders)) {
@@ -339,8 +558,35 @@ function parsePresetNodes(raw: RawSTPreset): ParseResult | null {
     nodes,
     commentOnlyCount,
     disabledByPreset,
-    legacyNodeCount: legacyPromptNodes.length,
+    legacyNodeCount: normalizedPreset.syntheticNodeCount + legacyPromptNodes.length,
+    sourceKind: normalizedPreset.sourceKind,
   };
+}
+
+function summarizeMacroLabels(labels: string[], maxLabels = 4): string {
+  const sorted = [...labels].sort((a, b) => a.localeCompare(b));
+  if (sorted.length <= maxLabels) {
+    return sorted.join(", ");
+  }
+
+  const remaining = sorted.length - maxLabels;
+  return `${sorted.slice(0, maxLabels).join(", ")} +${remaining} more`;
+}
+
+function collectUnsupportedEnabledMacros(nodes: Omit<StPresetNodeRow, "node_id" | "preset_id">[]): string[] {
+  const labels = new Set<string>();
+
+  for (const node of nodes) {
+    if (!node.is_enabled || node.is_marker || node.is_comment) {
+      continue;
+    }
+
+    for (const label of findUnsupportedPresetMacros(node.content)) {
+      labels.add(label);
+    }
+  }
+
+  return [...labels];
 }
 
 // ─── Execution ───────────────────────────────────────────────────────
@@ -430,8 +676,9 @@ export async function execute(
       return;
     }
 
-    // 7. Validate it looks like a SillyTavern preset (must have prompts array)
-    if (!rawPreset.prompts || !Array.isArray(rawPreset.prompts)) {
+    // 7. Normalize supported ST preset formats (modern Prompt Manager or legacy text-completions)
+    const normalizedPreset = normalizePresetShape(rawPreset);
+    if (!normalizedPreset) {
       await interaction.editReply({
         content: localizer(locale, "commands.st-preset.import.not_a_preset"),
       });
@@ -439,7 +686,7 @@ export async function execute(
     }
 
     // 8. Parse nodes from the preset
-    const parseResult = parsePresetNodes(rawPreset);
+    const parseResult = parsePresetNodes(normalizedPreset);
     if (!parseResult) {
       await interaction.editReply({
         content: localizer(locale, "commands.st-preset.import.no_nodes"),
@@ -447,7 +694,7 @@ export async function execute(
       return;
     }
 
-    const { nodes, commentOnlyCount, disabledByPreset, legacyNodeCount } = parseResult;
+    const { nodes, commentOnlyCount, disabledByPreset, legacyNodeCount, sourceKind } = parseResult;
 
     // 9. Derive preset name from filename
     const presetName = derivePresetName(attachment.name ?? "Unnamed Preset");
@@ -473,6 +720,8 @@ export async function execute(
     // Excludes comment-only nodes — they never inject regardless of enabled state
     const enabledCount = nodes.filter((n) => n.is_enabled && !n.is_marker && !n.is_comment).length;
 
+    const unsupportedEnabledMacros = collectUnsupportedEnabledMacros(nodes);
+
     // 13. Build filtering notes for the success embed
     const filterNotes: string[] = [];
     if (commentOnlyCount > 0) {
@@ -489,10 +738,28 @@ export async function execute(
         }),
       );
     }
+    if (unsupportedEnabledMacros.length > 0) {
+      filterNotes.push(
+        localizer(locale, "commands.st-preset.import.note_unsupported_macros", {
+          macros: summarizeMacroLabels(unsupportedEnabledMacros),
+        }),
+      );
+    }
+    if (sourceKind === "legacy_text_completion") {
+      filterNotes.push(localizer(locale, "commands.st-preset.import.note_legacy_text_completion"));
+    }
     const notes = filterNotes.length > 0 ? filterNotes.join("\n") : "";
 
     if (legacyNodeCount > 0) {
-      log.info(`[ST Preset Import] Added ${legacyNodeCount} synthetic prompt node(s) from legacy post-history fields`);
+      log.info(`[ST Preset Import] Added ${legacyNodeCount} synthetic prompt node(s) from legacy preset compatibility`);
+    }
+    if (unsupportedEnabledMacros.length > 0) {
+      log.warn(
+        `[ST Preset Import] "${presetName}" contains unsupported macro(s) in enabled nodes: ${unsupportedEnabledMacros.join(", ")}`,
+      );
+    }
+    if (sourceKind === "legacy_text_completion") {
+      log.info(`[ST Preset Import] "${presetName}" was converted from a legacy text-completions preset shape`);
     }
 
     const stPresetToggleMention = commandRegistry.getCommandMention("st-preset", "node", "toggle");

@@ -29,6 +29,9 @@ export async function execute(
     const stPresetToggleMention = commandRegistry.getCommandMention("st-preset", "node", "toggle");
     const stPresetRemoveMention = commandRegistry.getCommandMention("st-preset", "remove");
     const configSystemPromptSetMention = commandRegistry.getCommandMention("config", "system-prompt", "set");
+    const personaPromptSetMention = commandRegistry.getCommandMention("persona", "prompt", "set");
+    const personaAttributeAddMention = commandRegistry.getCommandMention("persona", "attribute", "add");
+    const personaSampleDialogueAddMention = commandRegistry.getCommandMention("persona", "sample-dialogue", "add");
     const botImpersonateMention = commandRegistry.getCommandMention("bot", "impersonate");
 
     const pages: SummaryEmbedOptions[] = [
@@ -51,6 +54,19 @@ export async function execute(
             nameKey: "commands.help.st-preset.embed1_still_sent_title",
             value: localizer(locale, "commands.help.st-preset.embed1_still_sent_description", {
               configSystemPromptSet: configSystemPromptSetMention,
+              personaPromptSet: personaPromptSetMention,
+              personaAttributeAdd: personaAttributeAddMention,
+              personaSampleDialogueAdd: personaSampleDialogueAddMention,
+            }),
+            inline: false,
+          },
+          {
+            nameKey: "commands.help.st-preset.embed1_mapping_title",
+            value: localizer(locale, "commands.help.st-preset.embed1_mapping_description", {
+              configSystemPromptSet: configSystemPromptSetMention,
+              personaPromptSet: personaPromptSetMention,
+              personaAttributeAdd: personaAttributeAddMention,
+              personaSampleDialogueAdd: personaSampleDialogueAddMention,
             }),
             inline: false,
           },
@@ -82,6 +98,7 @@ export async function execute(
         descriptionKey: "commands.help.st-preset.embed3_description",
         descriptionVars: {
           botImpersonate: botImpersonateMention,
+          configSystemPromptSet: configSystemPromptSetMention,
           stPresetRemove: stPresetRemoveMention,
         },
         color: ColorCode.INFO,

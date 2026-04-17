@@ -3,7 +3,8 @@
  *
  * Resolves ST-specific macros in preset node content at context build time.
  * Uses a two-pass architecture:
- *   Pass 1: Collect all {{setvar::key::value}} from enabled nodes (last writer wins)
+ *   Pass 1: Apply all {{setvar::key::value}} / {{addvar::key::value}} declarations
+ *           from enabled nodes in order
  *   Pass 2: Resolve {{getvar::key}}, content macros, randomization, dice rolls, trim, etc.
  *
  * Identity macros ({{user}}, {{char}}) are intentionally left unresolved here —
@@ -61,20 +62,30 @@ export interface ResolvedNode {
 /** Matches {{// comment }} blocks */
 const COMMENT_REGEX = /\{\{\/\/[^}]*\}\}/g;
 
-/** Matches {{setvar::key::value}} declarations */
-const SETVAR_REGEX = /\{\{setvar::([^:}]+)::([^}]*)\}\}/g;
+/** Matches {{setvar::key::value}} / {{addvar::key::value}} declarations */
+const VAR_DECLARATION_REGEX = /\{\{(setvar|addvar)::([^:}]+)::([^}]*)\}\}/g;
 
 /** Matches {{getvar::key}} references */
 const GETVAR_REGEX = /\{\{getvar::([^}]+)\}\}/g;
 
 /** Matches {{random: A, B, C}} selections */
-const RANDOM_REGEX = /\{\{random:\s*([^}]+)\}\}/g;
+const RANDOM_COMMA_REGEX = /\{\{random:\s*([^}]+)\}\}/gi;
+
+/** Matches legacy {{random::A::B::C}} selections */
+const RANDOM_DOUBLE_COLON_REGEX = /\{\{random::([^}]+)\}\}/gi;
 
 /** Matches {{roll: XdY}} dice rolls */
 const ROLL_REGEX = /\{\{roll:\s*(\d+)d(\d+)\}\}/gi;
 
 /** Matches {{trim}} directives */
 const TRIM_REGEX = /\{\{trim\}\}/g;
+
+/** Matches simple supported content / identity macros */
+const SIMPLE_SUPPORTED_MACRO_REGEX =
+  /\{\{(?:user|char|bot|personality|description|scenario|mesExamples|lastChatMessage)\}\}/gi;
+
+/** Matches any remaining {{...}} macro for compatibility warnings */
+const GENERIC_MACRO_REGEX = /\{\{([^{}]+)\}\}/g;
 
 /** Detects HTML tags that Discord cannot render */
 const HTML_TAG_REGEX =
@@ -128,24 +139,93 @@ function stripComments(text: string): string {
 }
 
 /**
- * Extract all {{setvar::key::value}} declarations from text.
- * Returns the cleaned text (with setvar macros removed) and a map of variable bindings.
+ * Apply all {{setvar::key::value}} / {{addvar::key::value}} declarations in text.
+ * Returns the cleaned text (with variable macros removed) and the updated map.
  *
- * @param text - Node content potentially containing setvar macros
- * @returns Cleaned text + extracted variable map
+ * `setvar` replaces the current value for the key.
+ * `addvar` appends to the current value for the key, preserving raw whitespace.
+ *
+ * @param text - Node content potentially containing variable declaration macros
+ * @param targetVars - Optional existing variable map to mutate in-place
+ * @returns Cleaned text + updated variable map
  */
-function processSetVars(text: string): {
+function processVarDeclarations(
+  text: string,
+  targetVars?: Map<string, string>,
+): {
   cleaned: string;
   vars: Map<string, string>;
 } {
-  const vars = new Map<string, string>();
+  const vars = targetVars ?? new Map<string, string>();
 
-  const cleaned = text.replace(SETVAR_REGEX, (_match, key: string, value: string) => {
-    vars.set(key.trim(), value.trim());
-    return ""; // Remove the setvar macro from content
+  const cleaned = text.replace(VAR_DECLARATION_REGEX, (_match, mode: string, key: string, value: string) => {
+    const normalizedKey = key.trim();
+
+    if (mode === "addvar") {
+      vars.set(normalizedKey, `${vars.get(normalizedKey) ?? ""}${value}`);
+    } else {
+      vars.set(normalizedKey, value);
+    }
+
+    return ""; // Remove the variable declaration macro from content
   });
 
   return { cleaned, vars };
+}
+
+/**
+ * Find unsupported `{{...}}` macros that remain after stripping the subset of
+ * SillyTavern syntax TomoriBot actually resolves.
+ *
+ * Used by `/st-preset import` to warn users when enabled nodes still reference
+ * macros that will not behave like they do in SillyTavern.
+ *
+ * @param text - Raw preset node content
+ * @returns Deduplicated user-facing macro labels
+ */
+export function findUnsupportedPresetMacros(text: string): string[] {
+  const stripped = text
+    .replace(COMMENT_REGEX, "")
+    .replace(VAR_DECLARATION_REGEX, "")
+    .replace(GETVAR_REGEX, "")
+    .replace(RANDOM_COMMA_REGEX, "")
+    .replace(RANDOM_DOUBLE_COLON_REGEX, "")
+    .replace(ROLL_REGEX, "")
+    .replace(TRIM_REGEX, "")
+    .replace(SIMPLE_SUPPORTED_MACRO_REGEX, "");
+
+  GENERIC_MACRO_REGEX.lastIndex = 0;
+
+  const labels = new Set<string>();
+  for (const match of stripped.matchAll(GENERIC_MACRO_REGEX)) {
+    const body = match[1]?.trim();
+    if (!body) continue;
+
+    if (body.startsWith("#if")) {
+      labels.add("{{#if ...}}");
+      continue;
+    }
+
+    if (body === "/if") {
+      labels.add("{{/if}}");
+      continue;
+    }
+
+    if (body.startsWith("roll:")) {
+      labels.add("{{roll:...}}");
+      continue;
+    }
+
+    const macroName = body.match(/^([a-zA-Z_][\w-]*)/u)?.[1];
+    if (macroName) {
+      labels.add(`{{${macroName}}}`);
+      continue;
+    }
+
+    labels.add(`{{${body}}}`);
+  }
+
+  return [...labels];
 }
 
 /**
@@ -224,19 +304,35 @@ function processContentMacros(text: string, ctx: MacroContext, expanded: Set<str
 }
 
 /**
- * Evaluate {{random: A, B, C}} macros by picking a random item from the comma-separated list.
+ * Evaluate {{random: A, B, C}} and legacy {{random::A::B::C}} macros by picking
+ * a random item from the provided list.
  *
  * @param text - Node content with random selection macros
  * @returns Text with each random macro replaced by a randomly chosen item
  */
 function processRandom(text: string): string {
-  return text.replace(RANDOM_REGEX, (_match, options: string) => {
+  const pickRandomItem = (items: string[]) => {
+    if (items.length === 0) {
+      return "";
+    }
+
+    return items[Math.floor(Math.random() * items.length)];
+  };
+
+  const commaResolved = text.replace(RANDOM_COMMA_REGEX, (_match, options: string) => {
     const items = options
       .split(",")
       .map((item) => item.trim())
       .filter((item) => item.length > 0);
-    if (items.length === 0) return "";
-    return items[Math.floor(Math.random() * items.length)];
+    return pickRandomItem(items);
+  });
+
+  return commaResolved.replace(RANDOM_DOUBLE_COLON_REGEX, (_match, options: string) => {
+    const items = options
+      .split("::")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+    return pickRandomItem(items);
   });
 }
 
@@ -316,8 +412,9 @@ function mapStRole(stRole: string): "system" | "user" | "model" {
 /**
  * Resolve all ST macros in a set of preset nodes using two-pass variable resolution.
  *
- * **Pass 1** — Walk all enabled non-marker nodes in node_order, collecting
- * {{setvar::key::value}} declarations into a shared variable map. Last writer wins.
+ * **Pass 1** — Walk all enabled non-marker nodes in node_order, applying
+ * `{{setvar::key::value}}` / `{{addvar::key::value}}` declarations into a shared
+ * variable map. `setvar` replaces, `addvar` appends.
  *
  * **Pass 2** — Walk all nodes (including markers), resolving:
  *   - {{getvar::key}} from the variable map
@@ -342,22 +439,17 @@ export function resolvePresetMacros(
   const expandedContentMacros = new Set<string>();
   const globalVars = new Map<string, string>();
 
-  // ── Pass 1: Collect setvars from all enabled non-marker nodes ──
+  // ── Pass 1: Collect setvars/addvars from all enabled non-marker nodes ──
   // Walk in node_order (already sorted from DB query).
-  // If the same key is set by multiple nodes, the last one (highest node_order) wins.
+  // If the same key is set by multiple nodes, later declarations win.
   for (const node of nodes) {
     if (!node.is_enabled || node.is_marker || node.is_comment) continue;
 
     // 1. Strip comments first so they don't interfere
     const commentStripped = stripComments(node.content);
 
-    // 2. Extract setvar declarations
-    const { vars } = processSetVars(commentStripped);
-
-    // 3. Merge into global variable map (last writer wins)
-    for (const [key, value] of vars) {
-      globalVars.set(key, value);
-    }
+    // 2. Extract variable declarations into the shared global map
+    processVarDeclarations(commentStripped, globalVars);
   }
 
   if (globalVars.size > 0) {
@@ -414,8 +506,8 @@ export function resolvePresetMacros(
     // 1. Strip comments
     content = stripComments(content);
 
-    // 2. Remove setvar declarations (already collected in Pass 1)
-    const { cleaned } = processSetVars(content);
+    // 2. Remove setvar/addvar declarations (already collected in Pass 1)
+    const { cleaned } = processVarDeclarations(content);
     content = cleaned;
 
     // 3. Resolve getvar references

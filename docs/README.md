@@ -16,6 +16,7 @@ This folder is organized by topic instead of numeric filenames.
 - [`systems/command-system.md`](./systems/command-system.md)
 - [`systems/status-command.md`](./systems/status-command.md)
 - [`systems/tool-system.md`](./systems/tool-system.md)
+- [`systems/prompt-snapshot.md`](./systems/prompt-snapshot.md)
 - [`systems/utils.md`](./systems/utils.md)
 - [`systems/localization.md`](./systems/localization.md)
 - [`systems/security.md`](./systems/security.md)

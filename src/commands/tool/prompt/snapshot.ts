@@ -3,6 +3,12 @@ import { AttachmentBuilder, EmbedBuilder, MessageFlags } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "@/utils/discord/interactionHelper";
+import { sliceMessagesAtResetMarker } from "@/utils/discord/embedDetection";
+import {
+  checkTargetEmbedTitle,
+  processLinkEmbed,
+  formatSystemProducedEmbedHint,
+} from "@/utils/discord/embedClassifier";
 import { getCachedTomoriState, getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
 import { buildContext } from "@/utils/text/contextBuilder";
 import { getCachedActivePreset } from "@/utils/cache/stPresetCache";
@@ -26,6 +32,8 @@ import { getZaicodingToolAdapter } from "@/providers/zaicoding/zaicodingToolAdap
 import { getVertexToolAdapter } from "@/providers/vertex/vertexToolAdapter";
 import { getNovelaiToolAdapter } from "@/providers/novelai/novelaiToolAdapter";
 import type { MCPCapableToolAdapter } from "@/types/tool/interfaces";
+import { buildActiveSamplingParams, selectAnthropicSamplingParams } from "@/utils/provider/samplingControl";
+import { buildProviderStopStrings } from "@/providers/utils/stopStrings";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -198,7 +206,12 @@ export async function execute(
 
     const messageFetchLimit = normalizeMessageFetchLimit(selectedPersona.config.message_fetch_limit);
     const fetchedMessages = await textChannel.messages.fetch({ limit: messageFetchLimit });
-    const messagesArray = Array.from(fetchedMessages.values()).reverse();
+    const allMessagesArray = Array.from(fetchedMessages.values()).reverse();
+
+    // 10a. Respect /refresh and /compact_refresh boundaries — same slicing logic
+    //      used by the live chat pipeline in tomoriChat.ts so snapshot reflects
+    //      exactly what the LLM would actually see
+    const { sliced: messagesArray } = sliceMessagesAtResetMarker(allMessagesArray);
 
     // 11. Build persona nickname index for webhook attribution
     const personaByNickname = new Map<string, TomoriState>();
@@ -318,7 +331,79 @@ export async function execute(
         }
       }
 
-      const messageContent = message.content?.trim() ? message.content : null;
+      // Process embeds to match tomoriChat.ts conversion rules:
+      //   a) System-produced embeds (memory_learning, reminder_set, system_injection,
+      //      compact_summary/refresh, reward, punish) are wrapped as `[System: ...]`
+      //      blocks and appended to message content — this applies to ALL messages.
+      //   b) Link-preview embeds (Twitter/YouTube/articles) are extracted as
+      //      `[System: Link preview embed content: ...]` and their images are added
+      //      to imageAttachments — ONLY for non-Tomori-authored messages.
+      const botNickname = mainPersona.tomori_nickname ?? tomoriState.tomori_nickname ?? null;
+      const isTomoriAuthored = message.author.id === client.user?.id;
+      const embedTextSegments: string[] = [];
+      if (message.embeds.length > 0) {
+        for (const embed of message.embeds) {
+          const embedCheck = checkTargetEmbedTitle(embed.title);
+          if (embedCheck.isTarget && embed.description) {
+            const type = embedCheck.type;
+            if (type === "system_injection" || type === "compact_summary" || type === "compact_refresh") {
+              // 1. System injection / compact summary / compact refresh — bare [System:] wrapper
+              const titleLine =
+                (type === "compact_summary" || type === "compact_refresh") && embed.title ? `## ${embed.title}\n` : "";
+              embedTextSegments.push(`[System: ${titleLine}${embed.description}]`);
+            } else {
+              // 2. Strip bot-name prefix (e.g., "Tomori: foo" → "foo") for non-system-injection kinds
+              let cleanedDescription = embed.description;
+              if (botNickname) {
+                const escapedNickname = botNickname.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                const botNamePattern = new RegExp(`^${escapedNickname}:\\s*`, "i");
+                if (botNamePattern.test(cleanedDescription)) {
+                  cleanedDescription = cleanedDescription.replace(botNamePattern, "").trim();
+                }
+              }
+              const includeTitle = type === "memory_learning" || type === "reminder_set";
+              const titleLine = includeTitle && embed.title ? `${embed.title}\n` : "";
+              const embedBody = `${titleLine}${cleanedDescription}`;
+              // 3. memory_learning / reward / punish → plain [System: ...];
+              //    reminder_set → formatSystemProducedEmbedHint
+              embedTextSegments.push(
+                type === "memory_learning" || type === "reward" || type === "punish"
+                  ? `[System: ${embedBody}]`
+                  : formatSystemProducedEmbedHint(embedBody),
+              );
+            }
+          } else if (!isTomoriAuthored) {
+            // 4. Link preview extraction for non-bot messages
+            const linkEmbedData = processLinkEmbed(embed);
+            if (linkEmbedData.isLinkPreview) {
+              if (linkEmbedData.textContent) embedTextSegments.push(linkEmbedData.textContent);
+              if (linkEmbedData.imageInfo) {
+                imageAttachments.push({
+                  url: linkEmbedData.imageInfo.url,
+                  proxyUrl: linkEmbedData.imageInfo.proxyUrl,
+                  mimeType: linkEmbedData.imageInfo.mimeType,
+                  filename: linkEmbedData.imageInfo.filename,
+                });
+                hasLocalMedia = true;
+              }
+              if (linkEmbedData.thumbnailInfo) {
+                imageAttachments.push({
+                  url: linkEmbedData.thumbnailInfo.url,
+                  proxyUrl: linkEmbedData.thumbnailInfo.proxyUrl,
+                  mimeType: linkEmbedData.thumbnailInfo.mimeType,
+                  filename: linkEmbedData.thumbnailInfo.filename,
+                });
+                hasLocalMedia = true;
+              }
+            }
+          }
+        }
+      }
+
+      // Merge embed-derived text into the message content (appended after original text)
+      const baseContent = message.content?.trim() ? message.content : "";
+      const combinedContent = [baseContent, ...embedTextSegments].filter((s) => s.length > 0).join("\n");
+      const messageContent = combinedContent.length > 0 ? combinedContent : null;
       const mediaSourceMessageIds = hasLocalMedia ? [message.id] : undefined;
 
       // Merge consecutive messages from the same author (same as real context building)
@@ -405,12 +490,23 @@ export async function execute(
       }
     }
 
+    // 16b. Build per-provider sampling/request-config block
+    //      Shown in DM for BOTH formats and baked into JSON file top-level
+    const requestConfig = buildRequestConfig(selectedPersona, providerName, modelName);
+
     // 17. Build snapshot file content
     let fileContent: string;
     let fileName: string;
 
     if (format === "json") {
-      const snapshotData = await buildJsonSnapshot(contextItems, selectedPersona, providerName, modelName, toolsData);
+      const snapshotData = await buildJsonSnapshot(
+        contextItems,
+        selectedPersona,
+        providerName,
+        modelName,
+        toolsData,
+        requestConfig,
+      );
       fileContent = JSON.stringify(snapshotData, null, 2);
       fileName = `prompt-snapshot-${interaction.channelId}-${selectedPersona.persona_lineage_id}-${Date.now()}.json`;
     } else {
@@ -442,6 +538,15 @@ export async function execute(
         `model: ${modelName}`,
         `preset: ${presetName ?? "(native)"}`,
         `captured: ${timestamp}`,
+        "```",
+      ].join("\n"),
+    );
+    // Second code block: per-provider sampling/request config (shown in both TXT and JSON formats)
+    descriptionParts.push(
+      [
+        localizer(locale, "commands.tool.prompt.snapshot.dm_config_heading"),
+        "```json",
+        JSON.stringify(requestConfig, null, 2),
         "```",
       ].join("\n"),
     );
@@ -643,6 +748,7 @@ async function buildJsonSnapshot(
   providerName: string,
   modelName: string,
   toolsData: Array<Record<string, unknown>> | null,
+  requestConfig: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const activeLlm = persona.persona_llm ?? persona.llm;
   const seesImages = activeLlm.sees_images;
@@ -729,20 +835,46 @@ async function buildJsonSnapshot(
     // Fallback for providers without a public probe builder (novelai, custom, etc.):
     // flatten `contextItems` into a plain `{model, messages: [{role, content}]}` shape.
     // Role remap: `model` → `assistant` to match OpenAI conventions.
-    const messages = contextItems.map((item) => {
-      const role = item.role === "model" ? "assistant" : item.role;
-      const hasMedia = item.parts.some((p) => p.type !== "text");
 
-      if (!hasMedia) {
-        // 1. Text-only: plain string content
+    // 1. Consolidate all system items into a single leading entry
+    //    OpenAI-compatible APIs only accept one `role: "system"` message,
+    //    so we flatten multiple system blocks (personality, rules, knowledge, etc.)
+    //    by joining their text parts with "\n\n" into one entry.
+    const systemTextChunks: string[] = [];
+    const nonSystemItems: StructuredContextItem[] = [];
+    for (const item of contextItems) {
+      if (item.role === "system") {
         const text = item.parts
           .filter((p): p is { type: "text"; text: string } => p.type === "text")
           .map((p) => p.text)
           .join("\n");
-        return { role, content: text };
+        if (text.trim()) systemTextChunks.push(text);
+      } else {
+        nonSystemItems.push(item);
+      }
+    }
+
+    const messagesList: Array<Record<string, unknown>> = [];
+    if (systemTextChunks.length > 0) {
+      messagesList.push({ role: "system", content: systemTextChunks.join("\n\n") });
+    }
+
+    // 2. Map the remaining non-system items to OpenAI-style messages
+    for (const item of nonSystemItems) {
+      const role = item.role === "model" ? "assistant" : item.role;
+      const hasMedia = item.parts.some((p) => p.type !== "text");
+
+      if (!hasMedia) {
+        // 2a. Text-only: plain string content
+        const text = item.parts
+          .filter((p): p is { type: "text"; text: string } => p.type === "text")
+          .map((p) => p.text)
+          .join("\n");
+        messagesList.push({ role, content: text });
+        continue;
       }
 
-      // 2. Mixed media: OpenAI-vision array-content form
+      // 2b. Mixed media: OpenAI-vision array-content form
       const content = item.parts.map((part) => {
         if (part.type === "text") return { type: "text", text: part.text };
         if (part.type === "image") {
@@ -756,13 +888,21 @@ async function buildJsonSnapshot(
           ...(part.isYouTubeLink ? { youtube: true } : {}),
         };
       });
-      return { role, content };
-    });
+      messagesList.push({ role, content });
+    }
 
-    requestData = { model: modelName, messages };
+    requestData = { model: modelName, messages: messagesList };
   }
 
-  // 3. Append provider-formatted tools when requested
+  // 3. Merge per-provider sampling/request config into the top level.
+  //    For Google/Vertex we nest under existing keys (`generation_config`, `safety_settings`, etc.)
+  //    so the shape continues to match what the adapter would send. For Anthropic and
+  //    OpenAI-compat we just spread onto the root object.
+  for (const [key, value] of Object.entries(requestConfig)) {
+    if (!(key in requestData)) requestData[key] = value;
+  }
+
+  // 4. Append provider-formatted tools when requested
   if (toolsData && toolsData.length > 0) {
     requestData.tools = toolsData;
   }
@@ -847,4 +987,102 @@ async function fetchProviderTools(persona: TomoriState, providerName: string): P
   // 2. Route through the provider adapter to get native tool shape
   const adapter = selectToolAdapter(providerName);
   return adapter.getAllToolsInProviderFormat(builtInTools, persona.server_id, mcpFunctionNames);
+}
+
+// ─── Request-config builder ──────────────────────────────────────────────────
+
+/**
+ * Produces a provider-specific sampling/request-config block matching what each
+ * adapter would actually send at runtime. UNFILTERED: does not probe OpenRouter
+ * for `supportedParameters`, so params the model may reject are still shown.
+ *
+ * Provider shapes:
+ *   - google / vertex  : `{temperature, top_k, top_p, frequency_penalty, presence_penalty, max_output_tokens, stop_sequences, safety_settings, thinking_config?}`
+ *   - anthropic        : `{temperature?, top_p?, top_k?, max_tokens, stop_sequences}` (Anthropic rejects sending both temp+top_p — uses `selectAnthropicSamplingParams`)
+ *   - openai-compat    : `{temperature?, top_p?, top_k?, frequency_penalty?, presence_penalty?, min_p?, max_tokens, stop}`
+ *
+ * Used in two places:
+ *   1. Baked into the JSON snapshot file at the top level (alongside `messages`/`contents`)
+ *   2. Rendered as a second ```json code block in the DM body (shown for BOTH text and JSON formats)
+ */
+function buildRequestConfig(persona: TomoriState, providerName: string, modelName: string): Record<string, unknown> {
+  const activeLlm = persona.persona_llm ?? persona.llm;
+  const config = persona.config;
+  const disabledParams = config.llm_disabled_params ?? [];
+
+  if (providerName === "google" || providerName === "vertex") {
+    // 1. Google: show raw configured values (unfiltered, mirrors GoogleProviderConfig)
+    const maxOutputTokens = Number.parseInt(process.env.GOOGLE_MAX_OUTPUT_TOKENS || "8192", 10);
+    const isGemini3Flash =
+      modelName.trim().toLowerCase().startsWith("gemini-3") && modelName.toLowerCase().includes("flash");
+    const out: Record<string, unknown> = {
+      generation_config: {
+        temperature: config.llm_temperature,
+        top_k: config.llm_top_k,
+        top_p: config.llm_top_p,
+        frequency_penalty: config.llm_frequency_penalty,
+        presence_penalty: config.llm_presence_penalty,
+        max_output_tokens: maxOutputTokens,
+        stop_sequences: [],
+      },
+      safety_settings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+      ],
+    };
+    if (isGemini3Flash) out.thinking_config = { thinking_level: "LOW" };
+    if (disabledParams.length > 0) out.disabled_params = disabledParams;
+    return out;
+  }
+
+  if (providerName === "anthropic") {
+    // 2. Anthropic: uses selectAnthropicSamplingParams to coalesce temp+top_p
+    const selection = selectAnthropicSamplingParams({
+      temperature: config.llm_temperature,
+      topP: config.llm_top_p,
+      disabledParams,
+    });
+    const maxTokens = Number.parseInt(process.env.ANTHROPIC_MAX_OUTPUT_TOKENS || "8192", 10);
+    const stopSequences = buildProviderStopStrings({
+      providerName: "anthropic",
+      model: modelName,
+      personaName: persona.tomori_nickname,
+    });
+
+    const out: Record<string, unknown> = { max_tokens: maxTokens };
+    if (selection.temperature !== undefined) out.temperature = selection.temperature;
+    if (selection.topP !== undefined) out.top_p = selection.topP;
+    if (config.llm_top_k > 0 && !disabledParams.includes("topK")) out.top_k = config.llm_top_k;
+    if (stopSequences) out.stop_sequences = stopSequences;
+    if (disabledParams.length > 0) out.disabled_params = disabledParams;
+    return out;
+  }
+
+  // 3. OpenAI-compatible (openrouter, deepseek, zai, zaicoding, nvidia, custom, novelai):
+  //    translate active sampling params to snake_case and include stop + max_tokens.
+  const active = buildActiveSamplingParams(config);
+  const maxTokensRaw = process.env.OPENROUTER_MAX_OUTPUT_TOKENS || "8192";
+  const maxTokens = Number.parseInt(maxTokensRaw, 10);
+  const stopStrings = buildProviderStopStrings({
+    providerName,
+    model: modelName,
+    personaName: persona.tomori_nickname,
+  });
+
+  const out: Record<string, unknown> = { max_tokens: maxTokens };
+  if (active.temperature !== undefined) out.temperature = active.temperature;
+  if (active.topP !== undefined) out.top_p = active.topP;
+  if (active.topK !== undefined) out.top_k = active.topK;
+  if (active.frequencyPenalty !== undefined) out.frequency_penalty = active.frequencyPenalty;
+  if (active.presencePenalty !== undefined) out.presence_penalty = active.presencePenalty;
+  if (active.minP !== undefined) out.min_p = active.minP;
+  if (stopStrings) out.stop = stopStrings;
+  if (disabledParams.length > 0) out.disabled_params = disabledParams;
+
+  // Acknowledge has_tools flag is mirrored from adapter runtime — informational
+  if (!activeLlm.has_tools) out.tools_disabled = true;
+
+  return out;
 }
