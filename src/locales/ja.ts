@@ -322,9 +322,9 @@ export default {
       inherit_global: `グローバルクールダウンを継承`,
     },
     "st-preset": {
-      description: `SillyTavernプリセットを管理`,
+      description: `SillyTavernプリセットを管理。詳しくは /help st-preset`,
       import: {
-        description: `SillyTavernプリセットJSONファイルをインポート`,
+        description: `SillyTavernプリセットJSONをインポート。詳しくは /help st-preset`,
         file_description: `インポートするSillyTavernプリセットの.jsonファイル`,
         invalid_file_title: `無効なファイル`,
         file_too_large_title: `ファイルが大きすぎます`,
@@ -340,8 +340,9 @@ export default {
 • **{markers}** 構造マーカー
 • **{toggleable}** 切り替え可能ノード（**{enabled}** 有効）
 {notes}
-\`/st-preset node toggle\`でアクティブなノードを調整できます。
-\`/st-preset remove\`でデフォルトの動作に戻せます。`,
+{stPresetToggle}でアクティブなノードを調整できます。
+{helpStPreset}で、この環境でのプリセットの挙動を確認できます。
+{stPresetRemove}でデフォルトの動作に戻せます。`,
         note_comment_only: `
 > **{count}** 個のコメントのみのノードが\`/st-preset node toggle\`で表示されますが、プロンプトには挿入されません。`,
         note_disabled_by_preset: `
@@ -1402,6 +1403,45 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 
 {personalPrivacy}コマンドで記憶機能をオプトアウトし、{configPermissions}コマンドで自己学習を無効化できます。`,
         footer: `選択したAIプロバイダー（Google、NovelAI、OpenRouter）は独自のプライバシーポリシーに従ってメッセージを処理します。プライバシーのため、個人情報を共有しないでください。詳細は\`/legal privacy\`と\`/legal terms\`をご覧ください`,
+      },
+      "st-preset": {
+        description: `この環境でのSillyTavernプリセットの挙動を学ぶ`,
+        embed1_title: `この環境でのSillyTavernプリセット`,
+        embed1_description: `{stPresetImport}でPrompt Managerプリセットを読み込み、{stPresetToggle}で有効ノードを確認し、{stPresetRemove}で通常レイアウトに戻せます。`,
+        embed1_controls_title: `プリセットが制御するもの`,
+        embed1_controls_description: `- プロンプト順序とマーカー配置
+- カスタムプロンプトノード
+- post-history / depth injection ノード
+- インポート時に有効・無効で始まるノード`,
+        embed1_still_sent_title: `それでも完全には置き換えないもの`,
+        embed1_still_sent_description: `- 設定している場合の {configSystemPromptSet} のカスタムシステムプロンプト
+- キャラクター説明、性格、サンプル会話、ライブ会話履歴
+- サーバーメモリ、アップロード文書の文脈、絵文字/ステッカー文脈、その他の自動コンテキスト`,
+        embed1_system_prompt_title: `システムプロンプトのルール`,
+        embed1_system_prompt_description: `- プリセットが有効な間は、組み込みのフォールバック用システムプロンプトは外れます
+- {configSystemPromptSet} で自分のシステムプロンプトを設定していれば、それは送信されます
+- STの感覚では、プリセットが制御するのはレイアウトであって、すべてのプロンプト供給元ではありません`,
+        embed1_footer: `プリセットを読み込んだ後でも /help st-preset でいつでも確認できます`,
+        embed2_title: `よくある意外な挙動`,
+        embed2_description: `「無視された」「位置がおかしい」と感じやすい主な理由です。
+
+- インポートされたからといって必ず送信されるとは限りません。 \`prompt_order\` で無効なノードは {stPresetToggle} で有効にするまで送られません
+- コメント専用ノードや \`{{trim}}\` の結果が空になるノードは送信されません
+- 未対応のマーカーはスキップされます
+- 順序は文字どおりです。 \`chatHistory\` を \`dialogueExamples\` より前に置くと、ライブ会話が先に来ます
+- 読み取る \`prompt_order\` は \`character_id: 100001\` だけです
+- サンプル会話が最後になると、厳格なプロバイダーが例文を続けないよう短い区切り文が追加されます`,
+        embed2_footer: `何か足りないように見えるときは、{stPresetToggle} のノード一覧と元JSONを見比べてください`,
+        embed3_title: `制限と互換性`,
+        embed3_description: `- post-history / depth injection は独立したメッセージとして挿入されず、既存の会話履歴項目にマージされます
+- 同じ深さのノードはまとめて1つに束ねられます
+- {botImpersonate} によるユーザーなりきりではプリセットが無視され、通常レイアウトが使われます
+- 必要なのは \`prompts\` 配列を持つ modern Prompt Manager プリセットです。追加の legacy \`post_history\` フィールドは一部だけ取り込みます
+- regex後処理、プリセット側の temperature/top_p/モデル上書き、多段プリセットは未対応です
+- \`worldInfo\` マーカーは ST lorebook ではなく、取得された文書コンテキストを使います
+- プリセットに明示的なSTマーカーを置かなくても、一部の自動サーバー/文脈ブロックは挿入されることがあります
+- プロバイダー差も残ります。assistant prefill は効くプロバイダーもあれば無視するものもあります`,
+        embed3_footer: `{stPresetRemove} でプリセットモードをすぐ無効化できます`,
       },
       "api-key": {
         description: `AIプロバイダーのAPIキー設定方法を学ぶ`,

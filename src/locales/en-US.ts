@@ -322,9 +322,9 @@ The selected model requires allowing data for paid model training, but your Open
       inherit_global: `Inherit Global Cooldown`,
     },
     "st-preset": {
-      description: `Manage SillyTavern presets`,
+      description: `Manage SillyTavern presets. Use /help st-preset.`,
       import: {
-        description: `Import a SillyTavern preset JSON file`,
+        description: `Import a SillyTavern preset JSON file. Use /help st-preset.`,
         file_description: `The SillyTavern preset .json file to import`,
         invalid_file_title: `Invalid File`,
         file_too_large_title: `File Too Large`,
@@ -340,8 +340,9 @@ The selected model requires allowing data for paid model training, but your Open
 • **{markers}** structural markers
 • **{toggleable}** toggleable nodes (**{enabled}** enabled)
 {notes}
-Use \`/st-preset node toggle\` to adjust which nodes are active.
-Use \`/st-preset remove\` to revert to default behavior.`,
+Use {stPresetToggle} to adjust which nodes are active.
+Use {helpStPreset} to learn how imported presets behave here.
+Use {stPresetRemove} to revert to default behavior.`,
         note_comment_only: `
 > **{count}** comment-only node(s) are visible in \`/st-preset node toggle\` but are never injected into the prompt.`,
         note_disabled_by_preset: `> **{count}** node(s) are disabled by default in this preset. Use \`/st-preset node toggle\` to enable them.
@@ -746,10 +747,10 @@ I have built-in features to help reduce costs from abusers or spammers in your s
           persona_select_placeholder: `Select a persona...`,
           dm_title: `Prompt Snapshot`,
           dm_description: `Here's the prompt snapshot for persona **{persona_name}** (format: {format}).`,
-          dm_txt_headers_note: `Heads up — the \`=== Title (/command) ===\` and \`== SubTitle ==\` headers in the TXT file are annotations that show which config command controls each section. They are **not** part of the actual prompt sent to the LLM.`,
-          dm_hint_try_json: `Want the raw machine-readable format? Run the command again with \`format: JSON\`.`,
-          dm_hint_try_text: `Want a more user-readable format? Run the command again with \`format: Text\`.`,
-          dm_tools_txt_note: `Tool definitions are omitted from TXT format — re-run with \`format: JSON\` and \`fetch_tools: true\` to include them.`,
+          dm_txt_headers_note: `The \`=== Title (/command) ===\` and \`== SubTitle ==\` headers in the TXT file are annotations that show which config command controls each section. They are **not** part of the actual prompt sent to the LLM.`,
+          dm_hint_try_json: `Run the command again with \`format: JSON\` for the raw format.`,
+          dm_hint_try_text: `Run the command again with \`format: Text\` for a more user-readable format.`,
+          dm_tools_txt_note: `Tool definitions are omitted from TXT format, please re-run with \`format: JSON\` and \`fetch_tools: true\` to include them.`,
           dm_failed_title: `Could Not Send DM`,
           dm_failed_description: `I couldn't send a DM. Your snapshot is attached here instead. Enable DMs from server members to receive future snapshots in DMs.`,
           success_title: `Snapshot Sent`,
@@ -1402,6 +1403,45 @@ Whenever I'm triggered, I fetch the **latest messages** in the text channel as w
 
 You may opt out of my Memory features by using the {personalPrivacy} command, as well as turn off my self-learning using the {configPermissions} command.`,
         footer: `Your chosen AI provider (Google, NovelAI, OpenRouter) processes your messages according to their own privacy policies. Never share personal information with me for privacy. For full details, see \`/legal privacy\` and \`/legal terms\``,
+      },
+      "st-preset": {
+        description: `Learn how SillyTavern presets behave here`,
+        embed1_title: `SillyTavern Presets Here`,
+        embed1_description: `Use {stPresetImport} to load a Prompt Manager preset, {stPresetToggle} to inspect which imported nodes are enabled, and {stPresetRemove} to go back to the normal layout.`,
+        embed1_controls_title: `What A Preset Controls`,
+        embed1_controls_description: `- Prompt order and marker placement
+- Custom prompt nodes
+- Post-history / depth injection nodes
+- Which imported nodes start enabled or disabled`,
+        embed1_still_sent_title: `What It Does Not Fully Replace`,
+        embed1_still_sent_description: `- A custom system prompt from {configSystemPromptSet} if you set one
+- Character description, personality, sample chats, and live chat history
+- Server memory, uploaded document context, emoji/sticker context, and other automatic context`,
+        embed1_system_prompt_title: `System Prompt Rule`,
+        embed1_system_prompt_description: `- While a preset is active, the built-in fallback system prompt is removed
+- If you set your own system prompt with {configSystemPromptSet}, it is still sent
+- In ST terms, the preset owns the layout, not every source of prompt text`,
+        embed1_footer: `Use /help st-preset again anytime after importing a preset`,
+        embed2_title: `Common Surprises`,
+        embed2_description: `These are the main reasons a preset author thinks something was ignored or moved.
+
+- Imported does not always mean sent: nodes disabled in \`prompt_order\` stay off until you enable them with {stPresetToggle}
+- Comment-only nodes and nodes that become empty after \`{{trim}}\` are never sent
+- Unknown markers are skipped
+- Order is literal: if you place \`chatHistory\` before \`dialogueExamples\`, live chat comes first
+- Only \`prompt_order\` for \`character_id: 100001\` is used
+- If sample chats end up last, the bot adds a short separator so strict providers do not continue the example`,
+        embed2_footer: `If something looks missing, compare the imported node list in {stPresetToggle} against your preset JSON`,
+        embed3_title: `Limits And Compatibility`,
+        embed3_description: `- Post-history / depth injections are merged into existing chat history entries, not inserted as standalone messages
+- Multiple nodes at the same depth are batched together
+- User impersonation via {botImpersonate} ignores the preset and uses the normal layout
+- Modern Prompt Manager presets with a \`prompts\` array are required; some extra legacy \`post_history\` fields are imported too
+- Regex post-processing, preset-side temperature/top_p/model overrides, and layered presets are not supported
+- \`worldInfo\` markers use retrieved document context instead of ST lorebooks
+- Some automatic server/context blocks may still be inserted even if your preset does not place explicit ST markers for them
+- Provider-specific behavior still applies: assistant prefill may work on some providers and be ignored on others`,
+        embed3_footer: `Use {stPresetRemove} to disable preset mode instantly`,
       },
       "api-key": {
         description: `Learn how to set up API keys for AI providers`,

@@ -32,6 +32,8 @@ This is distinct from [SillyTavern Card Import](./sillytavern-card-support.md), 
 
 ## Commands
 
+For a user-facing explanation of behavior, surprises, and limitations in SillyTavern terms, use `/help st-preset`.
+
 ### `/st-preset import`
 
 Imports a SillyTavern preset JSON file and stores it for the current server.
@@ -40,12 +42,15 @@ Imports a SillyTavern preset JSON file and stores it for the current server.
 1. User attaches a `.json` file to the slash command
 2. Bot validates the file (format, size <= 2 MB, presence of `prompts` array)
 3. Parses the `prompt_order` (character_id 100001) to determine node sequence and default enabled states
-4. Filters out comment-only nodes (content resolves to empty after macro stripping)
-5. Stores preset metadata + raw JSON in `st_presets`, individual nodes in `st_preset_nodes`
-6. Activates the preset for the server
-7. Replies with an import summary (total nodes, markers, toggleable count)
+4. Normalizes legacy post-history fields carried by some modern preset exports into synthetic depth-injection nodes
+5. Filters out comment-only nodes (content resolves to empty after macro stripping)
+6. Stores preset metadata + raw JSON in `st_presets`, individual nodes in `st_preset_nodes`
+7. Activates the preset for the server
+8. Replies with an import summary (total nodes, markers, toggleable count)
 
 **Preset name:** Derived from the uploaded filename (minus `.json` extension), truncated to 100 chars. Must be unique per server.
+
+**Legacy compatibility:** The importer still requires a modern Prompt Manager preset with a `prompts` array. If that preset also carries legacy `post_history` fields such as root `post_history`, `sysprompt.post_history`, or `context.post_history`, TomoriBot converts them into synthetic depth-injection nodes at import time instead of ignoring them.
 
 ### `/st-preset node toggle`
 

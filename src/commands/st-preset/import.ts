@@ -6,6 +6,7 @@ import {
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
+import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
@@ -20,6 +21,7 @@ const MAX_PRESET_FILE_SIZE_MB = 2;
 
 /** Maximum allowed preset name length (derived from filename) */
 const MAX_PRESET_NAME_LENGTH = 100;
+const LEGACY_POST_HISTORY_INJECTION_ORDER = 10_000;
 
 /**
  * Regex to detect comment-only content in SillyTavern nodes.
@@ -136,6 +138,99 @@ interface ParseResult {
   commentOnlyCount: number;
   /** Number of non-marker nodes disabled by the preset's prompt_order */
   disabledByPreset: number;
+  /** Number of synthetic nodes added from legacy prompt fields */
+  legacyNodeCount: number;
+}
+
+type JsonObject = Record<string, unknown>;
+
+function asObject(value: unknown): JsonObject | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as JsonObject;
+}
+
+function getStringField(obj: JsonObject | null, key: string): string | null {
+  if (!obj) {
+    return null;
+  }
+
+  const value = obj[key];
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * Some modern ST preset exports still carry legacy post-history fields outside
+ * the Prompt Manager `prompts` array. Import them as synthetic depth nodes so
+ * the existing preset pipeline can handle them normally.
+ */
+function buildLegacyPromptNodes(raw: RawSTPreset, prompts: RawSTPromptNode[]): RawSTPromptNode[] {
+  const root = asObject(raw);
+  const sysprompt = asObject(root?.sysprompt);
+  const context = asObject(root?.context);
+
+  const existingDepthContents = new Set(
+    prompts
+      .filter((prompt) => prompt.marker !== true && (prompt.injection_position ?? 0) === 1)
+      .map((prompt) => prompt.content?.trim())
+      .filter((content): content is string => Boolean(content)),
+  );
+  const seenLegacyContents = new Set<string>();
+
+  const candidates: Array<{
+    content: string | null;
+    identifier: string;
+    name: string;
+  }> = [
+    {
+      identifier: "legacyPostHistory",
+      name: "Legacy Post-History",
+      content: getStringField(root, "post_history"),
+    },
+    {
+      identifier: "legacySyspromptPostHistory",
+      name: "Legacy Sysprompt Post-History",
+      content: getStringField(sysprompt, "post_history"),
+    },
+    {
+      identifier: "legacyContextPostHistory",
+      name: "Legacy Context Post-History",
+      content: getStringField(context, "post_history"),
+    },
+  ];
+
+  const legacyNodes: RawSTPromptNode[] = [];
+  for (const candidate of candidates) {
+    if (!candidate.content) {
+      continue;
+    }
+
+    if (seenLegacyContents.has(candidate.content) || existingDepthContents.has(candidate.content)) {
+      continue;
+    }
+
+    seenLegacyContents.add(candidate.content);
+    legacyNodes.push({
+      identifier: candidate.identifier,
+      name: candidate.name,
+      role: "system",
+      content: candidate.content,
+      enabled: true,
+      injection_position: 1,
+      injection_depth: 0,
+      // Keep legacy post-history last among same-depth injections.
+      injection_order: LEGACY_POST_HISTORY_INJECTION_ORDER,
+    });
+  }
+
+  return legacyNodes;
 }
 
 /**
@@ -152,7 +247,13 @@ interface ParseResult {
  * @returns Parse result with nodes and stats, or null if the preset is invalid
  */
 function parsePresetNodes(raw: RawSTPreset): ParseResult | null {
-  const prompts = raw.prompts;
+  const basePrompts = raw.prompts;
+  if (!Array.isArray(basePrompts) || basePrompts.length === 0) {
+    return null;
+  }
+
+  const legacyPromptNodes = buildLegacyPromptNodes(raw, basePrompts);
+  const prompts = [...basePrompts, ...legacyPromptNodes];
   if (!Array.isArray(prompts) || prompts.length === 0) {
     return null;
   }
@@ -173,7 +274,16 @@ function parsePresetNodes(raw: RawSTPreset): ParseResult | null {
   if (Array.isArray(promptOrders)) {
     const userOrder = promptOrders.find((po) => po.character_id === 100001);
     const systemOrder = promptOrders.find((po) => po.character_id === 100000);
-    orderEntries = userOrder?.order ?? systemOrder?.order ?? null;
+    const baseOrderEntries = userOrder?.order ?? systemOrder?.order ?? null;
+    if (baseOrderEntries) {
+      orderEntries = [
+        ...baseOrderEntries,
+        ...legacyPromptNodes.map((prompt) => ({
+          identifier: prompt.identifier,
+          enabled: prompt.enabled !== false,
+        })),
+      ];
+    }
   }
 
   // 3. If no prompt_order found, fall back to prompts array order
@@ -225,7 +335,12 @@ function parsePresetNodes(raw: RawSTPreset): ParseResult | null {
   }
 
   if (nodes.length === 0) return null;
-  return { nodes, commentOnlyCount, disabledByPreset };
+  return {
+    nodes,
+    commentOnlyCount,
+    disabledByPreset,
+    legacyNodeCount: legacyPromptNodes.length,
+  };
 }
 
 // ─── Execution ───────────────────────────────────────────────────────
@@ -332,7 +447,7 @@ export async function execute(
       return;
     }
 
-    const { nodes, commentOnlyCount, disabledByPreset } = parseResult;
+    const { nodes, commentOnlyCount, disabledByPreset, legacyNodeCount } = parseResult;
 
     // 9. Derive preset name from filename
     const presetName = derivePresetName(attachment.name ?? "Unnamed Preset");
@@ -376,6 +491,14 @@ export async function execute(
     }
     const notes = filterNotes.length > 0 ? filterNotes.join("\n") : "";
 
+    if (legacyNodeCount > 0) {
+      log.info(`[ST Preset Import] Added ${legacyNodeCount} synthetic prompt node(s) from legacy post-history fields`);
+    }
+
+    const stPresetToggleMention = commandRegistry.getCommandMention("st-preset", "node", "toggle");
+    const stPresetRemoveMention = commandRegistry.getCommandMention("st-preset", "remove");
+    const helpStPresetMention = commandRegistry.getCommandMention("help", "st-preset");
+
     // 14. Success response
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.st-preset.import.success_title",
@@ -387,6 +510,9 @@ export async function execute(
         toggleable: toggleableCount.toString(),
         enabled: enabledCount.toString(),
         notes,
+        stPresetToggle: stPresetToggleMention,
+        stPresetRemove: stPresetRemoveMention,
+        helpStPreset: helpStPresetMention,
       },
       color: ColorCode.SUCCESS,
     });

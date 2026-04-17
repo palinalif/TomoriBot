@@ -2,7 +2,7 @@
  * Anthropic LLM provider implementation.
  *
  * Provides direct access to Claude models (claude-sonnet-4-6, claude-haiku-4-5,
- * claude-opus-4-6) via the Anthropic Messages API.
+ * claude-opus-4-6, claude-opus-4-7) via the Anthropic Messages API.
  *
  * Key differences from OpenAI-compatible providers:
  * - System prompt is a top-level parameter, not a message
