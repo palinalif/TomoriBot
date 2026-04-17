@@ -304,6 +304,7 @@ export const tomoriConfigSchema = z.object({
   server_memteaching_enabled: z.boolean().default(true),
   attribute_memteaching_enabled: z.boolean().default(false),
   sampledialogue_memteaching_enabled: z.boolean().default(false),
+  prompt_snapshot_enabled: z.boolean().default(false), // Added April 2026 - Allow non-admin members to use /tool prompt snapshot
   self_teaching_enabled: z.boolean().default(true),
   web_search_enabled: z.boolean().default(true), // New: Added for Web Search permission (Brave Search)
   personal_memories_enabled: z.boolean().default(true),

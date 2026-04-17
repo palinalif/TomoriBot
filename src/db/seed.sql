@@ -7,6 +7,7 @@ SELECT add_column_if_not_exists('tomori_configs', 'autoch_persona_overrides', 'J
 SELECT add_column_if_not_exists('tomori_configs', 'hide_respond_embed', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('tomori_configs', 'hide_impersonation_embeds', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('tomori_configs', 'tool_notice_hidden_keys', 'TEXT[]', 'ARRAY[]::TEXT[]');
+SELECT add_column_if_not_exists('tomori_configs', 'prompt_snapshot_enabled', 'BOOLEAN', 'false');
 
 -- Migrate legacy notice visibility booleans into the shared hidden-key registry
 UPDATE tomori_configs

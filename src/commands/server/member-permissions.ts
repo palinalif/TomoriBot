@@ -58,6 +58,13 @@ const MEMBER_PERMISSION_DEFINITIONS: MemberPermissionDefinition[] = [
     descKey: "commands.server.member-permissions.sampledialogues_desc",
     getState: (c) => c.sampledialogue_memteaching_enabled,
   },
+  {
+    value: "promptsnapshot",
+    dbColumn: "prompt_snapshot_enabled",
+    labelKey: "commands.server.member-permissions.promptsnapshot_option",
+    descKey: "commands.server.member-permissions.promptsnapshot_desc",
+    getState: (c) => c.prompt_snapshot_enabled,
+  },
 ];
 
 /**
