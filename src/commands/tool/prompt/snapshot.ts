@@ -10,10 +10,22 @@ import { getCachedPrivacyLevel } from "@/utils/cache/userCache";
 import { normalizeProviderName } from "@/utils/provider/providerInfoRegistry";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 import { PrivacyLevel, type UserRow, type TomoriState } from "@/types/db/schema";
-import type { StructuredContextItem } from "@/types/misc/context";
+import { ContextItemTag, type StructuredContextItem } from "@/types/misc/context";
 import { GoogleStreamAdapter } from "@/providers/google/googleStreamAdapter";
 import { OpenrouterStreamAdapter } from "@/providers/openrouter/openrouterStreamAdapter";
 import { AnthropicStreamAdapter } from "@/providers/anthropic/anthropicStreamAdapter";
+import { type ToolStateForContext, getAvailableToolsWithMCP } from "@/tools/toolRegistry";
+import { getGoogleToolAdapter } from "@/providers/google/googleToolAdapter";
+import { getAnthropicToolAdapter } from "@/providers/anthropic/anthropicToolAdapter";
+import { getOpenrouterToolAdapter } from "@/providers/openrouter/openrouterToolAdapter";
+import { getCustomToolAdapter } from "@/providers/custom/customToolAdapter";
+import { getDeepseekToolAdapter } from "@/providers/deepseek/deepseekToolAdapter";
+import { getNvidiaToolAdapter } from "@/providers/nvidia/nvidiaToolAdapter";
+import { getZaiToolAdapter } from "@/providers/zai/zaiToolAdapter";
+import { getZaicodingToolAdapter } from "@/providers/zaicoding/zaicodingToolAdapter";
+import { getVertexToolAdapter } from "@/providers/vertex/vertexToolAdapter";
+import { getNovelaiToolAdapter } from "@/providers/novelai/novelaiToolAdapter";
+import type { MCPCapableToolAdapter } from "@/types/tool/interfaces";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -41,6 +53,11 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
           { name: localizer("en-US", "commands.tool.prompt.snapshot.text_option"), value: "text" },
           { name: localizer("en-US", "commands.tool.prompt.snapshot.json_option"), value: "json" },
         ),
+    )
+    .addBooleanOption((option) =>
+      option
+        .setName("fetch_tools")
+        .setDescription(localizer("en-US", "commands.tool.prompt.snapshot.fetch_tools_description")),
     );
 
 // ─── Execute ──────────────────────────────────────────────────────────────────
@@ -100,8 +117,9 @@ export async function execute(
       return;
     }
 
-    // 4. Read optional format choice (defaults to "text")
+    // 4. Read optional format choice (defaults to "text") and fetch_tools flag
     const format = interaction.options.getString("format") ?? "text";
+    const fetchTools = interaction.options.getBoolean("fetch_tools") ?? false;
 
     // 5. Load all server personas for the select modal
     const personas = await getCachedAllPersonas(interaction.guild.id);
@@ -374,53 +392,77 @@ export async function execute(
     const modelName = activeLlm.llm_codename;
     const timestamp = new Date().toISOString();
 
-    // 16. Build snapshot file content
+    // 16. Optionally fetch provider-formatted tool definitions (JSON output only).
+    //     TXT format intentionally omits tools — users are directed to use JSON for tools.
+    let toolsData: Array<Record<string, unknown>> | null = null;
+    if (fetchTools && format === "json") {
+      try {
+        toolsData = await fetchProviderTools(selectedPersona, providerName);
+      } catch (toolError) {
+        log.warn(
+          `Failed to fetch tools for prompt snapshot (provider=${providerName}): ${(toolError as Error).message}`,
+        );
+      }
+    }
+
+    // 17. Build snapshot file content
     let fileContent: string;
     let fileName: string;
 
     if (format === "json") {
-      const snapshotData = await buildJsonSnapshot(
-        contextItems,
-        selectedPersona,
-        providerName,
-        modelName,
-        interaction.guild.id,
-        channelName,
-        presetName,
-        timestamp,
-      );
+      const snapshotData = await buildJsonSnapshot(contextItems, selectedPersona, providerName, modelName, toolsData);
       fileContent = JSON.stringify(snapshotData, null, 2);
       fileName = `prompt-snapshot-${interaction.channelId}-${selectedPersona.persona_lineage_id}-${Date.now()}.json`;
     } else {
-      fileContent = buildTextSnapshot(
-        contextItems,
-        selectedPersona,
-        providerName,
-        modelName,
-        interaction.guild.id,
-        channelName,
-        presetName,
-        timestamp,
-      );
+      fileContent = buildTextSnapshot(contextItems);
       fileName = `prompt-snapshot-${interaction.channelId}-${selectedPersona.persona_lineage_id}-${Date.now()}.txt`;
     }
 
-    // 17. Create the attachment buffer
+    // 18. Create the attachment buffer
     const attachment = new AttachmentBuilder(Buffer.from(fileContent, "utf-8"), { name: fileName });
     const formatLabel = format === "json" ? "JSON" : "Text";
 
-    // 18. DM the file; fall back to ephemeral attachment if DMs are closed
+    // 19. Compose the DM description — intro + metadata code block + format-switch hint
+    //     + (TXT) note about `=== === ` headers being annotations
+    //     + (TXT + fetch_tools) note that tools are JSON-only
+    const descriptionParts: string[] = [];
+    descriptionParts.push(
+      localizer(locale, "commands.tool.prompt.snapshot.dm_description", {
+        persona_name: selectedPersona.tomori_nickname,
+        format: formatLabel,
+      }),
+    );
+    descriptionParts.push(
+      [
+        "```yaml",
+        `server_id: ${interaction.guild.id}`,
+        `channel: #${channelName}`,
+        `persona: ${selectedPersona.tomori_nickname}`,
+        `provider: ${providerName}`,
+        `model: ${modelName}`,
+        `preset: ${presetName ?? "(native)"}`,
+        `captured: ${timestamp}`,
+        "```",
+      ].join("\n"),
+    );
+    if (format === "text") {
+      descriptionParts.push(localizer(locale, "commands.tool.prompt.snapshot.dm_txt_headers_note"));
+      descriptionParts.push(localizer(locale, "commands.tool.prompt.snapshot.dm_hint_try_json"));
+      if (fetchTools) {
+        descriptionParts.push(localizer(locale, "commands.tool.prompt.snapshot.dm_tools_txt_note"));
+      }
+    } else {
+      descriptionParts.push(localizer(locale, "commands.tool.prompt.snapshot.dm_hint_try_text"));
+    }
+    const dmDescription = descriptionParts.join("\n\n");
+
+    // 20. DM the file; fall back to ephemeral attachment if DMs are closed
     try {
       await interaction.user.send({
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "commands.tool.prompt.snapshot.dm_title"))
-            .setDescription(
-              localizer(locale, "commands.tool.prompt.snapshot.dm_description", {
-                persona_name: selectedPersona.tomori_nickname,
-                format: formatLabel,
-              }),
-            )
+            .setDescription(dmDescription)
             .setColor(ColorCode.INFO),
         ],
         files: [attachment],
@@ -440,7 +482,9 @@ export async function execute(
         embeds: [
           new EmbedBuilder()
             .setTitle(localizer(locale, "commands.tool.prompt.snapshot.dm_failed_title"))
-            .setDescription(localizer(locale, "commands.tool.prompt.snapshot.dm_failed_description"))
+            .setDescription(
+              `${localizer(locale, "commands.tool.prompt.snapshot.dm_failed_description")}\n\n${dmDescription}`,
+            )
             .setColor(ColorCode.WARN),
         ],
         files: [attachment],
@@ -463,34 +507,91 @@ export async function execute(
   }
 }
 
+// ─── Tag → user-facing label mapping ─────────────────────────────────────────
+
+/**
+ * Human-readable label (and optional command hint) for each `ContextItemTag`.
+ * Rendered by `buildTextSnapshot` as `=== Title (command/system-managed) ===` blocks.
+ *
+ * `subsections` lets a single context item — especially composites like
+ * `KNOWLEDGE_USERS_IN_CONVERSATION` — expose multiple `== SubTitle ==` markers
+ * so users can see which separate data pools feed into that block.
+ */
+type TagLabel = {
+  title: string;
+  hint: string; // Slash-command reference like `/config system-prompt`, or the literal "system-managed"
+  subsections?: Array<{ title: string; hint: string }>;
+};
+
+const TAG_LABELS: Record<string, TagLabel> = {
+  [ContextItemTag.SYSTEM_INSTRUCTION_BLOCK]: { title: "System Instruction Block", hint: "system-managed" },
+  [ContextItemTag.SYSTEM_PERSONALITY]: { title: "Persona Attributes", hint: "/persona attribute" },
+  [ContextItemTag.SYSTEM_HUMANIZER_RULES]: { title: "System Prompt", hint: "/config system-prompt" },
+  [ContextItemTag.SYSTEM_FUNCTION_GUIDE]: { title: "Function Guide", hint: "system-managed" },
+  [ContextItemTag.KNOWLEDGE_SERVER_INFO]: { title: "Discord Server Info", hint: "system-managed" },
+  [ContextItemTag.KNOWLEDGE_SERVER_EMOJIS]: { title: "Server Emojis", hint: "system-managed" },
+  [ContextItemTag.KNOWLEDGE_SERVER_STICKERS]: { title: "Server Stickers", hint: "system-managed" },
+  [ContextItemTag.KNOWLEDGE_SERVER_MEMORIES]: { title: "Server Memories", hint: "/memory server" },
+  [ContextItemTag.KNOWLEDGE_SERVER_DOCUMENTS]: { title: "Server Documents", hint: "/memory document add" },
+  [ContextItemTag.KNOWLEDGE_SERVER_CONDITIONING]: { title: "Conditioning Log", hint: "/conditioning" },
+  [ContextItemTag.KNOWLEDGE_USER_MEMORIES]: { title: "Personal Memories", hint: "/memory personal" },
+  [ContextItemTag.KNOWLEDGE_USER_STATUS]: { title: "Discord Presence", hint: "system-managed" },
+  [ContextItemTag.KNOWLEDGE_CURRENT_CONTEXT]: { title: "Current Context", hint: "system-managed" },
+  [ContextItemTag.KNOWLEDGE_USERS_IN_CONVERSATION]: {
+    title: "Info on Users in Context",
+    hint: "composite",
+    subsections: [
+      { title: "Personal/Server Memories", hint: "/memory" },
+      { title: "Discord Presence/Role", hint: "system-managed" },
+    ],
+  },
+  [ContextItemTag.KNOWLEDGE_SHORT_TERM_MEMORY]: { title: "Short-Term Memory", hint: "/server stm manage" },
+  [ContextItemTag.DIALOGUE_SAMPLE]: { title: "Sample Dialogue", hint: "/persona sample-dialogue" },
+  [ContextItemTag.DIALOGUE_HISTORY]: { title: "Conversation History", hint: "system-managed" },
+};
+
+function renderTagHeader(tag: string | undefined): string {
+  if (!tag) return "=== Untagged (system-managed) ===";
+  const label = TAG_LABELS[tag];
+  if (!label) return `=== ${tag} (system-managed) ===`;
+
+  const lines: string[] = [];
+  // 1. Main title — composite tags use just the title since sub-sections carry the hints
+  if (label.hint === "composite") {
+    lines.push(`=== ${label.title} ===`);
+  } else if (label.hint === "system-managed") {
+    lines.push(`=== ${label.title} (system-managed) ===`);
+  } else {
+    lines.push(`=== ${label.title} (\`${label.hint}\`) ===`);
+  }
+  // 2. Sub-sections (if any) — composite tags like KNOWLEDGE_USERS_IN_CONVERSATION list their feeders
+  if (label.subsections) {
+    for (const sub of label.subsections) {
+      if (sub.hint === "system-managed") {
+        lines.push(`== ${sub.title} (system-managed) ==`);
+      } else {
+        lines.push(`== ${sub.title} (\`${sub.hint}\`) ==`);
+      }
+    }
+  }
+  return lines.join("\n");
+}
+
 // ─── Text formatter ───────────────────────────────────────────────────────────
 
 /**
  * Serializes `contextItems` (already rearranged by preset routing, if applicable) into
  * a human-readable flat-text format that mirrors the order produced by `buildContext`.
+ *
+ * Each context item gets a `=== Title (/command) ===` header derived from its
+ * `metadataTag`. These headers are annotations — they are NOT part of the prompt
+ * actually sent to the LLM. The DM body that ships with the file explains this.
  */
-function buildTextSnapshot(
-  contextItems: StructuredContextItem[],
-  persona: TomoriState,
-  providerName: string,
-  modelName: string,
-  guildId: string,
-  channelName: string,
-  presetName: string | null,
-  timestamp: string,
-): string {
+function buildTextSnapshot(contextItems: StructuredContextItem[]): string {
   const lines: string[] = [];
 
-  lines.push("=== REQUEST SNAPSHOT ===");
-  lines.push(`Server: ${guildId}  Channel: #${channelName}  Persona: ${persona.tomori_nickname}`);
-  lines.push(`Provider: ${providerName}  Model: ${modelName}`);
-  lines.push(`Preset: ${presetName ?? "(native)"}`);
-  lines.push(`Captured: ${timestamp}`);
-  lines.push("");
-
   for (const item of contextItems) {
-    const tag = item.metadataTag ?? "untagged";
-    lines.push(`--- [${tag}] ${item.role} ---`);
+    lines.push(renderTagHeader(item.metadataTag));
 
     for (const part of item.parts) {
       if (part.type === "text") {
@@ -521,36 +622,31 @@ function buildTextSnapshot(
  * each adapter's `logSanitizedRequest` to terminal. Base64 image data is redacted
  * to keep file sizes manageable, matching the terminal log sanitization.
  *
- * Supported providers with full fidelity:
+ * Supported providers with full native fidelity:
  *   - google / vertex   → GoogleStreamAdapter.buildTokenCountPayload
  *   - openrouter-family → OpenrouterStreamAdapter.buildProbeMessages
  *   - anthropic         → AnthropicStreamAdapter.buildProbeMessages
  *
- * All other providers fall back to a raw contextItems representation.
+ * All other providers (novelai, custom, etc.) fall back to a flat OpenAI-style
+ * `{model, messages: [{role, content}]}` shape. Messages with media use the
+ * OpenAI-vision array-content form; text-only messages use plain strings.
+ *
+ * Metadata (server/channel/persona/provider/preset) is NOT embedded in the file —
+ * it is rendered in the DM body instead, to keep the file focused on payload.
+ *
+ * When `toolsData` is provided, a top-level `tools` key is appended in the same
+ * shape the adapter would send to the provider.
  */
 async function buildJsonSnapshot(
   contextItems: StructuredContextItem[],
   persona: TomoriState,
   providerName: string,
   modelName: string,
-  guildId: string,
-  channelName: string,
-  presetName: string | null,
-  timestamp: string,
+  toolsData: Array<Record<string, unknown>> | null,
 ): Promise<Record<string, unknown>> {
   const activeLlm = persona.persona_llm ?? persona.llm;
   const seesImages = activeLlm.sees_images;
   const seesVideos = activeLlm.sees_videos;
-
-  const metadata = {
-    server_id: guildId,
-    channel: `#${channelName}`,
-    persona: persona.tomori_nickname,
-    provider: providerName,
-    model: modelName,
-    preset: presetName ?? "(native)",
-    captured: timestamp,
-  };
 
   let requestData: Record<string, unknown>;
 
@@ -630,19 +726,125 @@ async function buildJsonSnapshot(
 
     requestData = { model: modelName, system, messages: sanitizedMessages };
   } else {
-    // Fallback for providers without a public assembly method (novelai, custom, etc.)
-    requestData = {
-      _note: `Full JSON assembly not supported for provider "${providerName}". Raw context items shown instead.`,
-      context_items: contextItems.map((item) => ({
-        role: item.role,
-        tag: item.metadataTag ?? null,
-        parts: item.parts.map((part) => {
-          if (part.type === "text") return { type: "text", text: part.text };
-          return { type: part.type, mimeType: part.mimeType, uri: "[MEDIA_HIDDEN]" };
-        }),
-      })),
-    };
+    // Fallback for providers without a public probe builder (novelai, custom, etc.):
+    // flatten `contextItems` into a plain `{model, messages: [{role, content}]}` shape.
+    // Role remap: `model` → `assistant` to match OpenAI conventions.
+    const messages = contextItems.map((item) => {
+      const role = item.role === "model" ? "assistant" : item.role;
+      const hasMedia = item.parts.some((p) => p.type !== "text");
+
+      if (!hasMedia) {
+        // 1. Text-only: plain string content
+        const text = item.parts
+          .filter((p): p is { type: "text"; text: string } => p.type === "text")
+          .map((p) => p.text)
+          .join("\n");
+        return { role, content: text };
+      }
+
+      // 2. Mixed media: OpenAI-vision array-content form
+      const content = item.parts.map((part) => {
+        if (part.type === "text") return { type: "text", text: part.text };
+        if (part.type === "image") {
+          return { type: "image_url", image_url: { url: "[MEDIA_HIDDEN]" }, mime_type: part.mimeType };
+        }
+        // video
+        return {
+          type: "video_url",
+          video_url: { url: "[MEDIA_HIDDEN]" },
+          mime_type: part.mimeType,
+          ...(part.isYouTubeLink ? { youtube: true } : {}),
+        };
+      });
+      return { role, content };
+    });
+
+    requestData = { model: modelName, messages };
   }
 
-  return { metadata, request: requestData };
+  // 3. Append provider-formatted tools when requested
+  if (toolsData && toolsData.length > 0) {
+    requestData.tools = toolsData;
+  }
+
+  return requestData;
+}
+
+// ─── Tool fetcher ─────────────────────────────────────────────────────────────
+
+/**
+ * Resolves the tool adapter matching the given provider. Non-OpenAI providers
+ * (google/vertex/anthropic) have dedicated adapters; OpenAI-compatible providers
+ * share the openrouter-style adapter via subclasses. NovelAI keeps its own.
+ * Unknown providers fall back to the OpenRouter adapter for OpenAI-compat shape.
+ */
+function selectToolAdapter(providerName: string): MCPCapableToolAdapter {
+  switch (providerName) {
+    case "google":
+      return getGoogleToolAdapter();
+    case "vertex":
+      return getVertexToolAdapter();
+    case "anthropic":
+      return getAnthropicToolAdapter();
+    case "openrouter":
+      return getOpenrouterToolAdapter();
+    case "deepseek":
+      return getDeepseekToolAdapter();
+    case "zai":
+      return getZaiToolAdapter();
+    case "zaicoding":
+      return getZaicodingToolAdapter();
+    case "nvidia":
+      return getNvidiaToolAdapter();
+    case "novelai":
+      return getNovelaiToolAdapter();
+    case "custom":
+      return getCustomToolAdapter();
+    default:
+      return getOpenrouterToolAdapter();
+  }
+}
+
+/**
+ * Mirrors the tool-list assembly that `<Provider>Provider.getTools` does at
+ * runtime — minus the `streamingContext` filter, which requires a live Discord
+ * channel that doesn't exist for a snapshot. Returns the provider's native tool
+ * JSON (OpenAI function spec for OpenAI-compat, Gemini schema for Google, etc.).
+ */
+async function fetchProviderTools(persona: TomoriState, providerName: string): Promise<Array<Record<string, unknown>>> {
+  const activeLlm = persona.persona_llm ?? persona.llm;
+
+  if (!activeLlm.has_tools) {
+    return [];
+  }
+
+  const toolStateForContext: ToolStateForContext = {
+    server_id: persona.server_id.toString(),
+    activePersonaHasElevenlabsVoice: Boolean(persona.elevenlabs_voice_id?.trim()),
+    llm: {
+      llm_codename: activeLlm.llm_codename,
+      has_tools: activeLlm.has_tools,
+      sees_images: activeLlm.sees_images,
+      sees_videos: activeLlm.sees_videos,
+      sees_youtube: activeLlm.sees_youtube,
+      supports_structoutput: activeLlm.supports_structoutput,
+    },
+    config: {
+      sticker_usage_enabled: persona.config.sticker_usage_enabled,
+      web_search_enabled: persona.config.web_search_enabled,
+      self_teaching_enabled: persona.config.self_teaching_enabled,
+      manage_message_enabled: persona.config.manage_message_enabled,
+      imagegen_enabled: persona.config.imagegen_enabled,
+      videogen_enabled: persona.config.videogen_enabled,
+      nai_exclusive_imggen: persona.config.nai_exclusive_imggen,
+      voice_message_enabled: persona.config.voice_message_enabled,
+    },
+  };
+
+  // 1. Ask registry which built-in tools + MCP functions pass feature-flag gates
+  const { builtInTools, mcpFunctionNames } = await getAvailableToolsWithMCP(providerName, toolStateForContext);
+
+  // 2. Route through the provider adapter to get native tool shape
+  const adapter = selectToolAdapter(providerName);
+  return adapter.getAllToolsInProviderFormat(builtInTools, persona.server_id, mcpFunctionNames);
 }

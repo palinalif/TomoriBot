@@ -234,29 +234,44 @@ export async function checkTextQuota(serverId: number, userDiscId: string): Prom
 }
 
 /**
- * Increment both user daily and server-wide text quotas after successful generation
- * Should only be called AFTER a text response succeeds
+ * Increment both user daily and server-wide text quotas after successful generation.
+ * Should only be called AFTER a text response succeeds.
+ * Only increments counters that have an active limit -- skips writes when quota is unlimited (0)
+ * so usage does not accumulate retroactively before limits are first configured.
  */
 export async function incrementTextQuota(serverId: number, userDiscId: string): Promise<void> {
   try {
+    // 1. Fetch config to determine which counters are actively limited
+    const config = await getTextQuotaConfig(serverId);
+
+    const shouldIncrementUser = config.enabled && config.daily_user_quota > 0;
+    const shouldIncrementServerwide = config.enabled && config.serverwide_quota > 0;
+
+    // 2. Nothing to count if no limits are configured
+    if (!shouldIncrementUser && !shouldIncrementServerwide) {
+      return;
+    }
+
     const today = new Date().toISOString().split("T")[0];
 
-    // 1. Increment user's daily quota (using transaction for consistency)
+    // 3. Increment only the active counters inside a transaction
     await sql.begin(async (tx: SQL) => {
-      // Increment user quota
-      await tx`
+      if (shouldIncrementUser) {
+        await tx`
 				INSERT INTO text_quotas (server_id, user_disc_id, usage_count, quota_date)
 				VALUES (${serverId}, ${userDiscId}, 1, ${today}::date)
 				ON CONFLICT (server_id, user_disc_id, quota_date)
 				DO UPDATE SET usage_count = text_quotas.usage_count + 1
 			`;
+      }
 
-      // Increment server-wide quota
-      await tx`
+      if (shouldIncrementServerwide) {
+        await tx`
 				UPDATE text_serverwide_quotas
 				SET usage_count = usage_count + 1
 				WHERE server_id = ${serverId}
 			`;
+      }
     });
 
     log.info("Incremented text quotas");

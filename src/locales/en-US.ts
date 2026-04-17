@@ -735,6 +735,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         snapshot: {
           description: `Dump the exact LLM prompt for a persona to a file for debugging.`,
           format_description: `Output format for the snapshot file.`,
+          fetch_tools_description: `If true, appends the available tool/function definitions to the snapshot (JSON only).`,
           text_option: `Text`,
           json_option: `JSON`,
           no_permission_title: `Permission Denied`,
@@ -745,6 +746,10 @@ I have built-in features to help reduce costs from abusers or spammers in your s
           persona_select_placeholder: `Select a persona...`,
           dm_title: `Prompt Snapshot`,
           dm_description: `Here's the prompt snapshot for persona **{persona_name}** (format: {format}).`,
+          dm_txt_headers_note: `Heads up — the \`=== Title (/command) ===\` and \`== SubTitle ==\` headers in the TXT file are annotations that show which config command controls each section. They are **not** part of the actual prompt sent to the LLM.`,
+          dm_hint_try_json: `Want the raw machine-readable format? Run the command again with \`format: JSON\`.`,
+          dm_hint_try_text: `Want a more user-readable format? Run the command again with \`format: Text\`.`,
+          dm_tools_txt_note: `Tool definitions are omitted from TXT format — re-run with \`format: JSON\` and \`fetch_tools: true\` to include them.`,
           dm_failed_title: `Could Not Send DM`,
           dm_failed_description: `I couldn't send a DM. Your snapshot is attached here instead. Enable DMs from server members to receive future snapshots in DMs.`,
           success_title: `Snapshot Sent`,
@@ -1595,6 +1600,68 @@ Leave unset for endpoints that require no authentication (e.g. local Ollama).`,
 - **Cross-server sharing** is opt-in: use {personalStm} with the \`crossserver\` option to let me reference your own conversations from other servers
 - Clear your user-specific STM with {personalStmClear}
 - STM expires automatically over time`,
+      },
+      spotlight: {
+        description: `Learn what personal spotlight does and how to use it`,
+        title: `Personal Spotlight Guide`,
+        embed_description: `Personal spotlight lets you narrow which personas *you* can trigger in one channel, and optionally assign one persona to auto-trigger for your own messages there.`,
+        what_title: `What It Does`,
+        what_description: `- Spotlight is scoped to **you + one channel**
+- It does not affect other users
+- It acts like a personal persona whitelist for that channel
+- You choose which personas stay available there`,
+        set_title: `Setting One Up`,
+        set_description: `Use {personalSpotlightSet} and choose:
+- A duration in hours
+- The target channel
+- The personas you want in your spotlight
+
+If you set **hours = 0**, the spotlight stays until you remove it manually.`,
+        auto_trigger_title: `Auto-Trigger Option`,
+        auto_trigger_description: `After choosing personas, you can optionally pick one of them as your personal auto-trigger persona.
+- That persona becomes the fallback responder for your messages in that channel
+- Direct triggers still target the persona you explicitly called
+- If you press Finish instead, no personal auto-trigger persona is set`,
+        rules_title: `Important Rules`,
+        rules_description: `- Spotlight only **narrows** access; it never expands access
+- It still respects server-level persona limits such as {serverWhitelistPersona}
+- Selected personas are the **only** personas you can trigger there
+- Proxy chains are blocked too: if your spotlight only includes Alice, an Alice reply cannot hand off to Bob for your message chain`,
+        manage_title: `Changing Or Removing It`,
+        manage_description: `Use {personalSpotlightManage} to review your active spotlight entries.
+- Leave an entry checked to keep it
+- Uncheck an entry to remove it
+- Timed spotlights expire on their own`,
+        footer: `Use personal spotlight when you want tighter control over which persona answers you in one channel without changing the server-wide setup.`,
+      },
+      "deliberate-trigger-mode": {
+        description: `Learn how deliberate trigger mode changes message triggering`,
+        title: `Deliberate Trigger Mode Guide`,
+        embed_description: `Deliberate Trigger Mode (DTM) changes how explicit persona triggers are recognized, especially for plain trigger words.`,
+        normal_title: `Normal Triggering`,
+        normal_description: `When DTM is off, I can normally be triggered by:
+- Plain trigger words in a message
+- Discord mentions
+- Replies to the persona
+- {botRespond} for manual replies
+
+In practice, plain trigger words are the biggest difference because they can directly activate a persona just by naming its trigger.`,
+        enabled_title: `What Changes When DTM Is On`,
+        enabled_description: `When DTM is on, plain trigger words stop counting as explicit persona triggers.
+- \`@{trigger}\` still works
+- Discord mentions still work
+- Replies still work
+- {botRespond} still works
+
+This means users must invoke personas more deliberately instead of accidentally triggering them with ordinary text.`,
+        personal_title: `Server And Personal Control`,
+        personal_description: `- Server admins can toggle the server-wide behavior with {serverDtm}
+- Individual users can override it for themselves with {personalDtm}
+- Personal DTM has three modes:
+  off = always allow plain trigger words
+  follow = use the server setting
+  on = always require deliberate invocations`,
+        footer: `If users say a persona name often in normal conversation and accidental triggers are a problem, DTM is the setting to use.`,
       },
       customization: {
         description: `Learn how to customize TomoriBot's personality and behavior`,
@@ -4119,7 +4186,7 @@ You can change this anytime using \`/personal privacy\`.`,
       spotlight: {
         description: `Manage your personal persona spotlight settings.`,
         set: {
-          description: `Set a personal persona spotlight for one channel.`,
+          description: `Set a personal persona spotlight for one channel. Use /help spotlight to learn more.`,
           hours_description: `How long the spotlight should last. Use 0 to keep it until removed.`,
           channel_description: `The channel where this personal spotlight should apply.`,
           modal_title: `Set Personal Spotlight`,
@@ -4155,7 +4222,7 @@ You can change this anytime using \`/personal privacy\`.`,
           more_personas: `and {count} more`,
         },
         manage: {
-          description: `Remove your active personal spotlights.`,
+          description: `Remove your active personal spotlights. Use /help spotlight to learn more.`,
           none_title: `No Personal Spotlights`,
           none_description: `You don't have any active personal spotlights in this server.`,
           too_many_title: `Too Many Personal Spotlights`,

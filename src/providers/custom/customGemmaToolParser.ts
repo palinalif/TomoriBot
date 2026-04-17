@@ -178,21 +178,32 @@ export class GemmaToolCallParser {
 
   /**
    * Build a FunctionCall from a parsed tool name and raw args string.
+   *
+   * Gemma 4 produces two string-value formats depending on quant level:
+   *   Format A (special token markers): key:<|"|>value<|"|>
+   *   Format B (standard JSON-style):   key: "value"  or  key:"value"
    */
   private buildCall(name: string, argsStr: string): FunctionCall {
     const args: Record<string, unknown> = {};
     const matchedKeys = new Set<string>();
 
-    // 1. String args: key:<|"|>value<|"|>
-    //    Lazy quantifier ensures multiple string args don't merge.
-    for (const m of argsStr.matchAll(/(\w+):<\|"\|>([\s\S]*?)<\|"\|>/g)) {
+    // 1. Format A — special token string markers: key:<|"|>value<|"|>
+    for (const m of argsStr.matchAll(/(\w+):\s*<\|"\|>([\s\S]*?)<\|"\|>/g)) {
       args[m[1]] = m[2];
       matchedKeys.add(m[1]);
     }
 
-    // 2. Non-string args: key:rawValue (number / boolean / bare identifier).
+    // 2. Format B — standard double-quoted strings: key: "value" or key:"value"
+    //    Lazy quantifier stops at the first closing quote to keep args separate.
+    for (const m of argsStr.matchAll(/(\w+):\s*"([\s\S]*?)"/g)) {
+      if (matchedKeys.has(m[1])) continue;
+      args[m[1]] = m[2];
+      matchedKeys.add(m[1]);
+    }
+
+    // 3. Non-string args: key:rawValue (number / boolean / bare identifier).
     //    Only for keys not already captured above.
-    for (const m of argsStr.matchAll(/(\w+):([\w.-]+)/g)) {
+    for (const m of argsStr.matchAll(/(\w+):\s*([\w.-]+)/g)) {
       if (matchedKeys.has(m[1])) continue;
 
       const raw = m[2];
