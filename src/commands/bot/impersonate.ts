@@ -33,7 +33,9 @@ import { getCooldownTypeFooterKey } from "@/utils/db/messageCooldown";
 import { sendCooldownDM } from "@/utils/discord/cooldownDM";
 import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
 import { getCachedWhitelistStatus } from "@/utils/cache/channelWhitelistCache";
-import { filterPersonasByWhitelist, isPersonaAllowedByWhitelistStatus } from "@/utils/db/personaWhitelist";
+import { getCachedUserRow } from "@/utils/cache/userCache";
+import { getCachedPersonalSpotlightStatus } from "@/utils/cache/personalSpotlightCache";
+import { filterPersonasForTrigger, isPersonaAllowedForTrigger } from "@/utils/db/personaAccess";
 
 /**
  * Configures the /bot impersonate subcommand
@@ -134,6 +136,7 @@ async function handleTargetUserImpersonation(
 async function handlePersonaImpersonation(
   _client: Client,
   interaction: ChatInputCommandInteraction,
+  userData: UserRow,
   locale: string,
 ): Promise<void> {
   if (!interaction.guild || !interaction.channel) {
@@ -181,6 +184,14 @@ async function handlePersonaImpersonation(
     invokingMember?.roles.cache.map((role) => role.id),
     parentChannelId,
   );
+  const tomoriState = allPersonas.find((persona) => !persona.is_alter) ?? allPersonas[0];
+  const personalSpotlightStatus = userData.user_id
+    ? await getCachedPersonalSpotlightStatus(
+        tomoriState?.server_id ?? 0,
+        userData.user_id,
+        parentChannelId ?? channel.id,
+      )
+    : null;
 
   if (!whitelistStatus.isTriggerAllowed) {
     await replyInfoEmbed(interaction, locale, {
@@ -192,11 +203,11 @@ async function handlePersonaImpersonation(
     return;
   }
 
-  const availablePersonas = filterPersonasByWhitelist(allPersonas, whitelistStatus);
+  const availablePersonas = filterPersonasForTrigger(allPersonas, whitelistStatus, personalSpotlightStatus);
   if (availablePersonas.length === 0) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.message_cooldown_title",
-      descriptionKey: "commands.bot.impersonate.channel_not_whitelisted",
+      descriptionKey: "commands.bot.impersonate.persona_access_blocked",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -249,13 +260,16 @@ async function handlePersonaImpersonation(
   const messageContent = modalResult.values.message_content || "";
 
   const selectedPersona = availablePersonas[selectedIndex];
-  if (!selectedPersona?.tomori_id || !isPersonaAllowedByWhitelistStatus(whitelistStatus, selectedPersona.tomori_id)) {
+  if (
+    !selectedPersona?.tomori_id ||
+    !isPersonaAllowedForTrigger(whitelistStatus, personalSpotlightStatus, selectedPersona.tomori_id)
+  ) {
     log.info(
-      `[/bot impersonate persona] Rejected persona selection at index ${selectedIndex} in channel ${channel.id} due to whitelist or stale modal state`,
+      `[/bot impersonate persona] Rejected persona selection at index ${selectedIndex} in channel ${channel.id} due to persona access rules or stale modal state`,
     );
     await replyInfoEmbed(modalResult.interaction, locale, {
       titleKey: "general.message_cooldown_title",
-      descriptionKey: "commands.bot.impersonate.channel_not_whitelisted",
+      descriptionKey: "commands.bot.impersonate.persona_access_blocked",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -264,7 +278,6 @@ async function handlePersonaImpersonation(
 
   try {
     // 5. Check notice embed visibility for impersonation notices
-    const tomoriState = allPersonas.find((persona) => !persona.is_alter) ?? allPersonas[0];
     const shouldShowNotice = tomoriState?.config
       ? isNoticeEmbedVisible(tomoriState.config, "impersonation_notice")
       : true;
@@ -489,11 +502,19 @@ async function handleUserImpersonation(
       invokingMember?.roles.cache.map((role) => role.id),
       parentChannelId,
     );
+    const invokingUserRow = await getCachedUserRow(interaction.user.id);
+    const personalSpotlightStatus = invokingUserRow?.user_id
+      ? await getCachedPersonalSpotlightStatus(
+          tomoriState.server_id,
+          invokingUserRow.user_id,
+          parentChannelId ?? channel.id,
+        )
+      : null;
 
-    if (!isPersonaAllowedByWhitelistStatus(whitelistStatus, tomoriState.tomori_id)) {
+    if (!isPersonaAllowedForTrigger(whitelistStatus, personalSpotlightStatus, tomoriState.tomori_id)) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.message_cooldown_title",
-        descriptionKey: channelWhitelistKey,
+        descriptionKey: "commands.bot.impersonate.main_persona_access_blocked",
         color: ColorCode.WARN,
       });
       return;
@@ -756,7 +777,7 @@ async function handleSystemImpersonation(interaction: ChatInputCommandInteractio
 export async function execute(
   client: Client,
   interaction: ChatInputCommandInteraction,
-  _userData: UserRow,
+  userData: UserRow,
   locale: string,
 ): Promise<void> {
   // 1. Fast validation
@@ -776,7 +797,7 @@ export async function execute(
   // 3. Route to appropriate handler
   switch (target) {
     case "persona":
-      await handlePersonaImpersonation(client, interaction, locale);
+      await handlePersonaImpersonation(client, interaction, userData, locale);
       break;
     case "user":
       await handleTargetUserImpersonation(client, interaction, locale);

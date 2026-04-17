@@ -14,7 +14,8 @@ import {
   setMessageTriggerCooldownWithWhitelist,
 } from "../../utils/db/cooldownManager";
 import { getCachedWhitelistStatus } from "../../utils/cache/channelWhitelistCache";
-import { filterPersonasByWhitelist, isPersonaAllowedByWhitelistStatus } from "../../utils/db/personaWhitelist";
+import { getCachedPersonalSpotlightStatus } from "@/utils/cache/personalSpotlightCache";
+import { filterPersonasForTrigger, isPersonaAllowedForTrigger } from "@/utils/db/personaAccess";
 import { CooldownType } from "../../types/db/schema";
 import { getCooldownTypeFooterKey } from "../../utils/db/messageCooldown";
 import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
@@ -37,7 +38,7 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
 export async function execute(
   client: Client,
   interaction: ChatInputCommandInteraction,
-  _userData: UserRow,
+  userData: UserRow,
   locale: string,
 ): Promise<void> {
   // 1. Ensure command is run in a guild text channel - let helper functions manage interaction state
@@ -151,12 +152,19 @@ export async function execute(
     invokingMember?.roles.cache.map((role) => role.id),
     parentChannelId,
   );
-  const availablePersonas = filterPersonasByWhitelist(allPersonas, whitelistStatus);
+  const personalSpotlightStatus = userData.user_id
+    ? await getCachedPersonalSpotlightStatus(
+        tomoriState.server_id,
+        userData.user_id,
+        parentChannelId ?? interaction.channel.id,
+      )
+    : null;
+  const availablePersonas = filterPersonasForTrigger(allPersonas, whitelistStatus, personalSpotlightStatus);
 
   if (availablePersonas.length === 0) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.message_cooldown_title",
-      descriptionKey: "commands.bot.respond.channel_not_whitelisted",
+      descriptionKey: "commands.bot.respond.persona_access_blocked",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -261,12 +269,12 @@ export async function execute(
     );
   }
 
-  if (!isPersonaAllowedByWhitelistStatus(whitelistStatus, selectedPersona?.tomori_id)) {
+  if (!isPersonaAllowedForTrigger(whitelistStatus, personalSpotlightStatus, selectedPersona?.tomori_id)) {
     await replyInteraction.editReply({
       embeds: [
         new EmbedBuilder()
           .setTitle(localizer(locale, "general.message_cooldown_title"))
-          .setDescription(localizer(locale, "commands.bot.respond.channel_not_whitelisted"))
+          .setDescription(localizer(locale, "commands.bot.respond.persona_access_blocked"))
           .setColor(ColorCode.WARN),
       ],
     });

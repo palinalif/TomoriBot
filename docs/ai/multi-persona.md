@@ -70,6 +70,15 @@ Configured auto-trigger channels can also pin a single persona per channel:
 - The per-channel assignment is stored in `tomori_configs.autoch_persona_overrides`.
 - If a channel has no explicit assignment, auto-trigger falls back to the main persona.
 
+### Personal spotlight
+
+Users can add a channel-scoped personal persona filter with `/personal spotlight set`:
+
+- The spotlight stores a per-user allowed persona set for one channel.
+- That set is intersected with the server whitelist result, so personal spotlight can only narrow access, never expand it.
+- If the spotlight also chooses an auto-trigger persona, that persona becomes the user+channel-scoped fallback for every qualifying message from that user in that channel.
+- `/personal spotlight manage` removes permanent or timed spotlight rows.
+
 ## Response Pipeline (Multi-Persona)
 
 High-level flow (per incoming message):
@@ -92,6 +101,7 @@ To prevent infinite loops where personas continuously trigger each other, Tomori
 - **Default limit**: 3 (configurable via `/config self-reply-limit`, max 10)
 - **Scope**: Per-channel (shared across all personas)
 - **Purpose**: Limit cascading persona-to-persona triggers, not user-triggered responses
+- **Origin tracking**: each self-reply chain keeps the originating user identity so downstream persona self-messages still respect that user's server whitelist and personal spotlight restrictions
 
 ### Mental Model: Nested Array
 
@@ -181,8 +191,10 @@ The chain resets (depth → 0) when:
 
 **Exception:** if the active user sends a natural-language stop message while a generation is already running, TomoriBot preserves the current depth and clears queued self-reply work for that chain instead of resetting it.
 
-Auto-trigger note: auto-chat / always-reply channel behavior only qualifies on real user-like messages. Persona self-messages do not advance the shared auto-chat counter and do not auto-trigger fresh self turns by themselves. When a channel has an auto-trigger persona assignment, that persona owns the auto-trigger fallback for that channel; explicit trigger-word matches still take priority.
+Auto-trigger note: auto-chat / always-reply channel behavior only qualifies on real user-like messages. Persona self-messages do not advance the shared auto-chat counter and do not auto-trigger fresh self turns by themselves. When a channel has an auto-trigger persona assignment, that persona owns the auto-trigger fallback for that channel; explicit trigger-word matches still take priority. Personal spotlight auto-trigger behaves the same way, but only for the spotlight owner in that specific channel.
 With deliberate trigger mode enabled, only deliberate trigger invocations count as explicit matches. Plain trigger words no longer override the channel fallback persona unless that persona is the channel's exempt auto-chat owner.
+
+Proxy-trigger note: if user A is restricted to persona Alice by either server whitelist or personal spotlight, then `Alice -> Bob` self-trigger chains are blocked for that user. Replies, mentions, and other proxy paths do not bypass the originating user's persona access rules.
 
 ### Configuration
 

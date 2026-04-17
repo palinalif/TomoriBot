@@ -26,7 +26,8 @@ import { log, ColorCode } from "@/utils/misc/logger";
 import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
 import { runHiddenImageTurn } from "@/utils/provider/hiddenImageTurn";
 import { getCachedWhitelistStatus } from "@/utils/cache/channelWhitelistCache";
-import { filterPersonasByWhitelist, isPersonaAllowedByWhitelistStatus } from "@/utils/db/personaWhitelist";
+import { getCachedPersonalSpotlightStatus } from "@/utils/cache/personalSpotlightCache";
+import { filterPersonasForTrigger, isPersonaAllowedForTrigger } from "@/utils/db/personaAccess";
 
 // ─── Modal field identifiers ──────────────────────────────────────────────────
 
@@ -270,7 +271,7 @@ async function replyQuotaExceeded(
 export async function execute(
   client: Client,
   interaction: ChatInputCommandInteraction,
-  _userData: UserRow,
+  userData: UserRow,
   locale: string,
 ): Promise<void> {
   // 1. Guild-only guard — the command targets a specific channel.
@@ -395,12 +396,23 @@ export async function execute(
     invokingMember?.roles.cache.map((role) => role.id),
     parentChannelId,
   );
-  const availablePersonaSummaries = filterPersonasByWhitelist(personaSummaries, whitelistStatus);
+  const personalSpotlightStatus = userData.user_id
+    ? await getCachedPersonalSpotlightStatus(
+        tomoriState.server_id,
+        userData.user_id,
+        parentChannelId ?? interaction.channel.id,
+      )
+    : null;
+  const availablePersonaSummaries = filterPersonasForTrigger(
+    personaSummaries,
+    whitelistStatus,
+    personalSpotlightStatus,
+  );
 
   if (availablePersonaSummaries.length === 0) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.message_cooldown_title",
-      descriptionKey: "commands.bot.generate.image.channel_not_whitelisted",
+      descriptionKey: "commands.bot.generate.image.persona_access_blocked",
       color: ColorCode.WARN,
       flags: MessageFlags.Ephemeral,
     });
@@ -561,10 +573,13 @@ export async function execute(
     const selectedPersona =
       availablePersonaSummaries.find((p) => p.tomori_id === selectedPersonaId) ?? fallbackPersonaSummary;
 
-    if (!selectedPersona || !isPersonaAllowedByWhitelistStatus(whitelistStatus, selectedPersona.tomori_id)) {
+    if (
+      !selectedPersona ||
+      !isPersonaAllowedForTrigger(whitelistStatus, personalSpotlightStatus, selectedPersona.tomori_id)
+    ) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "general.message_cooldown_title",
-        descriptionKey: "commands.bot.generate.image.channel_not_whitelisted",
+        descriptionKey: "commands.bot.generate.image.persona_access_blocked",
         color: ColorCode.WARN,
       });
       return;

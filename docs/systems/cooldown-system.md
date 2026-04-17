@@ -46,9 +46,10 @@ Used for automatic message-triggered chat flow.
 3. If channel whitelist is active and current channel (or its parent channel for threads) is not whitelisted -> blocked.
 4. If role whitelist is active and triggering member has no whitelisted role -> blocked.
 5. If a persona has a channel whitelist configured anywhere in the server, that persona is only eligible in its whitelisted channels (threads inherit the parent channel entry); personas with no rows remain eligible everywhere. Disallowed automatic persona matches fail silently and manual persona selections (for example `/bot respond`, `/bot impersonate`, conditioning, and scene-image sender selection) are rejected.
-6. If channel is whitelisted and has an explicit override, use that channel-specific cooldown type/length.
-7. If channel is whitelisted without an override, inherit global `tomori_configs.cooldown_type/cooldown_length`.
-8. Otherwise use global `tomori_configs.cooldown_type/cooldown_length`.
+6. If the triggering user has a personal spotlight for the effective channel, that spotlight becomes an additional persona filter on top of the server whitelist. Only personas present in both sets may trigger, including proxy/self chains. The spotlight's optional personal auto-trigger persona behaves like a user+channel-scoped always-reply fallback, but still respects the server whitelist result.
+7. If channel is whitelisted and has an explicit override, use that channel-specific cooldown type/length.
+8. If channel is whitelisted without an override, inherit global `tomori_configs.cooldown_type/cooldown_length`.
+9. Otherwise use global `tomori_configs.cooldown_type/cooldown_length`.
 
 ### Cooldown types
 
@@ -80,6 +81,9 @@ Operational note:
   - `/server whitelist persona`
   - `/server whitelist role`
   - `/server whitelist remove` (bulk remove whitelisted personas, channels, and/or roles)
+- Personal spotlight:
+  - `/personal spotlight set`
+  - `/personal spotlight manage`
 
 ## Cleanup
 
@@ -96,5 +100,6 @@ When cooldown config/whitelist settings change, invalidate:
 
 - Tomori state cache
 - whitelist cache
+- personal spotlight cache
 
 to avoid stale trigger behavior.

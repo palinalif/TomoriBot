@@ -40,6 +40,8 @@ This document summarizes the current PostgreSQL schema used by TomoriBot.
 ### Permissions/privacy/routing
 
 - `personalization_blacklist`
+- `personal_spotlights`
+- `personal_spotlight_personas`
 - `channel_persona_whitelist`
 - `channel_whitelist`
 - `role_whitelist`
@@ -122,6 +124,14 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 ### User personalization
 
 - `users.impersonation_prompt` stores the global user-owned prompt used during `/bot impersonate` user impersonation replies.
+
+### Personal spotlight routing
+
+- `personal_spotlights` stores one user-scoped spotlight row per `server_id + user_id + channel_disc_id`.
+- `personal_spotlights.auto_trigger_tomori_id` stores the optional persona automatically triggered for that user in that channel.
+- `personal_spotlights.expires_at` is `NULL` for permanent spotlights and timestamped for timed spotlights.
+- `personal_spotlight_personas` stores the selected allowed persona set for each spotlight row.
+- Runtime reads `personal_spotlights` + `personal_spotlight_personas` together and intersects them with server whitelist rules, so personal spotlight never expands server-level access.
 
 ### Memory split
 

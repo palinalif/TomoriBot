@@ -67,7 +67,7 @@ import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
 import { getLinkedMatrixRoom, pendingMatrixReplyChannels, sendMatrixTypingIndicator } from "@/utils/matrix";
 import { isBridgeUserId, stripBridgePrefix, extractBridgeUserId, isMatrixBridgeWebhookUsername } from "@/utils/bridge";
-import { isPersonaAllowedByWhitelistStatus } from "@/utils/db/personaWhitelist";
+import { isPersonaAllowedForTrigger } from "@/utils/db/personaAccess";
 
 import type { TomoriState, TomoriConfigRow, ServerEmojiRow, ServerStickerRow } from "@/types/db/schema";
 import { PrivacyLevel } from "@/types/db/schema";
@@ -2899,18 +2899,37 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           ...earlyTomoriState,
           autoch_counter: 0,
         };
-        const earlyEffectiveChannelId =
-          "isThread" in channel && typeof channel.isThread === "function" && channel.isThread()
-            ? (channel.parent?.id ?? message.channelId)
-            : message.channelId;
+        const earlyIsThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
+        const earlyParentChannelId = earlyIsThread && "parent" in channel ? channel.parent?.id : undefined;
+        const earlyEffectiveChannelId = earlyParentChannelId ?? message.channelId;
         const cachedTriggerUser =
           !isDMChannel && earlyTomoriState.server_id ? await getCachedUserRow(userDiscId) : null;
+        const earlyWhitelistStatus =
+          !isStopResponse && guild
+            ? await getCachedWhitelistStatus(
+                guild.id,
+                message.channelId,
+                message.member?.roles.cache.map((role) => role.id),
+                earlyParentChannelId,
+              )
+            : null;
         const earlyPersonalSpotlightStatus =
           !isDMChannel && cachedTriggerUser?.user_id
             ? await getCachedPersonalSpotlightStatus(
                 earlyTomoriState.server_id,
                 cachedTriggerUser.user_id,
                 earlyEffectiveChannelId,
+              )
+            : null;
+        const earlyAllowedPersonaIds =
+          earlyWhitelistStatus?.hasActivePersonaWhitelist || earlyPersonalSpotlightStatus
+            ? new Set(
+                earlyAllPersonas.flatMap((persona) =>
+                  typeof persona.tomori_id === "number" &&
+                  isPersonaAllowedForTrigger(earlyWhitelistStatus, earlyPersonalSpotlightStatus, persona.tomori_id)
+                    ? [persona.tomori_id]
+                    : [],
+                ),
               )
             : null;
 
@@ -2920,6 +2939,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           isManuallyTriggered ||
           shouldBotReply(message, modifiedEarlyTomoriStateForCheck, earlyAllPersonas, {
             personalAutoTriggerPersonaId: earlyPersonalSpotlightStatus?.autoTriggerPersonaId ?? null,
+            allowedPersonaIds: earlyAllowedPersonaIds,
           })
         ) {
           if (!isStopResponse && !isPersonaJob) {
@@ -2938,25 +2958,14 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
           // 2a. Check whitelist and cooldown BEFORE queuing (skip for stop responses)
           if (!isStopResponse && !message.author.bot && !message.webhookId) {
-            const memberRoleDiscIds = message.member ? message.member.roles.cache.map((role) => role.id) : undefined;
-            // Get parent channel ID if this is a thread (threads inherit whitelist from parent)
-            const isThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
-            const parentChannelId = isThread && "parent" in channel ? channel.parent?.id : undefined;
             // Autochat-override channels (auto-trigger, always-reply) bypass the whitelist gate
-            const effectiveChannelId = parentChannelId ?? message.channelId;
-            const isAutochatOverride = isAutochatOverrideChannel(earlyTomoriState.config, effectiveChannelId);
-            const whitelistStatus = await getCachedWhitelistStatus(
-              guild?.id ?? message.author.id,
-              message.channelId,
-              memberRoleDiscIds,
-              parentChannelId,
-            );
+            const isAutochatOverride = isAutochatOverrideChannel(earlyTomoriState.config, earlyEffectiveChannelId);
 
             // If whitelist rules block this trigger, silently ignore
             // Exception: autochat-override channels are always allowed regardless of whitelist policy
-            if (!whitelistStatus.isTriggerAllowed && !isAutochatOverride) {
+            if (earlyWhitelistStatus && !earlyWhitelistStatus.isTriggerAllowed && !isAutochatOverride) {
               log.info(
-                `Message ${message.id} in channel ${message.channelId} rejected by whitelist policy (${whitelistStatus.blockReason ?? "unknown"})`,
+                `Message ${message.id} in channel ${message.channelId} rejected by whitelist policy (${earlyWhitelistStatus.blockReason ?? "unknown"})`,
               );
               return; // Silent rejection
             }
@@ -3708,13 +3717,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         }
       }
 
-      // 6. Determine if Bot Should Reply using shouldBotReply helper
-      // Skip check if this is a manual command trigger
-      if (!isManuallyTriggered && !shouldBotReply(message, tomoriState, allPersonas)) {
-        return;
-      }
-
-      // Pre-compute channel context shared by the whitelist, persona selection,
+      // Pre-compute channel context shared by the whitelist, spotlight, persona selection,
       // and cooldown checks below
       const msgIsThread = "isThread" in channel && typeof channel.isThread === "function" && channel.isThread();
       const msgParentChannelId = msgIsThread && "parent" in channel ? channel.parent?.id : undefined;
@@ -3723,10 +3726,11 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       const msgEffectiveChannelId = msgParentChannelId ?? message.channelId;
       const isAutochatOverride = isAutochatOverrideChannel(tomoriState.config, msgEffectiveChannelId);
 
-      // 6.5. Check whitelist status.
+      // 6.5. Check whitelist + personal spotlight status.
       // Automatic self-trigger chains still skip the channel/role gate, but manual turns
       // are always enforced and persona whitelist metadata is loaded for all non-stop turns.
       let whitelistStatus: Awaited<ReturnType<typeof getCachedWhitelistStatus>> | null = null;
+      let personalSpotlightStatus: Awaited<ReturnType<typeof getCachedPersonalSpotlightStatus>> | null = null;
       if (!isStopResponse) {
         const memberRoleDiscIds = manualTriggerInvoker?.member
           ? manualTriggerInvoker.member.roles.cache.map((role) => role.id)
@@ -3737,6 +3741,10 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           memberRoleDiscIds,
           msgParentChannelId,
         );
+        personalSpotlightStatus =
+          !isDMChannel && userRow?.user_id
+            ? await getCachedPersonalSpotlightStatus(tomoriState.server_id, userRow.user_id, msgEffectiveChannelId)
+            : null;
 
         // If whitelist rules block this trigger, silently ignore
         // Exception: autochat-override channels are always allowed regardless of whitelist policy
@@ -3749,27 +3757,44 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         }
       }
 
+      const allowedPersonaIds =
+        whitelistStatus?.hasActivePersonaWhitelist || personalSpotlightStatus
+          ? new Set(
+              allPersonas.flatMap((persona) =>
+                typeof persona.tomori_id === "number" &&
+                isPersonaAllowedForTrigger(whitelistStatus, personalSpotlightStatus, persona.tomori_id)
+                  ? [persona.tomori_id]
+                  : [],
+              ),
+            )
+          : null;
+
+      // 6.75. Determine if Bot Should Reply using shouldBotReply helper.
+      // Skip check if this is a manual command trigger.
+      if (
+        !isManuallyTriggered &&
+        !shouldBotReply(message, tomoriState, allPersonas, {
+          personalAutoTriggerPersonaId: personalSpotlightStatus?.autoTriggerPersonaId ?? null,
+          allowedPersonaIds,
+        })
+      ) {
+        return;
+      }
+
       // 7. Multi-Persona: Determine which personas should respond
       // For manual triggers, respond with the selected persona (if provided)
       // For reminders/stop responses, only the main persona responds
-      const allowedPersonaIds = whitelistStatus?.hasActivePersonaWhitelist
-        ? new Set(
-            allPersonas.flatMap((persona) =>
-              typeof persona.tomori_id === "number" &&
-              isPersonaAllowedByWhitelistStatus(whitelistStatus, persona.tomori_id)
-                ? [persona.tomori_id]
-                : [],
-            ),
-          )
-        : null;
       let personasToRespond: TomoriState[];
       if (isManuallyTriggered) {
-        if (selectedPersona && isPersonaAllowedByWhitelistStatus(whitelistStatus, selectedPersona.tomori_id)) {
+        if (
+          selectedPersona &&
+          isPersonaAllowedForTrigger(whitelistStatus, personalSpotlightStatus, selectedPersona.tomori_id)
+        ) {
           personasToRespond = [selectedPersona];
         } else {
-          if (selectedPersona && whitelistStatus?.hasActivePersonaWhitelist) {
+          if (selectedPersona && (whitelistStatus?.hasActivePersonaWhitelist || personalSpotlightStatus)) {
             log.info(
-              `Manual trigger for persona ${selectedPersona.tomori_id ?? "unknown"} in channel ${message.channelId} rejected by persona whitelist`,
+              `Manual trigger for persona ${selectedPersona.tomori_id ?? "unknown"} in channel ${message.channelId} rejected by persona access rules`,
             );
           }
           personasToRespond = [];
@@ -3779,17 +3804,28 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         personasToRespond = tomoriState ? [tomoriState] : [];
         if (!isStopResponse && personasToRespond.length > 0) {
           personasToRespond = personasToRespond.filter((persona) =>
-            isPersonaAllowedByWhitelistStatus(whitelistStatus, persona.tomori_id),
+            isPersonaAllowedForTrigger(whitelistStatus, personalSpotlightStatus, persona.tomori_id),
           );
         }
       } else {
         // Check if the shared auto-chat range hit for this message
         const config = tomoriState?.config;
+        const personalAutoTriggerPersonaId = isPersonaAllowedForTrigger(
+          whitelistStatus,
+          personalSpotlightStatus,
+          personalSpotlightStatus?.autoTriggerPersonaId ?? null,
+        )
+          ? (personalSpotlightStatus?.autoTriggerPersonaId ?? null)
+          : null;
+        const isPersonalAutoTriggerActive =
+          personalAutoTriggerPersonaId !== null && isAutochatQualifyingMessage(message, isSelfMessage);
         const isAutoMsgHit =
           !!config &&
+          !isPersonalAutoTriggerActive &&
           isAutochatQualifyingMessage(message, isSelfMessage) &&
           isAutochatCounterHit(tomoriState, effectiveChannelId);
-        const autoTriggerPersonaId = config ? getAutochatAssignedPersonaId(config, effectiveChannelId) : null;
+        const serverAutoTriggerPersonaId = config ? getAutochatAssignedPersonaId(config, effectiveChannelId) : null;
+        const effectiveAutoTriggerPersonaId = personalAutoTriggerPersonaId ?? serverAutoTriggerPersonaId;
         const isAutochatConfigured = !!config && isAutochatConfiguredChannel(config, effectiveChannelId);
         const isScopedAlwaysReplyActive =
           !!config &&
@@ -3808,7 +3844,8 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         // Must be enabled, must be a real user message (not bot/webhook/self), and in a guild channel
         const isAlwaysReplyActive =
           (!!config?.always_reply_enabled && isAutochatQualifyingMessage(message, isSelfMessage)) ||
-          isScopedAlwaysReplyActive;
+          isScopedAlwaysReplyActive ||
+          isPersonalAutoTriggerActive;
 
         // Determine matching personas using the helper function
         personasToRespond = determineMatchingPersonas(
@@ -3820,10 +3857,14 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           isBotMentioned,
           !!isAutoMsgHit, // Convert to boolean
           isAlwaysReplyActive,
-          autoTriggerPersonaId,
-          isScopedAlwaysReplyActive ? autoTriggerPersonaId : null,
+          effectiveAutoTriggerPersonaId,
+          isPersonalAutoTriggerActive
+            ? personalAutoTriggerPersonaId
+            : isScopedAlwaysReplyActive
+              ? serverAutoTriggerPersonaId
+              : null,
           isDtmActive,
-          isAutochatConfigured,
+          isAutochatConfigured || isPersonalAutoTriggerActive,
           allowedPersonaIds,
         );
 
@@ -8574,6 +8615,7 @@ export function determineMatchingPersonas(
  */
 type ShouldBotReplyOptions = {
   personalAutoTriggerPersonaId?: number | null;
+  allowedPersonaIds?: ReadonlySet<number> | null;
 };
 
 export function shouldBotReply(
@@ -8625,10 +8667,20 @@ export function shouldBotReply(
   // Config is guaranteed to exist by loadTomoriState structure
   // biome-ignore lint/style/noNonNullAssertion: config is part of TomoriState type
   const config = tomoriState.config!;
+  const allowedPersonaIds = options.allowedPersonaIds ?? null;
+  const mainPersona = allPersonas.find((persona) => !persona.is_alter);
+  const resolveFallbackPersona = (personaId?: number | null): TomoriState | undefined =>
+    (personaId ? allPersonas.find((persona) => persona.tomori_id === personaId) : undefined) ?? mainPersona;
+  const isPersonaAllowed = (persona?: TomoriState | null): persona is TomoriState =>
+    Boolean(
+      persona &&
+        (!allowedPersonaIds || (typeof persona.tomori_id === "number" && allowedPersonaIds.has(persona.tomori_id))),
+    );
 
   // 2. Check if the message is a reply to the bot
   let isReplyToBot = false;
   let isReplyToPersona = false;
+  let replyPersonaTarget: TomoriState | null = null;
   const personaByNickname = new Map<string, TomoriState>();
   for (const persona of allPersonas) {
     const nicknameKey = persona.tomori_nickname?.toLowerCase();
@@ -8641,10 +8693,12 @@ export function shouldBotReply(
     if (referenceMessage?.author.id === message.client.user!.id) {
       isReplyToBot = true;
       isReplyToPersona = true;
+      replyPersonaTarget = mainPersona ?? null;
     } else if (referenceMessage?.webhookId) {
       const webhookReplyTarget = resolveReferencedWebhookTarget(referenceMessage, personaByNickname, message.guild);
       if (webhookReplyTarget.replyPersona) {
         isReplyToPersona = true;
+        replyPersonaTarget = webhookReplyTarget.replyPersona;
       }
       if (webhookReplyTarget.impersonatedUserId) {
         isReplyToBot = true;
@@ -8684,12 +8738,11 @@ export function shouldBotReply(
   const personalAutoTriggerPersonaId = options.personalAutoTriggerPersonaId ?? null;
   const hasPersonalAutoTrigger = Number.isInteger(personalAutoTriggerPersonaId);
   const isAutoTriggerChannel = isAutochatConfiguredChannel(config, msgEffectiveChannelId) || hasPersonalAutoTrigger;
+  const serverAutochatPersonaId = isAutochatConfiguredChannel(config, msgEffectiveChannelId)
+    ? getAutochatAssignedPersonaId(config, msgEffectiveChannelId)
+    : null;
   // null → no persona override, so the main (non-alter) persona is exempt; otherwise only the assigned ID is.
-  const autochatPersonaId = hasPersonalAutoTrigger
-    ? personalAutoTriggerPersonaId
-    : isAutochatConfiguredChannel(config, msgEffectiveChannelId)
-      ? getAutochatAssignedPersonaId(config, msgEffectiveChannelId)
-      : null;
+  const autochatPersonaId = hasPersonalAutoTrigger ? personalAutoTriggerPersonaId : serverAutochatPersonaId;
 
   let triggersActive = false;
   let triggersActiveDeliberate = false;
@@ -8702,6 +8755,10 @@ export function shouldBotReply(
   } | null = null;
 
   for (const persona of allPersonas) {
+    if (!isPersonaAllowed(persona)) {
+      continue;
+    }
+
     // Prevent self-triggers: skip if this persona sent the message
     if (senderPersona && persona.tomori_id === senderPersona.tomori_id) {
       continue;
@@ -8790,14 +8847,24 @@ export function shouldBotReply(
 
   // 5. Check if the shared auto-chat range hit for this message.
   // msgEffectiveChannelId is already computed above (before the trigger loop).
+  const autoReplyPersona = resolveFallbackPersona(autochatPersonaId);
+  const scopedAlwaysReplyPersona = resolveFallbackPersona(serverAutochatPersonaId);
+  const personalAutoReplyPersona = resolveFallbackPersona(personalAutoTriggerPersonaId);
   const isAutoMsgHit =
-    isAutochatQualifyingMessage(message, isSelfMessage) && isAutochatCounterHit(tomoriState, msgEffectiveChannelId);
+    !hasPersonalAutoTrigger &&
+    isAutochatQualifyingMessage(message, isSelfMessage) &&
+    isAutochatCounterHit(tomoriState, msgEffectiveChannelId) &&
+    isPersonaAllowed(autoReplyPersona);
   const isScopedAlwaysReplyHit =
     !isMatrixRelayMessage &&
     isAutochatAlwaysReplyChannelActive(config, msgEffectiveChannelId) &&
-    isAutochatQualifyingMessage(message, isSelfMessage);
+    isAutochatQualifyingMessage(message, isSelfMessage) &&
+    isPersonaAllowed(scopedAlwaysReplyPersona);
   const isPersonalAutoTriggerHit =
-    !isMatrixRelayMessage && hasPersonalAutoTrigger && isAutochatQualifyingMessage(message, isSelfMessage);
+    !isMatrixRelayMessage &&
+    hasPersonalAutoTrigger &&
+    isAutochatQualifyingMessage(message, isSelfMessage) &&
+    isPersonaAllowed(personalAutoReplyPersona);
 
   // 6. Check always-reply mode:
   // When enabled, main persona replies to all real user messages in guild channels.
@@ -8805,7 +8872,10 @@ export function shouldBotReply(
   // Auto-chat range 0-0 reuses this path, but only for configured auto-chat channels.
   // Persona selection (main vs alter) is handled downstream in determineMatchingPersonas().
   const isAlwaysReplyHit =
-    (config.always_reply_enabled && !isMatrixRelayMessage && isAutochatQualifyingMessage(message, isSelfMessage)) ||
+    (config.always_reply_enabled &&
+      !isMatrixRelayMessage &&
+      isAutochatQualifyingMessage(message, isSelfMessage) &&
+      isPersonaAllowed(mainPersona)) ||
     isScopedAlwaysReplyHit ||
     isPersonalAutoTriggerHit;
 
@@ -8819,11 +8889,14 @@ export function shouldBotReply(
 
   // When DTM is active, plain trigger matches don't count — only deliberate invocations do.
   const effectiveTriggersActive = isDtmActive ? triggersActiveDeliberate : triggersActive;
+  const effectiveReplyToBot = isReplyToBot && isPersonaAllowed(mainPersona);
+  const effectiveReplyToPersona = isReplyToPersona && isPersonaAllowed(replyPersonaTarget ?? mainPersona);
+  const effectiveBotMentioned = isBotMentioned && isPersonaAllowed(mainPersona);
 
   const wouldReply =
-    isReplyToBot ||
-    isReplyToPersona ||
-    isBotMentioned ||
+    effectiveReplyToBot ||
+    effectiveReplyToPersona ||
+    effectiveBotMentioned ||
     effectiveTriggersActive ||
     isAutoMsgHit ||
     isAlwaysReplyHit ||
@@ -8833,9 +8906,9 @@ export function shouldBotReply(
   // This captures cases where the cross-trigger log above didn't fire (e.g. auto-chat leak).
   if (isSelfMessage && wouldReply) {
     const reasons = [
-      isReplyToBot && "isReplyToBot",
-      isReplyToPersona && "isReplyToPersona",
-      isBotMentioned && "isBotMentioned",
+      effectiveReplyToBot && "isReplyToBot",
+      effectiveReplyToPersona && "isReplyToPersona",
+      effectiveBotMentioned && "isBotMentioned",
       effectiveTriggersActive && "effectiveTriggersActive",
       isAutoMsgHit && "isAutoMsgHit",
       isAlwaysReplyHit && "isAlwaysReplyHit",

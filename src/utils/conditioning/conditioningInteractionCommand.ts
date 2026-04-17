@@ -13,6 +13,7 @@ import type { ConditioningType, UserRow } from "@/types/db/schema";
 import type { SelectOption } from "@/types/discord/modal";
 import { loadAllPersonasForServer, loadTomoriState } from "@/utils/db/dbRead";
 import { getCachedWhitelistStatus } from "@/utils/cache/channelWhitelistCache";
+import { getCachedPersonalSpotlightStatus } from "@/utils/cache/personalSpotlightCache";
 import tomoriChat from "@/events/messageCreate/tomoriChat";
 import {
   CONDITIONING_REASON_MAX_LENGTH,
@@ -20,7 +21,7 @@ import {
   type ConditioningActionKey,
 } from "@/utils/conditioning/conditioning";
 import { recordConditioningEvent } from "@/utils/db/conditioningDb";
-import { isPersonaAllowedByWhitelistStatus } from "@/utils/db/personaWhitelist";
+import { filterPersonasForTrigger, isPersonaAllowedForTrigger } from "@/utils/db/personaAccess";
 
 const EMBED_COLOR_BY_TYPE: Record<ConditioningType, ColorCode> = {
   reward: ColorCode.AFFECTION,
@@ -104,14 +105,42 @@ export function createConditioningInteractionCommand(type: ConditioningType, act
     }
 
     const allPersonas = await loadAllPersonasForServer(interaction.guild.id);
-    const alterPersonas = allPersonas.filter((persona) => persona.is_alter);
-    const mainPersona = allPersonas.find((persona) => !persona.is_alter) ?? allPersonas[0];
-
-    if (!mainPersona) {
+    if (allPersonas.length === 0) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.tomori_not_setup_title",
         descriptionKey: "general.errors.tomori_not_setup_description",
         color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const invokingMember = interaction.guild.members.cache.get(interaction.user.id);
+    const memberRoleDiscIds = invokingMember?.roles.cache.map((role) => role.id);
+    const isThread =
+      "isThread" in guildChannel && typeof guildChannel.isThread === "function" && guildChannel.isThread();
+    const parentChannelId = isThread && "parent" in guildChannel ? guildChannel.parent?.id : undefined;
+    const whitelistStatus = await getCachedWhitelistStatus(
+      interaction.guild.id,
+      interaction.channel.id,
+      memberRoleDiscIds,
+      parentChannelId,
+    );
+    const personalSpotlightStatus = userData.user_id
+      ? await getCachedPersonalSpotlightStatus(
+          tomoriState.server_id,
+          userData.user_id,
+          parentChannelId ?? interaction.channel.id,
+        )
+      : null;
+    const availablePersonas = filterPersonasForTrigger(allPersonas, whitelistStatus, personalSpotlightStatus);
+    const alterPersonas = availablePersonas.filter((persona) => persona.is_alter);
+    const mainPersona = availablePersonas.find((persona) => !persona.is_alter) ?? availablePersonas[0];
+
+    if (!mainPersona) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.conditioning.shared.persona_access_blocked_title",
+        descriptionKey: "commands.conditioning.shared.persona_access_blocked_description",
+        color: ColorCode.WARN,
       });
       return;
     }
@@ -220,18 +249,6 @@ export function createConditioningInteractionCommand(type: ConditioningType, act
         flags: MessageFlags.SuppressNotifications,
       });
 
-      const invokingMember = interaction.guild.members.cache.get(interaction.user.id);
-      const memberRoleDiscIds = invokingMember?.roles.cache.map((role) => role.id);
-      const isThread =
-        "isThread" in guildChannel && typeof guildChannel.isThread === "function" && guildChannel.isThread();
-      const parentChannelId = isThread && "parent" in guildChannel ? guildChannel.parent?.id : undefined;
-      const whitelistStatus = await getCachedWhitelistStatus(
-        interaction.guild.id,
-        interaction.channel.id,
-        memberRoleDiscIds,
-        parentChannelId,
-      );
-
       if (!whitelistStatus.isTriggerAllowed) {
         log.info(
           `${type} ${actionKey} interaction completed without chat response because channel ${interaction.channel.id} is blocked by whitelist policy (${whitelistStatus.blockReason ?? "unknown"})`,
@@ -239,9 +256,9 @@ export function createConditioningInteractionCommand(type: ConditioningType, act
         return;
       }
 
-      if (!isPersonaAllowedByWhitelistStatus(whitelistStatus, selectedPersona.tomori_id)) {
+      if (!isPersonaAllowedForTrigger(whitelistStatus, personalSpotlightStatus, selectedPersona.tomori_id)) {
         log.info(
-          `${type} ${actionKey} interaction completed without chat response because persona ${selectedPersona.tomori_id} is blocked by its channel whitelist in ${interaction.channel.id}`,
+          `${type} ${actionKey} interaction completed without chat response because persona ${selectedPersona.tomori_id} is blocked by persona access rules in ${interaction.channel.id}`,
         );
         return;
       }

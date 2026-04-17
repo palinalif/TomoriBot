@@ -194,6 +194,22 @@ Rules:
 - durable server-scoped settings added through this pattern should also be surfaced in `/tool status`
 - keep [`status-command.md`](./status-command.md) in sync when `/tool status` coverage changes
 
+### Pattern 3C: Modal -> Review Prompt -> Modal
+
+Use when a command needs one modal to collect a bulk selection, then a follow-up confirmation or button choice before optionally opening a second modal.
+
+Example:
+
+- `/personal spotlight set`
+
+Rules:
+
+- do not auto-defer the first modal submit if you still need to reply with buttons from that modal interaction
+- reply to the first modal submit with a review embed + buttons
+- if the user picks the branch that needs more input, open the second modal from the unacknowledged button interaction
+- after the second modal submit, silently acknowledge with `acknowledgeModalSubmitForRefresh(...)` when you intend to edit the original review reply instead of responding on the second modal itself
+- only persist the final DB write after the last user decision is known, then invalidate caches in that same success path
+
 ### Pattern 4: Pagination Helpers (No Pre-Defer)
 
 Use when calling `replyPaginatedChoices(...)` or `promptWithPaginatedModal(...)`.
@@ -297,7 +313,7 @@ Rules:
 - `server`: trigger(add/delete), whitelist(channel/persona/role/remove), stm(manage), cooldown(triggers), auto-trigger(*), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove)
 - `persona`: create, generate, import, export, default, swap, remove, attribute(add/edit/remove), sample-dialogue(add/edit/remove), prompt(set/remove), history(import/remove)
 - `memory`: document(add/remove), personal(add/edit/remove/import/export), server(add/edit/remove/import/export)
-- `personal`: privacy, language, nickname, cache, config(import/export/remove), impersonate(prompt)
+- `personal`: privacy, language, nickname, cache, config(import/export/remove), impersonate(prompt), spotlight(set/manage)
 - `scheduled-task`: remove
 - `conditioning`: manage, reward(headpat/hug/kiss/tickle), punish(spank/pinch/bite/squeeze)
 - `tool`: ping, status, refresh, compact, comment
