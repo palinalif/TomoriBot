@@ -506,7 +506,8 @@ I have built-in features to help reduce costs from abusers or spammers in your s
       refresh: {
         description: `Clears the recent conversation history.`,
         title: `🧹 Conversation History Cleared`,
-        response: `Context has been refreshed. All messages above this one will now be ignored.`,
+        response: `All messages above this one will now be ignored and the channel's STM has been cleared.`,
+        footer: `Delete this embed to allow those older messages to be included again.`,
       },
       status: {
         description: `Show current personal, server, or persona status.`,
@@ -1901,6 +1902,28 @@ A malicious MCP server can:
 
 Treat MCP servers with the same caution as browser extensions or third-party apps. If in doubt, do not add it.`,
         footer: `Always review an MCP's described tools before adding it.`,
+      },
+      nsfw: {
+        description: `Learn how to enable age-restricted (NSFW) commands`,
+        title: `Enabling Age-Restricted Commands`,
+        embed_description: `TomoriBot supports age-restricted commands. Here's how to enable them:`,
+        enable_title: `Step 1: Enable in Discord Settings`,
+        enable_description: `**1.** Open Discord and go to **User Settings** (gear icon in the bottom-left)
+**2.** Navigate to **Privacy & Safety**
+**3.** Toggle on: **Allow access to age-restricted commands in apps**
+**4.** Once enabled, you'll be able to use NSFW commands
+
+Note: You must be 18 or older to enable this setting.`,
+        channel_title: `Step 2: Use Commands in NSFW Channels`,
+        channel_description: `Age-restricted commands can only be executed in channels marked as NSFW:
+- On desktop: Right-click a channel → **Edit Channel** → Toggle **NSFW**
+- On mobile: Channel settings → Toggle **NSFW**
+- Only server admins can mark channels as NSFW
+
+If a command is restricted and the channel isn't marked NSFW, you won't be able to see the command.`,
+        warning_title: `⚠️ Content Warning`,
+        warning_description: `Age-restricted commands may contain **mature or explicit content**. These commands are intended for adult users only. Use responsibly and respect Discord's Community Guidelines.`,
+        footer: `For more help, use \`/help\` to see all available commands.`,
       },
     },
     legal: {

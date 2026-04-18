@@ -359,6 +359,7 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   tool_notice_hidden_keys TEXT[] DEFAULT '{}',
   llm_disabled_params TEXT[] DEFAULT '{}',
   humanizer_degree INT DEFAULT 1,
+  thinking_level TEXT DEFAULT 'auto',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (tomori_id) REFERENCES tomoris(tomori_id) ON DELETE SET NULL,
@@ -600,6 +601,9 @@ SELECT add_column_if_not_exists('tomori_configs', 'custom_model_name', 'TEXT');
 -- Add context window size for custom endpoints (April 2026)
 -- Sent as options.num_ctx in Ollama-compatible requests; null means use endpoint default
 SELECT add_column_if_not_exists('tomori_configs', 'custom_num_ctx', 'INT');
+
+-- Add provider-agnostic thinking level hint (April 2026)
+SELECT add_column_if_not_exists('tomori_configs', 'thinking_level', 'TEXT', '''auto''');
 
 -- Add RP channel IDs for per-channel emoji/sticker suppression (February 2026)
 -- Channels in this list always suppress emojis and stickers regardless of global settings
@@ -1123,6 +1127,7 @@ CREATE TABLE IF NOT EXISTS conditioning_history (
   FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
+
 
 DROP TRIGGER IF EXISTS update_conditioning_history_timestamp ON conditioning_history;
 CREATE TRIGGER update_conditioning_history_timestamp
@@ -2166,6 +2171,7 @@ CREATE TABLE IF NOT EXISTS saved_provider_configs (
   custom_endpoint_url TEXT,                   -- Custom provider endpoint URL
   custom_model_name TEXT,                     -- Custom provider model name
   custom_num_ctx INT,                         -- Custom provider context window size (e.g., Ollama num_ctx)
+  thinking_level TEXT DEFAULT 'auto',         -- Provider-specific thinking/reasoning effort snapshot
   fallback_llm_ids JSONB DEFAULT '[]'::JSONB, -- Ordered fallback model IDs
   channel_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- Snapshot: [{channel_disc_id, llm_id}, ...]
   persona_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- Snapshot: [{tomori_id, llm_id}, ...]
@@ -2203,6 +2209,9 @@ SELECT add_column_if_not_exists('saved_provider_configs', 'llm_disabled_params',
 
 -- Migration: add video_model_id column to saved_provider_configs (April 2026)
 SELECT add_column_if_not_exists('saved_provider_configs', 'video_model_id', 'INTEGER', 'NULL');
+
+-- Migration: add thinking_level snapshot column to saved_provider_configs (April 2026)
+SELECT add_column_if_not_exists('saved_provider_configs', 'thinking_level', 'TEXT', '''auto''');
 
 -- Auto-update timestamp trigger
 DROP TRIGGER IF EXISTS update_saved_provider_configs_timestamp ON saved_provider_configs;

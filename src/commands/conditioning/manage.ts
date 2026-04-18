@@ -33,16 +33,10 @@ type ConditioningManageEntry = ConditioningGroup & {
   serverId: number;
   personaName: string;
   personaLineageId: number;
-  rewardEnabled: boolean;
-  punishEnabled: boolean;
 };
 
-function isInjectedManageEntry(entry: ConditioningManageEntry): boolean {
-  if (entry.reasonText.trim().length === 0) {
-    return false;
-  }
-
-  return entry.conditioningType === "reward" ? entry.rewardEnabled : entry.punishEnabled;
+function hasManageableReason(entry: ConditioningManageEntry): boolean {
+  return entry.reasonText.trim().length > 0;
 }
 
 function truncateOptionLabel(value: string): string {
@@ -138,8 +132,6 @@ async function loadManageEntries(personas: TomoriState[]): Promise<ConditioningM
           serverId: persona.server_id,
           personaName: persona.tomori_nickname,
           personaLineageId: persona.persona_lineage_id ?? 0,
-          rewardEnabled: persona.reward_conditioning_enabled,
-          punishEnabled: persona.punish_conditioning_enabled,
         }),
       );
     }),
@@ -147,7 +139,7 @@ async function loadManageEntries(personas: TomoriState[]): Promise<ConditioningM
 
   return personaEntries
     .flat()
-    .filter(isInjectedManageEntry)
+    .filter(hasManageableReason)
     .sort((a, b) => {
       const timeDiff = b.updatedAt.getTime() - a.updatedAt.getTime();
       if (timeDiff !== 0) return timeDiff;
@@ -264,10 +256,13 @@ function buildCheckboxGroups(entries: ConditioningManageEntry[], locale: string)
     const options: CheckboxGroupOption[] = chunk.map((entry, index) => {
       const effectiveIndex = i + index;
       const actionLabel = localizer(locale, `commands.${entry.conditioningType}.${entry.actionKey}.history_label`);
-      const description = localizer(locale, "commands.conditioning.manage.option_reason_description", {
+      let description = localizer(locale, "commands.conditioning.manage.option_reason_description", {
         count: entry.totalCount.toString(),
         reason: entry.reasonText,
       });
+      if (entry.actionText) {
+        description = `${description} • ${entry.actionText}`;
+      }
 
       return {
         label: truncateOptionLabel(

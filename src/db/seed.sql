@@ -27,6 +27,9 @@ WHERE hide_respond_embed = true
 SELECT add_column_if_not_exists('persona_configs', 'reward_conditioning_enabled', 'BOOLEAN', 'true');
 SELECT add_column_if_not_exists('persona_configs', 'punish_conditioning_enabled', 'BOOLEAN', 'true');
 
+-- Ensure all required columns exist in conditioning_history table
+SELECT add_column_if_not_exists('conditioning_history', 'action_text', 'TEXT');
+
 -- Ensure all required columns exist in llms table
 SELECT add_column_if_not_exists('llms', 'is_smartest', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'is_default', 'BOOLEAN', 'false');

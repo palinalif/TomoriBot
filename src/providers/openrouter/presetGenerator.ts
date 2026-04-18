@@ -16,6 +16,7 @@ import {
   buildPresetPrompt,
   extractResponseText,
   buildToolErrorResult,
+  stripAnthropicUnsupportedConstraints,
   type PresetContentPart,
   type PresetMessage,
   type PresetToolCall,
@@ -56,12 +57,17 @@ export async function generatePresetFromPromptOpenrouter(
   const toolContext = options.toolContext;
   const toolsEnabled = tools.length > 0 && toolContext;
 
+  const rawPresetSchema = buildPresetResponseSchema();
+  const presetSchema = options.model.startsWith("anthropic/")
+    ? stripAnthropicUnsupportedConstraints(rawPresetSchema)
+    : rawPresetSchema;
+
   const responseFormat = {
     type: "json_schema" as const,
     json_schema: {
       name: "preset_export_data",
       description: "Structured persona preset data",
-      schema: buildPresetResponseSchema(),
+      schema: presetSchema,
     },
   };
 

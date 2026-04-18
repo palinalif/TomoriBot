@@ -41,6 +41,7 @@ export async function execute(
     {
       titleKey: "commands.tool.refresh.title",
       descriptionKey: "commands.tool.refresh.response", // Ensure this locale key contains "refresh"
+      footerKey: "commands.tool.refresh.footer",
       color: ColorCode.SECTION, // Use SECTION color for visual separation
     },
     MessageFlags.SuppressNotifications,

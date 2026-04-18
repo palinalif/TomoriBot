@@ -4,6 +4,7 @@ import {
   buildExpressionResponseSchema,
   type ExpressionBatchResult,
 } from "@/providers/utils/structuredOutput";
+import { stripAnthropicUnsupportedConstraints } from "@/providers/utils/presetCommon";
 import type { ProviderStructuredJsonRequest, StructuredOutputResult } from "@/types/provider/featureInterfaces";
 import { log } from "@/utils/misc/logger";
 import { fetchAndOptimizeImage } from "@/utils/image/imageProcessor";
@@ -213,7 +214,10 @@ export async function callOpenrouterStructuredOutput(
       },
     ];
 
-    const responseSchema = buildExpressionResponseSchema(images.length);
+    const rawExpressionSchema = buildExpressionResponseSchema(images.length);
+    const responseSchema = request.model.startsWith("anthropic/")
+      ? stripAnthropicUnsupportedConstraints(rawExpressionSchema)
+      : rawExpressionSchema;
     const responseFormat = {
       type: "json_schema" as const,
       json_schema: {

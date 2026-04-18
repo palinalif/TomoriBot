@@ -113,7 +113,7 @@ function getCommandLocalizationAliases(key: string): string[] {
   }
 
   const conditioningMatch = key.match(
-    /^commands\.conditioning\.(reward|punish)\.([a-z0-9-]+)\.(description|reason_description)$/,
+    /^commands\.conditioning\.(reward|punish)\.([a-z0-9-]+)\.([a-z][a-z0-9]*(?:_[a-z0-9]+)*_description|description)$/,
   );
   if (conditioningMatch) {
     const [, type, actionKey, suffix] = conditioningMatch;

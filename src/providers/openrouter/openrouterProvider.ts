@@ -299,13 +299,35 @@ export class OpenrouterProvider
       return [];
     }
 
-    const openRouter = new OpenRouter({ apiKey: request.apiKey });
-    const response = await openRouter.embeddings.generate({
-      model: request.model,
-      input: request.inputs,
-    });
+    try {
+      const openRouter = new OpenRouter({ apiKey: request.apiKey });
+      const response = await openRouter.embeddings.generate({
+        model: request.model,
+        input: request.inputs,
+      });
 
-    return extractOpenRouterEmbeddings(response);
+      return extractOpenRouterEmbeddings(response);
+    } catch (error: unknown) {
+      // OpenRouter sometimes returns 200 OK with an error body, which trips up the SDK's validation.
+      // If this happens, the SDK throws a ResponseValidationError with the raw body in rawValue.
+      // biome-ignore lint/suspicious/noExplicitAny: SDK-specific error structure (ResponseValidationError) contains rawValue
+      const err = error as any;
+
+      if (err.name === "ResponseValidationError" && err.rawValue?.error) {
+        const orError = err.rawValue.error;
+        const message = orError.message || "Unknown OpenRouter error";
+        const code = orError.code || "unknown";
+        throw new Error(`OpenRouter Embedding Error (HTTP 200/${code}): ${message}`);
+      }
+
+      // Handle standard OpenRouter error types if they have a clear message
+      if (err.message?.includes("Response validation failed")) {
+        const rawBody = err.rawValue ? JSON.stringify(err.rawValue) : "no raw value";
+        log.error(`OpenRouter embedding validation failed. Raw response: ${rawBody}`);
+      }
+
+      throw error;
+    }
   }
 
   getExpressionInitializationBatchSize(): number {

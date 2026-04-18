@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { SUPPORTED_PARAM_VALUES } from "@/constants/supportedParams";
+import { DEFAULT_THINKING_LEVEL, THINKING_LEVEL_VALUES } from "@/constants/thinkingLevels";
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
 import { logitBiasEntrySchema } from "@/types/provider/logitBias";
 
@@ -98,6 +99,7 @@ export const serverConfigExportSchema = z.object({
     z.array(logitBiasEntrySchema).default([]),
   ),
   humanizer_degree: z.number().int().min(0).max(3),
+  thinking_level: z.enum(THINKING_LEVEL_VALUES).default(DEFAULT_THINKING_LEVEL),
   timezone_offset: z.number().int().min(-12).max(14),
   message_fetch_limit: z.number().int().min(20).max(100).default(80),
   system_prompt: z.string().nullable().default(null),

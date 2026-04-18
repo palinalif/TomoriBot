@@ -1,6 +1,7 @@
 import { StickerFormatType } from "discord.js";
 import { z } from "zod";
 import { SUPPORTED_PARAM_VALUES, isSupportedParamValue, type SupportedParamValue } from "@/constants/supportedParams";
+import { DEFAULT_THINKING_LEVEL, THINKING_LEVEL_VALUES } from "@/constants/thinkingLevels";
 import { TOOL_NOTICE_KEYS, isToolNoticeKey, type ToolNoticeKey } from "@/constants/toolNotices";
 import { DEFAULT_NAI_NEGATIVE_TAGS, DEFAULT_NAI_STYLE_TAGS } from "@/utils/image/naiTagDefaults";
 import { logitBiasEntrySchema, normalizeLogitBiasEntries } from "@/types/provider/logitBias";
@@ -309,6 +310,7 @@ export const tomoriConfigSchema = z.object({
   web_search_enabled: z.boolean().default(true), // New: Added for Web Search permission (Brave Search)
   personal_memories_enabled: z.boolean().default(true),
   humanizer_degree: z.nativeEnum(HumanizerDegree).default(HumanizerDegree.LIGHT),
+  thinking_level: z.enum(THINKING_LEVEL_VALUES).default(DEFAULT_THINKING_LEVEL), // Added April 2026 - General reasoning/thinking effort hint
   emoji_usage_enabled: z.boolean().default(true), // Added May 5, 2025
   sticker_usage_enabled: z.boolean().default(true), // Added May 5, 2025
   manage_message_enabled: z.boolean().default(true), // Added November 5, 2025 - Permission gate for message management tools
@@ -495,6 +497,7 @@ export const conditioningHistorySchema = z.object({
   action_key: z.string(),
   reason_text: z.string(),
   reason_normalized: z.string(),
+  action_text: z.string().nullable().optional(),
   user_id: z.number(),
   count: z.number().int().min(1).default(1),
   created_at: z.date().optional(),
@@ -1012,6 +1015,7 @@ export const savedProviderConfigSchema = z.object({
   custom_endpoint_url: z.string().nullable(),
   custom_model_name: z.string().nullable(),
   custom_num_ctx: z.number().int().min(512).nullable().optional(),
+  thinking_level: z.enum(THINKING_LEVEL_VALUES).default(DEFAULT_THINKING_LEVEL),
   fallback_llm_ids: z.preprocess((value) => normalizeFallbackLlmIds(value), z.array(z.number().int()).default([])),
   channel_llm_overrides: z.preprocess(
     (value) => normalizeJsonbArray(value),

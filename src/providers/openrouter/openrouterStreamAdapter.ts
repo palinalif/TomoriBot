@@ -1954,7 +1954,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       }
     }
 
-    const finalMessage = extractedMessage || errorMessage;
+    const finalMessage = String(extractedMessage || errorMessage || "Unknown error");
     const finalCode = errorCode || "unknown";
 
     // Map common HTTP status codes and OpenRouter error codes

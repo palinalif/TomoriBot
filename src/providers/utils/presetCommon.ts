@@ -203,6 +203,36 @@ ${params.existingPresetContext.trim()}`;
 }
 
 // ---------------------------------------------------------------------------
+// Schema sanitization helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Recursively strip JSON Schema array constraints unsupported by Anthropic's
+ * structured-output endpoint (`maxItems`, `minItems`).
+ *
+ * Use this before sending a schema to any Anthropic model (including via
+ * OpenRouter) to avoid the "property 'maxItems' is not supported" error.
+ */
+export function stripAnthropicUnsupportedConstraints(schema: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(schema)) {
+    // Drop array-level constraints Anthropic rejects
+    if (key === "maxItems" || key === "minItems") continue;
+
+    // Recurse into nested schema objects (properties, items, etc.) but not into
+    // plain arrays like `enum` whose elements are primitive values
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      result[key] = stripAnthropicUnsupportedConstraints(value as Record<string, unknown>);
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Response extraction
 // ---------------------------------------------------------------------------
 

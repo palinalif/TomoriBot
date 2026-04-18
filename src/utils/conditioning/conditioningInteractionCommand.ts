@@ -220,6 +220,8 @@ export function createConditioningInteractionCommand(
       const botName =
         selectedPersona.tomori_nickname ?? tomoriState.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori";
       const reasonText = normalizeConditioningReason(interaction.options.getString("reason"));
+      const extraContext = cmdOptions?.getExtraContext?.(interaction) ?? {};
+      const actionTextValue = extraContext.action_text?.trim() ?? null;
       const conditioningEvent = await recordConditioningEvent({
         serverId: tomoriState.server_id,
         personaLineageId: selectedPersona.persona_lineage_id ?? 0,
@@ -227,9 +229,9 @@ export function createConditioningInteractionCommand(
         actionKey,
         userId: userData.user_id,
         reason: reasonText,
+        actionText: actionTextValue,
       });
 
-      const extraContext = cmdOptions?.getExtraContext?.(interaction) ?? {};
       let embedDescription = localizer(locale, `${commandKey}.embed_description`, {
         user: `<@${interaction.user.id}>`,
         bot: botName,

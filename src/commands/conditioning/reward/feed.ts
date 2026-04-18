@@ -6,7 +6,10 @@ import { CONDITIONING_REASON_MAX_LENGTH } from "@/utils/conditioning/conditionin
 const { execute } = createConditioningInteractionCommand("reward", "feed", {
   getExtraContext: (interaction) => {
     const food = interaction.options.getString("food")?.trim();
-    return { food_text: food ? ` \`${food}\`` : "" };
+    return {
+      food_text: food ? ` \`${food}\`` : "",
+      action_text: food ?? "",
+    };
   },
 });
 
@@ -16,15 +19,15 @@ export function configureSubcommand(subcommand: SlashCommandSubcommandBuilder) {
     .setDescription(localizer("en-US", "commands.reward.feed.description"))
     .addStringOption((option) =>
       option
-        .setName("reason")
-        .setDescription(localizer("en-US", "commands.reward.feed.reason_description"))
+        .setName("food")
+        .setDescription(localizer("en-US", "commands.reward.feed.food_description"))
         .setMaxLength(CONDITIONING_REASON_MAX_LENGTH)
-        .setRequired(false),
+        .setRequired(true),
     )
     .addStringOption((option) =>
       option
-        .setName("food")
-        .setDescription(localizer("en-US", "commands.reward.feed.food_description"))
+        .setName("reason")
+        .setDescription(localizer("en-US", "commands.reward.feed.reason_description"))
         .setMaxLength(CONDITIONING_REASON_MAX_LENGTH)
         .setRequired(false),
     );

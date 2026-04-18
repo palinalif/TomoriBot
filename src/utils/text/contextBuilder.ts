@@ -899,7 +899,8 @@ async function buildConditioningContextItem(params: {
       const users = group.userDiscIds.map((userDiscId) => `<@${userDiscId}>`).join(", ");
       const action = getConditioningContextPastParticiple(conditioningType, group.actionKey);
       const countSuffix = group.totalCount > 1 ? ` (${group.totalCount} times)` : "";
-      return `- [${params.botName} was ${action} by ${users}. Reason: \`${group.reasonText}]\`${countSuffix}`;
+      const actionTextSuffix = group.actionText ? ` with \`${group.actionText}\`` : "";
+      return `- [${params.botName} was ${action} by ${users}. Reason: \`${group.reasonText}\`${actionTextSuffix}]${countSuffix}`;
     });
 
     sections.push(`${heading}\n${lines.join("\n")}`);

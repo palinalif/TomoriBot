@@ -77,6 +77,7 @@ const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
   "web_search_enabled",
   "personal_memories_enabled",
   "humanizer_degree",
+  "thinking_level",
   "emoji_usage_enabled",
   "sticker_usage_enabled",
   "imagegen_enabled",

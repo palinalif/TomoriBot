@@ -19,6 +19,7 @@ type ConditioningGroupRow = {
   action_key: string;
   reason_text: string;
   reason_normalized: string;
+  action_text: string | null;
   count: number;
   updated_at: Date;
   user_disc_id: string;
@@ -29,6 +30,7 @@ export type ConditioningGroup = {
   actionKey: string;
   reasonText: string;
   reasonNormalized: string;
+  actionText: string | null;
   totalCount: number;
   updatedAt: Date;
   userDiscIds: string[];
@@ -42,6 +44,7 @@ export async function recordConditioningEvent(params: {
   actionKey: ConditioningActionKey;
   userId: number;
   reason?: string | null;
+  actionText?: string | null;
 }): Promise<ConditioningHistoryRow | null> {
   const reasonText = normalizeConditioningReason(params.reason);
   const reasonNormalized = normalizeConditioningReasonKey(params.reason);
@@ -55,6 +58,7 @@ export async function recordConditioningEvent(params: {
 				action_key,
 				reason_text,
 				reason_normalized,
+				action_text,
 				user_id,
 				count
 			)
@@ -65,12 +69,14 @@ export async function recordConditioningEvent(params: {
 				${params.actionKey},
 				${reasonText},
 				${reasonNormalized},
+				${params.actionText ?? null},
 				${params.userId},
 				1
 			)
 			ON CONFLICT (server_id, persona_lineage_id, conditioning_type, action_key, reason_normalized, user_id)
 			DO UPDATE SET
 				reason_text = EXCLUDED.reason_text,
+				action_text = EXCLUDED.action_text,
 				count = conditioning_history.count + 1,
 				updated_at = CURRENT_TIMESTAMP
 			RETURNING *
@@ -224,6 +230,7 @@ export async function loadConditioningGroupsForPersona(
 					ch.action_key,
 					ch.reason_text,
 					ch.reason_normalized,
+					ch.action_text,
 					ch.count,
 					ch.updated_at,
 					u.user_disc_id
@@ -240,6 +247,7 @@ export async function loadConditioningGroupsForPersona(
 					ch.action_key,
 					ch.reason_text,
 					ch.reason_normalized,
+					ch.action_text,
 					ch.count,
 					ch.updated_at,
 					u.user_disc_id
@@ -269,6 +277,7 @@ export async function loadConditioningGroupsForPersona(
           actionKey: row.action_key,
           reasonText: row.reason_text,
           reasonNormalized: row.reason_normalized,
+          actionText: row.action_text ?? null,
           totalCount: row.count,
           updatedAt: row.updated_at,
           userDiscIds: [row.user_disc_id],
@@ -285,6 +294,7 @@ export async function loadConditioningGroupsForPersona(
       if (row.updated_at > existing.updatedAt) {
         existing.updatedAt = row.updated_at;
         existing.reasonText = row.reason_text;
+        existing.actionText = row.action_text ?? null;
       }
     }
 

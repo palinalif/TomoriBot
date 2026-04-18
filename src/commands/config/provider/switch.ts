@@ -240,6 +240,8 @@ export async function execute(
         nai_preset_name: tomoriState.config.nai_preset_name ?? null,
         custom_endpoint_url: tomoriState.config.custom_endpoint_url ?? null,
         custom_model_name: tomoriState.config.custom_model_name ?? null,
+        custom_num_ctx: tomoriState.config.custom_num_ctx ?? null,
+        thinking_level: tomoriState.config.thinking_level,
         fallback_llm_ids: tomoriState.config.fallback_llm_ids ?? [],
         // Snapshot sampler/parameter settings
         llm_temperature: tomoriState.config.llm_temperature,
@@ -282,6 +284,7 @@ export async function execute(
     let customEndpointUrl: string | null = null;
     let customModelName: string | null = null;
     let customNumCtx: number | null = null;
+    let newThinkingLevel = tomoriState.config.thinking_level;
     let newLlmId = tomoriState.config.llm_id;
     let newDiffusionModelId = tomoriState.config.diffusion_model_id;
     let newEmbeddingModelId = tomoriState.config.embedding_model_id;
@@ -322,6 +325,7 @@ export async function execute(
       customEndpointUrl = savedConfig.custom_endpoint_url;
       customModelName = savedConfig.custom_model_name;
       customNumCtx = savedConfig.custom_num_ctx ?? null;
+      newThinkingLevel = savedConfig.thinking_level;
       // Restore sampler settings from snapshot
       newTemperature = savedConfig.llm_temperature ?? null;
       newTopP = savedConfig.llm_top_p ?? null;
@@ -611,6 +615,7 @@ export async function execute(
         newVisionLlmId = savedConfig.vision_llm_id ?? null;
         newNaiPresetName = savedConfig.nai_preset_name;
         newFallbackLlmIds = savedConfig.fallback_llm_ids ?? [];
+        newThinkingLevel = savedConfig.thinking_level;
         // Restore sampler settings from snapshot
         newTemperature = savedConfig.llm_temperature ?? null;
         newTopP = savedConfig.llm_top_p ?? null;
@@ -723,6 +728,7 @@ export async function execute(
 			    custom_endpoint_url = ${customEndpointUrl},
 			    custom_model_name = ${customModelName},
 			    custom_num_ctx = ${customNumCtx},
+			    thinking_level = ${newThinkingLevel},
 			    fallback_llm_ids = ${JSON.stringify(newFallbackLlmIds)}::jsonb,
 			    llm_temperature = COALESCE(${newTemperature}, llm_temperature),
 			    llm_top_p = COALESCE(${newTopP}, llm_top_p),
