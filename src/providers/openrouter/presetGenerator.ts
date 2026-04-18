@@ -10,6 +10,7 @@ import type { ToolContext } from "@/types/tool/interfaces";
 import { executeTool } from "@/tools/toolRegistry";
 import { getOpenRouterSupportedParameters } from "@/utils/cache/openrouterCapabilityCache";
 import { getOpenrouterToolAdapter } from "./openrouterToolAdapter";
+import { buildOpenrouterProviderRouting } from "./providerRouting";
 import {
   buildPresetResponseSchema,
   buildPresetPrompt,
@@ -102,6 +103,10 @@ export async function generatePresetFromPromptOpenrouter(
 
     if (toolsEnabled) {
       body.tools = tools;
+      const providerRouting = buildOpenrouterProviderRouting({ hasTools: true });
+      if (providerRouting) {
+        body.provider = providerRouting;
+      }
 
       // OpenRouter defaults tool_choice to automatic selection when omitted.
       // Only send it when the model explicitly advertises support.

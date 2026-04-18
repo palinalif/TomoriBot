@@ -27,6 +27,7 @@ import {
 } from "../../utils/cache/openrouterCapabilityCache";
 import { buildPersonaSpeakerStopString, buildProviderStopStrings } from "../utils/stopStrings";
 import { fetchAndOptimizeImage } from "../../utils/image/imageProcessor";
+import { buildOpenrouterProviderRouting } from "./providerRouting";
 import type {
   ProcessedChunk,
   ProviderError,
@@ -542,6 +543,10 @@ export class OpenrouterStreamAdapter implements StreamProvider {
           config.model !== "other-model" ? (getOpenRouterCapabilities(config.model)?.hasTools ?? false) : false;
         if (this.isOpenRouterParamSupported(supportedParameters, "tools") || capabilityAllowsTools) {
           requestBody.tools = config.tools;
+          const providerRouting = buildOpenrouterProviderRouting({ hasTools: true });
+          if (providerRouting) {
+            requestBody.provider = providerRouting;
+          }
         } else {
           skippedUnsupportedParams.push("tools");
         }

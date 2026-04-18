@@ -1308,12 +1308,19 @@ export class GoogleStreamAdapter implements StreamProvider {
   }
 
   /**
-   * Some Google models (notably Gemma variants) reject request-level
-   * developer instructions (`systemInstruction`).
+   * Older Gemma variants reject request-level developer instructions
+   * (`systemInstruction`), but Gemma 4 introduces native `system` role support.
    */
   private supportsDeveloperInstruction(model?: string): boolean {
     if (!model) return true;
     const normalizedModel = model.toLowerCase();
+    const gemmaVersionMatch = normalizedModel.match(/(?:^|\/)gemma-(\d+)/);
+    if (gemmaVersionMatch) {
+      const gemmaMajorVersion = Number.parseInt(gemmaVersionMatch[1], 10);
+      if (Number.isFinite(gemmaMajorVersion)) {
+        return gemmaMajorVersion >= 4;
+      }
+    }
     return !normalizedModel.includes("gemma");
   }
 

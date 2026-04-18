@@ -251,31 +251,66 @@ export async function execute(
 
     log.info(`[Initialize Expressions] Sync complete for guild ${interaction.guild.name}`);
 
-    // 5. Validate model capabilities
-    // Model must support BOTH image vision AND structured output
+    // 5. Resolve effective LLM for expression initialization
+    // Primary model is preferred; vision model used as fallback when primary lacks vision
     const llm = tomoriState.llm;
-    const effectiveModelName = getEffectiveLlmModelName(llm, tomoriState.config.custom_model_name);
+    let effectiveLlm = llm;
 
     if (!llm.sees_images || !llm.supports_structoutput) {
-      // Determine which capability is missing
-      const missingCapability = !llm.sees_images ? "IMAGE VISION" : "STRUCTURED OUTPUT";
+      // Primary model is missing a required capability — try vision model fallback
+      const visionLlm = tomoriState.vision_llm;
 
-      await interaction.editReply({
-        embeds: [
-          {
-            title: localizer(locale, "commands.server.initialize.expressions.model_incompatible_title"),
-            description: localizer(locale, "commands.server.initialize.expressions.model_incompatible_description", {
-              model_name: effectiveModelName,
-              missing_capability: missingCapability,
-            }),
-            color: hexToNumber(ColorCode.ERROR),
-          },
-        ],
-      });
-      return;
+      if (visionLlm?.sees_images && visionLlm.supports_structoutput) {
+        log.info(
+          `[Initialize Expressions] Primary model lacks capabilities (sees_images=${llm.sees_images}, supports_structoutput=${llm.supports_structoutput}), falling back to vision model ${visionLlm.llm_codename}`,
+        );
+        effectiveLlm = visionLlm;
+      } else {
+        // Neither model meets requirements
+        const effectiveModelName = getEffectiveLlmModelName(llm, tomoriState.config.custom_model_name);
+
+        // Determine which error message to show
+        if (!visionLlm) {
+          // No vision model configured — show original single-model error
+          const missingCapability = !llm.sees_images ? "IMAGE VISION" : "STRUCTURED OUTPUT";
+          await interaction.editReply({
+            embeds: [
+              {
+                title: localizer(locale, "commands.server.initialize.expressions.model_incompatible_title"),
+                description: localizer(
+                  locale,
+                  "commands.server.initialize.expressions.model_incompatible_description",
+                  {
+                    model_name: effectiveModelName,
+                    missing_capability: missingCapability,
+                  },
+                ),
+                color: hexToNumber(ColorCode.ERROR),
+              },
+            ],
+          });
+        } else {
+          // Vision model exists but also lacks capabilities
+          await interaction.editReply({
+            embeds: [
+              {
+                title: localizer(locale, "commands.server.initialize.expressions.vision_fallback_title"),
+                description: localizer(locale, "commands.server.initialize.expressions.vision_fallback_description", {
+                  chat_model: effectiveModelName,
+                  vision_model: visionLlm.llm_codename,
+                }),
+                color: hexToNumber(ColorCode.ERROR),
+              },
+            ],
+          });
+        }
+        return;
+      }
     }
 
-    if (!providerSupportsFeature(llm.llm_provider, "expressionInitialization")) {
+    const effectiveModelName = getEffectiveLlmModelName(effectiveLlm, tomoriState.config.custom_model_name);
+
+    if (!providerSupportsFeature(effectiveLlm.llm_provider, "expressionInitialization")) {
       await interaction.editReply({
         embeds: [
           {
@@ -355,7 +390,7 @@ export async function execute(
     // 10. Apply batch size limit based on provider
     // Different providers have different token limits and cost constraints
     // User should re-run the command to process remaining expressions
-    const provider = tomoriState.llm.llm_provider.toLowerCase();
+    const provider = effectiveLlm.llm_provider.toLowerCase();
     const structuredOutputCapability = await resolveStructuredOutputCapability(provider);
     const expressionBatchSize = structuredOutputCapability?.getExpressionInitializationBatchSize?.() ?? null;
     let isBatchLimited = false;

@@ -1006,7 +1006,8 @@ export async function buildContext(params: BuildContextParams): Promise<BuildCon
 
   // Skip preset routing for user impersonation
   if (!paramsWithMap.isUserImpersonation) {
-    const serverId = params.snapshot?.tomoriState?.server_id;
+    const tomoriStateForPreset = params.snapshot?.tomoriState ?? (await loadTomoriState(params.guildId));
+    const serverId = tomoriStateForPreset?.server_id;
     if (serverId) {
       const presetData = await getCachedActivePreset(serverId);
       if (presetData) {
@@ -1023,7 +1024,6 @@ export async function buildContext(params: BuildContextParams): Promise<BuildCon
         const lastUserMsg =
           params.simplifiedMessageHistory.filter((m) => m.authorType === "user").at(-1)?.content ?? "";
 
-        const tomoriStateForPreset = params.snapshot?.tomoriState ?? (await loadTomoriState(params.guildId));
         const presetToolPromptMacroResolver = createToolPromptMacroResolver({
           provider: tomoriStateForPreset?.llm?.llm_provider,
           stateForContext:

@@ -245,7 +245,7 @@ export async function execute(
           hasManagePermission && reminder.created_by_user_id !== userData.user_id
             ? isMatrixReminder
               ? ` | for ${creatorName}`
-              : ` | created by ${creatorName}`
+              : ` | created for ${creatorName}`
             : "";
         const description = `At ${formattedTime} (${formatUTCOffset(timezoneOffset)}) in #${channelName}${repeatText}${managerCreatedByText}`;
 
