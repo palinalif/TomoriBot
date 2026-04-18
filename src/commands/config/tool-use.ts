@@ -7,27 +7,9 @@ import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 
-// Configure the subcommand
+// Configure the subcommand — no options, running the command flips the toggle
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand
-    .setName("tool-use")
-    .setDescription(localizer("en-US", "commands.config.tool-use.description"))
-    .addStringOption((option) =>
-      option
-        .setName("set")
-        .setDescription(localizer("en-US", "commands.config.tool-use.set_description"))
-        .setRequired(true)
-        .addChoices(
-          {
-            name: localizer("en-US", "commands.config.options.enable"),
-            value: "enable",
-          },
-          {
-            name: localizer("en-US", "commands.config.options.disable"),
-            value: "disable",
-          },
-        ),
-    );
+  subcommand.setName("tool-use").setDescription(localizer("en-US", "commands.config.tool-use.description"));
 
 /**
  * Toggles the server-wide tool-use master switch.
@@ -57,9 +39,6 @@ export async function execute(
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   try {
-    const setAction = interaction.options.getString("set", true);
-    const isEnabled = setAction === "enable";
-
     const tomoriState = await getCachedTomoriState(serverDiscId);
     if (!tomoriState) {
       await replyInfoEmbed(interaction, locale, {
@@ -70,17 +49,8 @@ export async function execute(
       return;
     }
 
-    const currentSetting = tomoriState.config.tool_use_enabled ?? true;
-    if (currentSetting === isEnabled) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.tool-use.already_set_title",
-        descriptionKey: isEnabled
-          ? "commands.config.tool-use.already_enabled_description"
-          : "commands.config.tool-use.already_disabled_description",
-        color: ColorCode.WARN,
-      });
-      return;
-    }
+    // Flip the current value
+    const isEnabled = !(tomoriState.config.tool_use_enabled ?? true);
 
     const [updatedRow] = await sql`
       UPDATE tomori_configs
