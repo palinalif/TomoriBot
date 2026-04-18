@@ -220,9 +220,11 @@ export function createConditioningInteractionCommand(type: ConditioningType, act
         reason: reasonText,
       });
 
+      const extraContext = options?.getExtraContext?.(interaction) ?? {};
       let embedDescription = localizer(locale, `${commandKey}.embed_description`, {
         user: `<@${interaction.user.id}>`,
         bot: botName,
+        ...extraContext,
       });
 
       const interactionEmbed = new EmbedBuilder()

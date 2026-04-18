@@ -37,7 +37,13 @@ import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("expressions")
-    .setDescription(localizer("en-US", "commands.server.initialize.expressions.description"));
+    .setDescription(localizer("en-US", "commands.server.initialize.expressions.description"))
+    .addBooleanOption((option) =>
+      option
+        .setName("overwrite")
+        .setDescription(localizer("en-US", "commands.server.initialize.expressions.overwrite_description"))
+        .setRequired(false),
+    );
 
 /**
  * Database row type for uninitialized emojis
@@ -238,6 +244,8 @@ export async function execute(
   // 3. Defer reply early (this operation may take time)
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+  const overwrite = interaction.options.getBoolean("overwrite") ?? false;
+
   try {
     // 4. Force sync emojis and stickers from Discord to ensure DB is populated
     // This handles scenarios where:
@@ -321,6 +329,21 @@ export async function execute(
         ],
       });
       return;
+    }
+
+    // Handle overwrite before querying for uninitialized
+    if (overwrite) {
+      log.info(`[Initialize Expressions] Overwriting existing expressions for guild ${interaction.guild.name}`);
+      await sql`
+        UPDATE server_emojis
+        SET emotion_key = NULL, emoji_desc = NULL
+        WHERE server_id = ${tomoriState.server_id}
+      `;
+      await sql`
+        UPDATE server_stickers
+        SET emotion_key = NULL, sticker_desc = NULL
+        WHERE server_id = ${tomoriState.server_id}
+      `;
     }
 
     // 6. Query database for uninitialized emojis

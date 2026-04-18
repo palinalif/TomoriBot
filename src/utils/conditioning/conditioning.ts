@@ -1,7 +1,7 @@
 import type { ConditioningType } from "@/types/db/schema";
 
-export const REWARD_ACTION_KEYS = ["headpat", "hug", "kiss", "tickle"] as const;
-export const PUNISH_ACTION_KEYS = ["spank", "pinch", "bite", "squeeze"] as const;
+export const REWARD_ACTION_KEYS = ["headpat", "hug", "kiss", "tickle", "feed"] as const;
+export const PUNISH_ACTION_KEYS = ["spank", "pinch", "bite", "squeeze", "bonk"] as const;
 
 export type RewardActionKey = (typeof REWARD_ACTION_KEYS)[number];
 export type PunishActionKey = (typeof PUNISH_ACTION_KEYS)[number];
@@ -18,20 +18,24 @@ const CONTEXT_PAST_PARTICIPLES: Record<ConditioningType, Record<ConditioningActi
     hug: "hugged",
     kiss: "kissed",
     tickle: "tickled",
+    feed: "fed",
     spank: "spanked",
     pinch: "pinched",
     bite: "bitten",
     squeeze: "squeezed",
+    bonk: "bonked",
   },
   punish: {
     headpat: "headpatted",
     hug: "hugged",
     kiss: "kissed",
     tickle: "tickled",
+    feed: "fed",
     spank: "spanked",
     pinch: "pinched",
     bite: "bitten",
     squeeze: "squeezed",
+    bonk: "bonked",
   },
 };
 

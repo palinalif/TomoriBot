@@ -2399,6 +2399,14 @@ Prompt Guidance Rescale: {cfg_rescale}
         embed_description: `{user}は{bot}をくすぐっています。`,
         history_label: `くすぐり`,
       },
+      feed: {
+        description: `美味しいものを食べさせて応答をトリガーします。`,
+        reason_description: `どうしてご褒美をくれるの？`,
+        food_description: `何を食べさせますか？`,
+        embed_title: `🍴 スナック・タイム！`,
+        embed_description: `{user}は{bot}に{food_text}を与えました。`,
+        history_label: `食べさせる`,
+      },
     },
     punish: {
       description: `私をおしおきして応答をトリガーします。`,
@@ -2422,6 +2430,13 @@ Prompt Guidance Rescale: {cfg_rescale}
         embed_title: `🦷 バイト・タイム！`,
         embed_description: `{user}は{bot}を甘噛みしました。`,
         history_label: `甘噛み`,
+      },
+      bonk: {
+        description: `ポカッとして応答をトリガーします。`,
+        reason_description: `どうしておしおきするの？`,
+        embed_title: `🔨 ボンク！`,
+        embed_description: `{user}は{bot}をポカッと叩きました。`,
+        history_label: `ポカッ`,
       },
       squeeze: {
         description: `ぎゅっとして応答をトリガーします。`,
@@ -4120,6 +4135,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
         description: `AI分析を使用してサーバー機能を初期化します`,
         expressions: {
           description: `AIビジョンを使用してすべてのカスタム絵文字とスタンプを分析・分類します`,
+          overwrite_description: `既存の表現データを削除して新しくやり直す`,
           success_title: `絵文字とスタンプを初期化しました`,
           success_description: `{emoji_count}個の絵文字と{sticker_count}個のスタンプ（合計{total}個）を分析・分類しました。`,
           model_incompatible_title: `互換性のないモデル`,

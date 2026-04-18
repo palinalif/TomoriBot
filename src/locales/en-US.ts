@@ -1449,18 +1449,17 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - If you set your own system prompt with {configSystemPromptSet}, it is still sent
 - In ST terms, the preset owns the layout, not every source of prompt text`,
         embed1_footer: `Use /help st-preset again anytime after importing a preset`,
-        embed2_title: `Common Surprises`,
+        embed2_title: `Limits And Compatibility (Page 1)`,
         embed2_description: `These are the main reasons a preset author thinks something was ignored or moved.
-
 - Imported does not always mean sent: nodes disabled in \`prompt_order\` stay off until you enable them with {stPresetToggle}
 - Comment-only nodes and nodes that become empty after \`{{trim}}\` are never sent
 - If enabled nodes still contain unsupported preset macros after import, the import summary warns you; those tags may still be sent literally or behave differently here
 - Unknown markers are skipped
 - Order is literal: if you place \`chatHistory\` before \`dialogueExamples\`, live chat comes first
-- Tomori uses \`prompt_order\` for \`character_id: 100001\`, and falls back to \`100000\` only if \`100001\` is missing
+- Tomori uses \`prompt_order\` in the .json with \`character_id: 100001\`, and falls back to \`100000\` only if \`100001\` is missing
 - If sample chats end up last, the bot adds a short separator so strict providers do not continue the example`,
         embed2_footer: `If something looks missing, compare the imported node list in {stPresetToggle} against your preset JSON`,
-        embed3_title: `Limits And Compatibility`,
+        embed3_title: `Limits And Compatibility (Page 2)`,
         embed3_description: `- Post-history / depth injections are merged into existing chat history entries, not inserted as standalone messages
 - Multiple nodes at the same depth are batched together
 - \`{{setvar}}\` and \`{{addvar}}\` work across enabled nodes in node order, but variables are global for the whole preset
@@ -2387,6 +2386,14 @@ Each entry shows the persona and whether it is a reward or punishment record.`,
         embed_description: `{user} is tickling {bot}.`,
         history_label: `Tickle`,
       },
+      feed: {
+        description: `Feed me a delicious snack!`,
+        reason_description: `Why are you rewarding me?`,
+        food_description: `What are you feeding me?`,
+        embed_title: `🍴 Snack Time!`,
+        embed_description: `{user} just fed {bot}{food_text}.`,
+        history_label: `Feed`,
+      },
     },
     punish: {
       description: `Punish me with playful interactions.`,
@@ -2410,6 +2417,13 @@ Each entry shows the persona and whether it is a reward or punishment record.`,
         embed_title: `🦷 Snack Time!`,
         embed_description: `{user} just bit {bot}.`,
         history_label: `Bite`,
+      },
+      bonk: {
+        description: `Give me a bonk on the head!`,
+        reason_description: `Why are you punishing me?`,
+        embed_title: `🔨 Bonk!`,
+        embed_description: `{user} just bonked {bot}.`,
+        history_label: `Bonk`,
       },
       squeeze: {
         description: `Give me a squeeze!`,
@@ -4102,6 +4116,7 @@ Leave everything unchecked to keep this persona unrestricted in all channels.`,
         description: `Initialize server features with AI analysis`,
         expressions: {
           description: `Analyze and classify all custom emojis and stickers using AI vision`,
+          overwrite_description: `Delete existing expression data and start fresh`,
           success_title: `Expressions Initialized`,
           success_description: `Successfully analyzed and classified {emoji_count} emojis and {sticker_count} stickers ({total} total).`,
           model_incompatible_title: `Incompatible Model`,

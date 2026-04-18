@@ -26,7 +26,15 @@ import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
  * @returns The configured subcommand
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("respond").setDescription(localizer("en-US", "commands.bot.respond.description"));
+  subcommand
+    .setName("respond")
+    .setDescription(localizer("en-US", "commands.bot.respond.description"))
+    .addBooleanOption((option) =>
+      option
+        .setName("select_persona")
+        .setDescription(localizer("en-US", "commands.bot.respond.select_persona_description"))
+        .setRequired(false),
+    );
 
 /**
  * Execute the respond command - manually trigger Tomori to respond to the latest message
@@ -98,6 +106,7 @@ export async function execute(
     return;
   }
 
+  const selectPersona = interaction.options.getBoolean("select_persona") ?? false;
   const invokingMember = interaction.member as import("discord.js").GuildMember | null;
 
   // 3.5. Check cooldown (shares cooldown pool with message triggers)
@@ -189,7 +198,7 @@ export async function execute(
   // Build modal components (persona select if alters exist, plus optional prompt)
   const modalComponents: ModalComponent[] = [];
 
-  if (availablePersonas.length > 1) {
+  if (availablePersonas.length > 1 && selectPersona) {
     const personaOptions: SelectOption[] = availablePersonas.map((persona, index) => ({
       label: safeSelectOptionText(persona.tomori_nickname),
       value: index.toString(),
@@ -262,7 +271,7 @@ export async function execute(
   });
 
   const selectedIndex = Number.parseInt(modalResult.values?.persona_choice ?? "0", 10);
-  if (availablePersonas.length > 1) {
+  if (availablePersonas.length > 1 && selectPersona) {
     selectedPersona = availablePersonas[selectedIndex] ?? fallbackPersona;
     log.info(
       `User ${interaction.user.id} selected persona ${selectedPersona.tomori_nickname} (ID: ${selectedPersona.tomori_id}) for manual respond`,

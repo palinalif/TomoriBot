@@ -1758,6 +1758,8 @@ interface ChannelLockEntry {
   userDiscId?: string; // Discord ID of user whose message is currently being processed
   currentIsPersonaJob?: boolean; // Skip user rate limits for internal persona jobs
   activePersonaId?: number; // Persona currently generating — follow-ups inherit this to avoid fallback to main
+  activeIsUserImpersonation?: boolean; // Whether the current generation is a user impersonation — follow-ups inherit this
+  activeImpersonatedUserId?: string; // Impersonated user Discord ID — follow-ups inherit this to preserve identity
   followUpEligible?: boolean; // Only true once the current turn is confirmed to generate and has a pinned persona
   isInToolCallChain?: boolean; // True while multi-turn tool calling is active — suppresses follow-up interrupts
   isCommandTriggered?: boolean; // True when generation was triggered by a slash command (/respond, /impersonate) — suppresses follow-up interrupts entirely
@@ -2776,6 +2778,8 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       lockEntry.userDiscId = undefined; // Clear user tracking
       lockEntry.currentIsPersonaJob = false;
       lockEntry.activePersonaId = undefined; // Clear active persona tracking
+      lockEntry.activeIsUserImpersonation = undefined; // Clear user impersonation tracking
+      lockEntry.activeImpersonatedUserId = undefined; // Clear impersonated user ID
       lockEntry.followUpEligible = false;
       lockEntry.isInToolCallChain = false; // Clear tool-call chain flag
       lockEntry.isCommandTriggered = false; // Clear command trigger flag
@@ -2843,6 +2847,8 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           forceReason: false,
           isFollowUp: true,
           selectedPersonaId: lockEntry.activePersonaId,
+          isUserImpersonation: lockEntry.activeIsUserImpersonation, // Preserve user impersonation across tool-chain follow-ups
+          impersonatedUserId: lockEntry.activeImpersonatedUserId, // Preserve impersonated user ID across tool-chain follow-ups
           textQuotaSource,
           textQuotaTriggerKey: effectiveTextQuotaTriggerKey,
           textQuotaUserDiscId: effectiveTextQuotaUserDiscId,
@@ -2872,6 +2878,8 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         forceReason: false,
         isFollowUp: true,
         selectedPersonaId: lockEntry.activePersonaId, // Preserve interrupted persona
+        isUserImpersonation: lockEntry.activeIsUserImpersonation, // Preserve user impersonation across text-stream follow-ups
+        impersonatedUserId: lockEntry.activeImpersonatedUserId, // Preserve impersonated user ID across text-stream follow-ups
         textQuotaSource,
         textQuotaTriggerKey: effectiveTextQuotaTriggerKey,
         textQuotaUserDiscId: effectiveTextQuotaUserDiscId,
@@ -3115,6 +3123,8 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
     lockEntry.userDiscId = userDiscId; // Track user for rate limiting
     lockEntry.currentIsPersonaJob = isPersonaJob;
     lockEntry.activePersonaId = selectedPersonaId;
+    lockEntry.activeIsUserImpersonation = undefined; // Reset — set definitively after reply detection
+    lockEntry.activeImpersonatedUserId = undefined; // Reset — set definitively after reply detection
     lockEntry.followUpEligible = false;
     lockEntry.isInToolCallChain = false;
     lockEntry.isCommandTriggered = !!manualTriggerInvoker; // Slash command triggers suppress follow-up interrupts
@@ -3979,6 +3989,9 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       if (lockEntry) {
         lockEntry.activePersonaId = personasToRespond[0]?.tomori_id ?? undefined;
         lockEntry.followUpEligible = lockEntry.activePersonaId !== undefined;
+        // Persist user impersonation state so follow-up interrupts can inherit it
+        lockEntry.activeIsUserImpersonation = isUserImpersonation || undefined;
+        lockEntry.activeImpersonatedUserId = impersonatedUserId;
       }
 
       // 8.52. Check text generation quota for user-triggered guild responses
@@ -8279,6 +8292,8 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       lockEntry.userDiscId = undefined; // Clear user tracking for rate limiting
       lockEntry.currentIsPersonaJob = false;
       lockEntry.activePersonaId = undefined; // Clear active persona tracking
+      lockEntry.activeIsUserImpersonation = undefined; // Clear user impersonation tracking
+      lockEntry.activeImpersonatedUserId = undefined; // Clear impersonated user ID
       lockEntry.followUpEligible = false;
       lockEntry.isInToolCallChain = false; // Clear tool-call chain flag
       lockEntry.isCommandTriggered = false; // Clear command trigger flag
