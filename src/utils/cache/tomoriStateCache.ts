@@ -150,12 +150,21 @@ export async function getCachedAllPersonas(serverDiscId: string): Promise<Tomori
         return personas; // Return alters anyway, but log error
       }
 
+      // Apply tool-use master toggle: when tool_use_enabled is false, artificially
+      // override has_tools to false on every persona so all providers see no tools.
+      const effectivePersonas = personas.map((p) =>
+        p.config.tool_use_enabled ? p : { ...p, llm: { ...p.llm, has_tools: false } },
+      );
+      const effectiveMainPersona = effectivePersonas.find((p) => !p.is_alter) ?? mainPersona;
+
       // 4. Cache the loaded data
       cache.set(serverDiscId, {
-        personas,
-        mainPersona,
+        personas: effectivePersonas,
+        mainPersona: effectiveMainPersona,
         cachedAt: now,
       });
+
+      return effectivePersonas;
     }
 
     return personas;

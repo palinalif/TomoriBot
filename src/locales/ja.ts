@@ -2771,6 +2771,16 @@ Prompt Guidance Rescale: {cfg_rescale}
         success_disabled_title: `送信上限を無効化しました`,
         success_disabled_description: `送信メッセージ上限を解除しました。応答は制限されなくなります。`,
       },
+      "tool-use": {
+        description: `ツールや関数呼び出しの使用を切り替えます。`,
+        set_description: `全モデルのツール使用を有効または無効にします。`,
+        already_set_title: `ツール使用は既に設定済みです`,
+        already_enabled_description: `ツール使用は既に**有効**です。`,
+        already_disabled_description: `ツール使用は既に**無効**です。`,
+        success_title: `ツール使用を更新しました`,
+        enabled_success: `ツール使用を**有効**にしました。再びツールや関数を呼び出せます。`,
+        disabled_success: `ツール使用を**無効**にしました。モデルの能力に関わらず、ツールや関数は一切使用しません。`,
+      },
       "self-debug": {
         description: `私が送信した診断埋め込みをコンテキストに取り込むか切り替えます。`,
         set_description: `セルフデバッグ埋め込み取り込みを有効または無効にします。`,

@@ -30,7 +30,16 @@ const EMBED_COLOR_BY_TYPE: Record<ConditioningType, ColorCode> = {
 
 type ReplyInteraction = ChatInputCommandInteraction | ModalSubmitInteraction;
 
-export function createConditioningInteractionCommand(type: ConditioningType, actionKey: ConditioningActionKey) {
+interface ConditioningCommandOptions {
+  /** Returns extra interpolation context for the embed description localizer. */
+  getExtraContext?: (interaction: ChatInputCommandInteraction) => Record<string, string>;
+}
+
+export function createConditioningInteractionCommand(
+  type: ConditioningType,
+  actionKey: ConditioningActionKey,
+  cmdOptions?: ConditioningCommandOptions,
+) {
   const commandKey = `commands.${type}.${actionKey}`;
 
   const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
@@ -220,7 +229,7 @@ export function createConditioningInteractionCommand(type: ConditioningType, act
         reason: reasonText,
       });
 
-      const extraContext = options?.getExtraContext?.(interaction) ?? {};
+      const extraContext = cmdOptions?.getExtraContext?.(interaction) ?? {};
       let embedDescription = localizer(locale, `${commandKey}.embed_description`, {
         user: `<@${interaction.user.id}>`,
         bot: botName,

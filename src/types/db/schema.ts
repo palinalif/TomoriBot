@@ -325,6 +325,7 @@ export const tomoriConfigSchema = z.object({
   uncensor_injection_enabled: z.boolean().default(false), // Added February 2026 - Prompt injection mitigation toggle
   uncensor_unicode_space_enabled: z.boolean().default(false), // Added February 2026 - Unicode space replacement toggle
   uncensor_sanitize_enabled: z.boolean().default(false), // Added February 2026 - Sensitive word sanitization toggle
+  tool_use_enabled: z.boolean().default(true), // Added April 2026 - Master toggle; when false, has_tools is forced to false in the pipeline
   videogen_enabled: z.boolean().default(true), // Added January 2026 - Reserved for future video generation
   timezone_offset: z.number().int().min(-12).max(14).default(0),
   system_prompt: z.string().nullable(), // Added December 2025 - Custom system prompt for personality instructions

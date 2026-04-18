@@ -728,6 +728,10 @@ BEGIN
     END IF;
 END $$;
 
+-- Add tool-use master toggle (April 2026)
+-- When FALSE, has_tools is artificially overridden to false in the pipeline for all models
+SELECT add_column_if_not_exists('tomori_configs', 'tool_use_enabled', 'BOOLEAN', 'true');
+
 -- Create updated_at trigger for tomori_configs table
 DROP TRIGGER IF EXISTS update_tomori_configs_timestamp ON tomori_configs;
 CREATE TRIGGER update_tomori_configs_timestamp
