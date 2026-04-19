@@ -32,6 +32,7 @@ import type { StreamingContext } from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
+import { buildGoogleThinkingConfig } from "@/utils/provider/thinkingControl";
 import {
   BaseLLMProvider,
   type FunctionCall,
@@ -519,6 +520,16 @@ export class VertexProvider
         forceReason: streamingContext?.forceReason,
         isManuallyTriggered: streamingContext?.isManuallyTriggered,
       };
+
+      const thinkingConfig = buildGoogleThinkingConfig(
+        config.model ?? "",
+        tomoriState.config.thinking_level,
+        streamingContext?.forceReason,
+      );
+      if (thinkingConfig) {
+        streamConfig.thinkingConfig = thinkingConfig;
+        log.info(`VertexProvider: Applied thinking config for model ${config.model}`);
+      }
 
       // Override tools with context-aware tools when streaming context is provided
       if (streamingContext && tomoriState.llm.has_tools) {

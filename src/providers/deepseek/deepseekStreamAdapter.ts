@@ -1,12 +1,10 @@
 import { OpenAICompatibleStreamAdapter } from "@/providers/openaiCompatible/openaiCompatibleStreamAdapter";
 import type { OpenAICompatibleStreamConfig } from "@/providers/openaiCompatible/openaiCompatibleTypes";
+import { buildDeepSeekThinkingRequest } from "@/utils/provider/thinkingControl";
 
 export interface DeepseekStreamConfig extends OpenAICompatibleStreamConfig {
   endpointUrl: string;
 }
-
-const DEEPSEEK_REASONER_MODEL = "deepseek-reasoner";
-const DEEPSEEK_CHAT_MODEL = "deepseek-chat";
 
 export class DeepseekStreamAdapter extends OpenAICompatibleStreamAdapter {
   constructor() {
@@ -23,11 +21,15 @@ export class DeepseekStreamAdapter extends OpenAICompatibleStreamAdapter {
         return config.endpointUrl;
       },
       mutateRequestBody: ({ requestBody, config, context }) => {
-        const thinkingEnabled = config.model === DEEPSEEK_REASONER_MODEL || config.forceReason === true;
-        if (thinkingEnabled) {
-          if (config.model === DEEPSEEK_CHAT_MODEL) {
-            requestBody.thinking = { type: "enabled" };
-          }
+        const thinkingRequest = buildDeepSeekThinkingRequest(
+          config.model,
+          context.tomoriState.config.thinking_level,
+          config.forceReason,
+        );
+        if (thinkingRequest.thinking) {
+          requestBody.thinking = thinkingRequest.thinking;
+        }
+        if (thinkingRequest.omitSampling) {
           delete requestBody.temperature;
           delete requestBody.top_p;
           delete requestBody.presence_penalty;

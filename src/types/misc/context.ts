@@ -46,6 +46,7 @@ export enum ContextItemTag {
   // Dialogue examples and history
   DIALOGUE_SAMPLE = "dialogue_sample", // For individual sample user/model turns
   DIALOGUE_HISTORY = "dialogue_history", // For actual conversation history turns
+  CONTEXT_NOTE_INJECTION = "context_note_injection", // Author's note injected into dialogue at configurable depth
 
   // Tool/Function related (if we ever need to tag parts of tool descriptions or results)
   // TOOL_DESCRIPTION = "tool_description",

@@ -28,6 +28,7 @@ import {
 import { buildPersonaSpeakerStopString, buildProviderStopStrings } from "../utils/stopStrings";
 import { fetchAndOptimizeImage } from "../../utils/image/imageProcessor";
 import { buildOpenrouterProviderRouting } from "./providerRouting";
+import { buildOpenRouterReasoningRequest } from "@/utils/provider/thinkingControl";
 import type {
   ProcessedChunk,
   ProviderError,
@@ -459,6 +460,13 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         stream: true,
         stream_options: { include_usage: true },
       };
+      const reasoningRequest = buildOpenRouterReasoningRequest(
+        context.tomoriState.config.thinking_level,
+        config.forceReason,
+      );
+      if (reasoningRequest.reasoning) {
+        requestBody.reasoning = reasoningRequest.reasoning;
+      }
 
       if (
         config.temperature !== undefined &&

@@ -33,7 +33,18 @@ import { getVertexToolAdapter } from "@/providers/vertex/vertexToolAdapter";
 import { getNovelaiToolAdapter } from "@/providers/novelai/novelaiToolAdapter";
 import type { MCPCapableToolAdapter } from "@/types/tool/interfaces";
 import { buildActiveSamplingParams, selectAnthropicSamplingParams } from "@/utils/provider/samplingControl";
+import {
+  buildAnthropicThinkingRequest,
+  buildCustomThinkingRequest,
+  buildDeepSeekThinkingRequest,
+  buildGoogleThinkingConfig,
+  buildOpenRouterReasoningRequest,
+  buildZaiThinkingRequest,
+  getNovelAiThinkingDirective,
+  serializeGoogleThinkingConfig,
+} from "@/utils/provider/thinkingControl";
 import { buildProviderStopStrings } from "@/providers/utils/stopStrings";
+import { getEmojiPenaltyDirective } from "@/utils/text/emojiPenalty";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -46,6 +57,49 @@ const YOUTUBE_URL_PATTERNS = [
   /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/i,
   /(?:https?:\/\/)?(?:www\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/i,
 ];
+
+// ─── Tail directive helpers (mirrors cost.ts / tomoriChat.ts) ─────────────────
+
+function normalizeTailDirective(text: string): string {
+  let trimmed = text.trim();
+  if (!trimmed) return "";
+  if (/^\[System:/i.test(trimmed)) {
+    trimmed = trimmed.replace(/^\[System:\s*/i, "");
+    if (trimmed.endsWith("]")) trimmed = trimmed.slice(0, -1).trim();
+  }
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) trimmed = trimmed.slice(1, -1).trim();
+  return trimmed;
+}
+
+function buildCombinedTailDirectiveMessage(directives: string[]): StructuredContextItem | null {
+  const normalized = directives.map(normalizeTailDirective).filter((d) => d.length > 0);
+  if (normalized.length === 0) return null;
+  return {
+    role: "user",
+    parts: [{ type: "text", text: `[System: ${normalized.join("\n\n")}]` }],
+    metadataTag: ContextItemTag.DIALOGUE_HISTORY,
+  };
+}
+
+function insertBeforeLatestDialoguePair(
+  contextSegments: StructuredContextItem[],
+  injectedItem: StructuredContextItem,
+): void {
+  const dialogueIndexes: number[] = [];
+  for (let i = contextSegments.length - 1; i >= 0; i--) {
+    const item = contextSegments[i];
+    if (item.metadataTag === ContextItemTag.DIALOGUE_HISTORY && (item.role === "user" || item.role === "model")) {
+      dialogueIndexes.push(i);
+      if (dialogueIndexes.length === 2) break;
+    }
+  }
+  if (dialogueIndexes.length === 0) {
+    contextSegments.push(injectedItem);
+    return;
+  }
+  const insertAt = dialogueIndexes.length >= 2 ? dialogueIndexes[1] : dialogueIndexes[0];
+  contextSegments.splice(insertAt, 0, injectedItem);
+}
 
 // ─── Subcommand registration ──────────────────────────────────────────────────
 
@@ -76,13 +130,13 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
  *
  * @param client - Discord client instance
  * @param interaction - Command interaction (must be in a guild channel)
- * @param _userData - User row (unused, required by command loader signature)
+ * @param userData - Invoker's user row — passed to buildContext so STM loads correctly
  * @param locale - Resolved locale for the interaction
  */
 export async function execute(
   client: Client,
   interaction: ChatInputCommandInteraction,
-  _userData: UserRow,
+  userData: UserRow,
   locale: string,
 ): Promise<void> {
   // Unique modal ID per invocation prevents stale awaitModalSubmit collisions
@@ -453,8 +507,12 @@ export async function execute(
       channelDesc,
       channelName,
       channelId: interaction.channelId,
+      // Thread → parent-channel privacy inheritance (mirrors tomoriChat.ts)
+      parentChannelId: textChannel.isThread() ? textChannel.parentId : null,
       client,
       triggererName: interaction.user.displayName || interaction.user.globalName || interaction.user.username,
+      // snapshot.triggererUserRow unlocks STM context (actualTriggeringUserId guard inside buildContext)
+      snapshot: { triggererUserRow: userData },
       tomoriNickname: selectedPersona.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori",
       tomoriAttributes: selectedPersona.attribute_list,
       tomoriConfig: selectedPersona.config,
@@ -465,7 +523,32 @@ export async function execute(
       seesVideos: selectedPersona.llm.sees_videos,
     });
 
-    const contextItems = contextBuild.contextItems;
+    // Mutable copy — tail directives are spliced/pushed in below
+    const contextItems = [...contextBuild.contextItems];
+
+    // 13a. Apply tail directives in the same order as the live chat pipeline so the
+    //      snapshot reflects the full prompt the LLM would actually see:
+    //        1. Lower-priority tails (STM "create" prompt, emoji penalty) inserted
+    //           before the latest dialogue pair so they don't displace recent turns.
+    //        2. Normal tails (e.g. impersonation directive) appended to the end.
+    //        3. Uncensor directive appended last (isolated, strongest recency signal).
+    const lowerPriorityTailDirectives = [...contextBuild.lowerPriorityTailDirectives];
+    const emojiPenaltyDirective = getEmojiPenaltyDirective(
+      contextItems,
+      selectedPersona.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori",
+    );
+    if (emojiPenaltyDirective) lowerPriorityTailDirectives.push(emojiPenaltyDirective);
+
+    const lowerPriorityTailMessage = buildCombinedTailDirectiveMessage(lowerPriorityTailDirectives);
+    if (lowerPriorityTailMessage) insertBeforeLatestDialoguePair(contextItems, lowerPriorityTailMessage);
+
+    const combinedTailMessage = buildCombinedTailDirectiveMessage([...contextBuild.tailDirectives]);
+    if (combinedTailMessage) contextItems.push(combinedTailMessage);
+
+    if (contextBuild.uncensorDirective) {
+      const uncensorTailMessage = buildCombinedTailDirectiveMessage([contextBuild.uncensorDirective]);
+      if (uncensorTailMessage) contextItems.push(uncensorTailMessage);
+    }
 
     // 14. Retrieve the active preset name for the snapshot header
     const presetData = await getCachedActivePreset(selectedPersona.server_id);
@@ -653,6 +736,7 @@ const TAG_LABELS: Record<string, TagLabel> = {
   [ContextItemTag.KNOWLEDGE_SHORT_TERM_MEMORY]: { title: "Short-Term Memory", hint: "/server stm manage" },
   [ContextItemTag.DIALOGUE_SAMPLE]: { title: "Sample Dialogue", hint: "/persona sample-dialogue" },
   [ContextItemTag.DIALOGUE_HISTORY]: { title: "Conversation History", hint: "system-managed" },
+  [ContextItemTag.CONTEXT_NOTE_INJECTION]: { title: "Context Note", hint: "/config context-note" },
 };
 
 function renderTagHeader(tag: string | undefined): string {
@@ -1013,8 +1097,6 @@ function buildRequestConfig(persona: TomoriState, providerName: string, modelNam
   if (providerName === "google" || providerName === "vertex") {
     // 1. Google: show raw configured values (unfiltered, mirrors GoogleProviderConfig)
     const maxOutputTokens = Number.parseInt(process.env.GOOGLE_MAX_OUTPUT_TOKENS || "8192", 10);
-    const isGemini3Flash =
-      modelName.trim().toLowerCase().startsWith("gemini-3") && modelName.toLowerCase().includes("flash");
     const out: Record<string, unknown> = {
       generation_config: {
         temperature: config.llm_temperature,
@@ -1032,7 +1114,8 @@ function buildRequestConfig(persona: TomoriState, providerName: string, modelNam
         { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
       ],
     };
-    if (isGemini3Flash) out.thinking_config = { thinking_level: "LOW" };
+    const thinkingConfig = serializeGoogleThinkingConfig(buildGoogleThinkingConfig(modelName, config.thinking_level));
+    if (thinkingConfig) out.thinking_config = thinkingConfig;
     if (disabledParams.length > 0) out.disabled_params = disabledParams;
     return out;
   }
@@ -1051,10 +1134,15 @@ function buildRequestConfig(persona: TomoriState, providerName: string, modelNam
       personaName: persona.tomori_nickname,
     });
 
+    const thinkingRequest = buildAnthropicThinkingRequest(modelName, config.thinking_level);
     const out: Record<string, unknown> = { max_tokens: maxTokens };
-    if (selection.temperature !== undefined) out.temperature = selection.temperature;
-    if (selection.topP !== undefined) out.top_p = selection.topP;
-    if (config.llm_top_k > 0 && !disabledParams.includes("topK")) out.top_k = config.llm_top_k;
+    if (!thinkingRequest.omitSampling) {
+      if (selection.temperature !== undefined) out.temperature = selection.temperature;
+      if (selection.topP !== undefined) out.top_p = selection.topP;
+      if (config.llm_top_k > 0 && !disabledParams.includes("topK")) out.top_k = config.llm_top_k;
+    }
+    if (thinkingRequest.thinking) out.thinking = thinkingRequest.thinking;
+    if (thinkingRequest.output_config) out.output_config = thinkingRequest.output_config;
     if (stopSequences) out.stop_sequences = stopSequences;
     if (disabledParams.length > 0) out.disabled_params = disabledParams;
     return out;
@@ -1080,6 +1168,44 @@ function buildRequestConfig(persona: TomoriState, providerName: string, modelNam
   if (active.minP !== undefined) out.min_p = active.minP;
   if (stopStrings) out.stop = stopStrings;
   if (disabledParams.length > 0) out.disabled_params = disabledParams;
+
+  if (providerName === "openrouter") {
+    const reasoningRequest = buildOpenRouterReasoningRequest(config.thinking_level);
+    if (reasoningRequest.reasoning) out.reasoning = reasoningRequest.reasoning;
+  }
+
+  if (providerName === "deepseek") {
+    const thinkingRequest = buildDeepSeekThinkingRequest(modelName, config.thinking_level);
+    if (thinkingRequest.thinking) out.thinking = thinkingRequest.thinking;
+    if (thinkingRequest.omitSampling) {
+      delete out.temperature;
+      delete out.top_p;
+      delete out.frequency_penalty;
+      delete out.presence_penalty;
+    }
+  }
+
+  if (providerName === "zai" || providerName === "zaicoding") {
+    const thinkingRequest = buildZaiThinkingRequest(config.thinking_level);
+    if (thinkingRequest.thinking) out.thinking = thinkingRequest.thinking;
+    if (thinkingRequest.omitSampling) {
+      delete out.temperature;
+      delete out.top_p;
+      delete out.frequency_penalty;
+      delete out.presence_penalty;
+    }
+  }
+
+  if (providerName === "custom") {
+    const customThinking = buildCustomThinkingRequest(config.custom_endpoint_url, config.thinking_level);
+    if (customThinking.reasoning_effort) {
+      out.reasoning_effort = customThinking.reasoning_effort;
+    }
+  }
+
+  if (providerName === "novelai") {
+    out.thinking_directive = getNovelAiThinkingDirective(config.thinking_level);
+  }
 
   // Acknowledge has_tools flag is mirrored from adapter runtime — informational
   if (!activeLlm.has_tools) out.tools_disabled = true;

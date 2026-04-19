@@ -321,8 +321,9 @@ Checklist:
   - confirm the assistant/tool loop shape matches TomoriBot's runtime
 - reasoning or thinking mode:
   - check for continuation-only fields that must be replayed within the same turn
+  - decide explicitly how `/config thinking-level` behaves for the provider: map it, or document a deliberate no-op
   - DeepSeek example: preserve `reasoning_content` across tool sub-turns, but do not treat it as normal cross-turn chat history
-  - Z.ai example: reasoning models (`glm-5`, `glm-4.7`) use `thinking: { type: "enabled", budget_tokens: 8192 }` with temperature/sampling params deleted
+  - Z.ai example: `/config thinking-level` maps to `thinking: { type: "enabled" | "disabled" }`; active thinking removes temperature / top_p / frequency_penalty / presence_penalty
 - structured output:
   - determine whether the provider offers strict schema mode or only JSON-object mode
   - implement provider-owned `callStructuredJSON()` for the contract the vendor actually supports
@@ -358,6 +359,12 @@ Use this as the last pass before you call a provider integration "done".
 
 - determine whether the vendor supports strict schema mode, JSON-object mode, or only prompt-steered JSON
 - implement provider-owned `callStructuredJSON()` for the actual supported contract
+
+### Thinking Level
+
+- if the vendor has a verified request-side reasoning control, map `/config thinking-level` in the provider layer
+- if the vendor only supports startup flags, GUI toggles, or backend-template-specific reasoning controls, do not invent a generic request field
+- document the result in `docs/ai/thinking-level.md` and the provider notes
 - if the provider only guarantees JSON objects, inject the required prompt guidance and validate locally with Zod
 - seed `llms.supports_structoutput` only for models validated end-to-end in TomoriBot
 - if history extraction depends on structured output, do not enable `featureSupport.historyExtraction` until that path works

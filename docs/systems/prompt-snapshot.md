@@ -70,9 +70,9 @@ Shapes:
 | Provider | JSON shape |
 | --- | --- |
 | `google`, `vertex` | `{model, systemInstruction, contents[], generation_config, safety_settings, thinking_config?}` |
-| `anthropic` | `{model, system, messages[], temperature?, top_p?, top_k?, max_tokens, stop_sequences}` |
-| `openrouter`, `deepseek`, `zai`, `zaicoding`, `nvidia` | `{model, messages[], temperature?, top_p?, top_k?, frequency_penalty?, presence_penalty?, min_p?, max_tokens, stop}` |
-| `custom`, `novelai` (fallback) | `{model, messages[]}` + sampling params, OpenAI-vision array content form for media, **one consolidated `role: "system"` entry** |
+| `anthropic` | `{model, system, messages[], temperature?, top_p?, top_k?, max_tokens, stop_sequences, thinking?, output_config?}` |
+| `openrouter`, `deepseek`, `zai`, `zaicoding`, `nvidia` | `{model, messages[], temperature?, top_p?, top_k?, frequency_penalty?, presence_penalty?, min_p?, max_tokens, stop, reasoning?/thinking?}` |
+| `custom`, `novelai` (fallback) | `{model, messages[]}` + sampling params, OpenAI-vision array content form for media, optional `reasoning_effort` / `thinking_directive`, **one consolidated `role: "system"` entry** |
 
 #### Custom fallback consolidation
 
@@ -84,9 +84,9 @@ A provider-specific sampling block is shown in the DM body (both formats) and ba
 
 | Provider | Keys included |
 | --- | --- |
-| `google`, `vertex` | `generation_config.{temperature, top_k, top_p, frequency_penalty, presence_penalty, max_output_tokens, stop_sequences}`, `safety_settings[4]` (all `BLOCK_NONE`), `thinking_config` (Gemini 3 Flash only) |
-| `anthropic` | `temperature?`, `top_p?` (coalesced via `selectAnthropicSamplingParams`), `top_k?`, `max_tokens`, `stop_sequences` |
-| OpenAI-compat | `temperature?`, `top_p?`, `top_k?`, `frequency_penalty?`, `presence_penalty?`, `min_p?`, `max_tokens`, `stop` |
+| `google`, `vertex` | `generation_config.{temperature, top_k, top_p, frequency_penalty, presence_penalty, max_output_tokens, stop_sequences}`, `safety_settings[4]` (all `BLOCK_NONE`), provider-driven `thinking_config?` |
+| `anthropic` | `temperature?`, `top_p?` (coalesced via `selectAnthropicSamplingParams`), `top_k?`, `max_tokens`, `stop_sequences`, adaptive `thinking?`, `output_config?` |
+| OpenAI-compat | `temperature?`, `top_p?`, `top_k?`, `frequency_penalty?`, `presence_penalty?`, `min_p?`, `max_tokens`, `stop`, provider-specific `reasoning?` / `thinking?` / `reasoning_effort?` / `thinking_directive?` |
 
 `disabled_params` is appended when the persona has explicitly disabled sampling parameters. `tools_disabled: true` appears when the LLM has `has_tools: false`.
 

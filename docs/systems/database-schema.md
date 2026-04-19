@@ -94,6 +94,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `tomori_configs.server_id` is the primary modern scope.
 - `tomori_configs.tomori_id` remains as a nullable legacy pointer.
 - `tomori_configs.message_fetch_limit` stores the per-server context fetch cap (default `80`, configurable via `/config message-fetch-limit`).
+- `tomori_configs.thinking_level` stores the server's provider-agnostic reasoning preference (`auto`, `none`, `low`, `medium`, `high`) used by `/config thinking-level`.
 - `tomori_configs.welcome_channel_disc_id` stores the single configured join-welcome channel per server.
 - `tomori_configs.thought_log_channel_disc_id` stores the optional server-scoped channel where provider reasoning summaries are posted after successful streamed chat turns.
 - `tomori_configs.autoch_persona_overrides` stores optional per-channel persona assignments for configured auto-trigger channels. Each entry is a JSON object with `channel_disc_id` and `tomori_id`; missing entries fall back to the main persona.
@@ -177,6 +178,7 @@ Encrypted columns are stored as `BYTEA` with key version tracking:
 - `opt_api_keys.api_key` + `opt_api_keys.key_version`
 - `api_key_rotation.api_key` + `api_key_rotation.key_version`
 - `saved_provider_configs.api_key` + `saved_provider_configs.key_version`
+- `saved_provider_configs.thinking_level` mirrors `tomori_configs.thinking_level` so provider switching can restore the previous provider-specific reasoning preference.
 
 ### Logit bias snapshot storage
 

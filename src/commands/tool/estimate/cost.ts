@@ -1165,7 +1165,7 @@ async function measureDeepseekInputTokens(
 }
 
 /** Z.ai reasoning models where temperature must be omitted from probe requests */
-const ZAI_REASONING_MODELS = ["glm-5", "glm-4.7"];
+const ZAI_REASONING_MODELS = ["glm-5.1", "glm-5", "glm-4.7"];
 
 /**
  * Send a minimal probe request to Z.ai to measure actual input token count.

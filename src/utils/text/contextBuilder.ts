@@ -850,6 +850,7 @@ function pushDialogueHistoryContextItem(
   role: "user" | "model",
   parts: ContextPart[],
   messageId: string,
+  metadataTag?: ContextItemTag,
 ): void {
   if (parts.length === 0) {
     return;
@@ -858,7 +859,7 @@ function pushDialogueHistoryContextItem(
   contextItems.push({
     role,
     parts,
-    metadataTag: ContextItemTag.DIALOGUE_HISTORY,
+    metadataTag: metadataTag ?? ContextItemTag.DIALOGUE_HISTORY,
     messageId,
   });
 }
@@ -2344,6 +2345,7 @@ async function buildContextNative({
         "user",
         [{ type: "text", text: `[System: ${effectiveContextNote}]` }],
         "context_note_injection",
+        ContextItemTag.CONTEXT_NOTE_INJECTION,
       );
       contextNoteEmitted = true;
     }
@@ -2662,6 +2664,7 @@ async function buildContextNative({
       "user",
       [{ type: "text", text: `[System: ${effectiveContextNote}]` }],
       "context_note_injection",
+      ContextItemTag.CONTEXT_NOTE_INJECTION,
     );
     contextNoteEmitted = true;
   }

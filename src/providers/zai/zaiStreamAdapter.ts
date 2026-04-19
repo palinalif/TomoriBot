@@ -1,6 +1,6 @@
 import { OpenAICompatibleStreamAdapter } from "@/providers/openaiCompatible/openaiCompatibleStreamAdapter";
 import type { OpenAICompatibleStreamConfig } from "@/providers/openaiCompatible/openaiCompatibleTypes";
-import { ZAI_REASONING_MODELS } from "@/providers/zai/zaiShared";
+import { buildZaiThinkingRequest } from "@/utils/provider/thinkingControl";
 
 export interface ZaiStreamConfig extends OpenAICompatibleStreamConfig {
   endpointUrl: string;
@@ -25,11 +25,11 @@ export class ZaiStreamAdapter extends OpenAICompatibleStreamAdapter {
         return config.endpointUrl;
       },
       mutateRequestBody: ({ requestBody, config, context }) => {
-        // 1. Enable thinking mode for reasoning models or when forced
-        const isReasoningModel = ZAI_REASONING_MODELS.includes(config.model);
-        const thinkingEnabled = isReasoningModel || config.forceReason === true;
-        if (thinkingEnabled) {
-          requestBody.thinking = { type: "enabled", budget_tokens: 8192 };
+        const thinkingRequest = buildZaiThinkingRequest(context.tomoriState.config.thinking_level, config.forceReason);
+        if (thinkingRequest.thinking) {
+          requestBody.thinking = thinkingRequest.thinking;
+        }
+        if (thinkingRequest.omitSampling) {
           delete requestBody.temperature;
           delete requestBody.top_p;
           delete requestBody.presence_penalty;

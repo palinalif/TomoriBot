@@ -142,13 +142,17 @@ Rule:
 - conversation compaction and roleplay compaction work through the custom endpoint using the effective configured model name
 - persona preset generation works through the custom endpoint when the configured model supports structured output, and optional web search works when the model supports tools
 - `/config logit-bias` entries are stored in config snapshots, but Tomori does not currently auto-tokenize plain text for custom endpoints
+- `/config thinking-level` currently sends `reasoning_effort` only for Ollama-style OpenAI endpoints; KoboldCpp, llama.cpp, and generic vLLM reasoning knobs are not sent automatically because their request-side controls are backend/template-specific
 
 ## Anthropic Provider Notes
 
 `anthropic` uses Anthropic's native Messages API directly for Claude models.
 
 - chat models are streamed through the provider-owned SSE adapter
-- reasoning models enable `thinking: { type: "enabled", budget_tokens: 8192 }` and omit `temperature`
+- supported Claude 4.6/4.7 models use adaptive thinking via `thinking: { type: "adaptive" }`
+- `/config thinking-level` maps to Anthropic `output_config.effort` (`low` / `medium` / `high`) when adaptive thinking is supported
+- `None` maps to `thinking: { type: "disabled" }`
+- adaptive thinking omits sampling params that Anthropic rejects in that mode
 - sampler omission is user-configurable with `/config params manage`
 - Anthropic models that reject sending `temperature` and `top_p` together still only receive one sampling control at a time at the API boundary:
   - if `top_p` is customized away from the shared default while temperature remains at the shared default, Tomori sends `top_p`
@@ -177,9 +181,10 @@ Rule:
 
 `zai` uses the shared OpenAI-compatible family layer for the GLM model family via `https://api.z.ai/api/paas/v4`.
 
-- **Chat models**: `zai/glm-5` (default, reasoning), `zai/glm-4.7` (reasoning), `zai/glm-4.7-flash` (free), `zai/glm-4.6v` (vision), `zai/glm-4.6v-flash` (free vision)
+- **Chat models**: `zai/glm-5.1`, `zai/glm-5` (default, reasoning), `zai/glm-4.7` (reasoning), `zai/glm-4.7-flash` (free), `zai/glm-4.6v` (vision), `zai/glm-4.6v-flash` (free vision)
 - **Image generation**: `zai/glm-image` via dedicated images/generations endpoint; aspect ratio mapped to pixel sizes
-- Reasoning models (`glm-5`, `glm-4.7`) emit `reasoning_content` — thinking is enabled with `budget_tokens: 8192` and temperature/sampling params are deleted
+- `/config thinking-level` maps to `thinking: { type: "enabled" | "disabled" }`
+- active Z.ai thinking mode deletes temperature / top_p / frequency_penalty / presence_penalty from the request
 - Tool streaming uses `tool_stream: true` flag when tools are present
 - JSON structured output uses `response_format: { type: "json_object" }` with prompt-steered schema injection and Zod validation (same pattern as DeepSeek)
 - Vision structured output supported on `glm-4.6v` and `glm-4.6v-flash`
@@ -194,7 +199,7 @@ Rule:
 
 `zaicoding` uses the shared OpenAI-compatible family layer for the GLM family via `https://api.z.ai/api/coding/paas/v4`.
 
-- **Chat models**: `glm-5`, `glm-4.7`, `glm-4.7-flash`, `glm-4.6v`, `glm-4.6v-flash`
+- **Chat models**: `glm-5.1`, `glm-5`, `glm-4.7`, `glm-4.7-flash`, `glm-4.6v`, `glm-4.6v-flash`
 - **Image generation**: disabled; the coding endpoint is no longer treated as a native image generation provider
 - Uses the same streaming, tool-calling, and structured-output pipeline as the general `zai` provider
 - Intended for dedicated coding-endpoint access such as GLM Coding Plan workflows

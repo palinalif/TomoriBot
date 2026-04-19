@@ -57,6 +57,7 @@ import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
 import { loadGuildMcpServers } from "@/utils/db/guildMcpDb";
 import { loadPresetsForServer, loadToggleableNodes } from "@/utils/db/stPresetDb";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
+import { getThinkingLevelLocalizerKey } from "@/utils/provider/thinkingControl";
 
 // Constants
 const MAX_ITEMS_DISPLAY = 5; // Max channel/member items before switching to count-only
@@ -115,6 +116,10 @@ function getCooldownTypeLabel(locale: string, type: CooldownType): string {
     default:
       return localizer(locale, "commands.server.cooldown.triggers.type.choice_off");
   }
+}
+
+function getThinkingLevelLabel(locale: string, value: string | null | undefined): string {
+  return localizer(locale, getThinkingLevelLocalizerKey(value));
 }
 
 function truncateText(input: string, maxLength: number): string {
@@ -1105,6 +1110,11 @@ export async function execute(
             {
               nameKey: "commands.tool.status.field_humanizer",
               value: String(config.humanizer_degree),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_thinking_level",
+              value: getThinkingLevelLabel(locale, config.thinking_level),
               inline: true,
             },
             {

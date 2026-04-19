@@ -18,6 +18,7 @@ import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { fetchAndOptimizeImage } from "../../utils/image/imageProcessor";
 import { isParamDisabled, selectAnthropicSamplingParams } from "@/utils/provider/samplingControl";
+import { buildAnthropicThinkingRequest } from "@/utils/provider/thinkingControl";
 import { buildProviderStopStrings } from "../utils/stopStrings";
 import type {
   ProcessedChunk,
@@ -33,8 +34,6 @@ import type {
  */
 export interface AnthropicStreamConfig extends StreamConfig {
   seesImages?: boolean;
-  isReasoning?: boolean;
-  thinkingBudget?: number;
   topP?: number;
   topK?: number;
 }
@@ -123,7 +122,6 @@ interface ParsedSseEvent {
 const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_API_VERSION = "2023-06-01";
 const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
-const DEFAULT_THINKING_BUDGET = 8192;
 // Tags that should be extracted to the top-level system parameter
 const SYSTEM_INSTRUCTION_TAGS: ContextItemTag[] = [
   ContextItemTag.SYSTEM_HUMANIZER_RULES,
@@ -192,17 +190,20 @@ export class AnthropicStreamAdapter implements StreamProvider {
       requestBody.tools = config.tools;
     }
 
-    // 6. Handle reasoning models (extended thinking)
-    if (anthropicConfig.isReasoning) {
-      const thinkingBudget = anthropicConfig.thinkingBudget ?? DEFAULT_THINKING_BUDGET;
-      requestBody.thinking = {
-        type: "enabled",
-        budget_tokens: thinkingBudget,
-      };
-      // Temperature must be omitted when thinking is enabled
-      log.info(`AnthropicStreamAdapter: Extended thinking enabled with budget ${thinkingBudget}`);
-    } else {
-      // 7. Add sampling parameters (only for non-reasoning models)
+    const thinkingRequest = buildAnthropicThinkingRequest(
+      config.model,
+      context.tomoriState.config.thinking_level,
+      config.forceReason,
+    );
+    if (thinkingRequest.thinking) {
+      requestBody.thinking = thinkingRequest.thinking;
+    }
+    if (thinkingRequest.output_config) {
+      requestBody.output_config = thinkingRequest.output_config;
+    }
+
+    // 6. Add sampling parameters when thinking mode does not suppress them
+    if (!thinkingRequest.omitSampling) {
       const samplingSelection = selectAnthropicSamplingParams({
         temperature: config.temperature,
         topP: anthropicConfig.topP,

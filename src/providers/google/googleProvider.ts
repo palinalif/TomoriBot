@@ -6,7 +6,7 @@
  * and GoogleStreamAdapter for better code organization and maintainability.
  */
 
-import { GoogleGenAI, type HarmBlockThreshold, type HarmCategory, ThinkingLevel } from "@google/genai";
+import { GoogleGenAI, type HarmBlockThreshold, type HarmCategory } from "@google/genai";
 import type {
   BaseGuildTextChannel,
   BaseGuildVoiceChannel,
@@ -28,6 +28,7 @@ import type { StreamingContext } from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
+import { buildGoogleThinkingConfig } from "@/utils/provider/thinkingControl";
 import type {
   CompactConversationResult,
   CompactRoleplayResult,
@@ -620,14 +621,14 @@ export class GoogleProvider
         isManuallyTriggered: streamingContext?.isManuallyTriggered,
       };
 
-      // Enable thinking mode for Gemini 3 Flash models
-      // This allows the model to use internal reasoning before responding
-      const isGemini3Flash = isGemini3Model(config.model ?? "") && config.model?.includes("flash");
-      if (isGemini3Flash) {
-        streamConfig.thinkingConfig = {
-          thinkingLevel: ThinkingLevel.LOW,
-        };
-        log.info(`GoogleProvider: Enabled LOW thinking mode for Gemini 3 Flash model: ${config.model}`);
+      const thinkingConfig = buildGoogleThinkingConfig(
+        config.model ?? "",
+        tomoriState.config.thinking_level,
+        streamingContext?.forceReason,
+      );
+      if (thinkingConfig) {
+        streamConfig.thinkingConfig = thinkingConfig;
+        log.info(`GoogleProvider: Applied thinking config for model ${config.model}`);
       }
 
       // Override tools with context-aware tools when streaming context is provided,

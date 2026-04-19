@@ -3,6 +3,7 @@ import type { OpenAICompatibleStreamConfig } from "@/providers/openaiCompatible/
 import { GemmaToolCallParser } from "@/providers/custom/customGemmaToolParser";
 import type { ProcessedChunk, RawStreamChunk } from "@/types/stream/interfaces";
 import { log } from "@/utils/misc/logger";
+import { buildCustomThinkingRequest } from "@/utils/provider/thinkingControl";
 
 /**
  * When true, the stream adapter scans `delta.content` for Gemma 4's hallucinated
@@ -54,7 +55,7 @@ export class CustomStreamAdapter extends OpenAICompatibleStreamAdapter {
       // Inject Ollama-style options.num_ctx when the user has configured a
       // context window override. This travels outside the messages array so it
       // is unaffected by the context window it controls.
-      mutateRequestBody: ({ requestBody, config }) => {
+      mutateRequestBody: ({ requestBody, config, context }) => {
         const customConfig = config as CustomStreamConfig;
         if (customConfig.numCtx != null) {
           // Ollama reads options.num_ctx; KoboldCPP reads top-level max_context_length.
@@ -67,6 +68,16 @@ export class CustomStreamAdapter extends OpenAICompatibleStreamAdapter {
           log.info(
             `CustomStreamAdapter: Injecting num_ctx=${customConfig.numCtx} (options.num_ctx + max_context_length)`,
           );
+        }
+
+        const thinkingRequest = buildCustomThinkingRequest(
+          customConfig.endpointUrl,
+          context.tomoriState.config.thinking_level,
+          customConfig.forceReason,
+        );
+        if (thinkingRequest.reasoning_effort) {
+          requestBody.reasoning_effort = thinkingRequest.reasoning_effort;
+          log.info(`CustomStreamAdapter: Applying Ollama reasoning_effort=${thinkingRequest.reasoning_effort}`);
         }
       },
     });

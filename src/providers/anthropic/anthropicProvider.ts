@@ -70,15 +70,12 @@ const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6";
 const ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_API_VERSION = "2023-06-01";
 const ANTHROPIC_MAX_OUTPUT_TOKENS = parseInt(process.env.ANTHROPIC_MAX_OUTPUT_TOKENS ?? "8192", 10);
-const ANTHROPIC_THINKING_BUDGET = parseInt(process.env.ANTHROPIC_THINKING_BUDGET_TOKENS ?? "8192", 10);
 
 /**
  * Configuration for Anthropic provider requests
  */
 export interface AnthropicProviderConfig extends ProviderConfig {
   seesImages?: boolean;
-  isReasoning?: boolean;
-  thinkingBudget?: number;
   topP?: number;
   topK?: number;
 }
@@ -273,8 +270,6 @@ export class AnthropicProvider
       apiKey,
       maxOutputTokens: ANTHROPIC_MAX_OUTPUT_TOKENS,
       seesImages: tomoriState.llm.sees_images,
-      isReasoning: tomoriState.llm.is_reasoning,
-      thinkingBudget: ANTHROPIC_THINKING_BUDGET,
       temperature: tomoriState.config.llm_temperature,
       disabledParams: tomoriState.config.llm_disabled_params ?? [],
       ...samplingParams,
@@ -329,8 +324,6 @@ export class AnthropicProvider
         humanizerDegree: tomoriState.config.humanizer_degree,
         emojiUsageEnabled: tomoriState.config.emoji_usage_enabled,
         seesImages: tomoriState.llm.sees_images,
-        isReasoning: tomoriState.llm.is_reasoning,
-        thinkingBudget: anthropicConfig.thinkingBudget ?? ANTHROPIC_THINKING_BUDGET,
         forceReason: streamingContext?.forceReason,
         isManuallyTriggered: streamingContext?.isManuallyTriggered,
       };

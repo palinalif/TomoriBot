@@ -43,9 +43,7 @@ import {
 } from "./novelaiService";
 import { buildProviderStopStrings } from "@/providers/utils/stopStrings";
 import { isParamDisabled } from "@/utils/provider/samplingControl";
-
-/** Whether GLM 4.6 thinking (reasoning) is enabled. When disabled, /nothink is appended to suppress internal reasoning. */
-const NAI_GLM_THINKING_ENABLED = (process.env.NAI_GLM_THINKING_ENABLED ?? "true").toLowerCase() === "true";
+import { getNovelAiThinkingDirective } from "@/utils/provider/thinkingControl";
 
 /**
  * Whether to include the bot's persona name as a "{char}:" prefix in GLM 4.6 assistant turns.
@@ -328,6 +326,8 @@ export class NovelaiStreamAdapter implements StreamProvider {
         toolDefinitions: this.toolDefinitions,
         functionInteractionHistory: context.functionInteractionHistory,
         messageIdMap: context.messageIdMap,
+        thinkingLevel: context.tomoriState.config.thinking_level,
+        forceReason: config.forceReason,
       });
     } else {
       // Kayra: Flat text prompt with NAI prompt-convention formatting
@@ -2511,6 +2511,8 @@ export class NovelaiStreamAdapter implements StreamProvider {
       toolDefinitions?: NormalizedToolDefinition[];
       functionInteractionHistory?: StreamContext["functionInteractionHistory"];
       messageIdMap?: StreamContext["messageIdMap"];
+      thinkingLevel?: string | null;
+      forceReason?: boolean;
     },
   ): string {
     const systemInstructionParts: string[] = [];
@@ -2567,7 +2569,7 @@ export class NovelaiStreamAdapter implements StreamProvider {
     // 3. Build the prompt using GLM 4.6 chat template
     // Thinking directive: <think></think> seeds the expected format when thinking is enabled;
     // /nothink explicitly disables internal reasoning when thinking is turned off.
-    const thinkDirective = NAI_GLM_THINKING_ENABLED ? "<think></think>" : "/nothink";
+    const thinkDirective = getNovelAiThinkingDirective(options?.thinkingLevel, options?.forceReason);
     const promptParts: string[] = [];
 
     // Header: [gMASK]<sop>

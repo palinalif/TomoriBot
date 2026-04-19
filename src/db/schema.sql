@@ -2213,6 +2213,9 @@ SELECT add_column_if_not_exists('saved_provider_configs', 'video_model_id', 'INT
 -- Migration: add thinking_level snapshot column to saved_provider_configs (April 2026)
 SELECT add_column_if_not_exists('saved_provider_configs', 'thinking_level', 'TEXT', '''auto''');
 
+-- Migration: add custom_num_ctx column to saved_provider_configs (April 2026)
+SELECT add_column_if_not_exists('saved_provider_configs', 'custom_num_ctx', 'INT', 'NULL');
+
 -- Auto-update timestamp trigger
 DROP TRIGGER IF EXISTS update_saved_provider_configs_timestamp ON saved_provider_configs;
 CREATE TRIGGER update_saved_provider_configs_timestamp
