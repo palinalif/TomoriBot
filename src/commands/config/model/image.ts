@@ -9,7 +9,7 @@ import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../
 // Import types for validation
 import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
-import { promptForSavedProvider } from "@/commands/config/model/providerPicker";
+import { promptForSavedProvider, replaceProviderPickerWithInfo } from "@/commands/config/model/providerPicker";
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { getProviderDisplayName, getStaticProviderInfo } from "@/utils/provider/providerInfoRegistry";
 
@@ -167,10 +167,11 @@ export async function execute(
   let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
   let selectedModel: ImageDiffusionModelRow | null = null; // For error context and logic
   let responseInteraction: ChatInputCommandInteraction | import("discord.js").ButtonInteraction = interaction;
+  let providerSelection: Awaited<ReturnType<typeof promptForSavedProvider>> = null;
 
   try {
     const savedProviders = await loadSavedProvidersForCapability(tomoriState.server_id, "image");
-    const providerSelection = await promptForSavedProvider(interaction, locale, savedProviders);
+    providerSelection = await promptForSavedProvider(interaction, locale, savedProviders);
 
     if (!providerSelection) {
       return;
@@ -347,7 +348,7 @@ export async function execute(
     // Find previous model name
     const previousModel = availableModels.find((model) => model.diffusion_model_id === currentSelectedId);
 
-    await replyInfoEmbed(modalSubmitInteraction, locale, {
+    const successOptions = {
       titleKey: "commands.config.model.image.success_title",
       descriptionKey: "commands.config.model.image.success_description",
       descriptionVars: {
@@ -356,7 +357,15 @@ export async function execute(
         provider: getProviderDisplayName(selectedProvider),
       },
       color: ColorCode.SUCCESS,
-    });
+    } as const;
+
+    const replacedPicker =
+      modalSubmitInteraction &&
+      (await replaceProviderPickerWithInfo(providerSelection, modalSubmitInteraction, locale, successOptions));
+
+    if (!replacedPicker) {
+      await replyInfoEmbed(modalSubmitInteraction, locale, successOptions);
+    }
   } catch (error) {
     // 13. Log error with context
     let serverIdForError: number | null = null;

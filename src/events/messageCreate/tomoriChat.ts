@@ -32,6 +32,7 @@ import { getCachedPersonalSpotlightStatus } from "@/utils/cache/personalSpotligh
 import { getCachedChannelLlm } from "../../utils/cache/channelLlmCache";
 import { storeShortTermMemory } from "../../utils/cache/shortTermMemoryCache";
 import { incrementTomoriCounter, registerUser } from "@/utils/db/dbWrite";
+import { loadSavedProviderConfig } from "@/utils/db/dbRead";
 import { createStandardEmbed, sendStandardEmbed } from "../../utils/discord/embedHelper";
 import { resolvePreferredDiscordDisplayName } from "../../utils/discord/displayName";
 import { sendCooldownDM } from "../../utils/discord/cooldownDM";
@@ -5252,7 +5253,38 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         if (effectiveLlm !== currentPersona.llm) {
           // Shallow-copy so the cached TomoriState is never mutated
           tomoriState = { ...tomoriState, llm: effectiveLlm };
-          // Keep the snapshot in sync — its tomoriState.llm must reflect the override
+
+          // If the override uses a different provider, swap the api_key in the config.
+          // decryptMainKey() reads tomoriState.config.api_key which is the Phase A mirror
+          // of the global provider's key — using it for a different provider causes a 400.
+          const overrideProvider = effectiveLlm.llm_provider.toLowerCase();
+          if (overrideProvider !== currentPersona.llm.llm_provider.toLowerCase()) {
+            const overrideSavedConfig = await loadSavedProviderConfig(tomoriState.server_id, overrideProvider);
+            if (overrideSavedConfig) {
+              tomoriState = {
+                ...tomoriState,
+                config: {
+                  ...tomoriState.config,
+                  api_key: overrideSavedConfig.api_key ?? tomoriState.config.api_key,
+                  key_version: overrideSavedConfig.key_version ?? 1,
+                  llm_temperature: overrideSavedConfig.llm_temperature ?? tomoriState.config.llm_temperature,
+                  llm_top_p: overrideSavedConfig.llm_top_p ?? tomoriState.config.llm_top_p,
+                  llm_top_k: overrideSavedConfig.llm_top_k ?? tomoriState.config.llm_top_k,
+                  llm_frequency_penalty:
+                    overrideSavedConfig.llm_frequency_penalty ?? tomoriState.config.llm_frequency_penalty,
+                  llm_presence_penalty:
+                    overrideSavedConfig.llm_presence_penalty ?? tomoriState.config.llm_presence_penalty,
+                  llm_min_p: overrideSavedConfig.llm_min_p ?? tomoriState.config.llm_min_p,
+                  thinking_level: overrideSavedConfig.thinking_level ?? tomoriState.config.thinking_level,
+                  llm_disabled_params:
+                    overrideSavedConfig.llm_disabled_params ?? tomoriState.config.llm_disabled_params,
+                  llm_logit_biases: overrideSavedConfig.llm_logit_biases ?? tomoriState.config.llm_logit_biases,
+                },
+              };
+            }
+          }
+
+          // Keep the snapshot in sync — its tomoriState must reflect the override
           // so any consumer reading snapshot.tomoriState (e.g. contextBuilder) gets the
           // correct model, not the global/persona-base model that was snapshotted earlier.
           personaSnapshot = { ...personaSnapshot, tomoriState };

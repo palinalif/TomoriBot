@@ -341,8 +341,8 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   server_id INT, -- Server-scoped config (nullable for legacy rows)
   llm_id INT NOT NULL,
   embedding_model_id INT,
-  llm_temperature REAL NOT NULL DEFAULT 1.0 CHECK (llm_temperature >= 0.0 AND llm_temperature <= 2.0),
-  api_key BYTEA, -- encrypted
+  llm_temperature REAL NOT NULL DEFAULT 1.0 CHECK (llm_temperature >= 0.0 AND llm_temperature <= 2.0), -- DEPRECATED Phase 1.5 Pass B: mirror of saved_provider_configs; drop after checklist passes
+  api_key BYTEA, -- encrypted; DEPRECATED Phase 1.5 Pass B: mirror of saved_provider_configs.api_key
   trigger_words TEXT[] DEFAULT '{}',
   autoch_disc_ids TEXT[] DEFAULT '{}',
   autoch_persona_overrides JSONB DEFAULT '[]'::JSONB,
@@ -357,9 +357,9 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   imagegen_enabled BOOLEAN DEFAULT true,
   videogen_enabled BOOLEAN DEFAULT true,
   tool_notice_hidden_keys TEXT[] DEFAULT '{}',
-  llm_disabled_params TEXT[] DEFAULT '{}',
+  llm_disabled_params TEXT[] DEFAULT '{}', -- DEPRECATED Phase 1.5 Pass B: mirror of saved_provider_configs
   humanizer_degree INT DEFAULT 1,
-  thinking_level TEXT DEFAULT 'auto',
+  thinking_level TEXT DEFAULT 'auto', -- DEPRECATED Phase 1.5 Pass B: mirror of saved_provider_configs
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (tomori_id) REFERENCES tomoris(tomori_id) ON DELETE SET NULL,
@@ -603,6 +603,7 @@ SELECT add_column_if_not_exists('tomori_configs', 'custom_model_name', 'TEXT');
 SELECT add_column_if_not_exists('tomori_configs', 'custom_num_ctx', 'INT');
 
 -- Add provider-agnostic thinking level hint (April 2026)
+-- DEPRECATED Phase 1.5 Pass B: thinking_level is now canonical in saved_provider_configs
 SELECT add_column_if_not_exists('tomori_configs', 'thinking_level', 'TEXT', '''auto''');
 
 -- Add RP channel IDs for per-channel emoji/sticker suppression (February 2026)
@@ -634,6 +635,7 @@ SELECT add_column_if_not_exists('tomori_configs', 'autoch_persona_overrides', 'J
 SELECT add_column_if_not_exists('tomori_configs', 'tool_notice_hidden_keys', 'TEXT[]', 'ARRAY[]::TEXT[]');
 
 -- Add LLM sampling parameter columns (February 2026)
+-- DEPRECATED Phase 1.5 Pass B: all sampler columns are now canonical in saved_provider_configs
 -- llm_top_p: Nucleus sampling — probability mass threshold (0.95=default, 0.0=most restricted)
 SELECT add_column_if_not_exists('tomori_configs', 'llm_top_p', 'REAL', '0.95');
 -- llm_top_k: Top-K sampling — candidate token count (0=neutral/disabled, max 40)
@@ -1570,6 +1572,7 @@ SELECT add_column_if_not_exists('opt_api_keys', 'key_version', 'INTEGER', '1');
 CREATE INDEX IF NOT EXISTS idx_opt_api_keys_version ON opt_api_keys(key_version);
 
 -- Add key_version column to tomori_configs for main API key rotation (November 2025)
+-- DEPRECATED Phase 1.5 Pass B: api_key/key_version are now canonical in saved_provider_configs
 SELECT add_column_if_not_exists('tomori_configs', 'key_version', 'INTEGER', '1');
 CREATE INDEX IF NOT EXISTS idx_tomori_configs_key_version ON tomori_configs(key_version);
 
@@ -2030,7 +2033,7 @@ CREATE INDEX IF NOT EXISTS idx_nai_presets_model_target ON nai_presets(model_tar
 SELECT add_column_if_not_exists('tomori_configs', 'nai_preset_name', 'TEXT');
 
 -- Add fallback model chain for automatic provider failover (March 2026)
--- Stores an ordered list of fallback llm_ids to retry if the primary model errors
+-- DEPRECATED Phase 1.5 Pass B: fallback_llm_ids is now canonical in saved_provider_configs
 SELECT add_column_if_not_exists('tomori_configs', 'fallback_llm_ids', 'JSONB', '''[]''::JSONB');
 
 -- When true, hides the standard generate_image tool so only generate_image_nai is available (March 2026)
@@ -2173,8 +2176,8 @@ CREATE TABLE IF NOT EXISTS saved_provider_configs (
   custom_num_ctx INT,                         -- Custom provider context window size (e.g., Ollama num_ctx)
   thinking_level TEXT DEFAULT 'auto',         -- Provider-specific thinking/reasoning effort snapshot
   fallback_llm_ids JSONB DEFAULT '[]'::JSONB, -- Ordered fallback model IDs
-  channel_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- Snapshot: [{channel_disc_id, llm_id}, ...]
-  persona_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- Snapshot: [{tomori_id, llm_id}, ...]
+  channel_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- DEPRECATED Phase 1.5 Pass B: switch-snapshot baggage; no longer written after switch.ts removed
+  persona_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- DEPRECATED Phase 1.5 Pass B: switch-snapshot baggage; no longer written after switch.ts removed
   llm_logit_biases JSONB DEFAULT '[]'::JSONB, -- Snapshot: [{id, text, value}, ...]
   llm_disabled_params TEXT[] DEFAULT '{}',    -- Snapshot: params omitted for this provider
   saved_at TIMESTAMPTZ DEFAULT NOW(),
@@ -2191,6 +2194,7 @@ CREATE INDEX IF NOT EXISTS idx_saved_provider_configs_server
   ON saved_provider_configs(server_id);
 
 -- Migration: add override snapshot columns (for existing deployments)
+-- DEPRECATED Phase 1.5 Pass B: switch-snapshot baggage; drop after checklist passes
 SELECT add_column_if_not_exists('saved_provider_configs', 'channel_llm_overrides', 'JSONB', '''[]''::JSONB');
 SELECT add_column_if_not_exists('saved_provider_configs', 'persona_llm_overrides', 'JSONB', '''[]''::JSONB');
 

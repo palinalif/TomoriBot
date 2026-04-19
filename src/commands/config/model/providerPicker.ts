@@ -1,13 +1,34 @@
-import { MessageFlags, type ButtonInteraction, type ChatInputCommandInteraction } from "discord.js";
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ComponentType,
+  MessageFlags,
+  type ButtonInteraction,
+  type ChatInputCommandInteraction,
+  type InteractionEditReplyOptions,
+  type InteractionReplyOptions,
+  type ModalSubmitInteraction,
+} from "discord.js";
+import type { StandardEmbedOptions } from "@/types/discord/embed";
 import type { SavedProviderConfigRow } from "@/types/db/schema";
-import { replyInfoEmbed, replyPaginatedChoices } from "@/utils/discord/interactionHelper";
+import { createStandardEmbed } from "@/utils/discord/embedHelper";
+import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { ColorCode } from "@/utils/misc/logger";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
+import { localizer } from "@/utils/text/localizer";
 
 export interface SavedProviderSelectionResult {
   interaction: ChatInputCommandInteraction | ButtonInteraction;
   provider: string;
+  /** The interaction that owns the ephemeral picker reply; used to editReply() it after selection. */
+  pickerInteraction?: ChatInputCommandInteraction | ButtonInteraction;
 }
+
+const PROVIDER_PICKER_TIMEOUT_MS = 120000;
+const PROVIDER_BUTTON_PREFIX = "provider_pick_";
+const PROVIDER_CANCEL_BUTTON_ID = "provider_pick_cancel";
+const PROVIDER_BUTTONS_PER_ROW = 4;
 
 export async function promptForSavedProvider(
   interaction: ChatInputCommandInteraction | ButtonInteraction,
@@ -31,22 +52,145 @@ export async function promptForSavedProvider(
     };
   }
 
-  const providerLabels = savedProviders.map((savedProvider) => getProviderDisplayName(savedProvider.provider));
-  const selectionResult = await replyPaginatedChoices(interaction, locale, {
+  const pickerEmbed = createStandardEmbed(locale, {
     titleKey: "commands.config.model.providerPicker.title",
     descriptionKey: "commands.config.model.providerPicker.description",
-    items: providerLabels,
     color: ColorCode.INFO,
-    preserveSelectedInteraction: true,
-    onSelect: async () => {},
   });
+  const pickerComponents = buildProviderRows(savedProviders, locale);
 
-  if (!selectionResult.success || selectionResult.selectedIndex === undefined || !selectionResult.interaction) {
-    return null;
+  const baseReplyOptions: InteractionEditReplyOptions = {
+    embeds: [pickerEmbed],
+    components: pickerComponents,
+  };
+  const initialReplyOptions: InteractionReplyOptions = {
+    embeds: [pickerEmbed],
+    components: pickerComponents,
+    flags: MessageFlags.Ephemeral,
+  };
+
+  if (interaction.replied || interaction.deferred) {
+    await interaction.editReply(baseReplyOptions);
+  } else {
+    await interaction.reply(initialReplyOptions);
   }
 
-  return {
-    interaction: selectionResult.interaction,
-    provider: savedProviders[selectionResult.selectedIndex]?.provider.toLowerCase() ?? "",
-  };
+  // Collect the button click via the interaction's collector (works for ephemeral replies)
+  const reply = await interaction.fetchReply();
+
+  try {
+    const buttonInteraction = await reply.awaitMessageComponent({
+      componentType: ComponentType.Button,
+      filter: (componentInteraction) => componentInteraction.user.id === interaction.user.id,
+      time: PROVIDER_PICKER_TIMEOUT_MS,
+    });
+
+    if (buttonInteraction.customId === PROVIDER_CANCEL_BUTTON_ID) {
+      await buttonInteraction.update({
+        embeds: [
+          createStandardEmbed(locale, {
+            titleKey: "general.interaction.cancel_title",
+            descriptionKey: "general.interaction.cancel_description",
+            color: ColorCode.WARN,
+          }),
+        ],
+        components: [],
+      });
+      return null;
+    }
+
+    const selectedProvider = buttonInteraction.customId.replace(PROVIDER_BUTTON_PREFIX, "");
+    if (!selectedProvider) {
+      await buttonInteraction.update({
+        embeds: [
+          createStandardEmbed(locale, {
+            titleKey: "general.errors.invalid_option_title",
+            descriptionKey: "general.errors.invalid_option_description",
+            color: ColorCode.ERROR,
+          }),
+        ],
+        components: [],
+      });
+      return null;
+    }
+
+    return {
+      interaction: buttonInteraction,
+      provider: selectedProvider,
+      pickerInteraction: interaction,
+    };
+  } catch {
+    // Ephemeral replies must be edited through the original interaction token, not message.edit()
+    await interaction.editReply({
+      embeds: [
+        createStandardEmbed(locale, {
+          titleKey: "general.interaction.timeout_title",
+          descriptionKey: "general.interaction.timeout_description",
+          color: ColorCode.WARN,
+        }),
+      ],
+      components: [],
+    });
+    return null;
+  }
+}
+
+export async function replaceProviderPickerWithInfo(
+  selection: SavedProviderSelectionResult | null,
+  interaction: ModalSubmitInteraction,
+  locale: string,
+  options: StandardEmbedOptions,
+): Promise<boolean> {
+  if (!selection?.pickerInteraction) {
+    return false;
+  }
+
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  }
+
+  // editReply() uses the interaction token — the only valid way to update an ephemeral message
+  await selection.pickerInteraction.editReply({
+    embeds: [createStandardEmbed(locale, options)],
+    components: [],
+  });
+  await interaction.deleteReply().catch(() => {});
+  return true;
+}
+
+function buildProviderRows(
+  savedProviders: SavedProviderConfigRow[],
+  locale: string,
+): Array<ActionRowBuilder<ButtonBuilder>> {
+  const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
+
+  for (let i = 0; i < savedProviders.length; i += PROVIDER_BUTTONS_PER_ROW) {
+    const row = new ActionRowBuilder<ButtonBuilder>();
+    const providerChunk = savedProviders.slice(i, i + PROVIDER_BUTTONS_PER_ROW);
+
+    providerChunk.forEach((savedProvider) => {
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`${PROVIDER_BUTTON_PREFIX}${savedProvider.provider.toLowerCase()}`)
+          .setLabel(getProviderDisplayName(savedProvider.provider))
+          .setStyle(ButtonStyle.Secondary),
+      );
+    });
+
+    rows.push(row);
+  }
+
+  const cancelButton = new ButtonBuilder()
+    .setCustomId(PROVIDER_CANCEL_BUTTON_ID)
+    .setLabel(localizer(locale, "general.pagination.cancel"))
+    .setStyle(ButtonStyle.Danger);
+
+  const lastRow = rows.at(-1);
+  if (!lastRow || lastRow.components.length >= 5) {
+    rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(cancelButton));
+    return rows;
+  }
+
+  lastRow.addComponents(cancelButton);
+  return rows;
 }

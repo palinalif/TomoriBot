@@ -129,6 +129,13 @@ export function supportsVisionCapability(providerName: string): boolean {
 }
 
 /**
+ * Returns all providers as Discord slash-command choice objects.
+ */
+export function getAllProviderChoices(): Array<{ name: string; value: string }> {
+  return providerInfos.map((info) => ({ name: info.displayName, value: info.name.toLowerCase() }));
+}
+
+/**
  * Returns a locale-formatted list of provider display names
  * that support the given generation parameter.
  */

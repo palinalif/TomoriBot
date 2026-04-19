@@ -10,6 +10,8 @@ import {
   formatSystemProducedEmbedHint,
 } from "@/utils/discord/embedClassifier";
 import { getCachedTomoriState, getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
+import { getCachedChannelLlm } from "@/utils/cache/channelLlmCache";
+import { loadSavedProviderConfig } from "@/utils/db/dbRead";
 import { buildContext } from "@/utils/text/contextBuilder";
 import { getCachedActivePreset } from "@/utils/cache/stPresetCache";
 import { getCachedPrivacyLevel } from "@/utils/cache/userCache";
@@ -242,6 +244,43 @@ export async function execute(
         ],
       });
       return;
+    }
+
+    // 9b. Resolve effective LLM (persona override > channel override > global) and
+    //     patch samplers from saved_provider_configs when the override crosses providers.
+    //     Mirrors the same resolution block in tomoriChat.ts so snapshot reflects exactly
+    //     what the live pipeline would use.
+    const channelLlmOverride = await getCachedChannelLlm(selectedPersona.server_id, interaction.channelId);
+    const effectiveLlm = selectedPersona.persona_llm ?? channelLlmOverride ?? selectedPersona.llm;
+
+    let effectivePersona = selectedPersona;
+    if (effectiveLlm !== selectedPersona.llm) {
+      effectivePersona = { ...selectedPersona, llm: effectiveLlm };
+
+      const overrideProvider = effectiveLlm.llm_provider.toLowerCase();
+      if (overrideProvider !== selectedPersona.llm.llm_provider.toLowerCase()) {
+        const overrideSavedConfig = await loadSavedProviderConfig(selectedPersona.server_id, overrideProvider);
+        if (overrideSavedConfig) {
+          effectivePersona = {
+            ...effectivePersona,
+            config: {
+              ...selectedPersona.config,
+              llm_temperature: overrideSavedConfig.llm_temperature ?? selectedPersona.config.llm_temperature,
+              llm_top_p: overrideSavedConfig.llm_top_p ?? selectedPersona.config.llm_top_p,
+              llm_top_k: overrideSavedConfig.llm_top_k ?? selectedPersona.config.llm_top_k,
+              llm_frequency_penalty:
+                overrideSavedConfig.llm_frequency_penalty ?? selectedPersona.config.llm_frequency_penalty,
+              llm_presence_penalty:
+                overrideSavedConfig.llm_presence_penalty ?? selectedPersona.config.llm_presence_penalty,
+              llm_min_p: overrideSavedConfig.llm_min_p ?? selectedPersona.config.llm_min_p,
+              thinking_level: overrideSavedConfig.thinking_level ?? selectedPersona.config.thinking_level,
+              llm_disabled_params:
+                overrideSavedConfig.llm_disabled_params ?? selectedPersona.config.llm_disabled_params,
+              llm_logit_biases: overrideSavedConfig.llm_logit_biases ?? selectedPersona.config.llm_logit_biases,
+            },
+          };
+        }
+      }
     }
 
     // 10. Fetch channel message history — same pattern as /tool estimate cost
@@ -515,12 +554,12 @@ export async function execute(
       snapshot: { triggererUserRow: userData },
       tomoriNickname: selectedPersona.tomori_nickname ?? process.env.DEFAULT_BOTNAME ?? "Tomori",
       tomoriAttributes: selectedPersona.attribute_list,
-      tomoriConfig: selectedPersona.config,
+      tomoriConfig: effectivePersona.config,
       personaPrompt: selectedPersona.persona_prompt ?? null,
       personaLineageId: selectedPersona.persona_lineage_id,
       isDMChannel,
-      seesImages: selectedPersona.llm.sees_images,
-      seesVideos: selectedPersona.llm.sees_videos,
+      seesImages: effectiveLlm.sees_images,
+      seesVideos: effectiveLlm.sees_videos,
     });
 
     // Mutable copy — tail directives are spliced/pushed in below
@@ -554,10 +593,9 @@ export async function execute(
     const presetData = await getCachedActivePreset(selectedPersona.server_id);
     const presetName = presetData?.preset.preset_name ?? null;
 
-    // 15. Resolve effective model (persona override takes priority over server LLM)
-    const activeLlm = selectedPersona.persona_llm ?? selectedPersona.llm;
-    const providerName = normalizeProviderName(activeLlm.llm_provider);
-    const modelName = activeLlm.llm_codename;
+    // 15. Resolve effective model — already computed as effectiveLlm above (step 9b)
+    const providerName = normalizeProviderName(effectiveLlm.llm_provider);
+    const modelName = effectiveLlm.llm_codename;
     const timestamp = new Date().toISOString();
 
     // 16. Optionally fetch provider-formatted tool definitions (JSON output only).
@@ -565,7 +603,7 @@ export async function execute(
     let toolsData: Array<Record<string, unknown>> | null = null;
     if (fetchTools && format === "json") {
       try {
-        toolsData = await fetchProviderTools(selectedPersona, providerName);
+        toolsData = await fetchProviderTools(effectivePersona, providerName);
       } catch (toolError) {
         log.warn(
           `Failed to fetch tools for prompt snapshot (provider=${providerName}): ${(toolError as Error).message}`,
@@ -575,7 +613,7 @@ export async function execute(
 
     // 16b. Build per-provider sampling/request-config block
     //      Shown in DM for BOTH formats and baked into JSON file top-level
-    const requestConfig = buildRequestConfig(selectedPersona, providerName, modelName);
+    const requestConfig = buildRequestConfig(effectivePersona, providerName, modelName);
 
     // 17. Build snapshot file content
     let fileContent: string;
@@ -584,7 +622,7 @@ export async function execute(
     if (format === "json") {
       const snapshotData = await buildJsonSnapshot(
         contextItems,
-        selectedPersona,
+        effectivePersona,
         providerName,
         modelName,
         toolsData,

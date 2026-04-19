@@ -14,7 +14,7 @@ import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../../utils/discord/interactionHelper";
 import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
-import { promptForSavedProvider } from "@/commands/config/model/providerPicker";
+import { promptForSavedProvider, replaceProviderPickerWithInfo } from "@/commands/config/model/providerPicker";
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 
@@ -110,10 +110,11 @@ export async function execute(
   let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
   let selectedModel: VideoGenerationModelRow | null = null;
   let responseInteraction: ChatInputCommandInteraction | import("discord.js").ButtonInteraction = interaction;
+  let providerSelection: Awaited<ReturnType<typeof promptForSavedProvider>> = null;
 
   try {
     const savedProviders = await loadSavedProvidersForCapability(tomoriState.server_id, "video");
-    const providerSelection = await promptForSavedProvider(interaction, locale, savedProviders);
+    providerSelection = await promptForSavedProvider(interaction, locale, savedProviders);
 
     if (!providerSelection) {
       return;
@@ -273,7 +274,7 @@ export async function execute(
     // 14. Success message with previous model name
     const previousModel = availableModels.find((model) => model.video_model_id === tomoriState.config.video_model_id);
 
-    await replyInfoEmbed(modalSubmitInteraction, locale, {
+    const successOptions = {
       titleKey: "commands.config.model.video.success_title",
       descriptionKey: "commands.config.model.video.success_description",
       descriptionVars: {
@@ -282,7 +283,15 @@ export async function execute(
         provider: getProviderDisplayName(selectedProvider),
       },
       color: ColorCode.SUCCESS,
-    });
+    } as const;
+
+    const replacedPicker =
+      modalSubmitInteraction &&
+      (await replaceProviderPickerWithInfo(providerSelection, modalSubmitInteraction, locale, successOptions));
+
+    if (!replacedPicker) {
+      await replyInfoEmbed(modalSubmitInteraction, locale, successOptions);
+    }
   } catch (error) {
     // 15. Log error with context
     let serverIdForError: number | null = null;

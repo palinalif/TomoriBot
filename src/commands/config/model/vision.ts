@@ -8,7 +8,7 @@ import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../../utils/discord/interactionHelper";
 import { type UserRow, type ErrorContext, type LlmRow, tomoriConfigSchema } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
-import { promptForSavedProvider } from "@/commands/config/model/providerPicker";
+import { promptForSavedProvider, replaceProviderPickerWithInfo } from "@/commands/config/model/providerPicker";
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 
@@ -92,10 +92,11 @@ export async function execute(
   let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
   let selectedModel: LlmRow | null = null;
   let responseInteraction: ChatInputCommandInteraction | import("discord.js").ButtonInteraction = interaction;
+  let providerSelection: Awaited<ReturnType<typeof promptForSavedProvider>> = null;
 
   try {
     const savedProviders = await loadSavedProvidersForCapability(tomoriState.server_id, "vision");
-    const providerSelection = await promptForSavedProvider(interaction, locale, savedProviders);
+    providerSelection = await promptForSavedProvider(interaction, locale, savedProviders);
 
     if (!providerSelection) {
       return;
@@ -198,11 +199,19 @@ export async function execute(
 
       invalidateTomoriStateCache(serverId);
 
-      await replyInfoEmbed(modalSubmitInteraction, locale, {
+      const clearedOptions = {
         titleKey: "commands.config.model.vision.cleared_title",
         descriptionKey: "commands.config.model.vision.cleared_description",
         color: ColorCode.SUCCESS,
-      });
+      } as const;
+
+      const replacedPicker =
+        modalSubmitInteraction &&
+        (await replaceProviderPickerWithInfo(providerSelection, modalSubmitInteraction, locale, clearedOptions));
+
+      if (!replacedPicker) {
+        await replyInfoEmbed(modalSubmitInteraction, locale, clearedOptions);
+      }
       return;
     }
 
@@ -277,7 +286,7 @@ export async function execute(
       ? "commands.config.model.vision.success_description"
       : "commands.config.model.vision.success_no_tools_description";
 
-    await replyInfoEmbed(modalSubmitInteraction, locale, {
+    const successOptions = {
       titleKey: "commands.config.model.vision.success_title",
       descriptionKey,
       descriptionVars: {
@@ -286,7 +295,15 @@ export async function execute(
         provider: getProviderDisplayName(selectedProvider),
       },
       color: ColorCode.SUCCESS,
-    });
+    } as const;
+
+    const replacedPicker =
+      modalSubmitInteraction &&
+      (await replaceProviderPickerWithInfo(providerSelection, modalSubmitInteraction, locale, successOptions));
+
+    if (!replacedPicker) {
+      await replyInfoEmbed(modalSubmitInteraction, locale, successOptions);
+    }
   } catch (error) {
     const context: ErrorContext = {
       userId: userData.user_id,

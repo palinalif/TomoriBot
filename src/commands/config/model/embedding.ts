@@ -10,7 +10,7 @@ import type { SelectOption } from "../../../types/discord/modal";
 import { getMemoryLimits } from "../../../utils/db/memoryLimits";
 import { loadEmbeddingModelById, loadAvailableEmbeddingModelsForProvider } from "../../../utils/db/dbRead";
 import { reembedServerDocuments } from "../../../utils/documents/documentService";
-import { promptForSavedProvider } from "@/commands/config/model/providerPicker";
+import { promptForSavedProvider, replaceProviderPickerWithInfo } from "@/commands/config/model/providerPicker";
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
@@ -63,10 +63,11 @@ export async function execute(
   let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
   let selectedModel: EmbeddingModelRow | null = null;
   let responseInteraction: ChatInputCommandInteraction | import("discord.js").ButtonInteraction = interaction;
+  let providerSelection: Awaited<ReturnType<typeof promptForSavedProvider>> = null;
 
   try {
     const savedProviders = await loadSavedProvidersForCapability(tomoriState.server_id, "embedding");
-    const providerSelection = await promptForSavedProvider(interaction, locale, savedProviders);
+    providerSelection = await promptForSavedProvider(interaction, locale, savedProviders);
 
     if (!providerSelection) {
       return;
@@ -271,7 +272,7 @@ export async function execute(
       ? currentEmbeddingModel.codename
       : localizer(locale, "commands.config.model.embedding.current_none");
 
-    await replyInfoEmbed(modalSubmitInteraction, locale, {
+    const successOptions = {
       titleKey: "commands.config.model.embedding.success_title",
       descriptionKey: "commands.config.model.embedding.success_description",
       descriptionVars: {
@@ -280,7 +281,15 @@ export async function execute(
         provider: getProviderDisplayName(selectedProvider),
       },
       color: ColorCode.SUCCESS,
-    });
+    } as const;
+
+    const replacedPicker =
+      modalSubmitInteraction &&
+      (await replaceProviderPickerWithInfo(providerSelection, modalSubmitInteraction, locale, successOptions));
+
+    if (!replacedPicker) {
+      await replyInfoEmbed(modalSubmitInteraction, locale, successOptions);
+    }
   } catch (error) {
     const context: ErrorContext = {
       userId: userData.user_id,

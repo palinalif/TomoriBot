@@ -8,7 +8,7 @@ import { loadSavedProviderConfig } from "@/utils/db/dbRead";
 import { upsertSavedProviderConfig } from "@/utils/db/dbWrite";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
-import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
+import { getAllProviderChoices, getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { localizer } from "@/utils/text/localizer";
 
 function formatChangedSettings(locale: string, settings: Array<{ label: string; value: string }>): string {
@@ -19,12 +19,12 @@ function formatChangedSettings(locale: string, settings: Array<{ label: string; 
 
 function getChangedSettingLabel(locale: string, setting: string): string {
   const labelKeys: Record<string, string> = {
-    temperature: "commands.config.provider.switch.sampler_temperature_label",
-    top_p: "commands.config.provider.switch.sampler_top_p_label",
-    top_k: "commands.config.provider.switch.sampler_top_k_label",
-    frequency_penalty: "commands.config.provider.switch.sampler_frequency_penalty_label",
-    presence_penalty: "commands.config.provider.switch.sampler_presence_penalty_label",
-    min_p: "commands.config.provider.switch.sampler_min_p_label",
+    temperature: "commands.config.samplers.sampler_temperature_label",
+    top_p: "commands.config.samplers.sampler_top_p_label",
+    top_k: "commands.config.samplers.sampler_top_k_label",
+    frequency_penalty: "commands.config.samplers.sampler_frequency_penalty_label",
+    presence_penalty: "commands.config.samplers.sampler_presence_penalty_label",
+    min_p: "commands.config.samplers.sampler_min_p_label",
     thinking_level: "commands.config.thinking-level.select_label",
   };
 
@@ -39,7 +39,8 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
       option
         .setName("provider")
         .setDescription(localizer("en-US", "commands.config.samplers.provider_description"))
-        .setRequired(false),
+        .setRequired(true)
+        .addChoices(...getAllProviderChoices()),
     )
     .addNumberOption((option) =>
       option
@@ -131,8 +132,8 @@ export async function execute(
   }
 
   try {
-    const currentProvider = tomoriState.llm.llm_provider.toLowerCase();
-    const requestedProvider = interaction.options.getString("provider")?.trim().toLowerCase() ?? currentProvider;
+    // getString is non-null since provider is required
+    const requestedProvider = interaction.options.getString("provider", true).trim().toLowerCase();
     const savedConfig = await loadSavedProviderConfig(tomoriState.server_id, requestedProvider);
 
     if (!savedConfig) {
@@ -235,7 +236,7 @@ export async function execute(
       return;
     }
 
-    if (requestedProvider === currentProvider) {
+    if (requestedProvider === tomoriState.llm.llm_provider.toLowerCase()) {
       await sql`
         UPDATE tomori_configs
         SET llm_temperature = ${nextConfig.llm_temperature},

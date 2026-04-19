@@ -565,6 +565,32 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
 				ON CONFLICT (tomori_id) DO NOTHING
 			`;
 
+      // Seed the saved_provider_configs row for the provider registered at setup.
+      // Without this, /config model text shows "no saved providers" until the next bot restart
+      // triggers the seed.sql backfill block.
+      await tx`
+				INSERT INTO saved_provider_configs (
+					server_id, provider, api_key, key_version,
+					llm_id, diffusion_model_id, embedding_model_id,
+					nai_diffusion_model_id, video_model_id, vision_llm_id,
+					nai_preset_name, custom_endpoint_url, custom_model_name, custom_num_ctx,
+					thinking_level, fallback_llm_ids, channel_llm_overrides, persona_llm_overrides,
+					llm_temperature, llm_top_p, llm_top_k,
+					llm_frequency_penalty, llm_presence_penalty, llm_min_p,
+					llm_logit_biases, llm_disabled_params
+				) VALUES (
+					${server.server_id}, ${validConfig.provider}, ${validConfig.encryptedApiKey}, ${validConfig.keyVersion},
+					${selectedLlm.llm_id}, ${selectedDiffusionModelId}, ${selectedEmbeddingModelId},
+					NULL, NULL, NULL,
+					NULL, NULL, NULL, NULL,
+					'auto', '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
+					NULL, NULL, NULL,
+					NULL, NULL, NULL,
+					'[]'::jsonb, '{}'::text[]
+				)
+				ON CONFLICT (server_id, provider) DO NOTHING
+			`;
+
       // 4. Register guild emojis in bulk insert (only for guild contexts, Rule 16)
       const emojis = [];
       if (!isDMChannel && guild) {

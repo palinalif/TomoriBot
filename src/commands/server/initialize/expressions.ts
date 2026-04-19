@@ -451,8 +451,8 @@ export async function execute(
       await interaction.editReply({
         embeds: [
           {
-            title: localizer(locale, "commands.config.model.text.no_api_key_title"),
-            description: localizer(locale, "commands.config.model.text.no_api_key_description"),
+            title: localizer(locale, "general.errors.api_key_missing_title"),
+            description: localizer(locale, "general.errors.api_key_missing_description"),
             color: hexToNumber(ColorCode.ERROR),
           },
         ],
