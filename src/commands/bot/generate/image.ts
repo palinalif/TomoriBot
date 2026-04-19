@@ -210,7 +210,7 @@ async function resolveSceneImageBackendAvailability(params: {
     hasNovelAiOptKey || (params.provider === "novelai" && Boolean(params.tomoriState.config.api_key));
   const currentProviderAvailable =
     params.provider !== "novelai" &&
-    providerSupportsFeature(params.provider, "nativeImageGeneration") &&
+    providerSupportsFeature(params.provider, "imageGeneration") &&
     Boolean(params.tomoriState.config.api_key) &&
     Boolean(params.tomoriState.config.diffusion_model_id) &&
     !(hasNovelAiOptKey && params.tomoriState.config.nai_exclusive_imggen);

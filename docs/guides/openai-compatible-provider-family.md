@@ -434,7 +434,7 @@ The combined extraction + DeepSeek slice is successful when:
 
 - `custom` still works without behavior regression
 - `deepseek` is auto-discovered and registered in `providerInfoRegistry`
-- `/config setup` and `/config api-key set` can validate and switch to `deepseek`
+- `/config setup`, `/config provider add`, and `/config provider switch` can validate DeepSeek credentials
 - `/config model text` shows the seeded DeepSeek models
 - DeepSeek chat streaming works
 - DeepSeek tool calling works only on seeded tool-capable models

@@ -75,13 +75,17 @@ Run in your test server:
 /config setup
 ```
 
-Then set your provider key:
+`/config setup` already captures your initial provider credentials.
+
+If you want to save an additional provider afterward:
 
 ```text
-/config api-key set provider:google key:...
+/config provider add
 ```
 
-Also supported:
+Then use `/config provider switch` whenever you want to make one of your saved providers active.
+
+Common saved providers:
 
 - `provider:openrouter`
 - `provider:novelai`

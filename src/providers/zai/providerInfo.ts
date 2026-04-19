@@ -12,8 +12,8 @@ export const zaiProviderInfo: ProviderInfo = {
   supportsVideos: false,
   apiFamily: "openai-compatible",
   featureSupport: {
-    nativeImageGeneration: true,
-    nativeVideoGeneration: true,
+    imageGeneration: "chat-completion",
+    videoGeneration: "chat-completion",
     embeddings: false,
     structuredOutput: true,
     presetGeneration: true,

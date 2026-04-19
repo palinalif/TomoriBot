@@ -123,8 +123,8 @@ export class ReviewCapabilitiesTool extends BaseTool {
       const hasTools = llm.has_tools ?? false;
       const isReasoning = llm.is_reasoning ?? false;
       const isUncensored = llm.is_uncensored ?? false;
-      const supportsImageGen = providerSupportsFeature(provider, "nativeImageGeneration");
-      const supportsVideoGen = providerSupportsFeature(provider, "nativeVideoGeneration");
+      const supportsImageGen = providerSupportsFeature(provider, "imageGeneration");
+      const supportsVideoGen = providerSupportsFeature(provider, "videoGeneration");
 
       // 2. Build dynamic capabilities markdown with model information
       let capabilitiesContent = "# TomoriBot Chat Capabilities\n\n";

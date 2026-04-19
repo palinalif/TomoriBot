@@ -291,6 +291,284 @@ EXCEPTION
         RAISE NOTICE 'saved_provider_configs not found, skipping provider migration';
 END $$;
 
+-- Phase 1 provider rehaul: promote saved_provider_configs to the canonical
+-- provider-credentials vault by backfilling active provider rows and relevant
+-- optional-key providers on every startup until production data is confirmed.
+DO $$
+DECLARE
+    inserted_count INTEGER := 0;
+BEGIN
+    INSERT INTO saved_provider_configs (
+        server_id,
+        provider,
+        api_key,
+        key_version,
+        llm_id,
+        diffusion_model_id,
+        embedding_model_id,
+        video_model_id,
+        nai_diffusion_model_id,
+        vision_llm_id,
+        nai_preset_name,
+        custom_endpoint_url,
+        custom_model_name,
+        custom_num_ctx,
+        thinking_level,
+        fallback_llm_ids,
+        llm_temperature,
+        llm_top_p,
+        llm_top_k,
+        llm_frequency_penalty,
+        llm_presence_penalty,
+        llm_min_p,
+        llm_logit_biases,
+        llm_disabled_params
+    )
+    SELECT
+        tc.server_id,
+        LOWER(l.llm_provider),
+        tc.api_key,
+        COALESCE(tc.key_version, 1),
+        tc.llm_id,
+        tc.diffusion_model_id,
+        tc.embedding_model_id,
+        tc.video_model_id,
+        tc.nai_diffusion_model_id,
+        tc.vision_llm_id,
+        tc.nai_preset_name,
+        tc.custom_endpoint_url,
+        tc.custom_model_name,
+        tc.custom_num_ctx,
+        tc.thinking_level,
+        COALESCE(tc.fallback_llm_ids, '[]'::JSONB),
+        tc.llm_temperature,
+        tc.llm_top_p,
+        tc.llm_top_k,
+        tc.llm_frequency_penalty,
+        tc.llm_presence_penalty,
+        tc.llm_min_p,
+        COALESCE(tc.llm_logit_biases, '[]'::JSONB),
+        COALESCE(tc.llm_disabled_params, ARRAY[]::TEXT[])
+    FROM tomori_configs tc
+    JOIN llms l ON l.llm_id = tc.llm_id
+    WHERE tc.server_id IS NOT NULL
+      AND tc.api_key IS NOT NULL
+      AND NOT EXISTS (
+          SELECT 1
+          FROM saved_provider_configs spc
+          WHERE spc.server_id = tc.server_id
+            AND spc.provider = LOWER(l.llm_provider)
+      )
+    ON CONFLICT (server_id, provider) DO NOTHING;
+
+    GET DIAGNOSTICS inserted_count = ROW_COUNT;
+    IF inserted_count > 0 THEN
+        RAISE NOTICE 'Phase 1 backfill inserted % active-provider saved config row(s)', inserted_count;
+    END IF;
+EXCEPTION
+    WHEN undefined_table THEN
+        RAISE NOTICE 'Phase 1 active-provider backfill skipped: required table missing';
+END $$;
+
+DO $$
+DECLARE
+    inserted_count INTEGER := 0;
+    novelai_default_diffusion_id INTEGER;
+BEGIN
+    SELECT dm.diffusion_model_id
+    INTO novelai_default_diffusion_id
+    FROM image_diffusion_models dm
+    WHERE dm.provider = 'novelai'
+      AND dm.is_deprecated = false
+    ORDER BY CASE WHEN dm.is_default THEN 0 ELSE 1 END, dm.diffusion_model_id ASC
+    LIMIT 1;
+
+    INSERT INTO saved_provider_configs (
+        server_id,
+        provider,
+        api_key,
+        key_version,
+        llm_id,
+        diffusion_model_id,
+        embedding_model_id,
+        video_model_id,
+        nai_diffusion_model_id,
+        vision_llm_id,
+        nai_preset_name,
+        thinking_level,
+        fallback_llm_ids,
+        llm_logit_biases,
+        llm_disabled_params
+    )
+    SELECT
+        oak.server_id,
+        'novelai',
+        oak.api_key,
+        COALESCE(oak.key_version, 1),
+        (
+            SELECT l.llm_id
+            FROM llms l
+            WHERE l.llm_provider = 'novelai'
+              AND l.is_deprecated = false
+            ORDER BY CASE WHEN l.is_default THEN 0 ELSE 1 END, l.llm_id ASC
+            LIMIT 1
+        ),
+        NULL,
+        NULL,
+        NULL,
+        novelai_default_diffusion_id,
+        NULL,
+        NULL,
+        'auto',
+        '[]'::JSONB,
+        '[]'::JSONB,
+        ARRAY[]::TEXT[]
+    FROM opt_api_keys oak
+    WHERE oak.service_name = 'novelai'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM saved_provider_configs spc
+          WHERE spc.server_id = oak.server_id
+            AND spc.provider = 'novelai'
+      )
+    ON CONFLICT (server_id, provider) DO NOTHING;
+
+    GET DIAGNOSTICS inserted_count = ROW_COUNT;
+    IF inserted_count > 0 THEN
+        RAISE NOTICE 'Phase 1 backfill inserted % NovelAI saved config row(s) from opt_api_keys', inserted_count;
+    END IF;
+
+    IF novelai_default_diffusion_id IS NOT NULL THEN
+        UPDATE tomori_configs
+        SET nai_diffusion_model_id = novelai_default_diffusion_id
+        WHERE server_id IN (
+            SELECT oak.server_id
+            FROM opt_api_keys oak
+            WHERE oak.service_name = 'novelai'
+        )
+          AND nai_diffusion_model_id IS NULL;
+    END IF;
+EXCEPTION
+    WHEN undefined_table THEN
+        RAISE NOTICE 'Phase 1 NovelAI opt-key backfill skipped: required table missing';
+END $$;
+
+DO $$
+DECLARE
+    inserted_count INTEGER := 0;
+BEGIN
+    INSERT INTO saved_provider_configs (
+        server_id,
+        provider,
+        api_key,
+        key_version,
+        llm_id,
+        diffusion_model_id,
+        embedding_model_id,
+        video_model_id,
+        nai_diffusion_model_id,
+        vision_llm_id,
+        nai_preset_name,
+        thinking_level,
+        fallback_llm_ids,
+        llm_logit_biases,
+        llm_disabled_params
+    )
+    SELECT
+        oak.server_id,
+        'google',
+        oak.api_key,
+        COALESCE(oak.key_version, 1),
+        (
+            SELECT l.llm_id
+            FROM llms l
+            WHERE l.llm_provider = 'google'
+              AND l.is_deprecated = false
+            ORDER BY CASE WHEN l.is_default THEN 0 ELSE 1 END, l.llm_id ASC
+            LIMIT 1
+        ),
+        (
+            SELECT dm.diffusion_model_id
+            FROM image_diffusion_models dm
+            WHERE dm.provider = 'google'
+              AND dm.is_deprecated = false
+            ORDER BY CASE WHEN dm.is_default THEN 0 ELSE 1 END, dm.diffusion_model_id ASC
+            LIMIT 1
+        ),
+        (
+            SELECT em.embedding_model_id
+            FROM embedding_models em
+            WHERE em.provider = 'google'
+              AND em.is_deprecated = false
+            ORDER BY CASE WHEN em.is_default THEN 0 ELSE 1 END, em.embedding_model_id ASC
+            LIMIT 1
+        ),
+        (
+            SELECT vm.video_model_id
+            FROM video_generation_models vm
+            WHERE vm.provider = 'google'
+              AND vm.is_deprecated = false
+            ORDER BY CASE WHEN vm.is_default THEN 0 ELSE 1 END, vm.video_model_id ASC
+            LIMIT 1
+        ),
+        NULL,
+        (
+            SELECT l.llm_id
+            FROM llms l
+            WHERE l.llm_provider = 'google'
+              AND l.sees_images = true
+              AND l.is_deprecated = false
+            ORDER BY CASE WHEN l.is_default THEN 0 ELSE 1 END, l.llm_id ASC
+            LIMIT 1
+        ),
+        NULL,
+        'auto',
+        '[]'::JSONB,
+        '[]'::JSONB,
+        ARRAY[]::TEXT[]
+    FROM opt_api_keys oak
+    WHERE oak.service_name = 'google'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM saved_provider_configs spc
+          WHERE spc.server_id = oak.server_id
+            AND spc.provider = 'google'
+      )
+    ON CONFLICT (server_id, provider) DO NOTHING;
+
+    GET DIAGNOSTICS inserted_count = ROW_COUNT;
+    IF inserted_count > 0 THEN
+        RAISE NOTICE 'Phase 1 backfill inserted % Google saved config row(s) from opt_api_keys', inserted_count;
+    END IF;
+EXCEPTION
+    WHEN undefined_table THEN
+        RAISE NOTICE 'Phase 1 Google opt-key backfill skipped: required table missing';
+END $$;
+
+DO $$
+DECLARE
+    updated_count INTEGER := 0;
+BEGIN
+    UPDATE tomori_configs tc
+    SET diffusion_model_id = NULL
+    WHERE COALESCE(tc.nai_exclusive_imggen, false) = true
+      AND tc.diffusion_model_id IS NOT NULL
+      AND EXISTS (
+          SELECT 1
+          FROM saved_provider_configs spc
+          WHERE spc.server_id = tc.server_id
+            AND spc.provider = 'novelai'
+      );
+
+    GET DIAGNOSTICS updated_count = ROW_COUNT;
+    IF updated_count > 0 THEN
+        RAISE NOTICE 'Phase 1 backfill retired nai_exclusive_imggen for % config row(s)', updated_count;
+    END IF;
+EXCEPTION
+    WHEN undefined_table THEN
+        RAISE NOTICE 'Phase 1 nai_exclusive_imggen retirement skipped: required table missing';
+END $$;
+
 -- Ensure all required columns exist in image_diffusion_models table
 SELECT add_column_if_not_exists('image_diffusion_models', 'is_default', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('image_diffusion_models', 'is_deprecated', 'BOOLEAN', 'false');

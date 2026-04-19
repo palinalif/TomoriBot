@@ -8,6 +8,9 @@ import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../../utils/discord/interactionHelper";
 import { type UserRow, type ErrorContext, type LlmRow, tomoriConfigSchema } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
+import { promptForSavedProvider } from "@/commands/config/model/providerPicker";
+import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
+import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "config_model_vision_modal";
@@ -85,38 +88,37 @@ export async function execute(
     return;
   }
 
-  // 3. Check if an API key is configured
-  if (!tomoriState.config.api_key) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.model.vision.no_api_key_title",
-      descriptionKey: "commands.config.model.vision.no_api_key_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  // 4. Load vision-capable models for the current provider (sees_images = true)
-  const currentProvider = tomoriState.llm.llm_provider.toLowerCase();
-  const allModels = await loadAvailableModelsForProvider(currentProvider);
-  const visionModels = allModels?.filter((m) => m.sees_images) ?? [];
-
-  if (visionModels.length === 0) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.model.vision.no_models_title",
-      descriptionKey: "commands.config.model.vision.no_models_description",
-      descriptionVars: { provider: currentProvider },
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
   // Track modal state for error handling
   let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
   let selectedModel: LlmRow | null = null;
+  let responseInteraction: ChatInputCommandInteraction | import("discord.js").ButtonInteraction = interaction;
 
   try {
+    const savedProviders = await loadSavedProvidersForCapability(tomoriState.server_id, "vision");
+    const providerSelection = await promptForSavedProvider(interaction, locale, savedProviders);
+
+    if (!providerSelection) {
+      return;
+    }
+    const selectedProvider = providerSelection.provider;
+    responseInteraction = providerSelection.interaction;
+
+    const allModels = await loadAvailableModelsForProvider(selectedProvider);
+    const visionModels = allModels?.filter((m) => m.sees_images) ?? [];
+
+    if (visionModels.length === 0) {
+      await replyInfoEmbed(responseInteraction, locale, {
+        titleKey: "commands.config.model.vision.no_models_title",
+        descriptionKey: "commands.config.model.vision.no_models_description",
+        descriptionVars: {
+          provider: getProviderDisplayName(selectedProvider),
+        },
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
     // 5. Build select options: vision models + "clear" option
     const modelSelectOptions: SelectOption[] = [
       // "None" option to clear the vision model
@@ -135,7 +137,7 @@ export async function execute(
 
     // 6. Show the modal with vision model selection
     const modalResult = await promptWithRawModal(
-      interaction,
+      responseInteraction,
       locale,
       {
         modalCustomId: MODAL_CUSTOM_ID,
@@ -281,6 +283,7 @@ export async function execute(
       descriptionVars: {
         model_name: selectedModel.llm_codename,
         chat_model: tomoriState.llm.llm_codename,
+        provider: getProviderDisplayName(selectedProvider),
       },
       color: ColorCode.SUCCESS,
     });
@@ -299,7 +302,7 @@ export async function execute(
     };
     await log.error(`Error executing /config model vision for user ${userData.user_disc_id}`, error as Error, context);
 
-    const replyTarget = modalSubmitInteraction ?? interaction;
+    const replyTarget = modalSubmitInteraction ?? responseInteraction;
     await replyInfoEmbed(replyTarget, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",

@@ -15,8 +15,12 @@ import {
   type PersonalMemoryRow,
   type PersonaConfigRow,
   llmSchema,
+  diffusionModelSchema,
+  type DiffusionModelRow,
   type EmbeddingModelRow,
   embeddingModelSchema,
+  videoGenerationModelSchema,
+  type VideoGenerationModelRow,
   type ServerStickerRow,
   serverStickerSchema,
   reminderSchema,
@@ -1324,6 +1328,294 @@ export async function loadDefaultEmbeddingModelForProvider(
     return parsedModel.data;
   } catch (error) {
     log.error(`Error loading default embedding model for provider ${normalizedProviderName}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Loads available image diffusion models for a specific provider.
+ */
+export async function loadAvailableDiffusionModelsForProvider(
+  providerName: string,
+  includeDeprecated = false,
+): Promise<DiffusionModelRow[] | null> {
+  if (!providerName || providerName.trim().length === 0) {
+    log.error("Provider name cannot be empty");
+    return null;
+  }
+
+  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+    log.error(`Invalid provider name format: ${providerName}`);
+    return null;
+  }
+
+  const normalizedProviderName = providerName.trim().toLowerCase();
+
+  try {
+    const modelRows = includeDeprecated
+      ? await sql`
+				SELECT * FROM image_diffusion_models
+				WHERE provider = ${normalizedProviderName}
+				ORDER BY diffusion_model_id ASC
+			`
+      : await sql`
+				SELECT * FROM image_diffusion_models
+				WHERE provider = ${normalizedProviderName} AND is_deprecated = false
+				ORDER BY diffusion_model_id ASC
+			`;
+
+    if (!modelRows || modelRows.length === 0) {
+      log.warn(`No available diffusion models found for provider: ${normalizedProviderName}`);
+      return null;
+    }
+
+    const parsedModels = diffusionModelSchema.array().safeParse(modelRows);
+    if (!parsedModels.success) {
+      log.error(
+        `Failed to validate diffusion model data for provider ${normalizedProviderName}:`,
+        parsedModels.error.flatten(),
+      );
+      return null;
+    }
+
+    log.info(`Found ${parsedModels.data.length} diffusion models for ${normalizedProviderName}`);
+    return parsedModels.data;
+  } catch (error) {
+    log.error(`Error loading diffusion models for provider ${normalizedProviderName}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Loads the default image diffusion model for a provider, with fallback logic.
+ */
+export async function loadDefaultDiffusionModelForProvider(
+  providerName: string,
+  includeDeprecated = false,
+): Promise<DiffusionModelRow | null> {
+  if (!providerName || providerName.trim().length === 0) {
+    log.error("Provider name cannot be empty");
+    return null;
+  }
+
+  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+    log.error(`Invalid provider name format: ${providerName}`);
+    return null;
+  }
+
+  const normalizedProviderName = providerName.trim().toLowerCase();
+
+  try {
+    const modelRows = includeDeprecated
+      ? await sql`
+				SELECT *,
+					CASE WHEN is_default = true THEN 1 ELSE 2 END as priority
+				FROM image_diffusion_models
+				WHERE provider = ${normalizedProviderName}
+				ORDER BY priority ASC, diffusion_model_id ASC
+				LIMIT 1
+			`
+      : await sql`
+				SELECT *,
+					CASE WHEN is_default = true THEN 1 ELSE 2 END as priority
+				FROM image_diffusion_models
+				WHERE provider = ${normalizedProviderName} AND is_deprecated = false
+				ORDER BY priority ASC, diffusion_model_id ASC
+				LIMIT 1
+			`;
+
+    if (!modelRows || modelRows.length === 0) {
+      log.warn(`No available diffusion models found for provider: ${normalizedProviderName}`);
+      return null;
+    }
+
+    const parsedModel = diffusionModelSchema.safeParse(modelRows[0]);
+    if (!parsedModel.success) {
+      log.error(
+        `Failed to validate default diffusion model for provider ${normalizedProviderName}:`,
+        parsedModel.error.flatten(),
+      );
+      return null;
+    }
+
+    return parsedModel.data;
+  } catch (error) {
+    log.error(`Error loading default diffusion model for provider ${normalizedProviderName}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Loads available video generation models for a specific provider.
+ */
+export async function loadAvailableVideoGenerationModelsForProvider(
+  providerName: string,
+  includeDeprecated = false,
+): Promise<VideoGenerationModelRow[] | null> {
+  if (!providerName || providerName.trim().length === 0) {
+    log.error("Provider name cannot be empty");
+    return null;
+  }
+
+  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+    log.error(`Invalid provider name format: ${providerName}`);
+    return null;
+  }
+
+  const normalizedProviderName = providerName.trim().toLowerCase();
+
+  try {
+    const modelRows = includeDeprecated
+      ? await sql`
+				SELECT * FROM video_generation_models
+				WHERE provider = ${normalizedProviderName}
+				ORDER BY video_model_id ASC
+			`
+      : await sql`
+				SELECT * FROM video_generation_models
+				WHERE provider = ${normalizedProviderName} AND is_deprecated = false
+				ORDER BY video_model_id ASC
+			`;
+
+    if (!modelRows || modelRows.length === 0) {
+      log.warn(`No available video generation models found for provider: ${normalizedProviderName}`);
+      return null;
+    }
+
+    const parsedModels = videoGenerationModelSchema.array().safeParse(modelRows);
+    if (!parsedModels.success) {
+      log.error(
+        `Failed to validate video generation model data for provider ${normalizedProviderName}:`,
+        parsedModels.error.flatten(),
+      );
+      return null;
+    }
+
+    log.info(`Found ${parsedModels.data.length} video generation models for ${normalizedProviderName}`);
+    return parsedModels.data;
+  } catch (error) {
+    log.error(`Error loading video generation models for provider ${normalizedProviderName}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Loads the default video generation model for a provider, with fallback logic.
+ */
+export async function loadDefaultVideoGenerationModelForProvider(
+  providerName: string,
+  includeDeprecated = false,
+): Promise<VideoGenerationModelRow | null> {
+  if (!providerName || providerName.trim().length === 0) {
+    log.error("Provider name cannot be empty");
+    return null;
+  }
+
+  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+    log.error(`Invalid provider name format: ${providerName}`);
+    return null;
+  }
+
+  const normalizedProviderName = providerName.trim().toLowerCase();
+
+  try {
+    const modelRows = includeDeprecated
+      ? await sql`
+				SELECT *,
+					CASE WHEN is_default = true THEN 1 ELSE 2 END as priority
+				FROM video_generation_models
+				WHERE provider = ${normalizedProviderName}
+				ORDER BY priority ASC, video_model_id ASC
+				LIMIT 1
+			`
+      : await sql`
+				SELECT *,
+					CASE WHEN is_default = true THEN 1 ELSE 2 END as priority
+				FROM video_generation_models
+				WHERE provider = ${normalizedProviderName} AND is_deprecated = false
+				ORDER BY priority ASC, video_model_id ASC
+				LIMIT 1
+			`;
+
+    if (!modelRows || modelRows.length === 0) {
+      log.warn(`No available video generation models found for provider: ${normalizedProviderName}`);
+      return null;
+    }
+
+    const parsedModel = videoGenerationModelSchema.safeParse(modelRows[0]);
+    if (!parsedModel.success) {
+      log.error(
+        `Failed to validate default video generation model for provider ${normalizedProviderName}:`,
+        parsedModel.error.flatten(),
+      );
+      return null;
+    }
+
+    return parsedModel.data;
+  } catch (error) {
+    log.error(`Error loading default video generation model for provider ${normalizedProviderName}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Loads the default vision-capable LLM for a provider, with fallback logic.
+ */
+export async function loadDefaultVisionModelForProvider(
+  providerName: string,
+  includeDeprecated = false,
+): Promise<LlmRow | null> {
+  if (!providerName || providerName.trim().length === 0) {
+    log.error("Provider name cannot be empty");
+    return null;
+  }
+
+  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+    log.error(`Invalid provider name format: ${providerName}`);
+    return null;
+  }
+
+  const normalizedProviderName = providerName.trim().toLowerCase();
+
+  try {
+    const modelRows = includeDeprecated
+      ? await sql`
+				SELECT *,
+					CASE WHEN is_default = true THEN 1 ELSE 2 END as priority
+				FROM llms
+				WHERE llm_provider = ${normalizedProviderName}
+				  AND sees_images = true
+				ORDER BY priority ASC, llm_id ASC
+				LIMIT 1
+			`
+      : await sql`
+				SELECT *,
+					CASE WHEN is_default = true THEN 1 ELSE 2 END as priority
+				FROM llms
+				WHERE llm_provider = ${normalizedProviderName}
+				  AND sees_images = true
+				  AND is_deprecated = false
+				ORDER BY priority ASC, llm_id ASC
+				LIMIT 1
+			`;
+
+    if (!modelRows || modelRows.length === 0) {
+      log.warn(`No available vision models found for provider: ${normalizedProviderName}`);
+      return null;
+    }
+
+    const parsedModel = llmSchema.safeParse(modelRows[0]);
+    if (!parsedModel.success) {
+      log.error(
+        `Failed to validate default vision model for provider ${normalizedProviderName}:`,
+        parsedModel.error.flatten(),
+      );
+      return null;
+    }
+
+    return parsedModel.data;
+  } catch (error) {
+    log.error(`Error loading default vision model for provider ${normalizedProviderName}:`, error);
     return null;
   }
 }

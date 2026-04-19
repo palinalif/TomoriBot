@@ -5,7 +5,7 @@
  * pre-built GoogleGenAI client, so Vertex passes its ADC client through.
  *
  * Exceptions (not yet implemented):
- *   - nativeImageGeneration: requires generateNativeImage() — not in VertexProvider
+ *   - imageGeneration: no image-generation runtime on VertexProvider
  *   - liveTokenCounting: requires measureInputTokens() — not in VertexProvider
  */
 
@@ -23,8 +23,8 @@ export const vertexProviderInfo: ProviderInfo = {
   supportsVideos: true,
   apiFamily: "google-genai",
   featureSupport: {
-    nativeImageGeneration: false,
-    nativeVideoGeneration: false,
+    imageGeneration: "none",
+    videoGeneration: "none",
     embeddings: true,
     structuredOutput: true,
     presetGeneration: true,

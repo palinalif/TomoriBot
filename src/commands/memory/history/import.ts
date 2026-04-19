@@ -40,6 +40,7 @@ import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 import { extractHistoryWindowForProvider } from "@/providers/utils/providerFeatureExecutors";
 import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
 import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
+import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
 /** Maximum document name length */
 const MAX_DOCUMENT_NAME_LENGTH = 64;
@@ -558,6 +559,7 @@ export async function execute(
 
     // 10. Decrypt API key
     const decryptedKey = await decryptApiKey(tomoriState.config.api_key, tomoriState.config.key_version || 1);
+    const embeddingCreds = await resolveCapabilityCredentials(tomoriState.server_id, "embedding");
 
     const provider = tomoriState.llm.llm_provider.toLowerCase();
     const model = getEffectiveLlmModelName(tomoriState.llm, tomoriState.config.custom_model_name);
@@ -662,7 +664,7 @@ export async function execute(
         embeddingFamily: embeddingModel.model_family,
         embeddingProvider: embeddingModel.provider as string,
         embeddingCodename: embeddingModel.codename,
-        apiKey: decryptedKey,
+        apiKey: embeddingCreds.apiKey,
         scopeLabel,
         replyInteraction: personaSelectionInteraction,
         locale,
@@ -746,7 +748,7 @@ export async function execute(
         embeddingFamily: embeddingModel.model_family,
         embeddingProvider: embeddingModel.provider as string,
         embeddingCodename: embeddingModel.codename,
-        apiKey: decryptedKey,
+        apiKey: embeddingCreds.apiKey,
         scopeLabel,
         replyInteraction: interaction,
         locale,
@@ -834,7 +836,7 @@ export async function execute(
         embeddingFamily: embeddingModel.model_family,
         embeddingProvider: embeddingModel.provider as string,
         embeddingCodename: embeddingModel.codename,
-        apiKey: decryptedKey,
+        apiKey: embeddingCreds.apiKey,
         scopeLabel,
         replyInteraction: interaction,
         locale,
@@ -892,7 +894,7 @@ export async function execute(
         embeddingFamily: embeddingModel.model_family,
         embeddingProvider: embeddingModel.provider as string,
         embeddingCodename: embeddingModel.codename,
-        apiKey: decryptedKey,
+        apiKey: embeddingCreds.apiKey,
         scopeLabel,
         replyInteraction: interaction,
         locale,

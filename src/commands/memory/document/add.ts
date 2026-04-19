@@ -15,12 +15,12 @@ import { isBlacklisted, loadAllPersonasForServer, loadEmbeddingModelById } from 
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
 import { safeDownload } from "@/utils/security/safeDownload";
 import { memoryGuard, reserveDocumentQuota } from "@/utils/security/rateLimiter";
-import { decryptApiKey } from "@/utils/security/crypto";
 import { chunkDocumentText, insertDocumentWithChunks, normalizeDocumentText } from "@/utils/documents/documentService";
 import { extractTextFromBuffer } from "@/utils/documents/textExtractor";
 import { generateEmbeddingsBatched, providerSupportsEmbeddingTaskType } from "@/utils/embeddings/embeddingProvider";
 import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
 import type { SelectOption } from "@/types/discord/modal";
+import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
 const MAX_DOCUMENT_NAME_LENGTH = 64;
 type DocumentScope = "persona" | "serverwide";
@@ -195,16 +195,6 @@ export async function execute(
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.teach.document.no_embedding_model_title",
         descriptionKey: "commands.teach.document.no_embedding_model_description",
-        color: ColorCode.ERROR,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    if (!tomoriState.config.api_key) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.teach.document.no_api_key_title",
-        descriptionKey: "commands.teach.document.no_api_key_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -515,11 +505,11 @@ export async function execute(
       return;
     }
 
-    const decryptedKey = await decryptApiKey(tomoriState.config.api_key, tomoriState.config.key_version || 1);
+    const creds = await resolveCapabilityCredentials(tomoriState.server_id, "embedding");
 
     const embeddings = await generateEmbeddingsBatched({
       provider: embeddingModel.provider,
-      apiKey: decryptedKey,
+      apiKey: creds.apiKey,
       model: embeddingModel.codename,
       inputs: chunks,
       taskType: (await providerSupportsEmbeddingTaskType(embeddingModel.provider)) ? "RETRIEVAL_DOCUMENT" : undefined,

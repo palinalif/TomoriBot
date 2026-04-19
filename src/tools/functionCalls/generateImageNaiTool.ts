@@ -23,7 +23,7 @@ import {
 } from "@/utils/discord/toolProgressNotice";
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { sql } from "../../utils/db/client";
-import { decryptApiKey, getOptApiKey } from "../../utils/security/crypto";
+import { decryptApiKey } from "../../utils/security/crypto";
 import { checkImageQuota, incrementImageQuota } from "../../utils/quota/imageQuotaManager";
 import { extractImagesFromMessage } from "../../utils/image/imageExtractor";
 import { segmentImage } from "../../utils/image/segmentationService";
@@ -40,6 +40,8 @@ import {
   type NaiGenerationCharacterPayload,
 } from "@/utils/image/naiImageGeneration";
 import { loadCharRefAsBase64 } from "@/utils/storage/charrefStorage";
+import { loadSavedProviderConfig } from "@/utils/db/dbRead";
+import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
 // Disabled by default because the suggest-tags endpoint is currently unstable and
 // can hurt generation reliability; enable again once the API is consistently healthy.
@@ -337,26 +339,13 @@ export class GenerateImageNaiTool extends BaseTool {
   /**
    * Resolve a Google API key for Gemini segmentation.
    *
-   * Resolution order:
-   * 1. Google opt key from `/optional-key google set` (stored as opt_api_keys service_name='google')
-   * 2. Main config API key when the active provider is Google
-   *
    * @param context - Tool execution context
    * @returns Decrypted Google API key, or null if unavailable
    */
   private async resolveGoogleApiKey(context: ToolContext): Promise<string | null> {
-    // 1st priority: opt key for "google"
-    const optKey = await getOptApiKey(context.tomoriState.server_id, "google");
-    if (optKey) return optKey;
-
-    // 2nd priority: main config key when provider is Google
-    if (context.provider === "google") {
-      const encryptedApiKey = context.tomoriState.config.api_key;
-      const keyVersion = context.tomoriState.config.key_version || 1;
-
-      if (encryptedApiKey) {
-        return await decryptApiKey(encryptedApiKey, keyVersion);
-      }
+    const savedGoogleConfig = await loadSavedProviderConfig(context.tomoriState.server_id, "google");
+    if (savedGoogleConfig?.api_key) {
+      return await decryptApiKey(savedGoogleConfig.api_key, savedGoogleConfig.key_version || 1);
     }
 
     return null;
@@ -964,29 +953,8 @@ export class GenerateImageNaiTool extends BaseTool {
         };
       }
 
-      // Resolve NovelAI API key — prefer opt key (cross-provider), fall back to main config key (NovelAI provider)
-      let apiKey: string | null = null;
-
-      // 1st priority: opt_api_keys entry for "novelai" (set via /optional-key novelai set)
-      apiKey = await getOptApiKey(context.tomoriState.server_id, "novelai");
-
-      // 2nd priority: main config key when the active provider is NovelAI
-      if (!apiKey) {
-        const encryptedApiKey = context.tomoriState.config.api_key;
-        const keyVersion = context.tomoriState.config.key_version || 1;
-
-        if (encryptedApiKey) {
-          apiKey = await decryptApiKey(encryptedApiKey, keyVersion);
-        }
-      }
-
-      if (!apiKey) {
-        return {
-          success: false,
-          error:
-            "No NovelAI API key available. Set one with /optional-key novelai set, or switch to the NovelAI provider.",
-        };
-      }
+      const creds = await resolveCapabilityCredentials(context.tomoriState.server_id, "image-nai");
+      const apiKey = creds.apiKey;
 
       if (!context.suppressProgressNotices) {
         const baseNoticeDescription = localizer(

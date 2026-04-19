@@ -18,10 +18,10 @@ import {
 } from "@/utils/discord/toolProgressNotice";
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { sql } from "../../utils/db/client";
-import { decryptApiKey } from "../../utils/security/crypto";
 import { checkVideoQuota, incrementVideoQuota } from "../../utils/quota/videoQuotaManager";
 import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
 import type { ProviderNativeVideoResolution } from "@/types/provider/featureInterfaces";
+import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
 /** Discord file size limit for non-boosted servers (25 MB) */
 const DISCORD_FILE_SIZE_LIMIT = 25 * 1024 * 1024;
@@ -107,7 +107,7 @@ export class GenerateVideoTool extends BaseTool {
    * @returns True if provider supports native video generation
    */
   isAvailableFor(provider: string): boolean {
-    return providerSupportsFeature(provider, "nativeVideoGeneration");
+    return providerSupportsFeature(provider, "videoGeneration");
   }
 
   /**
@@ -338,18 +338,9 @@ export class GenerateVideoTool extends BaseTool {
       const modelCodename = await this.getVideoModelCodename(videoModelId);
       log.info(`Using video model: ${modelCodename} for video generation`);
 
-      // 6. Decrypt API key
-      const encryptedApiKey = context.tomoriState.config.api_key;
-      const keyVersion = context.tomoriState.config.key_version || 1;
-
-      if (!encryptedApiKey) {
-        return { success: false, error: "No API key configured for this server" };
-      }
-
-      const apiKey = await decryptApiKey(encryptedApiKey, keyVersion);
-      if (!apiKey) {
-        return { success: false, error: "Failed to decrypt API key" };
-      }
+      const creds = await resolveCapabilityCredentials(context.tomoriState.server_id, "video");
+      const apiKey = creds.apiKey;
+      const executionProvider = creds.provider;
 
       // 7. Send progress notice — video generation takes 1-3 minutes
       if (!context.suppressProgressNotices) {
@@ -404,11 +395,11 @@ export class GenerateVideoTool extends BaseTool {
 
       // 9. Route to appropriate provider implementation
       log.info(
-        `Generating video with ${context.provider} via ${modelCodename}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio}, duration: ${durationSeconds}s, resolution: ${resolution})`,
+        `Generating video with ${executionProvider} via ${modelCodename}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio}, duration: ${durationSeconds}s, resolution: ${resolution})`,
       );
 
       let videoData: Buffer | null = null;
-      const videoImplementation = resolveProviderFeatureImplementation(context.provider, "nativeVideoGeneration");
+      const videoImplementation = resolveProviderFeatureImplementation(executionProvider, "videoGeneration");
 
       if (videoImplementation === "google") {
         const { generateGoogleNativeVideo } = await import("@/providers/google/googleVideoGeneration");
@@ -452,7 +443,7 @@ export class GenerateVideoTool extends BaseTool {
       } else {
         return {
           success: false,
-          error: `Video generation is not implemented for provider ${context.provider}`,
+          error: `Video generation is not implemented for provider ${executionProvider}`,
         };
       }
 

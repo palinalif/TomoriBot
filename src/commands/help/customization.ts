@@ -55,10 +55,10 @@ export async function execute(
     const serverTriggerAddMention = commandRegistry.getCommandMention("server", "trigger", "add");
     const serverTriggerRemoveMention = commandRegistry.getCommandMention("server", "trigger", "remove");
     const configModelMention = commandRegistry.getCommandMention("config", "model", "text");
-    const configTemperatureMention = commandRegistry.getCommandMention("config", "temperature");
+    const configTemperatureMention = commandRegistry.getCommandMention("config", "samplers");
     const configHumanizerMention = commandRegistry.getCommandMention("config", "humanizer");
-    const configApikeySetMention = commandRegistry.getCommandMention("config", "api-key", "set");
-    const configApikeyDeleteMention = commandRegistry.getCommandMention("config", "api-key", "delete");
+    const configApikeySetMention = commandRegistry.getCommandMention("config", "provider", "add");
+    const configApikeyDeleteMention = commandRegistry.getCommandMention("config", "provider", "remove");
     const configBraveapiSetMention = commandRegistry.getCommandMention("config", "braveapi", "set");
     const configBraveapiDeleteMention = commandRegistry.getCommandMention("config", "braveapi", "delete");
     const configTimezoneMention = commandRegistry.getCommandMention("config", "timezone");

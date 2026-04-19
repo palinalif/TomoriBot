@@ -12,8 +12,8 @@ export const deepseekProviderInfo: ProviderInfo = {
   supportsVideos: false,
   apiFamily: "openai-compatible",
   featureSupport: {
-    nativeImageGeneration: false,
-    nativeVideoGeneration: false,
+    imageGeneration: "none",
+    videoGeneration: "none",
     embeddings: false,
     structuredOutput: true,
     presetGeneration: true,

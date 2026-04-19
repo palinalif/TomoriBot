@@ -9,6 +9,9 @@ import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../
 // Import types for validation
 import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
+import { promptForSavedProvider } from "@/commands/config/model/providerPicker";
+import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
+import { getProviderDisplayName, getStaticProviderInfo } from "@/utils/provider/providerInfoRegistry";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "config_model_image_modal";
@@ -60,9 +63,44 @@ function getLocalizedDescription(model: ImageDiffusionModelRow, locale: string):
   return `${flagPrefix}${baseDescription}`;
 }
 
+function getClearTargetLabel(locale: string, target: string): string {
+  switch (target) {
+    case "standard":
+      return localizer(locale, "commands.config.model.image.clear_standard_option");
+    case "nai":
+      return localizer(locale, "commands.config.model.image.clear_nai_option");
+    case "all":
+      return localizer(locale, "commands.config.model.image.clear_all_option");
+    default:
+      return target;
+  }
+}
+
 // Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("image").setDescription(localizer("en-US", "commands.config.model.image.description"));
+  subcommand
+    .setName("image")
+    .setDescription(localizer("en-US", "commands.config.model.image.description"))
+    .addStringOption((option) =>
+      option
+        .setName("clear")
+        .setDescription(localizer("en-US", "commands.config.model.image.clear_description"))
+        .setRequired(false)
+        .addChoices(
+          {
+            name: localizer("en-US", "commands.config.model.image.clear_standard_option"),
+            value: "standard",
+          },
+          {
+            name: localizer("en-US", "commands.config.model.image.clear_nai_option"),
+            value: "nai",
+          },
+          {
+            name: localizer("en-US", "commands.config.model.image.clear_all_option"),
+            value: "all",
+          },
+        ),
+    );
 
 /**
  * Changes Tomori's image diffusion model
@@ -99,39 +137,27 @@ export async function execute(
     return;
   }
 
-  // 3. Check if an API key is configured
-  if (!tomoriState.config.api_key) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.model.image.no_api_key_title",
-      descriptionKey: "commands.config.model.image.no_api_key_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
+  const clearTarget = interaction.options.getString("clear");
+  if (clearTarget) {
+    const nextStandardModelId = clearTarget === "nai" ? tomoriState.config.diffusion_model_id : null;
+    const nextNaiModelId = clearTarget === "standard" ? tomoriState.config.nai_diffusion_model_id : null;
 
-  // 4. Get current LLM provider (for filtering compatible image models)
-  const currentProvider = tomoriState.llm.llm_provider;
-
-  // 5. Load available diffusion models filtered by current provider
-  const availableModels = await sql<ImageDiffusionModelRow[]>`
-        SELECT dm.diffusion_model_id, dm.provider, dm.codename,
-               dm.model_description, dm.ja_description,
-               dm.is_default, dm.is_deprecated, dm.is_free, dm.is_uncensored
-        FROM image_diffusion_models dm
-        WHERE dm.provider = ${currentProvider}
-          AND dm.is_deprecated = false
-        ORDER BY dm.is_default DESC, dm.codename
+    await sql`
+      UPDATE tomori_configs
+      SET diffusion_model_id = ${nextStandardModelId},
+          nai_diffusion_model_id = ${nextNaiModelId}
+      WHERE server_id = ${tomoriState.server_id}
     `;
 
-  if (!availableModels || availableModels.length === 0) {
+    invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
+
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.model.image.no_models_title",
-      descriptionKey: "commands.config.model.image.no_models_description",
+      titleKey: "commands.config.model.image.slot_cleared_title",
+      descriptionKey: "commands.config.model.image.slot_cleared_description",
       descriptionVars: {
-        provider: currentProvider,
+        target: getClearTargetLabel(locale, clearTarget),
       },
-      color: ColorCode.ERROR,
+      color: ColorCode.SUCCESS,
       flags: MessageFlags.Ephemeral,
     });
     return;
@@ -140,8 +166,48 @@ export async function execute(
   // Track modal submit interaction and selected model for error handling in catch block
   let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
   let selectedModel: ImageDiffusionModelRow | null = null; // For error context and logic
+  let responseInteraction: ChatInputCommandInteraction | import("discord.js").ButtonInteraction = interaction;
 
   try {
+    const savedProviders = await loadSavedProvidersForCapability(tomoriState.server_id, "image");
+    const providerSelection = await promptForSavedProvider(interaction, locale, savedProviders);
+
+    if (!providerSelection) {
+      return;
+    }
+    const selectedProvider = providerSelection.provider;
+    responseInteraction = providerSelection.interaction;
+
+    const availableModels = await sql<ImageDiffusionModelRow[]>`
+      SELECT dm.diffusion_model_id, dm.provider, dm.codename,
+             dm.model_description, dm.ja_description,
+             dm.is_default, dm.is_deprecated, dm.is_free, dm.is_uncensored
+      FROM image_diffusion_models dm
+      WHERE dm.provider = ${selectedProvider}
+        AND dm.is_deprecated = false
+      ORDER BY dm.is_default DESC, dm.codename
+    `;
+
+    if (!availableModels.length) {
+      await replyInfoEmbed(responseInteraction, locale, {
+        titleKey: "commands.config.model.image.no_models_title",
+        descriptionKey: "commands.config.model.image.no_models_description",
+        descriptionVars: {
+          provider: getProviderDisplayName(selectedProvider),
+        },
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const imageGenerationStyle = getStaticProviderInfo(selectedProvider)?.featureSupport.imageGeneration ?? "none";
+    const targetColumn = imageGenerationStyle === "nai-pipeline" ? "nai_diffusion_model_id" : "diffusion_model_id";
+    const currentSelectedId =
+      targetColumn === "nai_diffusion_model_id"
+        ? tomoriState.config.nai_diffusion_model_id
+        : tomoriState.config.diffusion_model_id;
+
     // 5. Create model options for the select menu using localized descriptions
     const modelSelectOptions: SelectOption[] = availableModels.map((model) => ({
       label: safeSelectOptionText(model.codename), // Use codename as display label
@@ -151,7 +217,7 @@ export async function execute(
 
     // 6. Show the modal with model selection
     const modalResult = await promptWithRawModal(
-      interaction,
+      responseInteraction,
       locale,
       {
         modalCustomId: MODAL_CUSTOM_ID,
@@ -213,7 +279,7 @@ export async function execute(
     }
 
     // 9. Check if this is the same as the current model
-    if (selectedModel.diffusion_model_id === tomoriState.config.diffusion_model_id) {
+    if (selectedModel.diffusion_model_id === currentSelectedId) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.config.model.image.already_selected_title",
         descriptionKey: "commands.config.model.image.already_selected_description",
@@ -226,12 +292,20 @@ export async function execute(
     }
 
     // 10. Update the config in the database using direct SQL
-    const [updatedRow] = await sql`
-            UPDATE tomori_configs
-            SET diffusion_model_id = ${selectedModel.diffusion_model_id}
-            WHERE server_id = ${tomoriState.server_id}
-            RETURNING *
-        `;
+    const [updatedRow] =
+      targetColumn === "nai_diffusion_model_id"
+        ? await sql`
+              UPDATE tomori_configs
+              SET nai_diffusion_model_id = ${selectedModel.diffusion_model_id}
+              WHERE server_id = ${tomoriState.server_id}
+              RETURNING *
+          `
+        : await sql`
+              UPDATE tomori_configs
+              SET diffusion_model_id = ${selectedModel.diffusion_model_id}
+              WHERE server_id = ${tomoriState.server_id}
+              RETURNING *
+          `;
 
     // 11. Validate the returned data
     const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
@@ -271,9 +345,7 @@ export async function execute(
 
     // 13. Success message
     // Find previous model name
-    const previousModel = availableModels.find(
-      (model) => model.diffusion_model_id === tomoriState.config.diffusion_model_id,
-    );
+    const previousModel = availableModels.find((model) => model.diffusion_model_id === currentSelectedId);
 
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey: "commands.config.model.image.success_title",
@@ -281,6 +353,7 @@ export async function execute(
       descriptionVars: {
         model_name: selectedModel.codename,
         previous_model: previousModel?.codename || localizer(locale, "commands.config.model.image.current_none"),
+        provider: getProviderDisplayName(selectedProvider),
       },
       color: ColorCode.SUCCESS,
     });
@@ -310,7 +383,7 @@ export async function execute(
 
     // 14. Inform user of unknown error
     // Use modalSubmitInteraction if available (error after modal), otherwise interaction (error during modal)
-    const replyTarget = modalSubmitInteraction ?? interaction;
+    const replyTarget = modalSubmitInteraction ?? responseInteraction;
     await replyInfoEmbed(replyTarget, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",

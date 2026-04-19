@@ -56,13 +56,14 @@ export type ProviderFeatureImplementation =
 const providerFeatureImplementations: Partial<
   Record<ProviderFeatureName, Partial<Record<string, ProviderFeatureImplementation>>>
 > = {
-  nativeImageGeneration: {
+  imageGeneration: {
     google: "google",
     openrouter: "openrouter",
+    novelai: "novelai",
     zai: "zai",
     nvidia: "nvidia",
   },
-  nativeVideoGeneration: {
+  videoGeneration: {
     google: "google",
     openrouter: "openrouter",
     zai: "zai",
@@ -92,7 +93,11 @@ export function getProviderDisplayName(providerName: string): string {
 }
 
 export function providerSupportsFeature(providerName: string, featureName: ProviderFeatureName): boolean {
-  return getStaticProviderInfo(providerName)?.featureSupport[featureName] ?? false;
+  const featureValue = getStaticProviderInfo(providerName)?.featureSupport[featureName];
+  if (typeof featureValue === "string") {
+    return featureValue !== "none";
+  }
+  return featureValue ?? false;
 }
 
 export function providerUsesApiFamily(providerName: string, apiFamily: ProviderApiFamily): boolean {
@@ -105,6 +110,22 @@ export function resolveProviderFeatureImplementation(
 ): ProviderFeatureImplementation | null {
   const canonicalName = normalizeProviderName(providerName);
   return providerFeatureImplementations[featureName]?.[canonicalName] ?? null;
+}
+
+export function supportsImageCapability(providerName: string): boolean {
+  return getStaticProviderInfo(providerName)?.featureSupport.imageGeneration !== "none";
+}
+
+export function supportsVideoCapability(providerName: string): boolean {
+  return getStaticProviderInfo(providerName)?.featureSupport.videoGeneration !== "none";
+}
+
+export function supportsEmbeddingCapability(providerName: string): boolean {
+  return getStaticProviderInfo(providerName)?.featureSupport.embeddings === true;
+}
+
+export function supportsVisionCapability(providerName: string): boolean {
+  return getStaticProviderInfo(providerName)?.supportsImages === true;
 }
 
 /**

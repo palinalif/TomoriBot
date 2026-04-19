@@ -7,10 +7,13 @@ import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../../utils/discord/interactionHelper";
 import type { ErrorContext, UserRow, EmbeddingModelRow } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
-import { decryptApiKey } from "../../../utils/security/crypto";
 import { getMemoryLimits } from "../../../utils/db/memoryLimits";
 import { loadEmbeddingModelById, loadAvailableEmbeddingModelsForProvider } from "../../../utils/db/dbRead";
 import { reembedServerDocuments } from "../../../utils/documents/documentService";
+import { promptForSavedProvider } from "@/commands/config/model/providerPicker";
+import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
+import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
+import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 
 const MODAL_CUSTOM_ID = "config_model_embedding_modal";
 const MODEL_SELECT_ID = "model_select";
@@ -57,34 +60,34 @@ export async function execute(
     return;
   }
 
-  if (!tomoriState.config.api_key) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.model.embedding.no_api_key_title",
-      descriptionKey: "commands.config.model.embedding.no_api_key_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const currentProvider = tomoriState.llm.llm_provider;
-  const availableModels = await loadAvailableEmbeddingModelsForProvider(currentProvider, false);
-
-  if (!availableModels || availableModels.length === 0) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.model.embedding.no_models_title",
-      descriptionKey: "commands.config.model.embedding.no_models_description",
-      descriptionVars: { provider: currentProvider },
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
   let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
   let selectedModel: EmbeddingModelRow | null = null;
+  let responseInteraction: ChatInputCommandInteraction | import("discord.js").ButtonInteraction = interaction;
 
   try {
+    const savedProviders = await loadSavedProvidersForCapability(tomoriState.server_id, "embedding");
+    const providerSelection = await promptForSavedProvider(interaction, locale, savedProviders);
+
+    if (!providerSelection) {
+      return;
+    }
+    const selectedProvider = providerSelection.provider;
+    responseInteraction = providerSelection.interaction;
+
+    const availableModels = (await loadAvailableEmbeddingModelsForProvider(selectedProvider, false)) ?? [];
+    if (!availableModels.length) {
+      await replyInfoEmbed(responseInteraction, locale, {
+        titleKey: "commands.config.model.embedding.no_models_title",
+        descriptionKey: "commands.config.model.embedding.no_models_description",
+        descriptionVars: {
+          provider: getProviderDisplayName(selectedProvider),
+        },
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
     const modelSelectOptions: SelectOption[] = [];
     for (const model of availableModels) {
       if (model.embedding_model_id === null || model.embedding_model_id === undefined) {
@@ -98,10 +101,12 @@ export async function execute(
     }
 
     if (modelSelectOptions.length === 0) {
-      await replyInfoEmbed(interaction, locale, {
+      await replyInfoEmbed(responseInteraction, locale, {
         titleKey: "commands.config.model.embedding.no_models_title",
         descriptionKey: "commands.config.model.embedding.no_models_description",
-        descriptionVars: { provider: currentProvider },
+        descriptionVars: {
+          provider: getProviderDisplayName(selectedProvider),
+        },
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -109,7 +114,7 @@ export async function execute(
     }
 
     const modalResult = await promptWithRawModal(
-      interaction,
+      responseInteraction,
       locale,
       {
         modalCustomId: MODAL_CUSTOM_ID,
@@ -134,7 +139,7 @@ export async function execute(
     }
 
     if (!modalResult.interaction || !modalResult.values) {
-      await replyInfoEmbed(interaction, locale, {
+      await replyInfoEmbed(responseInteraction, locale, {
         titleKey: "general.errors.unknown_error_title",
         descriptionKey: "general.errors.unknown_error_description",
         color: ColorCode.ERROR,
@@ -194,47 +199,11 @@ export async function execute(
       return;
     }
 
-    const currentEmbeddingModel =
-      tomoriState.config.embedding_model_id !== null && tomoriState.config.embedding_model_id !== undefined
-        ? await loadEmbeddingModelById(tomoriState.config.embedding_model_id)
-        : null;
+    const currentEmbeddingModel = tomoriState.config.embedding_model_id
+      ? await loadEmbeddingModelById(tomoriState.config.embedding_model_id)
+      : null;
     const shouldReembed =
       currentEmbeddingModel?.model_family && currentEmbeddingModel.model_family !== selectedModel.model_family;
-
-    if (shouldReembed && ragEnabled) {
-      const [docCountRow] = await sql`
-				SELECT COUNT(*) as doc_count
-				FROM documents
-				WHERE server_id = ${tomoriState.server_id}
-			`;
-      const docCount = Number(docCountRow?.doc_count || 0);
-      if (docCount > 0) {
-        await replyInfoEmbed(modalSubmitInteraction, locale, {
-          titleKey: "commands.config.model.embedding.reembed_started_title",
-          descriptionKey: "commands.config.model.embedding.reembed_started_description",
-          color: ColorCode.INFO,
-        });
-
-        const apiKey = tomoriState.config.api_key;
-        if (!apiKey) {
-          await replyInfoEmbed(modalSubmitInteraction, locale, {
-            titleKey: "commands.config.model.embedding.no_api_key_title",
-            descriptionKey: "commands.config.model.embedding.no_api_key_description",
-            color: ColorCode.ERROR,
-          });
-          return;
-        }
-        const decryptedKey = await decryptApiKey(apiKey, tomoriState.config.key_version || 1);
-        const limits = getMemoryLimits();
-        await reembedServerDocuments({
-          serverId: tomoriState.server_id,
-          embeddingModel: selectedModel,
-          apiKey: decryptedKey,
-          chunkSize: limits.documentChunkSize,
-          chunkOverlap: limits.documentChunkOverlap,
-        });
-      }
-    }
 
     const [updatedRow] = await sql`
 			UPDATE tomori_configs
@@ -272,6 +241,32 @@ export async function execute(
 
     invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
+    if (shouldReembed && ragEnabled) {
+      const [docCountRow] = await sql`
+				SELECT COUNT(*) as doc_count
+				FROM documents
+				WHERE server_id = ${tomoriState.server_id}
+			`;
+      const docCount = Number(docCountRow?.doc_count || 0);
+      if (docCount > 0) {
+        await replyInfoEmbed(modalSubmitInteraction, locale, {
+          titleKey: "commands.config.model.embedding.reembed_started_title",
+          descriptionKey: "commands.config.model.embedding.reembed_started_description",
+          color: ColorCode.INFO,
+        });
+
+        const creds = await resolveCapabilityCredentials(tomoriState.server_id, "embedding");
+        const limits = getMemoryLimits();
+        await reembedServerDocuments({
+          serverId: tomoriState.server_id,
+          embeddingModel: selectedModel,
+          apiKey: creds.apiKey,
+          chunkSize: limits.documentChunkSize,
+          chunkOverlap: limits.documentChunkOverlap,
+        });
+      }
+    }
+
     const previousModel = currentEmbeddingModel?.codename
       ? currentEmbeddingModel.codename
       : localizer(locale, "commands.config.model.embedding.current_none");
@@ -282,6 +277,7 @@ export async function execute(
       descriptionVars: {
         model_name: selectedModel.codename,
         previous_model: previousModel,
+        provider: getProviderDisplayName(selectedProvider),
       },
       color: ColorCode.SUCCESS,
     });
@@ -304,7 +300,7 @@ export async function execute(
       context,
     );
 
-    const replyTarget = modalSubmitInteraction ?? interaction;
+    const replyTarget = modalSubmitInteraction ?? responseInteraction;
     await replyInfoEmbed(replyTarget, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",

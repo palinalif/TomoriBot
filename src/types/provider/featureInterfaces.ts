@@ -205,8 +205,8 @@ export interface ProviderCapabilityMap {
   presetGeneration: SupportsPresetGeneration;
   conversationCompaction: SupportsConversationCompaction;
   liveTokenCounting: SupportsLiveTokenCounting;
-  nativeImageGeneration: SupportsNativeImageGeneration;
-  nativeVideoGeneration: SupportsNativeVideoGeneration;
+  imageGeneration: SupportsNativeImageGeneration;
+  videoGeneration: SupportsNativeVideoGeneration;
 }
 
 export type ProviderCapabilityName = keyof ProviderCapabilityMap;

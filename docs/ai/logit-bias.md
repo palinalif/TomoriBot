@@ -45,7 +45,6 @@ Tomori refreshes tokenizer caches when the effective text model changes or when 
 - `/config logit-bias add`
 - `/config logit-bias upload`
 - `/config model text`
-- `/config api-key set` when it changes `llm_id`
 - `/config provider switch` when it changes or restores `llm_id`
 
 Saved provider snapshots also preserve `llm_logit_biases`, so switching away and back keeps both the raw text and any previously-cached tokenizer data.

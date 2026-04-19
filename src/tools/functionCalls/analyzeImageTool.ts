@@ -8,7 +8,6 @@ import { GoogleGenAI } from "@google/genai";
 import type { Part } from "@google/genai";
 import { BaseTool } from "@/types/tool/interfaces";
 import type { ToolContext, ToolResult, ToolParameterSchema } from "@/types/tool/interfaces";
-import { decryptApiKey } from "@/utils/security/crypto";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
@@ -17,6 +16,7 @@ import {
   ZAI_CODING_CHAT_COMPLETIONS_URL,
   ZAI_GENERAL_CHAT_COMPLETIONS_URL,
 } from "@/providers/zai/zaiShared";
+import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
 /**
  * Provider-to-chat-completions-URL mapping for OpenAI-compatible providers.
@@ -131,14 +131,6 @@ export class AnalyzeImageTool extends BaseTool {
       };
     }
 
-    // 3. Verify API key exists
-    if (!context.tomoriState.config.api_key) {
-      return {
-        success: false,
-        error: "No API key configured for this server.",
-      };
-    }
-
     try {
       await sendToolProgressNotice(
         context,
@@ -155,16 +147,8 @@ export class AnalyzeImageTool extends BaseTool {
       // 4. Extract images from the Discord message
       const images = await this.extractImagesFromMessage(messageId, context);
 
-      // 5. Decrypt the API key
-      const keyVersion = context.tomoriState.config.key_version || 1;
-      const apiKey = await decryptApiKey(context.tomoriState.config.api_key, keyVersion);
-
-      if (!apiKey) {
-        return {
-          success: false,
-          error: "Failed to decrypt API key.",
-        };
-      }
+      const creds = await resolveCapabilityCredentials(context.tomoriState.server_id, "vision");
+      const apiKey = creds.apiKey;
 
       // 6. Resolve API model name and provider from the vision LLM row
       const provider = visionLlm.llm_provider.toLowerCase();
@@ -180,7 +164,7 @@ export class AnalyzeImageTool extends BaseTool {
         analysisResult = await this.callGoogleVision(apiKey, apiModelName, images, prompt);
       } else {
         // OpenAI-compatible providers (openrouter, zai, zaicoding, deepseek, custom)
-        const endpointUrl = this.getEndpointUrl(provider, context);
+        const endpointUrl = this.getEndpointUrl(provider, context, creds.savedConfig.custom_endpoint_url);
         analysisResult = await this.callOpenAICompatibleVision(apiKey, apiModelName, endpointUrl, images, prompt);
       }
 
@@ -208,13 +192,13 @@ export class AnalyzeImageTool extends BaseTool {
    * @param context - Tool context (for custom endpoint URL)
    * @returns Chat completions URL
    */
-  private getEndpointUrl(provider: string, context: ToolContext): string {
+  private getEndpointUrl(provider: string, context: ToolContext, customEndpointUrl?: string | null): string {
     // Check known providers first
     const knownUrl = PROVIDER_CHAT_COMPLETIONS_URLS[provider];
     if (knownUrl) return knownUrl;
 
     // Custom provider: use the configured endpoint URL
-    const customUrl = context.tomoriState.config.custom_endpoint_url;
+    const customUrl = customEndpointUrl ?? context.tomoriState.config.custom_endpoint_url;
     if (customUrl) {
       return customUrl.endsWith("/chat/completions") ? customUrl : `${customUrl}/chat/completions`;
     }

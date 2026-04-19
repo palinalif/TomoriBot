@@ -14,6 +14,9 @@ import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../../utils/discord/interactionHelper";
 import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
+import { promptForSavedProvider } from "@/commands/config/model/providerPicker";
+import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
+import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "config_model_video_modal";
@@ -103,49 +106,44 @@ export async function execute(
     return;
   }
 
-  // 3. Check if an API key is configured
-  if (!tomoriState.config.api_key) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.model.video.no_api_key_title",
-      descriptionKey: "commands.config.model.video.no_api_key_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  // 4. Get current LLM provider (for filtering compatible video models)
-  const currentProvider = tomoriState.llm.llm_provider;
-
-  // 5. Load available video models filtered by current provider
-  const availableModels = await sql<VideoGenerationModelRow[]>`
-    SELECT vm.video_model_id, vm.provider, vm.codename,
-           vm.model_description, vm.ja_description,
-           vm.is_default, vm.is_deprecated, vm.is_free
-    FROM video_generation_models vm
-    WHERE vm.provider = ${currentProvider}
-      AND vm.is_deprecated = false
-    ORDER BY vm.is_default DESC, vm.codename
-  `;
-
-  if (!availableModels || availableModels.length === 0) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.model.video.no_models_title",
-      descriptionKey: "commands.config.model.video.no_models_description",
-      descriptionVars: {
-        provider: currentProvider,
-      },
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
   // Track modal submit interaction and selected model for error handling in catch block
   let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
   let selectedModel: VideoGenerationModelRow | null = null;
+  let responseInteraction: ChatInputCommandInteraction | import("discord.js").ButtonInteraction = interaction;
 
   try {
+    const savedProviders = await loadSavedProvidersForCapability(tomoriState.server_id, "video");
+    const providerSelection = await promptForSavedProvider(interaction, locale, savedProviders);
+
+    if (!providerSelection) {
+      return;
+    }
+    const selectedProvider = providerSelection.provider;
+    responseInteraction = providerSelection.interaction;
+
+    const availableModels = await sql<VideoGenerationModelRow[]>`
+      SELECT vm.video_model_id, vm.provider, vm.codename,
+             vm.model_description, vm.ja_description,
+             vm.is_default, vm.is_deprecated, vm.is_free
+      FROM video_generation_models vm
+      WHERE vm.provider = ${selectedProvider}
+        AND vm.is_deprecated = false
+      ORDER BY vm.is_default DESC, vm.codename
+    `;
+
+    if (!availableModels.length) {
+      await replyInfoEmbed(responseInteraction, locale, {
+        titleKey: "commands.config.model.video.no_models_title",
+        descriptionKey: "commands.config.model.video.no_models_description",
+        descriptionVars: {
+          provider: getProviderDisplayName(selectedProvider),
+        },
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
     // 6. Create model options for the select menu using localized descriptions
     const modelSelectOptions: SelectOption[] = availableModels.map((model) => ({
       label: safeSelectOptionText(model.codename),
@@ -155,7 +153,7 @@ export async function execute(
 
     // 7. Show the modal with model selection
     const modalResult = await promptWithRawModal(
-      interaction,
+      responseInteraction,
       locale,
       {
         modalCustomId: MODAL_CUSTOM_ID,
@@ -281,6 +279,7 @@ export async function execute(
       descriptionVars: {
         model_name: selectedModel.codename,
         previous_model: previousModel?.codename || localizer(locale, "commands.config.model.video.current_none"),
+        provider: getProviderDisplayName(selectedProvider),
       },
       color: ColorCode.SUCCESS,
     });
@@ -309,7 +308,7 @@ export async function execute(
     await log.error(`Error executing /config model video for user ${userData.user_disc_id}`, error as Error, context);
 
     // 16. Inform user of unknown error
-    const replyTarget = modalSubmitInteraction ?? interaction;
+    const replyTarget = modalSubmitInteraction ?? responseInteraction;
     await replyInfoEmbed(replyTarget, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",

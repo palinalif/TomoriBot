@@ -286,11 +286,11 @@ export async function execute(
     let customNumCtx: number | null = null;
     let newThinkingLevel = tomoriState.config.thinking_level;
     let newLlmId = tomoriState.config.llm_id;
-    let newDiffusionModelId = tomoriState.config.diffusion_model_id;
-    let newEmbeddingModelId = tomoriState.config.embedding_model_id;
-    let newVideoModelId = tomoriState.config.video_model_id ?? null;
-    let newNaiDiffusionModelId = tomoriState.config.nai_diffusion_model_id;
-    let newVisionLlmId = tomoriState.config.vision_llm_id;
+    const newDiffusionModelId = tomoriState.config.diffusion_model_id;
+    const newEmbeddingModelId = tomoriState.config.embedding_model_id;
+    const newVideoModelId = tomoriState.config.video_model_id ?? null;
+    const newNaiDiffusionModelId = tomoriState.config.nai_diffusion_model_id;
+    const newVisionLlmId = tomoriState.config.vision_llm_id;
     let newNaiPresetName = tomoriState.config.nai_preset_name;
     let newFallbackLlmIds: number[] = tomoriState.config.fallback_llm_ids ?? [];
     // Sampler/parameter settings to carry over (null = keep current values)
@@ -383,11 +383,6 @@ export async function execute(
           customModelName = customCapabilitiesResult.modelName || customModelName;
         }
 
-        newDiffusionModelId = null;
-        newEmbeddingModelId = null;
-        newVideoModelId = null;
-        newNaiDiffusionModelId = null;
-        newVisionLlmId = null;
         newNaiPresetName = null;
         newFallbackLlmIds = [];
 
@@ -400,11 +395,6 @@ export async function execute(
         }
       } else {
         newLlmId = savedConfig.llm_id ?? newLlmId;
-        newDiffusionModelId = savedConfig.diffusion_model_id;
-        newEmbeddingModelId = savedConfig.embedding_model_id;
-        newVideoModelId = savedConfig.video_model_id ?? null;
-        newNaiDiffusionModelId = savedConfig.nai_diffusion_model_id;
-        newVisionLlmId = savedConfig.vision_llm_id ?? null;
         newNaiPresetName = savedConfig.nai_preset_name;
         newFallbackLlmIds = savedConfig.fallback_llm_ids ?? [];
       }
@@ -476,11 +466,6 @@ export async function execute(
       if (customCapabilitiesResult.llmId) {
         newLlmId = customCapabilitiesResult.llmId;
       }
-      newDiffusionModelId = null;
-      newEmbeddingModelId = null;
-      newVideoModelId = null;
-      newNaiDiffusionModelId = null;
-      newVisionLlmId = null;
       newNaiPresetName = null;
       newFallbackLlmIds = [];
     } else {
@@ -608,11 +593,6 @@ export async function execute(
       } else if (savedConfig && !hasApiKeyInput) {
         // Restoring saved models for this provider
         newLlmId = savedConfig.llm_id ?? newLlmId;
-        newDiffusionModelId = savedConfig.diffusion_model_id;
-        newEmbeddingModelId = savedConfig.embedding_model_id;
-        newVideoModelId = savedConfig.video_model_id ?? null;
-        newNaiDiffusionModelId = savedConfig.nai_diffusion_model_id;
-        newVisionLlmId = savedConfig.vision_llm_id ?? null;
         newNaiPresetName = savedConfig.nai_preset_name;
         newFallbackLlmIds = savedConfig.fallback_llm_ids ?? [];
         newThinkingLevel = savedConfig.thinking_level;
@@ -645,65 +625,7 @@ export async function execute(
           `Switching to default model for ${normalizedProvider}: ${defaultModel.llm_codename} (ID: ${newLlmId})`,
         );
 
-        // Load default diffusion model
-        const defaultDiffusionModel = (
-          await sql`
-						SELECT * FROM image_diffusion_models
-						WHERE provider = ${normalizedProvider}
-						  AND is_default = true
-						  AND is_deprecated = false
-						ORDER BY diffusion_model_id ASC
-						LIMIT 1
-					`
-        )[0];
-
-        if (!defaultDiffusionModel) {
-          const fallbackDiffusionModel = (
-            await sql`
-							SELECT * FROM image_diffusion_models
-							WHERE provider = ${normalizedProvider}
-							  AND is_deprecated = false
-							ORDER BY diffusion_model_id ASC
-							LIMIT 1
-						`
-          )[0];
-
-          newDiffusionModelId = fallbackDiffusionModel ? fallbackDiffusionModel.diffusion_model_id : null;
-        } else {
-          newDiffusionModelId = defaultDiffusionModel.diffusion_model_id;
-        }
-
-        // Load default embedding model
-        const defaultEmbeddingModel = (
-          await sql`
-						SELECT * FROM embedding_models
-						WHERE provider = ${normalizedProvider}
-						  AND is_default = true
-						  AND is_deprecated = false
-						ORDER BY embedding_model_id ASC
-						LIMIT 1
-					`
-        )[0];
-
-        if (!defaultEmbeddingModel) {
-          const fallbackEmbeddingModel = (
-            await sql`
-							SELECT * FROM embedding_models
-							WHERE provider = ${normalizedProvider}
-							  AND is_deprecated = false
-							ORDER BY embedding_model_id ASC
-							LIMIT 1
-						`
-          )[0];
-
-          newEmbeddingModelId = fallbackEmbeddingModel ? fallbackEmbeddingModel.embedding_model_id : null;
-        } else {
-          newEmbeddingModelId = defaultEmbeddingModel.embedding_model_id;
-        }
-
-        // Reset provider-specific fields for fresh switch
-        newNaiDiffusionModelId = null;
-        newVideoModelId = null;
+        // Reset text-provider-specific fields for fresh switch
         newNaiPresetName = null;
         newFallbackLlmIds = [];
       }

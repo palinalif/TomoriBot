@@ -33,7 +33,6 @@ import {
 import { UNPAIRED_SAMPLE_DIALOGUE_SENTINEL } from "@/types/preset/presetExport";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 import { memoryGuard } from "../security/rateLimiter";
-import { decryptApiKey } from "../security/crypto";
 import { formatRetrievedChunksForPrompt, retrieveRelevantDocumentChunks } from "../documents/documentService";
 import {
   getShortTermMemoriesForServer,
@@ -56,6 +55,7 @@ import {
 import { createToolPromptMacroResolver, type ToolPromptMacroResolver } from "@/utils/tools/toolPromptMacros";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
 import { formatChannelReferenceLabel } from "@/utils/discord/targetResolver";
+import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
 /**
  * Maps userId -> nickname for the current mention replacement operation.
@@ -2079,8 +2079,7 @@ async function buildContextNative({
       (IS_PRODUCTION || ENABLE_LOCAL_RAG) &&
       memoryGuard.getStatus() !== "critical" &&
       tomoriState?.server_id &&
-      tomoriState.config.embedding_model_id &&
-      tomoriState.config.api_key
+      tomoriState.config.embedding_model_id
     ) {
       const queryText = getLatestUserQuery(simplifiedMessageHistory);
       if (queryText && queryText.length >= DOCUMENT_QUERY_MIN_LENGTH) {
@@ -2107,14 +2106,14 @@ async function buildContextNative({
         if (documentRow?.document_id) {
           const embeddingModel = await loadEmbeddingModelById(tomoriState.config.embedding_model_id);
           if (embeddingModel) {
-            const decryptedKey = await decryptApiKey(tomoriState.config.api_key, tomoriState.config.key_version || 1);
+            const creds = await resolveCapabilityCredentials(tomoriState.server_id, "embedding");
 
             const chunks = await retrieveRelevantDocumentChunks({
               serverId: tomoriState.server_id,
               tomoriId: tomoriState.tomori_id ?? null,
               query: queryText,
               embeddingModel,
-              apiKey: decryptedKey,
+              apiKey: creds.apiKey,
               maxResults: DOCUMENT_MAX_RESULTS,
               minSimilarity: DOCUMENT_MIN_SIMILARITY,
             });

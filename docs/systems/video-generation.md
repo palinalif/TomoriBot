@@ -85,7 +85,7 @@ Video generation uses these server-scoped config fields:
 - `tomori_configs.videogen_enabled`
 - `tomori_configs.video_model_id`
 
-Provider snapshot save/restore also preserves `saved_provider_configs.video_model_id` so `/config provider switch` can restore the previous video model with the rest of the provider state.
+Provider snapshots also preserve `saved_provider_configs.video_model_id` for bookkeeping and cleanup, but Phase 1 `/config provider switch` does not automatically restore video model slots.
 
 ## Quotas
 

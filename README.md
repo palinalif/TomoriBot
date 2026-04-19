@@ -122,7 +122,7 @@ TomoriBot supports a wide range of LLM providers, image generation APIs, voice s
 | **NovelAI** | ✅ | ✅ | - |- | Only GLM 4.6 can use Tools |
 | **Nvidia** | ✅ | ✅ | ✅ | ✅ |Free Models Available | 
 | **Deepseek** | ✅ | ✅ | - | - |- |
-| **Z.ai** | ✅ | ✅ | ✅ | - |Free Models Available ⚠️ ToS restricts to coding/agent use only |
+| **Z.ai** | ✅ | ✅ | ✅ | - |Free Models Available |
 | **Z.ai Coding** | ✅ | ✅ | - | - |Subscription Plan ⚠️ ToS restricts to coding/agent use only |
 | **Google Vertex AI** | ✅ | ✅ | ✅ |✅ | - |
 | **Codex CLI (via ChatMock)** | ✅ | ✅ | ✅ | - |via ChatMock (README for Instructions)) |

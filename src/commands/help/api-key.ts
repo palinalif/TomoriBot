@@ -85,7 +85,7 @@ export async function execute(
     // Get command mentions for cross-references
     const configBraveapiSetMention = commandRegistry.getCommandMention("config", "braveapi", "set");
     const configSetupMention = commandRegistry.getCommandMention("config", "setup");
-    const configApikeySetMention = commandRegistry.getCommandMention("config", "api-key", "set");
+    const configApikeySetMention = commandRegistry.getCommandMention("config", "provider", "add");
     const configModelMention = commandRegistry.getCommandMention("config", "model", "text");
     const configModelEmbeddingMention = commandRegistry.getCommandMention("config", "model", "embedding");
     const configModelImageMention = commandRegistry.getCommandMention("config", "model", "image");

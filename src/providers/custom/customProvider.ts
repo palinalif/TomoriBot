@@ -346,7 +346,7 @@ export class CustomProvider
 
     if (!endpointUrl) {
       throw new Error(
-        "Custom endpoint URL not configured. Please run /config setup or /config api-key set to configure your custom endpoint.",
+        "Custom endpoint URL not configured. Please run /config setup or /config provider add to configure your custom endpoint.",
       );
     }
 

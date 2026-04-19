@@ -142,7 +142,7 @@ Rule:
 - conversation compaction and roleplay compaction work through the custom endpoint using the effective configured model name
 - persona preset generation works through the custom endpoint when the configured model supports structured output, and optional web search works when the model supports tools
 - `/config logit-bias` entries are stored in config snapshots, but Tomori does not currently auto-tokenize plain text for custom endpoints
-- `/config thinking-level` currently sends `reasoning_effort` only for Ollama-style OpenAI endpoints; KoboldCpp, llama.cpp, and generic vLLM reasoning knobs are not sent automatically because their request-side controls are backend/template-specific
+- the `thinking_level` option in `/config samplers` currently sends `reasoning_effort` only for Ollama-style OpenAI endpoints; KoboldCpp, llama.cpp, and generic vLLM reasoning knobs are not sent automatically because their request-side controls are backend/template-specific
 
 ## Anthropic Provider Notes
 
@@ -150,10 +150,10 @@ Rule:
 
 - chat models are streamed through the provider-owned SSE adapter
 - supported Claude 4.6/4.7 models use adaptive thinking via `thinking: { type: "adaptive" }`
-- `/config thinking-level` maps to Anthropic `output_config.effort` (`low` / `medium` / `high`) when adaptive thinking is supported
+- the `thinking_level` option in `/config samplers` maps to Anthropic `output_config.effort` (`low` / `medium` / `high`) when adaptive thinking is supported
 - `None` maps to `thinking: { type: "disabled" }`
 - adaptive thinking omits sampling params that Anthropic rejects in that mode
-- sampler omission is user-configurable with `/config params manage`
+- per-provider sampler values are configured with `/config samplers`; Anthropic-specific request omission still happens automatically when the API rejects a combination
 - Anthropic models that reject sending `temperature` and `top_p` together still only receive one sampling control at a time at the API boundary:
   - if `top_p` is customized away from the shared default while temperature remains at the shared default, Tomori sends `top_p`
   - otherwise Tomori prefers `temperature` and omits `top_p`
@@ -183,7 +183,7 @@ Rule:
 
 - **Chat models**: `zai/glm-5.1`, `zai/glm-5` (default, reasoning), `zai/glm-4.7` (reasoning), `zai/glm-4.7-flash` (free), `zai/glm-4.6v` (vision), `zai/glm-4.6v-flash` (free vision)
 - **Image generation**: `zai/glm-image` via dedicated images/generations endpoint; aspect ratio mapped to pixel sizes
-- `/config thinking-level` maps to `thinking: { type: "enabled" | "disabled" }`
+- the `thinking_level` option in `/config samplers` maps to `thinking: { type: "enabled" | "disabled" }`
 - active Z.ai thinking mode deletes temperature / top_p / frequency_penalty / presence_penalty from the request
 - Tool streaming uses `tool_stream: true` flag when tools are present
 - JSON structured output uses `response_format: { type: "json_object" }` with prompt-steered schema injection and Zod validation (same pattern as DeepSeek)
@@ -399,15 +399,11 @@ Why this matters:
 - providers treat system instruction and history differently for behavior/token usage
 - incorrect tagging can silently change response quality and tool behavior
 
-## API Key Setup Commands
+## Provider Credential Commands
 
-- `/config api-key set provider:google key:...`
-- `/config api-key set provider:openrouter key:...`
-- `/config api-key set provider:novelai key:...`
-- `/config api-key set provider:deepseek key:...`
-- `/config api-key set provider:nvidia key:...`
-- `/config api-key set provider:zai key:...`
-- `/config api-key set provider:zaicoding key:...`
+- `/config setup` for first-time setup
+- `/config provider add` to save additional provider credentials without switching
+- `/config provider switch` to activate a saved provider or validate credentials for a first-time switch
 
 Provider choice/model selection commands:
 

@@ -1,6 +1,6 @@
 # Thinking Level
 
-This page describes how TomoriBot's server-scoped `thinking_level` setting works today.
+This page describes how TomoriBot's provider-scoped `thinking_level` preference works today.
 
 Use this page to verify:
 
@@ -11,9 +11,10 @@ Use this page to verify:
 
 ## Scope
 
-`thinking_level` is a **server-scoped config value** controlled by:
+`thinking_level` is a **provider-scoped saved preference** controlled by:
 
-- `/config thinking-level`
+- `/config samplers thinking_level:<value>`
+- `/config samplers provider:<saved-provider> thinking_level:<value>`
 
 Current values:
 
@@ -29,10 +30,10 @@ Default:
 
 Storage:
 
-- `tomori_configs.thinking_level`
 - `saved_provider_configs.thinking_level`
+- `tomori_configs.thinking_level` (mirror of the active text provider's saved value)
 
-That means the value is:
+That means the active value is:
 
 - visible in `/tool status`
 - reflected in `/tool prompt snapshot`

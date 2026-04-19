@@ -734,8 +734,8 @@ export async function execute(
 
       // Add Bearer token hint for custom providers
       if (isCustomProvider(normalizedProvider)) {
-        const apiKeySetMention = commandRegistry.getCommandMention("config", "api-key set");
-        const providerSwitchMention = commandRegistry.getCommandMention("config", "provider switch");
+        const apiKeySetMention = commandRegistry.getCommandMention("config", "provider", "add");
+        const providerSwitchMention = commandRegistry.getCommandMention("config", "provider", "switch");
         successFields.push({
           nameKey: "commands.config.setup.custom_bearer_hint_field",
           value: localizer(locale, "commands.config.setup.custom_bearer_hint_value", {

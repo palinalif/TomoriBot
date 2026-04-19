@@ -22,6 +22,7 @@ import { isBraveSearchAvailable } from "../tools/restAPIs/brave/braveSearchServi
 import { hasOptApiKey } from "../utils/security/crypto";
 import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
+import { sql } from "@/utils/db/client";
 
 /**
  * Minimal state interface for context building operations
@@ -397,32 +398,41 @@ class ToolRegistryImpl implements ToolRegistryInterface {
       // Apply NovelAI opt API key preference logic for image generation tools
       const serverIdNumber = stateForContext.server_id ? Number.parseInt(stateForContext.server_id, 10) : undefined;
       if (serverIdNumber) {
-        const hasNovelAiOptKey = await hasOptApiKey(serverIdNumber, "novelai");
         const hasElevenLabsOptKey = await hasOptApiKey(serverIdNumber, ELEVENLABS_SERVICE_NAME);
+        const [toolConfigRow] = await sql<
+          [{ diffusion_model_id: number | null; nai_diffusion_model_id: number | null }]
+        >`
+            SELECT diffusion_model_id, nai_diffusion_model_id
+            FROM tomori_configs
+            WHERE server_id = ${serverIdNumber}
+            LIMIT 1
+          `;
+        const [googleSavedProviderRow] = await sql<[{ api_key: Buffer | null }]>`
+            SELECT api_key
+            FROM saved_provider_configs
+            WHERE server_id = ${serverIdNumber}
+              AND provider = 'google'
+            LIMIT 1
+          `;
+        const hasStandardImageSlot = toolConfigRow?.diffusion_model_id != null;
+        const hasNaiImageSlot = toolConfigRow?.nai_diffusion_model_id != null;
+        const hasGeminiAccess = !!googleSavedProviderRow?.api_key;
 
-        // 1. If provider is not NovelAI AND no NovelAI opt key exists, remove generate_image_nai
-        if (provider !== "novelai" && !hasNovelAiOptKey) {
+        if (!hasNaiImageSlot) {
           const beforeCount = builtInTools.length;
           builtInTools = builtInTools.filter((tool) => tool.name !== "generate_image_nai");
           if (builtInTools.length < beforeCount) {
-            log.info(`Excluded generate_image_nai (no NovelAI opt key and provider is ${provider})`);
+            log.info("Excluded generate_image_nai (no NovelAI image slot configured)");
           }
         }
 
-        // 2. If NovelAI opt key exists AND nai_exclusive_imggen is enabled, remove generate_image
-        if (hasNovelAiOptKey && stateForContext.config.nai_exclusive_imggen) {
+        if (!hasStandardImageSlot) {
           const beforeCount = builtInTools.length;
           builtInTools = builtInTools.filter((tool) => tool.name !== "generate_image");
           if (builtInTools.length < beforeCount) {
-            log.info("Excluded generate_image (nai_exclusive_imggen enabled with NovelAI opt key)");
+            log.info("Excluded generate_image (no standard image slot configured)");
           }
         }
-
-        // 3. Dynamic parameter stripping for generate_image_nai inpainting params.
-        //    Only expose message_id/edit_target when Gemini API access is available
-        //    (Google opt key exists OR provider is Google), since segmentation requires it.
-        const hasGoogleOptKey = await hasOptApiKey(serverIdNumber, "google");
-        const hasGeminiAccess = hasGoogleOptKey || provider === "google";
 
         if (!hasGeminiAccess) {
           builtInTools = builtInTools.map((tool) => {

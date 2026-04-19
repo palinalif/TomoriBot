@@ -17,10 +17,10 @@ import {
 } from "@/utils/discord/toolProgressNotice";
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { sql } from "../../utils/db/client";
-import { decryptApiKey } from "../../utils/security/crypto";
 import { checkImageQuota, incrementImageQuota } from "../../utils/quota/imageQuotaManager";
 import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
 import { ZAI_CODING_IMAGES_GENERATIONS_URL, ZAI_GENERAL_IMAGES_GENERATIONS_URL } from "@/providers/zai/zaiShared";
+import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
 /**
  * Tool for generating images using the active provider's native image API
@@ -66,7 +66,7 @@ export class GenerateImageTool extends BaseTool {
    * @returns True if provider supports native image generation
    */
   isAvailableFor(provider: string): boolean {
-    return providerSupportsFeature(provider, "nativeImageGeneration");
+    return providerSupportsFeature(provider, "imageGeneration");
   }
 
   /**
@@ -578,25 +578,9 @@ export class GenerateImageTool extends BaseTool {
 
       log.info(`Using diffusion model: ${modelCodename} for image generation`);
 
-      // Decrypt API key
-      const encryptedApiKey = context.tomoriState.config.api_key;
-      const keyVersion = context.tomoriState.config.key_version || 1;
-
-      if (!encryptedApiKey) {
-        return {
-          success: false,
-          error: "No API key configured for this server",
-        };
-      }
-
-      const apiKey = await decryptApiKey(encryptedApiKey, keyVersion);
-
-      if (!apiKey) {
-        return {
-          success: false,
-          error: "Failed to decrypt API key",
-        };
-      }
+      const creds = await resolveCapabilityCredentials(context.tomoriState.server_id, "image-standard");
+      const apiKey = creds.apiKey;
+      const executionProvider = creds.provider;
 
       if (!context.suppressProgressNotices) {
         const baseNoticeDescription = localizer(
@@ -683,16 +667,13 @@ export class GenerateImageTool extends BaseTool {
 
       // Call appropriate provider API
       log.info(
-        `Generating image with ${context.provider} via ${modelCodename}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio})`,
+        `Generating image with ${executionProvider} via ${modelCodename}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio})`,
       );
 
       let generatedImageData: string | null = null;
       let referenceImagesUsed = referenceImages.length > 0;
       let referenceImagesIgnoredReason = "";
-      const imageGenerationImplementation = resolveProviderFeatureImplementation(
-        context.provider,
-        "nativeImageGeneration",
-      );
+      const imageGenerationImplementation = resolveProviderFeatureImplementation(executionProvider, "imageGeneration");
 
       if (imageGenerationImplementation === "openrouter") {
         // Use OpenRouter API
@@ -759,7 +740,7 @@ export class GenerateImageTool extends BaseTool {
           prompt,
           aspectRatio,
           endpointUrl:
-            context.provider === "zaicoding" ? ZAI_CODING_IMAGES_GENERATIONS_URL : ZAI_GENERAL_IMAGES_GENERATIONS_URL,
+            executionProvider === "zaicoding" ? ZAI_CODING_IMAGES_GENERATIONS_URL : ZAI_GENERAL_IMAGES_GENERATIONS_URL,
         });
         generatedImageData = result.imageData;
       } else if (imageGenerationImplementation === "nvidia") {
@@ -781,7 +762,7 @@ export class GenerateImageTool extends BaseTool {
       } else {
         return {
           success: false,
-          error: `Image generation is not implemented for provider ${context.provider}`,
+          error: `Image generation is not implemented for provider ${executionProvider}`,
         };
       }
 

@@ -94,7 +94,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `tomori_configs.server_id` is the primary modern scope.
 - `tomori_configs.tomori_id` remains as a nullable legacy pointer.
 - `tomori_configs.message_fetch_limit` stores the per-server context fetch cap (default `80`, configurable via `/config message-fetch-limit`).
-- `tomori_configs.thinking_level` stores the server's provider-agnostic reasoning preference (`auto`, `none`, `low`, `medium`, `high`) used by `/config thinking-level`.
+- `tomori_configs.thinking_level` stores the active text provider's mirrored reasoning preference (`auto`, `none`, `low`, `medium`, `high`) as managed through `/config samplers`.
 - `tomori_configs.welcome_channel_disc_id` stores the single configured join-welcome channel per server.
 - `tomori_configs.thought_log_channel_disc_id` stores the optional server-scoped channel where provider reasoning summaries are posted after successful streamed chat turns.
 - `tomori_configs.autoch_persona_overrides` stores optional per-channel persona assignments for configured auto-trigger channels. Each entry is a JSON object with `channel_disc_id` and `tomori_id`; missing entries fall back to the main persona.
@@ -183,11 +183,11 @@ Encrypted columns are stored as `BYTEA` with key version tracking:
 ### Logit bias snapshot storage
 
 - `saved_provider_configs.llm_logit_biases` mirrors `tomori_configs.llm_logit_biases` so provider snapshots can restore both the original text entries and any cached tokenizer-family resolutions.
-- This keeps `/config provider switch` and `/config api-key set` compatible with text-first logit-bias UX across model changes.
+- This keeps `/config provider switch` compatible with text-first logit-bias UX across model changes while `/config provider add` can seed saved-provider defaults without disturbing the active text stack.
 
 ### Provider snapshot model storage
 
-- `saved_provider_configs.video_model_id` mirrors `tomori_configs.video_model_id` so provider switching can restore the previously saved video model along with the other provider-specific settings.
+- `saved_provider_configs.video_model_id` mirrors the last saved video model for that provider so capability-specific cleanup and future migrations can reason about prior selections; Phase 1 provider switching does not automatically restore video model slots.
 
 ## Migration Style
 

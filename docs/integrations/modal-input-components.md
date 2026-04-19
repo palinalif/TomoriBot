@@ -388,7 +388,6 @@ These modals use a String Select with a small, fixed, mutually exclusive option 
 | Command                   | File                         | Custom ID              | Current Input | Options                                   | Why Radio Group                                     |
 | ------------------------- | ---------------------------- | ---------------------- | ------------- | ----------------------------------------- | --------------------------------------------------- |
 | `/config humanizer`       | `config/humanizer.ts`        | `humanizer_select`     | String Select | 4 (none/light/moderate/heavy)             | Fixed set of 4 mutually exclusive degrees           |
-| `/config thinking-level`  | `config/thinking-level.ts`   | `thinking_level_select`| String Select | 5 (auto/none/low/medium/high)            | Fixed provider-agnostic reasoning effort choices    |
 | `/config setup`           | `config/setup.ts`            | `humanizer_degree`     | String Select | 4 (none/light/default/heavy)              | Same fixed humanizer degree set as above            |
 | `/personal privacy`       | `personal/privacy.ts`        | `privacy_select`       | String Select | 3 (minimal/partial/full)                  | Fixed set of 3 mutually exclusive levels            |
 | `/generate image`         | `generate/image.ts`          | `aspect_ratio_select`  | String Select | 10 (1:1, 2:3, 3:2, 3:4, 4:3, etc.)      | Fixed set of 10 aspect ratios — at the limit        |
@@ -439,7 +438,7 @@ These modals have dynamic or large option sets that exceed Radio Group/Checkbox 
 | `/config model embedding`        | `config/model/embedding.ts`      | Dynamic model list, uses pagination                       |
 | `/config model fallback`         | `config/model/fallback.ts`       | Dynamic model list, uses pagination                       |
 | `/config system-prompt preset`       | `config/system-prompt/preset.ts`     | Dynamic preset list from DB                               |
-| `/config api-key set`             | `config/api-key/set.ts`           | Provider select + text input combo; list may grow         |
+| `/config provider add`            | `config/provider/add.ts`          | Provider select + text input combo; list may grow         |
 | `/persona prompt set`            | `persona/prompt/set.ts`         | Persona picker embed first, then a prefilled free-form prompt modal (up to 16000 chars, 4 fields) |
 | `/persona attribute add`         | `persona/attribute/add.ts`      | Dynamic persona list, uses pagination                     |
 | `/persona sample-dialogue add`   | `persona/sample-dialogue/add.ts`| Dynamic persona list, uses pagination                     |

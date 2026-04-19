@@ -270,7 +270,7 @@ export async function execute(
 
   // 5. Validate provider supports image generation
   const provider = tomoriState.llm.llm_provider.toLowerCase();
-  if (!providerSupportsFeature(provider, "nativeImageGeneration")) {
+  if (!providerSupportsFeature(provider, "imageGeneration")) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.generate.image.wrong_provider_title",
       descriptionKey: "commands.generate.image.wrong_provider_description",
@@ -502,7 +502,7 @@ export async function execute(
     // 16. Call provider API to generate image
     let generatedImageData: string | null = null;
     let generatedImageMimeType: string | null = null;
-    const imageGenerationImplementation = resolveProviderFeatureImplementation(provider, "nativeImageGeneration");
+    const imageGenerationImplementation = resolveProviderFeatureImplementation(provider, "imageGeneration");
 
     if (imageGenerationImplementation === "openrouter") {
       // Use OpenRouter API

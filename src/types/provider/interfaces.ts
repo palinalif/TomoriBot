@@ -24,9 +24,13 @@ export type ProviderApiFamily = "google-genai" | "openrouter" | "novelai" | "ope
 /** LLM generation parameters that providers may support via DB config. */
 export type SupportedParam = SupportedParamValue;
 
+export type ImageGenerationStyle = "chat-completion" | "nai-pipeline" | "none";
+
+export type VideoGenerationStyle = "chat-completion" | "none";
+
 export interface ProviderFeatureSupport {
-  nativeImageGeneration: boolean;
-  nativeVideoGeneration: boolean;
+  imageGeneration: ImageGenerationStyle;
+  videoGeneration: VideoGenerationStyle;
   embeddings: boolean;
   structuredOutput: boolean;
   presetGeneration: boolean;

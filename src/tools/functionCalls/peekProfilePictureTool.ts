@@ -9,7 +9,6 @@ import type { Part } from "@google/genai";
 import { log } from "../../utils/misc/logger";
 import type { EnhancedImageContent } from "@/types/tool/enhancedContextTypes";
 import { resolveAvatarByIdentity } from "@/utils/discord/avatarResolver";
-import { decryptApiKey } from "@/utils/security/crypto";
 import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import {
   toZaiApiModelName,
@@ -19,6 +18,7 @@ import {
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { ContextItemTag, type StructuredContextItem } from "../../types/misc/context";
 import { ColorCode } from "@/utils/misc/logger";
+import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
 /**
  * Provider-to-chat-completions-URL mapping for OpenAI-compatible providers.
@@ -368,23 +368,8 @@ export class PeekProfilePictureTool extends BaseTool {
     // biome-ignore lint/style/noNonNullAssertion: caller checked vision_llm
     const visionLlm = context.tomoriState.vision_llm!;
 
-    if (!context.tomoriState.config.api_key) {
-      return {
-        success: false,
-        error: "No API key configured for this server.",
-      };
-    }
-
-    // 1. Decrypt the API key
-    const keyVersion = context.tomoriState.config.key_version || 1;
-    const apiKey = await decryptApiKey(context.tomoriState.config.api_key, keyVersion);
-
-    if (!apiKey) {
-      return {
-        success: false,
-        error: "Failed to decrypt API key.",
-      };
-    }
+    const creds = await resolveCapabilityCredentials(context.tomoriState.server_id, "vision");
+    const apiKey = creds.apiKey;
 
     // 2. Resolve API model name and provider from the vision LLM row
     const provider = visionLlm.llm_provider.toLowerCase();
@@ -406,7 +391,7 @@ export class PeekProfilePictureTool extends BaseTool {
     if (provider === "google") {
       analysisResult = await this.callGoogleVisionWithBase64(apiKey, apiModelName, images, prompt);
     } else {
-      const endpointUrl = this.getVisionEndpointUrl(provider, context);
+      const endpointUrl = this.getVisionEndpointUrl(provider, context, creds.savedConfig.custom_endpoint_url);
       analysisResult = await this.callOpenAICompatibleVisionWithBase64(
         apiKey,
         apiModelName,
@@ -437,11 +422,11 @@ export class PeekProfilePictureTool extends BaseTool {
    * @param context - Tool context (for custom endpoint URL)
    * @returns Chat completions URL
    */
-  private getVisionEndpointUrl(provider: string, context: ToolContext): string {
+  private getVisionEndpointUrl(provider: string, context: ToolContext, customEndpointUrl?: string | null): string {
     const knownUrl = PROVIDER_CHAT_COMPLETIONS_URLS[provider];
     if (knownUrl) return knownUrl;
 
-    const customUrl = context.tomoriState.config.custom_endpoint_url;
+    const customUrl = customEndpointUrl ?? context.tomoriState.config.custom_endpoint_url;
     if (customUrl) {
       return customUrl.endsWith("/chat/completions") ? customUrl : `${customUrl}/chat/completions`;
     }

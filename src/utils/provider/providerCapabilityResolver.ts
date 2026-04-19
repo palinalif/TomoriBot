@@ -59,8 +59,8 @@ const capabilityGuards = {
   presetGeneration: hasPresetGenerationCapability,
   conversationCompaction: hasConversationCompactionCapability,
   liveTokenCounting: hasLiveTokenCountingCapability,
-  nativeImageGeneration: hasNativeImageGenerationCapability,
-  nativeVideoGeneration: hasNativeVideoGenerationCapability,
+  imageGeneration: hasNativeImageGenerationCapability,
+  videoGeneration: hasNativeVideoGenerationCapability,
 } satisfies {
   [K in ProviderCapabilityName]: (provider: LLMProvider) => provider is LLMProvider & ProviderCapabilityMap[K];
 };
@@ -98,5 +98,5 @@ export async function resolveLiveTokenCountingCapability(providerName: string) {
 }
 
 export async function resolveNativeImageGenerationCapability(providerName: string) {
-  return resolveProviderCapability(providerName, "nativeImageGeneration");
+  return resolveProviderCapability(providerName, "imageGeneration");
 }

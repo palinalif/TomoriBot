@@ -45,8 +45,8 @@ export async function execute(
     const helpMemoryMention = commandRegistry.getCommandMention("help", "memory");
     const helpCustomizationMention = commandRegistry.getCommandMention("help", "customization");
     const supportServerMention = commandRegistry.getCommandMention("support", "discord");
-    const configApiKeySetMention = commandRegistry.getCommandMention("config", "api-key set");
-    const configProviderSwitchMention = commandRegistry.getCommandMention("config", "provider switch");
+    const configApiKeySetMention = commandRegistry.getCommandMention("config", "provider", "add");
+    const configProviderSwitchMention = commandRegistry.getCommandMention("config", "provider", "switch");
 
     // Use replySummaryEmbed to show structured setup guide
     await replySummaryEmbed(

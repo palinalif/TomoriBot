@@ -6,7 +6,7 @@ import {
 } from "discord.js";
 import { loadSavedProviderConfigs } from "@/utils/db/dbRead";
 import { deleteSavedProviderConfig } from "@/utils/db/dbWrite";
-import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed, promptWithRawModal } from "@/utils/discord/interactionHelper";
@@ -14,6 +14,52 @@ import type { UserRow, ErrorContext } from "@/types/db/schema";
 import type { SelectOption, ModalComponent } from "@/types/discord/modal";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { isCustomProvider, deleteCustomLLMEntry } from "@/utils/discord/customProviderModal";
+import { sql } from "@/utils/db/client";
+import { loadProviderDefaultSelectionIds } from "@/utils/provider/savedProviderConfig";
+
+async function resolveLlmProvider(llmId: number | null | undefined): Promise<string | null> {
+  if (!llmId) return null;
+  const [row] = await sql`
+    SELECT llm_provider
+    FROM llms
+    WHERE llm_id = ${llmId}
+    LIMIT 1
+  `;
+  return row?.llm_provider ? String(row.llm_provider).toLowerCase() : null;
+}
+
+async function resolveDiffusionProvider(diffusionModelId: number | null | undefined): Promise<string | null> {
+  if (!diffusionModelId) return null;
+  const [row] = await sql`
+    SELECT provider
+    FROM image_diffusion_models
+    WHERE diffusion_model_id = ${diffusionModelId}
+    LIMIT 1
+  `;
+  return row?.provider ? String(row.provider).toLowerCase() : null;
+}
+
+async function resolveEmbeddingProvider(embeddingModelId: number | null | undefined): Promise<string | null> {
+  if (!embeddingModelId) return null;
+  const [row] = await sql`
+    SELECT provider
+    FROM embedding_models
+    WHERE embedding_model_id = ${embeddingModelId}
+    LIMIT 1
+  `;
+  return row?.provider ? String(row.provider).toLowerCase() : null;
+}
+
+async function resolveVideoProvider(videoModelId: number | null | undefined): Promise<string | null> {
+  if (!videoModelId) return null;
+  const [row] = await sql`
+    SELECT provider
+    FROM video_generation_models
+    WHERE video_model_id = ${videoModelId}
+    LIMIT 1
+  `;
+  return row?.provider ? String(row.provider).toLowerCase() : null;
+}
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "config_provider_remove_modal";
@@ -126,6 +172,97 @@ export async function execute(
     }
 
     // 8. Delete the saved config
+    const activeProvider = tomoriState.llm.llm_provider.toLowerCase();
+    const activeDefaults = await loadProviderDefaultSelectionIds(activeProvider);
+    const reassignmentLines: string[] = [];
+
+    const [embeddingProvider, standardImageProvider, naiImageProvider, videoProvider, visionProvider] =
+      await Promise.all([
+        resolveEmbeddingProvider(tomoriState.config.embedding_model_id),
+        resolveDiffusionProvider(tomoriState.config.diffusion_model_id),
+        resolveDiffusionProvider(tomoriState.config.nai_diffusion_model_id),
+        resolveVideoProvider(tomoriState.config.video_model_id),
+        resolveLlmProvider(tomoriState.config.vision_llm_id),
+      ]);
+
+    const nextEmbeddingModelId =
+      embeddingProvider === selectedProvider.toLowerCase()
+        ? activeDefaults.embedding_model_id
+        : tomoriState.config.embedding_model_id;
+    const nextDiffusionModelId =
+      standardImageProvider === selectedProvider.toLowerCase()
+        ? activeDefaults.diffusion_model_id
+        : tomoriState.config.diffusion_model_id;
+    const nextNaiDiffusionModelId =
+      naiImageProvider === selectedProvider.toLowerCase()
+        ? activeDefaults.nai_diffusion_model_id
+        : tomoriState.config.nai_diffusion_model_id;
+    const nextVideoModelId =
+      videoProvider === selectedProvider.toLowerCase()
+        ? activeDefaults.video_model_id
+        : tomoriState.config.video_model_id;
+    const nextVisionLlmId =
+      visionProvider === selectedProvider.toLowerCase()
+        ? activeDefaults.vision_llm_id
+        : tomoriState.config.vision_llm_id;
+
+    const fallbackRows =
+      tomoriState.config.fallback_llm_ids && tomoriState.config.fallback_llm_ids.length > 0
+        ? await sql<Array<{ llm_id: number; llm_provider: string }>>`
+            SELECT llm_id, llm_provider
+            FROM llms
+            WHERE llm_id = ANY(${tomoriState.config.fallback_llm_ids})
+          `
+        : [];
+    const nextFallbackIds = fallbackRows
+      .filter((row) => row.llm_provider.toLowerCase() !== selectedProvider.toLowerCase())
+      .map((row) => row.llm_id);
+
+    if (nextEmbeddingModelId !== tomoriState.config.embedding_model_id) {
+      reassignmentLines.push(
+        `- Embedding model -> ${nextEmbeddingModelId ? `\`${nextEmbeddingModelId}\`` : "*cleared*"}`,
+      );
+    }
+    if (nextDiffusionModelId !== tomoriState.config.diffusion_model_id) {
+      reassignmentLines.push(
+        `- Standard image model -> ${nextDiffusionModelId ? `\`${nextDiffusionModelId}\`` : "*cleared*"}`,
+      );
+    }
+    if (nextNaiDiffusionModelId !== tomoriState.config.nai_diffusion_model_id) {
+      reassignmentLines.push(
+        `- NovelAI image model -> ${nextNaiDiffusionModelId ? `\`${nextNaiDiffusionModelId}\`` : "*cleared*"}`,
+      );
+    }
+    if (nextVideoModelId !== tomoriState.config.video_model_id) {
+      reassignmentLines.push(`- Video model -> ${nextVideoModelId ? `\`${nextVideoModelId}\`` : "*cleared*"}`);
+    }
+    if (nextVisionLlmId !== tomoriState.config.vision_llm_id) {
+      reassignmentLines.push(`- Vision model -> ${nextVisionLlmId ? `\`${nextVisionLlmId}\`` : "*cleared*"}`);
+    }
+    if (nextFallbackIds.length !== (tomoriState.config.fallback_llm_ids ?? []).length) {
+      reassignmentLines.push("- Fallback models -> removed entries from the deleted provider");
+    }
+
+    await sql`
+      UPDATE tomori_configs
+      SET embedding_model_id = ${nextEmbeddingModelId},
+          diffusion_model_id = ${nextDiffusionModelId},
+          nai_diffusion_model_id = ${nextNaiDiffusionModelId},
+          video_model_id = ${nextVideoModelId},
+          vision_llm_id = ${nextVisionLlmId},
+          fallback_llm_ids = ${JSON.stringify(nextFallbackIds)}::jsonb
+      WHERE server_id = ${tomoriState.server_id}
+    `;
+
+    if (activeProvider === tomoriState.llm.llm_provider.toLowerCase()) {
+      await sql`
+        UPDATE saved_provider_configs
+        SET fallback_llm_ids = ${JSON.stringify(nextFallbackIds)}::jsonb
+        WHERE server_id = ${tomoriState.server_id}
+          AND provider = ${activeProvider}
+      `;
+    }
+
     const deleted = await deleteSavedProviderConfig(tomoriState.server_id, selectedProvider);
 
     if (!deleted) {
@@ -151,12 +288,18 @@ export async function execute(
       await deleteCustomLLMEntry(serverId);
     }
 
+    invalidateTomoriStateCache(serverId);
+
     // 11. Success message
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey: "commands.config.provider.remove.success_title",
-      descriptionKey: "commands.config.provider.remove.success_description",
+      descriptionKey:
+        reassignmentLines.length > 0
+          ? "commands.config.provider.remove.auto_reassigned_description"
+          : "commands.config.provider.remove.success_description",
       descriptionVars: {
         provider: getProviderDisplayName(selectedProvider),
+        reassignments: reassignmentLines.join("\n"),
       },
       color: ColorCode.SUCCESS,
     });

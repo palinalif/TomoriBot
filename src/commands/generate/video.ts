@@ -137,7 +137,7 @@ export async function execute(
 
   // 4. Validate provider supports video generation
   const provider = tomoriState.llm.llm_provider.toLowerCase();
-  if (!providerSupportsFeature(provider, "nativeVideoGeneration")) {
+  if (!providerSupportsFeature(provider, "videoGeneration")) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.generate.video.wrong_provider_title",
       descriptionKey: "commands.generate.video.wrong_provider_description",
@@ -328,7 +328,7 @@ export async function execute(
 
     // 13. Route to provider and generate video
     let videoData: Buffer | null = null;
-    const videoImplementation = resolveProviderFeatureImplementation(provider, "nativeVideoGeneration");
+    const videoImplementation = resolveProviderFeatureImplementation(provider, "videoGeneration");
 
     if (videoImplementation === "google") {
       const { generateGoogleNativeVideo } = await import("@/providers/google/googleVideoGeneration");
