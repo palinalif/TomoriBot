@@ -2,7 +2,7 @@ import type { Client, ChatInputCommandInteraction } from "discord.js";
 import { MessageFlags, type SlashCommandSubcommandBuilder, EmbedBuilder } from "discord.js";
 import { localizer } from "@/utils/text/localizer";
 import { ColorCode } from "@/utils/misc/logger";
-import { replyInfoEmbed, promptWithPaginatedModal } from "@/utils/discord/interactionHelper";
+import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { isGuildMessageCommandChannel } from "@/utils/discord/guildMessageChannel";
 import type { UserRow } from "@/types/db/schema";
 
@@ -12,7 +12,16 @@ import type { UserRow } from "@/types/db/schema";
  * @returns Configured subcommand builder
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) => {
-  return subcommand.setName("comment").setDescription(localizer("en-US", "commands.tool.comment.description"));
+  return subcommand
+    .setName("comment")
+    .setDescription(localizer("en-US", "commands.tool.comment.description"))
+    .addStringOption((option) =>
+      option
+        .setName("content")
+        .setDescription(localizer("en-US", "commands.tool.comment.content_description"))
+        .setRequired(true)
+        .setMaxLength(4000),
+    );
 };
 
 /**
@@ -53,35 +62,11 @@ export async function execute(
 
   const channel = interaction.channel;
 
-  // 2. Show modal for comment content
-  // DO NOT defer before modal - Pattern 3
-  const modalResult = await promptWithPaginatedModal(interaction, locale, {
-    modalCustomId: "tool_comment_modal",
-    modalTitleKey: "commands.tool.comment.modal_title",
-    components: [
-      {
-        customId: "comment_content",
-        labelKey: "commands.tool.comment.content_label",
-        placeholder: localizer(locale, "commands.tool.comment.content_placeholder"),
-        required: true,
-        minLength: 1,
-        maxLength: 4000,
-        style: 2, // TextInputStyle.Paragraph
-      },
-    ],
-  });
+  // 2. Defer reply ephemerally while processing
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  // 3. Process modal submission
-  if (modalResult.outcome !== "submit" || !modalResult.values || !modalResult.interaction) {
-    return;
-  }
-
-  // Ensure submission is deferred
-  if (!modalResult.interaction.deferred && !modalResult.interaction.replied) {
-    await modalResult.interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  }
-
-  const rawContent = modalResult.values.comment_content || "";
+  // 3. Get comment content from slash command option
+  const rawContent = interaction.options.getString("content", true);
 
   // 4. Resolve :emojiName: patterns into Discord custom emoji syntax if found in guild
   const commentContent = rawContent.replace(/:(\w+):/g, (match, name) => {
@@ -120,7 +105,7 @@ export async function execute(
   });
 
   // 8. Send confirmation to user
-  await replyInfoEmbed(modalResult.interaction, locale, {
+  await replyInfoEmbed(interaction, locale, {
     titleKey: "commands.tool.comment.success_title",
     descriptionKey: "commands.tool.comment.success_description",
     color: ColorCode.SUCCESS,

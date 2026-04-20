@@ -31,8 +31,8 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     .setDescription(localizer("en-US", "commands.bot.respond.description"))
     .addBooleanOption((option) =>
       option
-        .setName("select_persona")
-        .setDescription(localizer("en-US", "commands.bot.respond.select_persona_description"))
+        .setName("extra_options")
+        .setDescription(localizer("en-US", "commands.bot.respond.extra_options_description"))
         .setRequired(false),
     );
 
@@ -106,7 +106,7 @@ export async function execute(
     return;
   }
 
-  const selectPersona = interaction.options.getBoolean("select_persona") ?? false;
+  const extraOptions = interaction.options.getBoolean("extra_options") ?? false;
   const invokingMember = interaction.member as import("discord.js").GuildMember | null;
 
   // 3.5. Check cooldown (shares cooldown pool with message triggers)
@@ -191,135 +191,157 @@ export async function execute(
     return;
   }
 
+  const hideEmbed = !isNoticeEmbedVisible(tomoriState.config, "respond_embed");
+  const deferFlags = hideEmbed
+    ? MessageFlags.Ephemeral | MessageFlags.SuppressNotifications
+    : MessageFlags.SuppressNotifications;
+
   let selectedPersona = fallbackPersona;
   let replyInteraction: ChatInputCommandInteraction | import("discord.js").ModalSubmitInteraction = interaction;
   let manualPrompt: string | undefined;
-
-  // Build modal components (persona select if alters exist, plus optional prompt)
-  const modalComponents: ModalComponent[] = [];
-
-  if (availablePersonas.length > 1 && selectPersona) {
-    const personaOptions: SelectOption[] = availablePersonas.map((persona, index) => ({
-      label: safeSelectOptionText(persona.tomori_nickname),
-      value: index.toString(),
-      description: localizer(
-        locale,
-        persona.is_alter
-          ? "commands.bot.respond.alter_persona_description"
-          : "commands.bot.respond.main_persona_description",
-      ),
-    }));
-    modalComponents.push({
-      customId: "persona_choice",
-      labelKey: "commands.bot.respond.select_persona_label",
-      descriptionKey: "commands.bot.respond.select_persona_description",
-      placeholder: "commands.bot.respond.select_persona_placeholder",
-      required: true,
-      options: personaOptions,
-    });
-  }
-
-  // Add "Use Reasoning" checkbox — checked = "true", unchecked = "false"
-  modalComponents.push({
-    kind: "checkbox" as const,
-    customId: "use_reasoning",
-    labelKey: "commands.bot.respond.use_reasoning_label",
-    descriptionKey: "commands.bot.respond.use_reasoning_description",
-    default: false,
-  });
-
-  modalComponents.push({
-    customId: "prompt",
-    labelKey: "commands.bot.respond.prompt_label",
-    descriptionKey: "commands.bot.respond.prompt_description",
-    placeholder: localizer(locale, "commands.bot.respond.prompt_placeholder"),
-    required: false,
-    maxLength: 2000,
-    style: 2, // TextInputStyle.Paragraph
-  });
-  modalComponents.push({
-    customId: "prefill",
-    labelKey: "commands.bot.respond.prefill_label",
-    descriptionKey: "commands.bot.respond.prefill_description",
-    placeholder: localizer(locale, "commands.bot.respond.prefill_placeholder"),
-    required: false,
-    maxLength: 2000,
-    style: 2, // TextInputStyle.Paragraph
-  });
-
-  // Show modal (always, to allow prompt input)
-  const modalResult = await promptWithPaginatedModal(interaction, locale, {
-    modalCustomId: "respond_persona_select",
-    modalTitleKey: "commands.bot.respond.select_persona_title",
-    components: modalComponents,
-  });
-
-  if (modalResult.outcome !== "submit") {
-    log.info(`Respond modal ${modalResult.outcome} for user ${interaction.user.id}`);
-    return;
-  }
-
-  if (modalResult.interaction) {
-    replyInteraction = modalResult.interaction;
-  }
-
-  // 5. Defer the modal submission immediately — it opens a new 3-second window
-  // and async work (e.g. loadSmartestModel) must not run before acknowledgment
-  const hideEmbed = !isNoticeEmbedVisible(tomoriState.config, "respond_embed");
-  await replyInteraction.deferReply({
-    flags: hideEmbed ? MessageFlags.Ephemeral | MessageFlags.SuppressNotifications : MessageFlags.SuppressNotifications,
-  });
-
-  const selectedIndex = Number.parseInt(modalResult.values?.persona_choice ?? "0", 10);
-  if (availablePersonas.length > 1 && selectPersona) {
-    selectedPersona = availablePersonas[selectedIndex] ?? fallbackPersona;
-    log.info(
-      `User ${interaction.user.id} selected persona ${selectedPersona.tomori_nickname} (ID: ${selectedPersona.tomori_id}) for manual respond`,
-    );
-  }
-
-  if (!isPersonaAllowedForTrigger(whitelistStatus, personalSpotlightStatus, selectedPersona?.tomori_id)) {
-    await replyInteraction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setTitle(localizer(locale, "general.message_cooldown_title"))
-          .setDescription(localizer(locale, "commands.bot.respond.persona_access_blocked"))
-          .setColor(ColorCode.WARN),
-      ],
-    });
-    return;
-  }
-
-  const manualPromptRaw = modalResult.values?.prompt;
-  manualPrompt = manualPromptRaw?.trim() || undefined;
-  const manualPrefillRaw = modalResult.values?.prefill;
-  const manualPrefill = manualPrefillRaw?.trim() || undefined;
-
-  // Determine if reasoning mode was requested
-  // Checkbox returns "true" (checked) or "false" (unchecked)
-  const useReasoning = modalResult.values?.use_reasoning === "true";
+  let manualPrefill: string | undefined;
   let forceReason: boolean | undefined;
   let llmOverrideCodename: string | undefined;
 
-  if (useReasoning) {
-    // Load the smartest reasoning model for the current provider
-    const currentProvider = tomoriState.llm.llm_provider;
-    const smartestModel = await loadSmartestModel(currentProvider);
+  if (extraOptions) {
+    // Build modal components (persona select + reasoning + prompt + prefill)
+    const modalComponents: ModalComponent[] = [];
 
-    if (!smartestModel) {
+    // 1. Persona select dropdown — show when multiple personas are available
+    if (availablePersonas.length > 1) {
+      const personaOptions: SelectOption[] = availablePersonas.map((persona, index) => ({
+        label: safeSelectOptionText(persona.tomori_nickname),
+        value: index.toString(),
+        description: localizer(
+          locale,
+          persona.is_alter
+            ? "commands.bot.respond.alter_persona_description"
+            : "commands.bot.respond.main_persona_description",
+        ),
+      }));
+      modalComponents.push({
+        customId: "persona_choice",
+        labelKey: "commands.bot.respond.select_persona_label",
+        descriptionKey: "commands.bot.respond.select_persona_description",
+        placeholder: "commands.bot.respond.select_persona_placeholder",
+        required: true,
+        options: personaOptions,
+      });
+    }
+
+    // 2. Reasoning checkbox — checked = "true", unchecked = "false"
+    modalComponents.push({
+      kind: "checkbox" as const,
+      customId: "use_reasoning",
+      labelKey: "commands.bot.respond.use_reasoning_label",
+      descriptionKey: "commands.bot.respond.use_reasoning_description",
+      default: false,
+    });
+
+    // 3. Optional system prompt input
+    modalComponents.push({
+      customId: "prompt",
+      labelKey: "commands.bot.respond.prompt_label",
+      descriptionKey: "commands.bot.respond.prompt_description",
+      placeholder: localizer(locale, "commands.bot.respond.prompt_placeholder"),
+      required: false,
+      maxLength: 2000,
+      style: 2, // TextInputStyle.Paragraph
+    });
+
+    // 4. Optional assistant prefill input
+    modalComponents.push({
+      customId: "prefill",
+      labelKey: "commands.bot.respond.prefill_label",
+      descriptionKey: "commands.bot.respond.prefill_description",
+      placeholder: localizer(locale, "commands.bot.respond.prefill_placeholder"),
+      required: false,
+      maxLength: 2000,
+      style: 2, // TextInputStyle.Paragraph
+    });
+
+    // 5. Show modal with extra options
+    const modalResult = await promptWithPaginatedModal(interaction, locale, {
+      modalCustomId: "respond_persona_select",
+      modalTitleKey: "commands.bot.respond.extra_options_title",
+      components: modalComponents,
+    });
+
+    if (modalResult.outcome !== "submit") {
+      log.info(`Respond modal ${modalResult.outcome} for user ${interaction.user.id}`);
+      return;
+    }
+
+    if (modalResult.interaction) {
+      replyInteraction = modalResult.interaction;
+    }
+
+    // 6. Defer the modal submission — opens a new 3-second window
+    await replyInteraction.deferReply({ flags: deferFlags });
+
+    // 7. Process persona selection
+    const selectedIndex = Number.parseInt(modalResult.values?.persona_choice ?? "0", 10);
+    if (availablePersonas.length > 1) {
+      selectedPersona = availablePersonas[selectedIndex] ?? fallbackPersona;
+      log.info(
+        `User ${interaction.user.id} selected persona ${selectedPersona.tomori_nickname} (ID: ${selectedPersona.tomori_id}) for manual respond`,
+      );
+    }
+
+    if (!isPersonaAllowedForTrigger(whitelistStatus, personalSpotlightStatus, selectedPersona?.tomori_id)) {
       await replyInteraction.editReply({
         embeds: [
           new EmbedBuilder()
-            .setTitle(localizer(locale, "commands.bot.respond.no_smart_model_title"))
-            .setDescription(localizer(locale, "commands.bot.respond.no_smart_model_description"))
-            .setColor(ColorCode.ERROR),
+            .setTitle(localizer(locale, "general.message_cooldown_title"))
+            .setDescription(localizer(locale, "commands.bot.respond.persona_access_blocked"))
+            .setColor(ColorCode.WARN),
         ],
       });
       return;
     }
 
-    forceReason = true;
-    llmOverrideCodename = smartestModel.llm_codename;
+    // 8. Process prompt and prefill from modal
+    const manualPromptRaw = modalResult.values?.prompt;
+    manualPrompt = manualPromptRaw?.trim() || undefined;
+    const manualPrefillRaw = modalResult.values?.prefill;
+    manualPrefill = manualPrefillRaw?.trim() || undefined;
+
+    // 9. Determine if reasoning mode was requested
+    const useReasoning = modalResult.values?.use_reasoning === "true";
+    if (useReasoning) {
+      const currentProvider = tomoriState.llm.llm_provider;
+      const smartestModel = await loadSmartestModel(currentProvider);
+
+      if (!smartestModel) {
+        await replyInteraction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle(localizer(locale, "commands.bot.respond.no_smart_model_title"))
+              .setDescription(localizer(locale, "commands.bot.respond.no_smart_model_description"))
+              .setColor(ColorCode.ERROR),
+          ],
+        });
+        return;
+      }
+
+      forceReason = true;
+      llmOverrideCodename = smartestModel.llm_codename;
+    }
+  } else {
+    // Direct response — skip modal, use default persona
+    await interaction.deferReply({ flags: deferFlags });
+
+    if (!isPersonaAllowedForTrigger(whitelistStatus, personalSpotlightStatus, selectedPersona?.tomori_id)) {
+      await interaction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(localizer(locale, "general.message_cooldown_title"))
+            .setDescription(localizer(locale, "commands.bot.respond.persona_access_blocked"))
+            .setColor(ColorCode.WARN),
+        ],
+      });
+      return;
+    }
   }
 
   try {
@@ -375,7 +397,7 @@ export async function execute(
       false, // isFromQueue
       true, // isManuallyTriggered - this bypasses normal trigger logic
       forceReason, // forceReason - enabled when "Use Reasoning" is Yes
-      useReasoning ? manualPrompt : undefined, // reasoningQuery - prompt doubles as reasoning query when reasoning is enabled
+      forceReason ? manualPrompt : undefined, // reasoningQuery - prompt doubles as reasoning query when reasoning is enabled
       llmOverrideCodename, // llmOverrideCodename - smartest model when reasoning is enabled
       undefined, // isStopResponse
       0, // retryCount
