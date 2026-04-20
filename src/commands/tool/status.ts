@@ -1172,8 +1172,8 @@ export async function execute(
               inline: true,
             },
             {
-              nameKey: "commands.tool.status.field_self_reply_limit",
-              value: String(config.self_reply_limit),
+              nameKey: "commands.tool.status.field_cascade_limit",
+              value: String(config.cascade_limit),
               inline: true,
             },
             {
@@ -1192,8 +1192,8 @@ export async function execute(
               inline: true,
             },
             {
-              nameKey: "commands.tool.status.field_triggered_persona_limit",
-              value: String(config.triggered_persona_limit),
+              nameKey: "commands.tool.status.field_match_limit",
+              value: String(config.match_limit),
               inline: true,
             },
             {

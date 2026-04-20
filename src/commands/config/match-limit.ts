@@ -8,27 +8,26 @@ import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "../../types/db/schema";
 
-const MIN_LIMIT = 0;
+const MIN_LIMIT = 1;
 const MAX_LIMIT = 10;
 const DEFAULT_LIMIT = 3;
 
-// Configure the subcommand (Rule #21)
+// Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
-    .setName("self-reply-limit")
-    .setDescription(localizer("en-US", "commands.config.self-reply-limit.description"))
+    .setName("trigger-match-limit")
+    .setDescription(localizer("en-US", "commands.config.trigger-match-limit.description"))
     .addIntegerOption((option) =>
       option
         .setName("limit")
-        .setDescription(localizer("en-US", "commands.config.self-reply-limit.limit_description"))
+        .setDescription(localizer("en-US", "commands.config.trigger-match-limit.limit_description"))
         .setMinValue(MIN_LIMIT)
         .setMaxValue(MAX_LIMIT)
         .setRequired(true),
     );
 
 /**
- * Configures the self-reply chain limit for persona-to-persona triggering.
- * 0 disables self replies, 1-10 allow a chain up to the specified depth.
+ * Configures the maximum number of personas that can match a single message's triggers.
  * @param _client - Discord client instance
  * @param interaction - Command interaction
  * @param userData - User data from database
@@ -60,8 +59,8 @@ export async function execute(
     // 3. Validate range (redundant but safe)
     if (limit < MIN_LIMIT || limit > MAX_LIMIT) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.self-reply-limit.limit.invalid_range_title",
-        descriptionKey: "commands.config.self-reply-limit.limit.invalid_range_description",
+        titleKey: "commands.config.trigger-match-limit.limit.invalid_range_title",
+        descriptionKey: "commands.config.trigger-match-limit.limit.invalid_range_description",
         descriptionVars: {
           min: MIN_LIMIT.toString(),
           max: MAX_LIMIT.toString(),
@@ -83,11 +82,11 @@ export async function execute(
     }
 
     // 5. Check if this is the same as the current limit
-    const currentLimit = tomoriState.config.self_reply_limit ?? DEFAULT_LIMIT;
+    const currentLimit = tomoriState.config.match_limit ?? DEFAULT_LIMIT;
     if (limit === currentLimit) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.self-reply-limit.limit.already_set_title",
-        descriptionKey: "commands.config.self-reply-limit.limit.already_set_description",
+        titleKey: "commands.config.trigger-match-limit.limit.already_set_title",
+        descriptionKey: "commands.config.trigger-match-limit.limit.already_set_description",
         descriptionVars: {
           limit: limit.toString(),
         },
@@ -99,7 +98,7 @@ export async function execute(
     // 6. Update the limit in the database with direct SQL
     const [updatedRow] = await sql`
 			UPDATE tomori_configs
-			SET self_reply_limit = ${limit}
+			SET match_limit = ${limit}
 			WHERE server_id = ${tomoriState.server_id}
 			RETURNING *
 		`;
@@ -111,16 +110,12 @@ export async function execute(
         userId: userData.user_id,
         errorType: "DatabaseUpdateError",
         metadata: {
-          command: "config selfreply limit",
+          command: "config trigger-match-limit limit",
           limit,
           targetTable: "tomori_configs",
         },
       };
-      await log.error(
-        "Failed to update self_reply_limit config",
-        new Error("Database update returned no rows"),
-        context,
-      );
+      await log.error("Failed to update match_limit config", new Error("Database update returned no rows"), context);
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",
@@ -138,7 +133,7 @@ export async function execute(
         serverId: tomoriState.server_id,
         errorType: "SchemaValidationError",
         metadata: {
-          command: "config selfreply limit",
+          command: "config trigger-match-limit limit",
           validationErrors: validatedConfig.error.flatten(),
         },
       };
@@ -155,19 +150,14 @@ export async function execute(
     // 8. Invalidate cache so next message gets fresh config
     invalidateTomoriStateCache(interaction.guild.id);
 
-    // 9. Success message - indicate disabled state if limit is 0
-    const isEnabled = limit > 0;
+    // 9. Success message
     await replyInfoEmbed(interaction, locale, {
-      titleKey: isEnabled
-        ? "commands.config.self-reply-limit.limit.success_title"
-        : "commands.config.self-reply-limit.limit.success_disabled_title",
-      descriptionKey: isEnabled
-        ? "commands.config.self-reply-limit.limit.success_description"
-        : "commands.config.self-reply-limit.limit.success_disabled_description",
+      titleKey: "commands.config.trigger-match-limit.limit.success_title",
+      descriptionKey: "commands.config.trigger-match-limit.limit.success_description",
       descriptionVars: {
         limit: limit.toString(),
       },
-      color: isEnabled ? ColorCode.SUCCESS : ColorCode.WARN,
+      color: ColorCode.SUCCESS,
     });
   } catch (error) {
     const context: ErrorContext = {
@@ -175,11 +165,11 @@ export async function execute(
       serverId: (await getCachedTomoriState(interaction.guild.id))?.server_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "config selfreply limit",
+        command: "config trigger-match-limit limit",
         options: interaction.options?.data,
       },
     };
-    await log.error("Error in /config self-reply-limit limit command", error as Error, context);
+    await log.error("Error in /config trigger-match-limit limit command", error as Error, context);
 
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",

@@ -8,26 +8,28 @@ import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "../../types/db/schema";
 
-const MIN_LIMIT = 1;
+const MIN_LIMIT = 0;
 const MAX_LIMIT = 10;
 const DEFAULT_LIMIT = 3;
 
-// Configure the subcommand
+// Configure the subcommand (Rule #21)
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
-    .setName("persona-trigger-limit")
-    .setDescription(localizer("en-US", "commands.config.persona-trigger-limit.description"))
+    .setName("trigger-cascade-limit")
+    .setDescription(localizer("en-US", "commands.config.trigger-cascade-limit.description"))
     .addIntegerOption((option) =>
       option
         .setName("limit")
-        .setDescription(localizer("en-US", "commands.config.persona-trigger-limit.limit_description"))
+        .setDescription(localizer("en-US", "commands.config.trigger-cascade-limit.limit_description"))
         .setMinValue(MIN_LIMIT)
         .setMaxValue(MAX_LIMIT)
         .setRequired(true),
     );
 
 /**
- * Configures the maximum number of personas that can be triggered by a single message.
+ * Configures how many additional persona triggers are allowed after the first one.
+ * 0 allows only the first trigger (no additional triggers or chains).
+ * 1-10 allow that many additional triggers after the first.
  * @param _client - Discord client instance
  * @param interaction - Command interaction
  * @param userData - User data from database
@@ -59,8 +61,8 @@ export async function execute(
     // 3. Validate range (redundant but safe)
     if (limit < MIN_LIMIT || limit > MAX_LIMIT) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.persona-trigger-limit.limit.invalid_range_title",
-        descriptionKey: "commands.config.persona-trigger-limit.limit.invalid_range_description",
+        titleKey: "commands.config.trigger-cascade-limit.limit.invalid_range_title",
+        descriptionKey: "commands.config.trigger-cascade-limit.limit.invalid_range_description",
         descriptionVars: {
           min: MIN_LIMIT.toString(),
           max: MAX_LIMIT.toString(),
@@ -82,11 +84,11 @@ export async function execute(
     }
 
     // 5. Check if this is the same as the current limit
-    const currentLimit = tomoriState.config.triggered_persona_limit ?? DEFAULT_LIMIT;
+    const currentLimit = tomoriState.config.cascade_limit ?? DEFAULT_LIMIT;
     if (limit === currentLimit) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.persona-trigger-limit.limit.already_set_title",
-        descriptionKey: "commands.config.persona-trigger-limit.limit.already_set_description",
+        titleKey: "commands.config.trigger-cascade-limit.limit.already_set_title",
+        descriptionKey: "commands.config.trigger-cascade-limit.limit.already_set_description",
         descriptionVars: {
           limit: limit.toString(),
         },
@@ -98,7 +100,7 @@ export async function execute(
     // 6. Update the limit in the database with direct SQL
     const [updatedRow] = await sql`
 			UPDATE tomori_configs
-			SET triggered_persona_limit = ${limit}
+			SET cascade_limit = ${limit}
 			WHERE server_id = ${tomoriState.server_id}
 			RETURNING *
 		`;
@@ -110,16 +112,12 @@ export async function execute(
         userId: userData.user_id,
         errorType: "DatabaseUpdateError",
         metadata: {
-          command: "config persona-trigger-limit limit",
+          command: "config cascade limit",
           limit,
           targetTable: "tomori_configs",
         },
       };
-      await log.error(
-        "Failed to update triggered_persona_limit config",
-        new Error("Database update returned no rows"),
-        context,
-      );
+      await log.error("Failed to update cascade_limit config", new Error("Database update returned no rows"), context);
 
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.update_failed_title",
@@ -137,7 +135,7 @@ export async function execute(
         serverId: tomoriState.server_id,
         errorType: "SchemaValidationError",
         metadata: {
-          command: "config persona-trigger-limit limit",
+          command: "config cascade limit",
           validationErrors: validatedConfig.error.flatten(),
         },
       };
@@ -154,14 +152,19 @@ export async function execute(
     // 8. Invalidate cache so next message gets fresh config
     invalidateTomoriStateCache(interaction.guild.id);
 
-    // 9. Success message
+    // 9. Success message - indicate disabled state if limit is 0
+    const isEnabled = limit > 0;
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.persona-trigger-limit.limit.success_title",
-      descriptionKey: "commands.config.persona-trigger-limit.limit.success_description",
+      titleKey: isEnabled
+        ? "commands.config.trigger-cascade-limit.limit.success_title"
+        : "commands.config.trigger-cascade-limit.limit.success_disabled_title",
+      descriptionKey: isEnabled
+        ? "commands.config.trigger-cascade-limit.limit.success_description"
+        : "commands.config.trigger-cascade-limit.limit.success_disabled_description",
       descriptionVars: {
         limit: limit.toString(),
       },
-      color: ColorCode.SUCCESS,
+      color: isEnabled ? ColorCode.SUCCESS : ColorCode.WARN,
     });
   } catch (error) {
     const context: ErrorContext = {
@@ -169,11 +172,11 @@ export async function execute(
       serverId: (await getCachedTomoriState(interaction.guild.id))?.server_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "config persona-trigger-limit limit",
+        command: "config cascade limit",
         options: interaction.options?.data,
       },
     };
-    await log.error("Error in /config persona-trigger-limit limit command", error as Error, context);
+    await log.error("Error in /config trigger-cascade-limit limit command", error as Error, context);
 
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",

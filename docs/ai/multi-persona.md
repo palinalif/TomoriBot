@@ -92,116 +92,95 @@ High-level flow (per incoming message):
 
 **Important limitation**: later personas **do not** see earlier persona responses in their context (deferred for future refactor).
 
-## Self-Reply Chain System
+## Self-Reply Trigger System
 
-To prevent infinite loops where personas continuously trigger each other, TomoriBot implements a **self-reply chain limit**.
+To prevent infinite loops and unbounded persona activations, TomoriBot implements a **self-reply trigger limit** that controls how many persona triggers can occur after the first one in a session.
 
 ### Overview
 
 - **Default limit**: 3 (configurable via `/config self-reply-limit`, max 10)
 - **Scope**: Per-channel (shared across all personas)
-- **Purpose**: Limit cascading persona-to-persona triggers, not user-triggered responses
-- **Origin tracking**: each self-reply chain keeps the originating user identity so downstream persona self-messages still respect that user's server whitelist and personal spotlight restrictions
+- **Purpose**: Limit the total number of persona activations after the first trigger in a session
+- **Origin tracking**: each trigger session keeps the originating user identity so downstream persona self-messages still respect that user’s server whitelist and personal spotlight restrictions
 
-### Mental Model: Nested Array
+### Mental Model: Trigger Counter
 
-Think of the self-reply chain as a nested array with size `limit + 1`:
+Think of the trigger counter as a budget of additional activations after the first (free) trigger:
 
 ```javascript
 // With selfReplyLimit = 3
-const selfReplyChain = [
-  [User/Manual],     // Index 0: Bypass phase (up to /config persona-trigger-limit per message)
-  [Level 1],         // Index 1: depth = 1
-  [Level 2],         // Index 2: depth = 2
-  [Level 3],         // Index 3: depth = 3 (limit reached!)
-  [BLOCKED]          // Index 4+: Exceeds limit, all triggers blocked
-];
+const triggerBudget = {
+  triggerCount: 0,     // Starts at 0 when user sends a message
+  // First trigger:  count 0 → 1  (free, always allowed)
+  // Second trigger: count 1 → 2  (1st additional)
+  // Third trigger:  count 2 → 3  (2nd additional)
+  // Fourth trigger: count 3 → 4  (3rd additional)
+  // Fifth trigger:  count 4 → BLOCKED (exceeds limit of 3 additional)
+};
 ```
 
 **Key concepts:**
-- Each **level** = one generation of persona responses
-- Each trigger message can enqueue up to the configured multi-trigger cap
-- **Depth** = how many generations deep the chain has gone
-- **Limit** = maximum allowed depth (not counting the user/manual trigger)
-- **`limit = 2` means**: the user/manual turn at depth `0`, then up to **2 self-trigger levels** (`depth = 1` and `depth = 2`). It does **not** mean "only 2 total bot messages."
+- The **first trigger** in a session is always free (doesn’t count against the limit)
+- Each **additional trigger** increments the counter — whether from multi-persona or chains
+- **self-reply-limit = N** means N additional triggers are allowed after the first (N+1 total)
+- **Interaction with persona-trigger-limit**: the effective max per message is `min(persona-trigger-limit, self-reply-limit + 1)`
 
 ### How It Works
 
-#### **Bypass Phase (No Limit Applied)**
+#### **Trigger Counting**
 
-These triggers do NOT increment depth and can still trigger multiple personas (up to `/config persona-trigger-limit`):
+Every automatic persona activation (not manually triggered) increments the trigger counter:
 
-✅ **User messages** → `isSelfMessage = false`
+- **Multi-persona triggers**: User message triggers Alice, Bob, Charlie → Alice is #1 (free), Bob is #2 (additional), Charlie is #3 (additional)
+- **Chain triggers**: Alice’s response triggers Dave → Dave counts as an additional trigger
+- Both share the same counter for the session
+
+#### **Bypass (No Limit Applied)**
+
+These triggers do NOT increment the counter:
+
 ✅ **Slash commands** (`/respond`, `/impersonate`) → `isManuallyTriggered = true`
-✅ **Queued multi-persona responses** → `isManuallyTriggered = true`
 ✅ **Reminders** → Special flags
+✅ **Stop responses** → `isStopResponse = true`
 
-**Example:**
+#### **Example with limit = 1**
+
 ```
-User: "@A, @B, @C, @D"
-└─ depth = 0 (bypass phase)
-└─ All 4 personas respond ✅
+User: "@A, @B, @C"       → persona-trigger-limit = 3, self-reply-limit = 1
+└─ A responds             → triggerCount: 0 → 1 (first, free)
+└─ B responds             → triggerCount: 1 → 2 (1 additional, within limit)
+└─ C BLOCKED ❌           → would be triggerCount 3, exceeds limit of 1+1=2
 ```
-
-#### **Chain Phase (Limit Applied)**
-
-Once personas respond, their messages are processed and can trigger the chain:
-
-⚠️ **Persona message triggers another persona** → `depth += 1`
 
 **Example with limit = 3:**
 ```
-User: "@A"                          → depth 0 (bypass)
-  A: "@B, @C"                       → depth 1 (B, C respond)
-  B: "@D"                           → depth 2 (D responds)
-  C: "@E"                           → depth 3 (E responds, limit reached!)
-  D: "@F"                           → depth 4 (BLOCKED ❌)
-  E: "@G"                           → depth 4 (BLOCKED ❌)
+User: "@A"                          → triggerCount: 0 → 1 (first)
+  A: "@B, @C"                       → triggerCount: 1 → 2 (B queued), 2 → 3 (C queued)
+  B: "@D"                           → triggerCount: 3 → 4 (D responds, limit reached!)
+  C: "@E"                           → triggerCount 4, exceeds limit → BLOCKED ❌
 ```
 
-**Example with limit = 2:**
-```
-User: "@A"                          → depth 0 (bypass)
-  A: "@B"                           → depth 1
-  B: "@C"                           → depth 2 (last allowed self-trigger)
-  C: "@D"                           → depth 3 (BLOCKED ❌)
-```
+### Trigger Session Reset
 
-#### **Important: Depth Increments Per Trigger Message**
+The trigger counter resets to 0 when:
 
-If one persona mentions multiple personas, depth only increments **once**:
-
-```
-A: "@B, @C, @D, @E"  → depth +1
-└─ B, C, D, E all respond (one trigger message = 1 depth)
-```
-
-**NOT** per responding persona:
-```
-❌ WRONG: B responds → depth +1, C responds → depth +1, etc.
-✅ RIGHT: One message triggers B, C, D, E → depth +1 total
-```
-
-### Chain Reset
-
-The chain resets (depth → 0) when:
-
-1. **User sends a message** → Immediate reset
+1. **User sends a message** → Immediate reset (starts a new session)
 2. **30 minutes of inactivity** → Automatic reset (`SELF_REPLY_CHAIN_TTL_MS`)
 
-**Exception:** if the active user sends a natural-language stop message while a generation is already running, TomoriBot preserves the current depth and clears queued self-reply work for that chain instead of resetting it.
+**Exception:** if the active user sends a natural-language stop message while a generation is already running, TomoriBot preserves the current trigger count and clears queued self-reply work for that session instead of resetting it.
 
 Auto-trigger note: auto-chat / always-reply channel behavior only qualifies on real user-like messages. Persona self-messages do not advance the shared auto-chat counter and do not auto-trigger fresh self turns by themselves. When a channel has an auto-trigger persona assignment, that persona owns the auto-trigger fallback for that channel; explicit trigger-word matches still take priority. Personal spotlight auto-trigger behaves the same way, but only for the spotlight owner in that specific channel.
-With deliberate trigger mode enabled, only deliberate trigger invocations count as explicit matches. Plain trigger words no longer override the channel fallback persona unless that persona is the channel's exempt auto-chat owner.
+With deliberate trigger mode enabled, only deliberate trigger invocations count as explicit matches. Plain trigger words no longer override the channel fallback persona unless that persona is the channel’s exempt auto-chat owner.
 
-Proxy-trigger note: if user A is restricted to persona Alice by either server whitelist or personal spotlight, then `Alice -> Bob` self-trigger chains are blocked for that user. Replies, mentions, and other proxy paths do not bypass the originating user's persona access rules.
+Proxy-trigger note: if user A is restricted to persona Alice by either server whitelist or personal spotlight, then `Alice -> Bob` self-trigger chains are blocked for that user. Replies, mentions, and other proxy paths do not bypass the originating user’s persona access rules.
 
 ### Configuration
 
 **Database:** `tomori_configs.self_reply_limit`
 - Default: 3
-- Range: 0 (disabled) to 10 (max)
-- 0 = Only user/manual triggers allowed, all persona chains blocked
+- Range: 0 to 10
+- 0 = Only the first triggered persona responds, no additional triggers allowed
+- N = N additional triggers allowed after the first (N+1 total per session)
 
 **Command:** `/config self-reply-limit`
 
@@ -214,73 +193,60 @@ Proxy-trigger note: if user A is restricted to persona Alice by either server wh
 
 ### Example Flow
 
-**Setup:** Limit = 3, Personas A, B, C, D, E
+**Setup:** self-reply-limit = 3, persona-trigger-limit = 5, Personas A, B, C, D, E
 
 ```
-Level 0: User: "@A, @B"
-         └─ depth = 0, bypass phase
-         └─ A, B queued to respond
+Trigger 1: User: "@A, @B"
+           └─ triggerCount: 0 → 1 (A, first/free)
+           └─ triggerCount: 1 → 2 (B, 1st additional)
 
-Level 1: A: "Ask @C!"
-         B: "Yeah, ask @C and @D!"
-         └─ depth = 1 (two messages, both increment depth)
-         └─ C, D respond
+Trigger 2: A: "Ask @C!"
+           └─ triggerCount: 2 → 3 (C, 2nd additional)
 
-Level 2: C: "Hmm, ask @E!"
-         └─ depth = 2
-         └─ E responds
+Trigger 3: B: "Yeah, ask @D too!"
+           └─ triggerCount: 3 → 4 (D, 3rd additional, limit reached!)
 
-Level 3: D: "I agree with @E!"
-         └─ depth = 3 (limit reached!)
-         └─ E responds (last allowed)
+Trigger 4: C: "Maybe @E?"
+           └─ triggerCount = 4, exceeds limit → BLOCKED ❌
 
-Level 4: E: "Thanks! Ask @A!"
-         └─ depth would be 4 → BLOCKED ❌
-         └─ A does NOT respond
-
-User: "Thanks everyone!"
-      └─ depth = 0 (chain reset)
+           User: "Thanks everyone!"
+           └─ triggerCount = 0 (session reset)
 ```
 
-### Visual Tree Representation
+### Behavioral Summary
 
-```
-Level 0 (User)              [User]
-                               │
-                    ┌──────────┴──────────┐
-Level 1 (depth=1)  [A]                   [B]
-                    │                     │
-              ┌─────┴─────┐          ┌────┴────┐
-Level 2 (d=2) [C]        [D]        [E]       [F]
-               │          │          │         │
-Level 3 (d=3) [G]        [H]        [I]       [J] ← LIMIT!
-               │          │          │         │
-Level 4       ❌         ❌         ❌        ❌  BLOCKED
-```
+| self-reply-limit | Total triggers allowed | Behavior |
+|---|---|---|
+| 0 | 1 | Only first persona responds, no chains or multi-persona |
+| 1 | 2 | First + 1 additional |
+| 3 (default) | 4 | First + 3 additional |
+| 10 (max) | 11 | First + 10 additional |
+
+**Interaction with persona-trigger-limit**: `effective_max_per_message = min(persona-trigger-limit, self-reply-limit + 1)`
 
 ### Key Insights
 
-1. **User always bypasses depth** - User/manual triggers don’t consume chain depth (but still respect `/config persona-trigger-limit`)
-2. **One message = one depth** - Mentioning 10 personas in one message = 1 depth increment
-3. **Shared counter** - All personas share the same depth counter per channel
-4. **Fair multi-triggers** - Multiple personas responding to the same message don't each add depth
+1. **First trigger is free** — The first persona activation in a session never counts against the limit
+2. **Multi-persona and chains share one counter** — All additional triggers increment the same counter
+3. **Shared counter** — All personas share the same trigger counter per channel
+4. **persona-trigger-limit caps breadth, self-reply-limit caps total** — Together they control both dimensions
 
 ### Troubleshooting
 
 **Personas not responding after several triggers?**
-- Check if self-reply limit is reached
-- Look for log: `Self-reply chain limit reached (X)`
-- Have a user send a message to reset the chain
+- Check if self-reply trigger limit is reached
+- Look for log: `Self-reply trigger limit reached (X)`
+- Have a user send a message to reset the session
 - Increase limit with `/config self-reply-limit` (max 10)
 
-**Want to disable cascading entirely?**
+**Want to allow only the first persona to respond?**
 - Set limit to 0: `/config self-reply-limit limit:0`
-- Only user/manual triggers will work, no persona-to-persona chains
+- Only the first triggered persona will respond, no additional triggers
 
 **Need to stop a persona chain without reopening the limit budget?**
 - Send a natural stop message while your generation is active
 - TomoriBot will stop the active stream and clear queued self-reply work for that chain
-- Unlike a normal user message, that stop message does not reset `depth` to `0`
+- Unlike a normal user message, that stop message does not reset the trigger count
 
 ## Webhook Strategy
 
@@ -502,11 +468,12 @@ In-memory caches:
 - **DMs**: no webhook support; alters are not available in DMs.
 - **Sticker rendering**: alter personas send sticker **URL previews** instead of actual stickers.
 
-### Self-Reply Chains
+### Self-Reply Trigger Limits
 
-- **Shared limit**: All personas share one depth counter per channel (not per-persona).
-- **Chain blocks all**: When limit reached, ALL persona triggers are blocked (user can reset by sending a message).
-- **Cascading triggers**: If A triggers B, C, D in one message, that's 1 depth increment (not 3).
+- **Shared counter**: All personas share one trigger counter per channel (not per-persona).
+- **Counter blocks all**: When trigger count exceeds limit, ALL additional persona triggers are blocked (user can reset by sending a message).
+- **First trigger free**: The first persona activation in a session doesn't count against the limit.
+- **Multi-persona counts**: Each persona activation after the first increments the counter, whether from multi-persona triggers or chains.
 
 ### Webhooks (Local Development)
 
@@ -523,9 +490,9 @@ In-memory caches:
    - Confirm trigger words are unique and present in `alter_triggers`
    - Check if message contained the trigger or was a reply to alter webhook
 
-2. **Check self-reply limit:**
-   - Look for log: `Self-reply chain limit reached (X)`
-   - Have a user send a message to reset the chain
+2. **Check self-reply trigger limit:**
+   - Look for log: `Self-reply trigger limit reached (X)`
+   - Have a user send a message to reset the session
    - Increase limit with `/config self-reply-limit` if needed
 
 3. **Check webhook permissions:**
@@ -551,16 +518,16 @@ In-memory caches:
    - Webhooks not supported in DMs
    - Alters will use main persona appearance
 
-### Self-reply chain issues
+### Self-reply trigger issues
 
 **Personas stop responding after several triggers:**
-- Chain limit reached (default: 3)
-- User message resets chain
+- Trigger limit reached (default: 3 additional after first)
+- User message resets the trigger session
 - Check current limit: `/config self-reply-limit`
-- Increase limit (max 10) or disable (0)
+- Increase limit (max 10) or set to 0 for first-trigger-only
 
 **Personas triggering infinite loops:**
-- Limit is too high or disabled (0)
+- Limit is too high
 - Reduce limit with `/config self-reply-limit`
 - Check persona personalities (may be too eager to mention each other)
 
@@ -574,12 +541,12 @@ In-memory caches:
 4. **Stickers:** Sticker tool as alter → CDN URL sent via webhook.
 5. **Reminders:** Reminder created by alter → alter delivers reminder; fallback to main if persona removed.
 
-### Self-Reply Chains
+### Self-Reply Trigger Limits
 
-6. **User bypass:** User triggers 4+ personas → all respond (bypasses limit).
-7. **Chain depth:** Persona A → B → C → limit reached → D blocked.
-8. **Multi-mention depth:** Persona A mentions B, C, D in one message → all respond, depth +1 only.
-9. **Chain reset:** After chain limit reached, user message → chain resets, personas respond again.
+6. **First trigger free:** User triggers 3 personas with self-reply-limit = 1 → first 2 respond (first free + 1 additional), 3rd blocked.
+7. **Chain triggers count:** Persona A → B → C → each additional trigger counts toward the limit.
+8. **Multi-persona counts:** User message triggers B, C, D → each after the first increments the trigger counter.
+9. **Session reset:** After trigger limit reached, user message → counter resets, personas respond again.
 10. **Limit configuration:** `/config self-reply-limit limit:5` → new limit applies immediately.
 
 ### Webhook Robustness (Local Development)

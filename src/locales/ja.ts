@@ -2783,17 +2783,17 @@ Prompt Guidance Rescale: {cfg_rescale}
         },
       },
       "self-reply-limit": {
-        description: `ペルソナ同士の自己返信チェーンを管理します（デフォルト: 3）。`,
-        limit_description: `許可する自己返信回数 (0-10、0で無効、デフォルト: 3)`,
+        description: `最初のペルソナ発動後、追加で何回まで発動を許可するかを設定します（デフォルト: 3）。`,
+        limit_description: `最初の発動後に許可する追加発動回数 (0-10、0 = 最初の発動のみ、デフォルト: 3)`,
         limit: {
           invalid_range_title: `無効な上限値`,
           invalid_range_description: `上限は {min} 〜 {max} の範囲で指定してください。`,
           already_set_title: `既に設定済み`,
           already_set_description: `自己返信上限はすでに **{limit}** に設定されています。`,
           success_title: `自己返信上限を更新しました`,
-          success_description: `自己返信チェーンの上限を **{limit}** に設定しました。`,
-          success_disabled_title: `自己返信を無効化しました`,
-          success_disabled_description: `自己返信チェーンを無効にしました。`,
+          success_description: `自己返信トリガー上限を **{limit}** に設定しました（最初の発動後、{limit} 回まで追加発動を許可）。`,
+          success_disabled_title: `追加発動を無効化しました`,
+          success_disabled_description: `最初に発動したペルソナのみが応答します。追加の発動は許可されません。`,
         },
       },
       sendlimit: {

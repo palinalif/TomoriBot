@@ -195,7 +195,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       capabilitiesContent += "- Each alter persona has its own personality, trigger words, and webhook avatar\n";
       capabilitiesContent += "- Alter personas are triggered when their keywords appear in messages\n";
       capabilitiesContent +=
-        "- Multiple personas can be triggered sequentially from a single message (up to the server's `/config persona-trigger-limit` limit)\n";
+        "- Multiple personas can be matched from a single message (up to the server's `/config trigger-match-limit` limit)\n";
       capabilitiesContent += "- Replying to a webhook message continues the conversation as that persona\n";
       capabilitiesContent += "- Self-triggers are prevented (a persona will not trigger itself)\n\n";
 

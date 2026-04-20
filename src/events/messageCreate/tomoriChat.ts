@@ -290,11 +290,11 @@ const TOOLS_SUPPRESS_FOLLOWUP_AFTER_PRETOOL_TEXT = new Set([
   //"create_task",
 ]);
 const STREAM_SDK_CALL_TIMEOUT_MS = 120000; // Overall SDK call timeout (120 seconds) — must exceed typical TTFT for slow models
-const DEFAULT_SELF_REPLY_LIMIT = 1;
-const MAX_SELF_REPLY_LIMIT = 10;
-const DEFAULT_TRIGGERED_PERSONA_LIMIT = 1;
-const MIN_TRIGGERED_PERSONA_LIMIT = 1;
-const MAX_TRIGGERED_PERSONA_LIMIT = 10;
+const DEFAULT_CASCADE_LIMIT = 3;
+const MAX_CASCADE_LIMIT = 10;
+const DEFAULT_MATCH_LIMIT = 3;
+const MIN_MATCH_LIMIT = 1;
+const MAX_MATCH_LIMIT = 10;
 const SELF_DEBUG_ERROR_EMBED_MAX_DESCRIPTION_LENGTH = 1200;
 const SELF_DEBUG_ERROR_EMBED_MAX_FIELD_COUNT = 6;
 const SELF_DEBUG_ERROR_EMBED_MAX_FIELD_VALUE_LENGTH = 280;
@@ -1943,10 +1943,10 @@ function clearQueuedSelfReplyWork(
 }
 
 interface SelfReplyChainState {
-  depth: number; // Number of self replies already generated in this chain
+  triggerCount: number; // Total triggers in this session (first is "free", each additional counts against cascade-limit)
   lastWasSelf: boolean;
   updatedAt: number;
-  lastRespondedPersonaId: number | null; // Prevents same persona from triggering in consecutive depth levels
+  lastRespondedPersonaId: number | null; // Prevents same persona from triggering consecutively
   originUserDiscId: string | null;
 }
 
@@ -1961,7 +1961,7 @@ function getSelfReplyChainState(channelId: string): SelfReplyChainState {
   }
 
   const fresh: SelfReplyChainState = {
-    depth: 0,
+    triggerCount: 0,
     lastWasSelf: false,
     updatedAt: now,
     lastRespondedPersonaId: null,
@@ -1976,7 +1976,7 @@ function updateSelfReplyChainState(channelId: string, isSelfMessage: boolean): S
   state.updatedAt = Date.now();
 
   if (!isSelfMessage) {
-    state.depth = 0;
+    state.triggerCount = 0;
     state.lastWasSelf = false;
     state.lastRespondedPersonaId = null;
     state.originUserDiscId = null;
@@ -1990,17 +1990,9 @@ function updateSelfReplyChainState(channelId: string, isSelfMessage: boolean): S
   return state;
 }
 
-function incrementSelfReplyChainDepth(channelId: string): number {
-  const state = getSelfReplyChainState(channelId);
-  state.depth += 1;
-  state.lastWasSelf = true;
-  state.updatedAt = Date.now();
-  return state.depth;
-}
-
 /**
  * Records which persona last responded in a channel.
- * Used to prevent the same persona from triggering in consecutive depth levels.
+ * Used to prevent the same persona from triggering consecutively.
  * @param channelId - The Discord channel ID
  * @param personaId - The tomori_id of the persona that just responded
  */
@@ -2343,7 +2335,7 @@ export default async function tomoriChat(
   // Note: The guard for replies to other bots' messages is placed after earlyAllPersonas
   // is loaded (below), so all persona/alter trigger words can be checked before blocking.
 
-  if (isRealUserMessage && !isActiveNaturalStopMessage) {
+  if (isRealUserMessage && !isActiveNaturalStopMessage && !isPersonaJob) {
     updateSelfReplyChainState(channel.id, false);
   }
 
@@ -3220,13 +3212,10 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         ? (allPersonas.find((p) => p.tomori_id === selectedPersonaId) ?? fallbackPersona)
         : fallbackPersona;
       const isSelfMessage = isSelfTriggerMessage(message, allPersonas);
-      const rawSelfReplyLimit = tomoriState?.config.self_reply_limit ?? DEFAULT_SELF_REPLY_LIMIT;
-      const selfReplyLimit = Math.min(Math.max(rawSelfReplyLimit, 0), MAX_SELF_REPLY_LIMIT);
-      const rawTriggeredPersonaLimit = tomoriState?.config.triggered_persona_limit ?? DEFAULT_TRIGGERED_PERSONA_LIMIT;
-      const triggeredPersonaLimit = Math.min(
-        Math.max(rawTriggeredPersonaLimit, MIN_TRIGGERED_PERSONA_LIMIT),
-        MAX_TRIGGERED_PERSONA_LIMIT,
-      );
+      const rawCascadeLimit = tomoriState?.config.cascade_limit ?? DEFAULT_CASCADE_LIMIT;
+      const cascadeLimit = Math.min(Math.max(rawCascadeLimit, 0), MAX_CASCADE_LIMIT);
+      const rawMatchLimit = tomoriState?.config.match_limit ?? DEFAULT_MATCH_LIMIT;
+      const matchLimit = Math.min(Math.max(rawMatchLimit, MIN_MATCH_LIMIT), MAX_MATCH_LIMIT);
       let textQuotaStateForTrigger: TextQuotaTriggerState | null = null;
 
       if ((message.author.bot || message.webhookId) && !isSelfMessage && !isManuallyTriggered && !isMatrixRelay) {
@@ -3895,16 +3884,33 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           }
         }
 
-        // Apply per-message multi-trigger cap for automatic trigger matching.
-        if (personasToRespond.length > triggeredPersonaLimit) {
+        // Apply per-message match limit cap for automatic trigger matching.
+        if (personasToRespond.length > matchLimit) {
           const droppedPersonas = personasToRespond
-            .slice(triggeredPersonaLimit)
+            .slice(matchLimit)
             .map((p) => p.tomori_nickname)
             .join(", ");
-          personasToRespond = personasToRespond.slice(0, triggeredPersonaLimit);
+          personasToRespond = personasToRespond.slice(0, matchLimit);
           log.info(
-            `Multi-trigger cap applied (${triggeredPersonaLimit}) for message ${message.id}. Dropped personas: ${droppedPersonas || "none"}`,
+            `Match limit cap applied (${matchLimit}) for message ${message.id}. Dropped personas: ${droppedPersonas || "none"}`,
           );
+        }
+
+        // 1. Apply cascade trigger count cap: first trigger is free,
+        //    each additional counts against cascade-limit.
+        //    This caps total personas to cascadeLimit + 1.
+        if (!isManuallyTriggered && !isStopResponse && personasToRespond.length > 0) {
+          const maxAllowed = cascadeLimit + 1;
+          if (personasToRespond.length > maxAllowed) {
+            const droppedPersonas = personasToRespond
+              .slice(maxAllowed)
+              .map((p) => p.tomori_nickname)
+              .join(", ");
+            personasToRespond = personasToRespond.slice(0, maxAllowed);
+            log.info(
+              `Cascade trigger cap (${maxAllowed} max) for message ${message.id}. Dropped: ${droppedPersonas || "none"}`,
+            );
+          }
         }
       }
 
@@ -4049,27 +4055,20 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         }
       }
 
-      if (
-        isSelfMessage &&
-        !isManuallyTriggered &&
-        !reminderRecipientID &&
-        !reminderData?.self_reminder &&
-        !isStopResponse
-      ) {
-        if (selfReplyLimit <= 0) {
+      // 2. Cascade trigger count check: applies to ALL automatic triggers
+      //    (chains, persona jobs, and multi-persona). The first trigger is free,
+      //    each subsequent one counts against cascade-limit.
+      if (!isManuallyTriggered && !reminderRecipientID && !reminderData?.self_reminder && !isStopResponse) {
+        const triggerState = getSelfReplyChainState(channel.id);
+        if (triggerState.triggerCount > cascadeLimit) {
           log.info(
-            `Self-reply chain disabled (limit=0). Skipping self-triggered message ${message.id} in channel ${channel.id}.`,
+            `Cascade trigger limit reached (${cascadeLimit}). Skipping message ${message.id} in channel ${channel.id}.`,
           );
           return;
         }
-
-        const depth = incrementSelfReplyChainDepth(channel.id);
-        if (depth > selfReplyLimit) {
-          log.info(
-            `Self-reply chain limit reached (${selfReplyLimit}). Skipping self-triggered message ${message.id} in channel ${channel.id}.`,
-          );
-          return;
-        }
+        triggerState.triggerCount++;
+        triggerState.updatedAt = Date.now();
+        if (isSelfMessage) triggerState.lastWasSelf = true;
       }
 
       log.info(
@@ -8673,13 +8672,13 @@ export function shouldBotReply(
 ): boolean {
   const isSelfMessage = isSelfTriggerMessage(message, allPersonas);
   const isMatrixRelayMessage = Boolean(message.webhookId) && isMatrixBridgeWebhookUsername(message.author.username);
-  const rawSelfReplyLimit = tomoriState.config.self_reply_limit ?? DEFAULT_SELF_REPLY_LIMIT;
-  const selfReplyLimit = Math.min(Math.max(rawSelfReplyLimit, 0), MAX_SELF_REPLY_LIMIT);
+  const rawCascadeLimit = tomoriState.config.cascade_limit ?? DEFAULT_CASCADE_LIMIT;
+  const cascadeLimit = Math.min(Math.max(rawCascadeLimit, 0), MAX_CASCADE_LIMIT);
 
   if (message.webhookId && !isSelfMessage && !isMatrixRelayMessage) {
     return false;
   }
-  if (isSelfMessage && selfReplyLimit <= 0) {
+  if (isSelfMessage && cascadeLimit <= 0) {
     return false;
   }
 
@@ -8691,7 +8690,7 @@ export function shouldBotReply(
   const isVoiceChannel =
     message.channel.type === ChannelType.GuildVoice || message.channel.type === ChannelType.GuildStageVoice;
   if (
-    (message.author.bot && (!isSelfMessage || selfReplyLimit <= 0) && !isMatrixRelayMessage) ||
+    (message.author.bot && (!isSelfMessage || cascadeLimit <= 0) && !isMatrixRelayMessage) ||
     message.content.startsWith("!") || // Basic command prefix check
     !(
       message.channel instanceof TextChannel ||
@@ -8703,10 +8702,10 @@ export function shouldBotReply(
     return false;
   }
 
-  // Self-reply chain guard: stop if we've already hit the limit
-  if (isSelfMessage && selfReplyLimit > 0) {
+  // Cascade trigger count guard: stop if we've already hit the limit
+  if (isSelfMessage && cascadeLimit > 0) {
     const chainState = getSelfReplyChainState(message.channel.id);
-    if (chainState.depth >= selfReplyLimit) {
+    if (chainState.triggerCount > cascadeLimit) {
       return false;
     }
   }
@@ -8967,7 +8966,7 @@ export function shouldBotReply(
         `from "${senderPersona?.tomori_nickname ?? message.author.username}" → would reply. ` +
         `Reasons: [${reasons.join(", ")}]. ` +
         `autoch_counter=${tomoriState.autoch_counter}/${tomoriState.autoch_next_target}, ` +
-        `selfReplyLimit=${selfReplyLimit}, chainDepth=${getSelfReplyChainState(message.channel.id).depth}`,
+        `cascadeLimit=${cascadeLimit}, triggerCount=${getSelfReplyChainState(message.channel.id).triggerCount}`,
     );
   }
 

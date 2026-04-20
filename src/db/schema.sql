@@ -555,13 +555,27 @@ SELECT add_column_if_not_exists('tomori_configs', 'cooldown_type', 'INTEGER', '0
 -- cooldown_length: Duration in seconds (1-86400, default 5)
 SELECT add_column_if_not_exists('tomori_configs', 'cooldown_length', 'INTEGER', '5');
 
--- Self-reply chain limit for persona-to-persona triggering (January 2026)
--- 0 = disabled, default 3, max 10 enforced by command validation
-SELECT add_column_if_not_exists('tomori_configs', 'self_reply_limit', 'INTEGER', '3');
+-- Cascade trigger limit for persona triggering (January 2026, renamed April 2026)
+-- 0 = first trigger only, default 3, max 10 enforced by command validation
+-- Renamed from self_reply_limit to cascade_limit
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tomori_configs' AND column_name = 'self_reply_limit') THEN
+    ALTER TABLE tomori_configs RENAME COLUMN self_reply_limit TO cascade_limit;
+  END IF;
+END $$;
+SELECT add_column_if_not_exists('tomori_configs', 'cascade_limit', 'INTEGER', '3');
 
--- Per-message multi-persona trigger cap (February 2026)
+-- Per-message match limit cap (February 2026, renamed April 2026)
 -- Minimum 1, default 3, max 10 enforced by command validation
-SELECT add_column_if_not_exists('tomori_configs', 'triggered_persona_limit', 'INTEGER', '3');
+-- Renamed from triggered_persona_limit to match_limit
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tomori_configs' AND column_name = 'triggered_persona_limit') THEN
+    ALTER TABLE tomori_configs RENAME COLUMN triggered_persona_limit TO match_limit;
+  END IF;
+END $$;
+SELECT add_column_if_not_exists('tomori_configs', 'match_limit', 'INTEGER', '3');
 
 -- Per-server history fetch limit for context building (February 2026)
 -- Min 20, max 100 enforced by command and schema validation
