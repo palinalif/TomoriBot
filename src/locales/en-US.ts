@@ -583,10 +583,10 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_cooldown_type: `Cooldown Type`,
         field_cooldown_length: `Cooldown Duration`,
         field_cooldown_length_value: `{seconds}s`,
-        field_cascade_limit: `Self-Reply Limit`,
+        field_cascade_limit: `Cascade Limit`,
         field_send_message_limit: `Send Limit`,
         field_always_reply: `Always-Reply`,
-        field_triggered_persona_limit: `Triggered Persona Limit`,
+        field_match_limit: `Match Limit`,
         field_personalization: `Personal Memories`,
         field_self_teach: `Self-Teaching`,
         field_manage_message: `Message Management Tool`,
@@ -1276,7 +1276,7 @@ Please try again with different inputs or check your API key.`,
         alter_description: `- Multiple characters can coexist in one server via alter personas
 - Each alter has its own personality and is triggered by specific keywords
 - Alter personas use webhooks for distinct avatars
-- Multiple alters can respond to a single message (up to the \`/config persona-trigger-limit\` limit)
+- Multiple alters can respond to a single message (up to the \`/config trigger-match-limit\` limit)
 - Replying to a webhook message continues the conversation as that persona
 - Manage alters with \`/persona import\` (alter option) and \`/persona remove\``,
         expressions_title: `Expressions & Reactions`,
@@ -2761,17 +2761,17 @@ Restored now ({restored_count}): {restored_list}`,
           choice_strict_server_wide: `Strict Server-Wide`,
         },
       },
-      "self-reply-limit": {
+      "trigger-cascade-limit": {
         description: `Manage how many additional persona triggers are allowed after the first (default: 3).`,
         limit_description: `Additional triggers after the first (0-10, 0 = first trigger only, default: 3).`,
         limit: {
           invalid_range_title: `Invalid Limit`,
           invalid_range_description: `Limit must be between {min} and {max}.`,
           already_set_title: `Already Set`,
-          already_set_description: `Self-reply limit is already set to **{limit}**.`,
-          success_title: `Self-Reply Limit Updated`,
-          success_description: `Self-reply trigger limit set to **{limit}** (allows {limit} additional trigger(s) after the first).`,
-          success_disabled_title: `Additional Triggers Disabled`,
+          already_set_description: `Cascade limit is already set to **{limit}**.`,
+          success_title: `Cascade Limit Updated`,
+          success_description: `Cascade limit set to **{limit}** (allows {limit} additional trigger(s) after the first).`,
+          success_disabled_title: `Cascade Disabled`,
           success_disabled_description: `Only the first triggered persona will respond. No additional triggers allowed.`,
         },
       },
@@ -2815,16 +2815,16 @@ Restored now ({restored_count}): {restored_list}`,
           success_description: `I will now fetch up to **{limit}** recent messages for context.`,
         },
       },
-      "persona-trigger-limit": {
-        description: `Manage personas triggered per message (default: 1).`,
-        limit_description: `Max triggered personas per message (1-10, default: 1).`,
+      "trigger-match-limit": {
+        description: `Manage how many personas can match a single message (default: 3).`,
+        limit_description: `Max matched personas per message (1-10, default: 3).`,
         limit: {
           invalid_range_title: `Invalid Limit`,
           invalid_range_description: `Limit must be between {min} and {max}.`,
           already_set_title: `Already Set`,
-          already_set_description: `Multi-trigger limit is already set to **{limit}**.`,
-          success_title: `Multi-Trigger Limit Updated`,
-          success_description: `Per-message persona trigger limit set to **{limit}**.`,
+          already_set_description: `Match limit is already set to **{limit}**.`,
+          success_title: `Match Limit Updated`,
+          success_description: `Per-message match limit set to **{limit}**.`,
         },
       },
       voice: {

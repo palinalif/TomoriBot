@@ -3895,23 +3895,6 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
             `Match limit cap applied (${matchLimit}) for message ${message.id}. Dropped personas: ${droppedPersonas || "none"}`,
           );
         }
-
-        // 1. Apply cascade trigger count cap: first trigger is free,
-        //    each additional counts against cascade-limit.
-        //    This caps total personas to cascadeLimit + 1.
-        if (!isManuallyTriggered && !isStopResponse && personasToRespond.length > 0) {
-          const maxAllowed = cascadeLimit + 1;
-          if (personasToRespond.length > maxAllowed) {
-            const droppedPersonas = personasToRespond
-              .slice(maxAllowed)
-              .map((p) => p.tomori_nickname)
-              .join(", ");
-            personasToRespond = personasToRespond.slice(0, maxAllowed);
-            log.info(
-              `Cascade trigger cap (${maxAllowed} max) for message ${message.id}. Dropped: ${droppedPersonas || "none"}`,
-            );
-          }
-        }
       }
 
       // If no personas match, return early
@@ -4055,20 +4038,22 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         }
       }
 
-      // 2. Cascade trigger count check: applies to ALL automatic triggers
-      //    (chains, persona jobs, and multi-persona). The first trigger is free,
-      //    each subsequent one counts against cascade-limit.
-      if (!isManuallyTriggered && !reminderRecipientID && !reminderData?.self_reminder && !isStopResponse) {
+      // 2. Cascade trigger count check: applies to automatic bot-to-bot triggers AND persona jobs.
+      //    The very first user message bypasses this, establishing the start of the chain.
+      if (
+        (isSelfMessage || isPersonaJob) &&
+        !reminderRecipientID &&
+        !reminderData?.self_reminder &&
+        !isStopResponse
+      ) {
         const triggerState = getSelfReplyChainState(channel.id);
-        if (triggerState.triggerCount > cascadeLimit) {
+        // The absolute maximum number of bot responses in a chain is cascadeLimit + 1 (1 free + cascadeLimit additional)
+        if (triggerState.triggerCount >= cascadeLimit + 1) {
           log.info(
-            `Cascade trigger limit reached (${cascadeLimit}). Skipping message ${message.id} in channel ${channel.id}.`,
+            `Cascade trigger limit reached (total responses: ${triggerState.triggerCount} >= ${cascadeLimit + 1}). Skipping message ${message.id} in channel ${channel.id}.`,
           );
           return;
         }
-        triggerState.triggerCount++;
-        triggerState.updatedAt = Date.now();
-        if (isSelfMessage) triggerState.lastWasSelf = true;
       }
 
       log.info(
@@ -8066,6 +8051,19 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           log.success(
             `Completed response ${personaIndex + 1}/${personasToRespond.length} from persona "${currentPersona.tomori_nickname}"`,
           );
+
+          // Increment trigger count AFTER successful automated response
+          if (
+            (!isManuallyTriggered || isPersonaJob) &&
+            !reminderRecipientID &&
+            !reminderData?.self_reminder &&
+            !isStopResponse
+          ) {
+            const triggerState = getSelfReplyChainState(channel.id);
+            triggerState.triggerCount++;
+            triggerState.updatedAt = Date.now();
+            if (isSelfMessage) triggerState.lastWasSelf = true;
+          }
         } catch (personaError) {
           // Handle errors for this specific persona and continue with remaining personas
           log.error(
@@ -8702,10 +8700,10 @@ export function shouldBotReply(
     return false;
   }
 
-  // Cascade trigger count guard: stop if we've already hit the limit
+  // Cascade trigger count guard: stop if we've already hit the absolute limit
   if (isSelfMessage && cascadeLimit > 0) {
     const chainState = getSelfReplyChainState(message.channel.id);
-    if (chainState.triggerCount > cascadeLimit) {
+    if (chainState.triggerCount >= cascadeLimit + 1) {
       return false;
     }
   }

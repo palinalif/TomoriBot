@@ -54,7 +54,7 @@ Each persona checks its own trigger list:
 - **Main**: `tomori_configs.trigger_words`.
 - **Alter**: `tomoris.alter_triggers`.
 
-If multiple personas match, they respond in deterministic order based on where their trigger first appears in the message. The per-message count is capped by `/config persona-trigger-limit`.
+If multiple personas match, they respond in deterministic order based on where their trigger first appears in the message. The per-message count is capped by `/config trigger-match-limit`.
 
 ### Manual triggers
 
@@ -94,11 +94,11 @@ High-level flow (per incoming message):
 
 ## Self-Reply Trigger System
 
-To prevent infinite loops and unbounded persona activations, TomoriBot implements a **self-reply trigger limit** that controls how many persona triggers can occur after the first one in a session.
+To prevent infinite loops and unbounded persona activations, TomoriBot implements a **cascade trigger limit** that controls how many persona triggers can occur after the first one in a session.
 
 ### Overview
 
-- **Default limit**: 3 (configurable via `/config self-reply-limit`, max 10)
+- **Default limit**: 3 (configurable via `/config trigger-cascade-limit`, max 10)
 - **Scope**: Per-channel (shared across all personas)
 - **Purpose**: Limit the total number of persona activations after the first trigger in a session
 - **Origin tracking**: each trigger session keeps the originating user identity so downstream persona self-messages still respect that user’s server whitelist and personal spotlight restrictions
@@ -108,7 +108,7 @@ To prevent infinite loops and unbounded persona activations, TomoriBot implement
 Think of the trigger counter as a budget of additional activations after the first (free) trigger:
 
 ```javascript
-// With selfReplyLimit = 3
+// With cascadeLimit = 3
 const triggerBudget = {
   triggerCount: 0,     // Starts at 0 when user sends a message
   // First trigger:  count 0 → 1  (free, always allowed)
@@ -122,8 +122,8 @@ const triggerBudget = {
 **Key concepts:**
 - The **first trigger** in a session is always free (doesn’t count against the limit)
 - Each **additional trigger** increments the counter — whether from multi-persona or chains
-- **self-reply-limit = N** means N additional triggers are allowed after the first (N+1 total)
-- **Interaction with persona-trigger-limit**: the effective max per message is `min(persona-trigger-limit, self-reply-limit + 1)`
+- **trigger-cascade-limit = N** means N additional triggers are allowed after the first (N+1 total)
+- **Interaction with trigger-match-limit**: the effective max per message is `min(trigger-match-limit, trigger-cascade-limit + 1)`
 
 ### How It Works
 
@@ -146,7 +146,7 @@ These triggers do NOT increment the counter:
 #### **Example with limit = 1**
 
 ```
-User: "@A, @B, @C"       → persona-trigger-limit = 3, self-reply-limit = 1
+User: "@A, @B, @C"       → trigger-match-limit = 3, trigger-cascade-limit = 1
 └─ A responds             → triggerCount: 0 → 1 (first, free)
 └─ B responds             → triggerCount: 1 → 2 (1 additional, within limit)
 └─ C BLOCKED ❌           → would be triggerCount 3, exceeds limit of 1+1=2
@@ -167,7 +167,7 @@ The trigger counter resets to 0 when:
 1. **User sends a message** → Immediate reset (starts a new session)
 2. **30 minutes of inactivity** → Automatic reset (`SELF_REPLY_CHAIN_TTL_MS`)
 
-**Exception:** if the active user sends a natural-language stop message while a generation is already running, TomoriBot preserves the current trigger count and clears queued self-reply work for that session instead of resetting it.
+**Exception:** if the active user sends a natural-language stop message while a generation is already running, TomoriBot preserves the current trigger count and clears queued cascade work for that session instead of resetting it.
 
 Auto-trigger note: auto-chat / always-reply channel behavior only qualifies on real user-like messages. Persona self-messages do not advance the shared auto-chat counter and do not auto-trigger fresh self turns by themselves. When a channel has an auto-trigger persona assignment, that persona owns the auto-trigger fallback for that channel; explicit trigger-word matches still take priority. Personal spotlight auto-trigger behaves the same way, but only for the spotlight owner in that specific channel.
 With deliberate trigger mode enabled, only deliberate trigger invocations count as explicit matches. Plain trigger words no longer override the channel fallback persona unless that persona is the channel’s exempt auto-chat owner.
@@ -176,24 +176,24 @@ Proxy-trigger note: if user A is restricted to persona Alice by either server wh
 
 ### Configuration
 
-**Database:** `tomori_configs.self_reply_limit`
+**Database:** `tomori_configs.cascade_limit`
 - Default: 3
 - Range: 0 to 10
 - 0 = Only the first triggered persona responds, no additional triggers allowed
 - N = N additional triggers allowed after the first (N+1 total per session)
 
-**Command:** `/config self-reply-limit`
+**Command:** `/config trigger-cascade-limit`
 
-**Database:** `tomori_configs.triggered_persona_limit`
+**Database:** `tomori_configs.match_limit`
 - Default: 3
 - Range: 1 to 10
 - Caps how many personas one message can trigger
 
-**Command:** `/config persona-trigger-limit`
+**Command:** `/config trigger-match-limit`
 
 ### Example Flow
 
-**Setup:** self-reply-limit = 3, persona-trigger-limit = 5, Personas A, B, C, D, E
+**Setup:** trigger-cascade-limit = 3, trigger-match-limit = 5, Personas A, B, C, D, E
 
 ```
 Trigger 1: User: "@A, @B"
@@ -215,37 +215,37 @@ Trigger 4: C: "Maybe @E?"
 
 ### Behavioral Summary
 
-| self-reply-limit | Total triggers allowed | Behavior |
+| trigger-cascade-limit | Total triggers allowed | Behavior |
 |---|---|---|
 | 0 | 1 | Only first persona responds, no chains or multi-persona |
 | 1 | 2 | First + 1 additional |
 | 3 (default) | 4 | First + 3 additional |
 | 10 (max) | 11 | First + 10 additional |
 
-**Interaction with persona-trigger-limit**: `effective_max_per_message = min(persona-trigger-limit, self-reply-limit + 1)`
+**Interaction with trigger-match-limit**: `effective_max_per_message = min(trigger-match-limit, trigger-cascade-limit + 1)`
 
 ### Key Insights
 
 1. **First trigger is free** — The first persona activation in a session never counts against the limit
 2. **Multi-persona and chains share one counter** — All additional triggers increment the same counter
 3. **Shared counter** — All personas share the same trigger counter per channel
-4. **persona-trigger-limit caps breadth, self-reply-limit caps total** — Together they control both dimensions
+4. **trigger-match-limit caps breadth, trigger-cascade-limit caps total** — Together they control both dimensions
 
 ### Troubleshooting
 
 **Personas not responding after several triggers?**
-- Check if self-reply trigger limit is reached
+- Check if cascade trigger limit is reached
 - Look for log: `Self-reply trigger limit reached (X)`
 - Have a user send a message to reset the session
-- Increase limit with `/config self-reply-limit` (max 10)
+- Increase limit with `/config trigger-cascade-limit` (max 10)
 
 **Want to allow only the first persona to respond?**
-- Set limit to 0: `/config self-reply-limit limit:0`
+- Set limit to 0: `/config trigger-cascade-limit limit:0`
 - Only the first triggered persona will respond, no additional triggers
 
 **Need to stop a persona chain without reopening the limit budget?**
 - Send a natural stop message while your generation is active
-- TomoriBot will stop the active stream and clear queued self-reply work for that chain
+- TomoriBot will stop the active stream and clear queued cascade work for that chain
 - Unlike a normal user message, that stop message does not reset the trigger count
 
 ## Webhook Strategy
@@ -490,10 +490,10 @@ In-memory caches:
    - Confirm trigger words are unique and present in `alter_triggers`
    - Check if message contained the trigger or was a reply to alter webhook
 
-2. **Check self-reply trigger limit:**
+2. **Check cascade trigger limit:**
    - Look for log: `Self-reply trigger limit reached (X)`
    - Have a user send a message to reset the session
-   - Increase limit with `/config self-reply-limit` if needed
+   - Increase limit with `/config trigger-cascade-limit` if needed
 
 3. **Check webhook permissions:**
    - Verify bot has `MANAGE_WEBHOOKS` permission in channel
@@ -523,12 +523,12 @@ In-memory caches:
 **Personas stop responding after several triggers:**
 - Trigger limit reached (default: 3 additional after first)
 - User message resets the trigger session
-- Check current limit: `/config self-reply-limit`
+- Check current limit: `/config trigger-cascade-limit`
 - Increase limit (max 10) or set to 0 for first-trigger-only
 
 **Personas triggering infinite loops:**
 - Limit is too high
-- Reduce limit with `/config self-reply-limit`
+- Reduce limit with `/config trigger-cascade-limit`
 - Check persona personalities (may be too eager to mention each other)
 
 ## Test Checklist (Recommended)
@@ -543,11 +543,11 @@ In-memory caches:
 
 ### Self-Reply Trigger Limits
 
-6. **First trigger free:** User triggers 3 personas with self-reply-limit = 1 → first 2 respond (first free + 1 additional), 3rd blocked.
+6. **First trigger free:** User triggers 3 personas with trigger-cascade-limit = 1 → first 2 respond (first free + 1 additional), 3rd blocked.
 7. **Chain triggers count:** Persona A → B → C → each additional trigger counts toward the limit.
 8. **Multi-persona counts:** User message triggers B, C, D → each after the first increments the trigger counter.
 9. **Session reset:** After trigger limit reached, user message → counter resets, personas respond again.
-10. **Limit configuration:** `/config self-reply-limit limit:5` → new limit applies immediately.
+10. **Limit configuration:** `/config trigger-cascade-limit limit:5` → new limit applies immediately.
 
 ### Webhook Robustness (Local Development)
 

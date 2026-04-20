@@ -583,10 +583,10 @@ export default {
         field_cooldown_type: `クールダウンタイプ`,
         field_cooldown_length: `クールダウン時間`,
         field_cooldown_length_value: `{seconds}秒`,
-        field_self_reply_limit: `自己返信上限`,
+        field_cascade_limit: `カスケード上限`,
         field_send_message_limit: `送信上限`,
         field_always_reply: `常時応答`,
-        field_triggered_persona_limit: `トリガーペルソナ上限`,
+        field_match_limit: `マッチ上限`,
         field_personalization: `個人の記憶`,
         field_self_teach: `自己学習`,
         field_manage_message: `メッセージ管理ツール`,
@@ -1276,7 +1276,7 @@ export default {
         alter_description: `- アルターペルソナを使って、一つのサーバーに複数のキャラクターが共存できます
 - それぞれのアルターは独自のパーソナリティを持ち、特定のキーワードでトリガーされます
 - アルターペルソナは異なるアバターのためにウェブフックを使用します
-- 一つのメッセージで複数のアルターを同時にトリガーできます（\`/config persona-trigger-limit\`の上限まで）
+- 一つのメッセージで複数のアルターを同時にマッチできます（\`/config trigger-match-limit\`の上限まで）
 - ウェブフックメッセージに返信すると、そのペルソナとして会話が続きます
 - \`/persona import\`（アルターオプション）と\`/persona remove\`でアルターを管理できます`,
         expressions_title: `表情＆リアクション`,
@@ -2782,17 +2782,17 @@ Prompt Guidance Rescale: {cfg_rescale}
           choice_strict_server_wide: `厳密サーバー全体`,
         },
       },
-      "self-reply-limit": {
+      "trigger-cascade-limit": {
         description: `最初のペルソナ発動後、追加で何回まで発動を許可するかを設定します（デフォルト: 3）。`,
         limit_description: `最初の発動後に許可する追加発動回数 (0-10、0 = 最初の発動のみ、デフォルト: 3)`,
         limit: {
           invalid_range_title: `無効な上限値`,
           invalid_range_description: `上限は {min} 〜 {max} の範囲で指定してください。`,
           already_set_title: `既に設定済み`,
-          already_set_description: `自己返信上限はすでに **{limit}** に設定されています。`,
-          success_title: `自己返信上限を更新しました`,
-          success_description: `自己返信トリガー上限を **{limit}** に設定しました（最初の発動後、{limit} 回まで追加発動を許可）。`,
-          success_disabled_title: `追加発動を無効化しました`,
+          already_set_description: `カスケード上限はすでに **{limit}** に設定されています。`,
+          success_title: `カスケード上限を更新しました`,
+          success_description: `カスケード上限を **{limit}** に設定しました（最初の発動後、{limit} 回まで追加発動を許可）。`,
+          success_disabled_title: `カスケードを無効化しました`,
           success_disabled_description: `最初に発動したペルソナのみが応答します。追加の発動は許可されません。`,
         },
       },
@@ -2836,16 +2836,16 @@ Prompt Guidance Rescale: {cfg_rescale}
           success_description: `今後はコンテキスト用に最大 **{limit}** 件のメッセージを取得します。`,
         },
       },
-      "persona-trigger-limit": {
-        description: `1つのメッセージで起動できるペルソナ数を管理します（デフォルト: 3）。`,
-        limit_description: `1メッセージで起動できるペルソナ上限 (1-10、デフォルト: 3)`,
+      "trigger-match-limit": {
+        description: `1つのメッセージでマッチできるペルソナ数を管理します（デフォルト: 3）。`,
+        limit_description: `1メッセージあたりのマッチ上限 (1-10、デフォルト: 3)`,
         limit: {
           invalid_range_title: `無効な上限値`,
           invalid_range_description: `上限は {min} 〜 {max} の範囲で指定してください。`,
           already_set_title: `既に設定済み`,
-          already_set_description: `マルチトリガー上限はすでに **{limit}** に設定されています。`,
-          success_title: `マルチトリガー上限を更新しました`,
-          success_description: `メッセージごとのペルソナ起動上限を **{limit}** に設定しました。`,
+          already_set_description: `マッチ上限はすでに **{limit}** に設定されています。`,
+          success_title: `マッチ上限を更新しました`,
+          success_description: `メッセージごとのマッチ上限を **{limit}** に設定しました。`,
         },
       },
       voice: {
