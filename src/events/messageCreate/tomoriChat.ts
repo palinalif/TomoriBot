@@ -4040,12 +4040,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
       // 2. Cascade trigger count check: applies to automatic bot-to-bot triggers AND persona jobs.
       //    The very first user message bypasses this, establishing the start of the chain.
-      if (
-        (isSelfMessage || isPersonaJob) &&
-        !reminderRecipientID &&
-        !reminderData?.self_reminder &&
-        !isStopResponse
-      ) {
+      if ((isSelfMessage || isPersonaJob) && !reminderRecipientID && !reminderData?.self_reminder && !isStopResponse) {
         const triggerState = getSelfReplyChainState(channel.id);
         // The absolute maximum number of bot responses in a chain is cascadeLimit + 1 (1 free + cascadeLimit additional)
         if (triggerState.triggerCount >= cascadeLimit + 1) {
@@ -5232,8 +5227,14 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         //   1. persona_llm  — persona-specific override (set via /config model text scope:persona)
         //   2. channel LLM  — channel-level override (set via /config model text scope:channel)
         //   3. global llm   — server-wide default in tomori_configs
-        const channelLlmOverride = await getCachedChannelLlm(currentPersona.server_id, channel.id);
-        const effectiveLlm = currentPersona.persona_llm ?? channelLlmOverride ?? currentPersona.llm;
+        // User impersonation always uses the global text model so the bot speaks in the
+        // target user's voice without inheriting persona/channel model customizations.
+        const channelLlmOverride = isUserImpersonation
+          ? null
+          : await getCachedChannelLlm(currentPersona.server_id, channel.id);
+        const effectiveLlm = isUserImpersonation
+          ? currentPersona.llm
+          : (currentPersona.persona_llm ?? channelLlmOverride ?? currentPersona.llm);
         if (effectiveLlm !== currentPersona.llm) {
           // Shallow-copy so the cached TomoriState is never mutated
           tomoriState = { ...tomoriState, llm: effectiveLlm };
@@ -8089,12 +8090,14 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           }
 
           // Always send error embed for failed persona
+          const personaErrorMessage = personaError instanceof Error ? personaError.message : String(personaError);
           await sendStandardEmbed(channel, locale, {
             color: ColorCode.ERROR,
             titleKey: "general.errors.persona_response_failed_title",
             descriptionKey: "general.errors.persona_response_failed_description",
             descriptionVars: {
               personaName: currentPersona.tomori_nickname,
+              errorMessage: personaErrorMessage,
             },
             footerKey: "genai.generic_error_footer",
           }).catch((embedError) => log.warn("Failed to send persona error embed", embedError));

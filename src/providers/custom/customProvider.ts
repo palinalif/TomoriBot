@@ -65,6 +65,7 @@ import {
   type FunctionResponseImageMetadata,
   type ApiKeyValidationResult,
 } from "../../types/provider/interfaces";
+import { loadSavedProviderConfig } from "@/utils/db/dbRead";
 import { getCustomToolAdapter } from "./customToolAdapter";
 import { customProviderInfo } from "./providerInfo";
 
@@ -341,8 +342,14 @@ export class CustomProvider
    * @returns Promise<CustomProviderConfig> - Provider-specific configuration object
    */
   async createConfig(tomoriState: TomoriState, apiKey: string): Promise<CustomProviderConfig> {
-    // Get endpoint URL from tomori_configs
-    const endpointUrl = tomoriState.config.custom_endpoint_url;
+    // Get endpoint URL — prefer tomori_configs mirror, fall back to saved_provider_configs.
+    // The mirror can be NULL when the global text model was switched to a non-custom provider
+    // (which NULLs out the custom_* columns) while a persona override still points at a custom LLM.
+    let endpointUrl = tomoriState.config.custom_endpoint_url ?? null;
+    if (!endpointUrl) {
+      const savedConfig = await loadSavedProviderConfig(tomoriState.server_id, "custom");
+      endpointUrl = savedConfig?.custom_endpoint_url ?? null;
+    }
 
     if (!endpointUrl) {
       throw new Error(

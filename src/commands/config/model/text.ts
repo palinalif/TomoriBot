@@ -331,6 +331,10 @@ export async function execute(
     if (isCustomProvider(selectedProvider)) {
       if (responseInteraction.isChatInputCommand()) {
         await responseInteraction.deferReply({ flags: MessageFlags.Ephemeral });
+      } else if (!responseInteraction.deferred && !responseInteraction.replied) {
+        // ButtonInteraction from the provider picker — acknowledge in-place so
+        // promptCustomCapabilities can editReply() on it
+        await (responseInteraction as ButtonInteraction).deferUpdate();
       }
 
       const capabilitiesResult = await promptCustomCapabilities(

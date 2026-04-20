@@ -317,89 +317,6 @@ function convertToOpenAIParams(
 // =============================================
 
 /**
- * Make a request to NovelAI API
- * @param endpoint - API endpoint path
- * @param body - Request body
- * @param config - Request configuration
- * @returns API response
- */
-async function makeNovelAIRequest<T>(
-  endpoint: string,
-  body: Record<string, unknown>,
-  config: ApiRequestConfig,
-): Promise<ApiResult<T>> {
-  const { apiKey, timeout = REQUEST_TIMEOUT } = config;
-
-  try {
-    // Build URL
-    const url = `${NOVELAI_API_BASE_URL}${endpoint}`;
-
-    log.info(`Making NovelAI API request to: ${endpoint}`);
-
-    // Create fetch request with timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    // Check if request was successful
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "Unknown error");
-      log.error(`NovelAI API request failed with status ${response.status}: ${errorText}`);
-
-      return {
-        success: false,
-        error: `API request failed: ${response.statusText}`,
-        statusCode: response.status,
-      };
-    }
-
-    // Parse JSON response
-    const data = (await response.json()) as T;
-    log.success(`NovelAI API request to ${endpoint} completed successfully`);
-
-    return {
-      success: true,
-      data,
-      statusCode: response.status,
-    };
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.name === "AbortError") {
-        log.error(`NovelAI API request to ${endpoint} timed out after ${timeout}ms`);
-        return {
-          success: false,
-          error: "Request timed out",
-          statusCode: 408,
-        };
-      }
-
-      log.error(`NovelAI API request to ${endpoint} failed:`, error);
-      return {
-        success: false,
-        error: error.message,
-      };
-    }
-
-    return {
-      success: false,
-      error: "Unknown error occurred",
-    };
-  }
-}
-
-/**
  * Start streaming generation using OpenAI-compatible API endpoint
  * @param prompt - Generation prompt
  * @param model - Model name
@@ -737,7 +654,9 @@ export async function* novelaiGenerateStream(
 }
 
 /**
- * Validate NovelAI API key by making a minimal request
+ * Validate NovelAI API key by fetching user information
+ * Uses GET /user/information which works for all account types
+ * (subscribed, trial, Anlas-only) without triggering a generation.
  * @param apiKey - API key to validate
  * @returns True if valid, throws error with details if invalid
  * @throws Error with statusCode and message on validation failure
@@ -745,40 +664,47 @@ export async function* novelaiGenerateStream(
 export async function validateNovelAIApiKey(apiKey: string): Promise<boolean> {
   log.info("Validating NovelAI API key");
 
-  // Get proper parameters for kayra-v1 (use existing preset)
-  const parameters = getKayraParameters();
-  // Override to minimal generation for faster validation
-  parameters.max_length = 10;
-  parameters.min_length = 1;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-  // Make a minimal request to test the key
-  const result = await makeNovelAIRequest<NovelAIGenerationResponse>(
-    "/ai/generate",
-    {
-      input: "Test",
-      model: "kayra-v1",
-      parameters,
-    },
-    { apiKey, timeout: 10000 },
-  );
+  try {
+    const response = await fetch(`${NOVELAI_ACCOUNT_API_BASE_URL}/user/information`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal: controller.signal,
+    });
 
-  if (result.success) {
-    log.success("NovelAI API key is valid");
-    return true;
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      log.success("NovelAI API key is valid");
+      return true;
+    }
+
+    // Non-OK response — key is invalid or something else went wrong
+    const errorText = await response.text().catch(() => "Unknown error");
+    const error: Error & { statusCode?: number } = new Error(`API request failed: ${response.statusText}`);
+    error.statusCode = response.status;
+
+    log.warn(`NovelAI API key validation failed with status ${response.status}: ${errorText}`);
+    throw error;
+  } catch (err) {
+    clearTimeout(timeoutId);
+
+    // Re-throw our own errors (non-OK responses)
+    if (err instanceof Error && "statusCode" in err) {
+      throw err;
+    }
+
+    // Network/timeout errors
+    const error: Error & { statusCode?: number } = new Error(
+      err instanceof Error ? err.message : "Validation request failed",
+    );
+    error.statusCode = 408;
+    throw error;
   }
-
-  // 401 = invalid key, 402 = insufficient credits (but key is valid)
-  if (result.statusCode === 402) {
-    log.info("NovelAI API key is valid but has insufficient credits");
-    return true;
-  }
-
-  // Create an error object with statusCode for proper error handling
-  const error: Error & { statusCode?: number } = new Error(result.error || "API key validation failed");
-  error.statusCode = result.statusCode;
-
-  log.warn(`NovelAI API key validation failed with status ${result.statusCode}: ${result.error}`);
-  throw error;
 }
 
 // =============================================

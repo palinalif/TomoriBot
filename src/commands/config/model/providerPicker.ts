@@ -30,10 +30,16 @@ const PROVIDER_BUTTON_PREFIX = "provider_pick_";
 const PROVIDER_CANCEL_BUTTON_ID = "provider_pick_cancel";
 const PROVIDER_BUTTONS_PER_ROW = 4;
 
+export interface PickerOptions {
+  /** Extra text appended to the picker embed description (e.g. guidance notes). */
+  additionalDescription?: string;
+}
+
 export async function promptForSavedProvider(
   interaction: ChatInputCommandInteraction | ButtonInteraction,
   locale: string,
   savedProviders: SavedProviderConfigRow[],
+  options?: PickerOptions,
 ): Promise<SavedProviderSelectionResult | null> {
   if (savedProviders.length === 0) {
     await replyInfoEmbed(interaction, locale, {
@@ -57,6 +63,9 @@ export async function promptForSavedProvider(
     descriptionKey: "commands.config.model.providerPicker.description",
     color: ColorCode.INFO,
   });
+  if (options?.additionalDescription) {
+    pickerEmbed.setDescription(`${pickerEmbed.data.description ?? ""}\n\n${options.additionalDescription}`);
+  }
   const pickerComponents = buildProviderRows(savedProviders, locale);
 
   const baseReplyOptions: InteractionEditReplyOptions = {

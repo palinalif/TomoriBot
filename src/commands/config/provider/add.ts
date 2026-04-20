@@ -5,16 +5,17 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import { loadSavedProviderConfig, loadUniqueProviders } from "@/utils/db/dbRead";
+import { loadSavedProviderConfig, loadSavedProviderConfigs, loadUniqueProviders } from "@/utils/db/dbRead";
 import { upsertSavedProviderConfig } from "@/utils/db/dbWrite";
-import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
+import { sql } from "@/utils/db/client";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed, promptWithRawModal } from "@/utils/discord/interactionHelper";
 import type { ErrorContext, UserRow } from "@/types/db/schema";
 import type { ModalComponent, SelectOption } from "@/types/discord/modal";
 import { ProviderFactory } from "@/utils/provider/providerFactory";
-import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
+import { getProviderDisplayName, getStaticProviderInfo } from "@/utils/provider/providerInfoRegistry";
 import { encryptApiKey } from "@/utils/security/crypto";
 import {
   CUSTOM_ENDPOINT_PLACEHOLDER_KEY,
@@ -72,11 +73,24 @@ export async function execute(
     return;
   }
 
-  const providerSelectOptions: SelectOption[] = uniqueProviders.map((provider) => ({
-    label: getProviderDisplayName(provider),
-    value: provider.toLowerCase(),
-    description: undefined,
-  }));
+  // 1. Load already-saved providers for this server so we can mark them in the select menu
+  const savedProviders = await loadSavedProviderConfigs(tomoriState.server_id);
+  const savedProviderNames = new Set(savedProviders.map((cfg) => cfg.provider.toLowerCase()));
+
+  const alreadyExistingSuffix = localizer(locale, "commands.config.provider.add.already_existing_suffix");
+
+  const providerSelectOptions: SelectOption[] = uniqueProviders.map((provider) => {
+    const isExisting = savedProviderNames.has(provider.toLowerCase());
+    return {
+      label: isExisting
+        ? `${getProviderDisplayName(provider)} (${alreadyExistingSuffix})`
+        : getProviderDisplayName(provider),
+      value: provider.toLowerCase(),
+      description: isExisting
+        ? localizer(locale, "commands.config.provider.add.already_existing_description")
+        : undefined,
+    };
+  });
 
   let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
 
@@ -267,6 +281,22 @@ export async function execute(
         color: ColorCode.ERROR,
       });
       return;
+    }
+
+    // 1. Auto-fill the active NovelAI image slot if this is a new NovelAI provider
+    //    and the server hasn't configured one yet
+    const imageGenerationStyle = getStaticProviderInfo(selectedProvider)?.featureSupport.imageGeneration ?? "none";
+    if (
+      imageGenerationStyle === "nai-pipeline" &&
+      savedConfig.nai_diffusion_model_id != null &&
+      tomoriState.config.nai_diffusion_model_id == null
+    ) {
+      await sql`
+        UPDATE tomori_configs
+        SET nai_diffusion_model_id = ${savedConfig.nai_diffusion_model_id}
+        WHERE server_id = ${tomoriState.server_id}
+      `;
+      invalidateTomoriStateCache(serverId);
     }
 
     await replyInfoEmbed(modalSubmitInteraction, locale, {

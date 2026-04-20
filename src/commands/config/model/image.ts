@@ -171,7 +171,31 @@ export async function execute(
 
   try {
     const savedProviders = await loadSavedProvidersForCapability(tomoriState.server_id, "image");
-    providerSelection = await promptForSavedProvider(interaction, locale, savedProviders);
+
+    // 3. Separate NovelAI (nai-pipeline) providers — they use /novelai image model instead
+    const nonNaiProviders = savedProviders.filter(
+      (p) => getStaticProviderInfo(p.provider)?.featureSupport.imageGeneration !== "nai-pipeline",
+    );
+    const hasNaiProviders = savedProviders.length > nonNaiProviders.length;
+
+    // 4. If all image providers are NAI, show guidance pointing to the dedicated command
+    if (nonNaiProviders.length === 0) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.config.model.image.nai_only_title",
+        descriptionKey: hasNaiProviders
+          ? "commands.config.model.image.nai_only_description"
+          : "commands.config.model.image.no_models_title",
+        color: ColorCode.INFO,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    // 5. Show provider picker with non-NAI providers; add footnote if NAI was filtered out
+    const pickerOptions = hasNaiProviders
+      ? { additionalDescription: localizer(locale, "commands.config.model.image.nai_picker_note") }
+      : undefined;
+    providerSelection = await promptForSavedProvider(interaction, locale, nonNaiProviders, pickerOptions);
 
     if (!providerSelection) {
       return;
