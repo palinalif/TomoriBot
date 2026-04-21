@@ -110,7 +110,9 @@ export async function execute(
     // 3. Load all saved provider configs
     const allSavedConfigs = await loadSavedProviderConfigs(tomoriState.server_id);
     const currentProvider = tomoriState.llm.llm_provider.toLowerCase();
-    const removableConfigs = allSavedConfigs.filter((c) => c.provider.toLowerCase() !== currentProvider);
+    const removableConfigs = tomoriState.config.user_byok_mode
+      ? allSavedConfigs
+      : allSavedConfigs.filter((c) => c.provider.toLowerCase() !== currentProvider);
 
     // 4. If no removable configs exist, show error
     if (removableConfigs.length === 0) {
@@ -125,7 +127,7 @@ export async function execute(
 
     // 5. Show provider picker — active provider shown as disabled button with explanation
     const pickerResult = await promptForSavedProvider(interaction, locale, allSavedConfigs, {
-      disabledProviders: [currentProvider],
+      disabledProviders: tomoriState.config.user_byok_mode ? [] : [currentProvider],
       titleKey: "commands.config.provider.remove.picker_title",
       descriptionKey: "commands.config.provider.remove.picker_description",
       additionalDescription: localizer(locale, "commands.config.provider.remove.active_provider_note", {
@@ -145,7 +147,18 @@ export async function execute(
 
     // 7. Delete the saved config and reassign dependent model selections
     const activeProvider = tomoriState.llm.llm_provider.toLowerCase();
-    const activeDefaults = await loadProviderDefaultSelectionIds(activeProvider);
+    const deletingActiveProvider = selectedProvider.toLowerCase() === activeProvider;
+    const activeDefaults =
+      deletingActiveProvider && tomoriState.config.user_byok_mode
+        ? {
+            llm_id: null,
+            diffusion_model_id: null,
+            embedding_model_id: null,
+            nai_diffusion_model_id: null,
+            video_model_id: null,
+            vision_llm_id: null,
+          }
+        : await loadProviderDefaultSelectionIds(activeProvider);
     const reassignmentLines: string[] = [];
 
     const [embeddingProvider, standardImageProvider, naiImageProvider, videoProvider, visionProvider] =
@@ -157,6 +170,7 @@ export async function execute(
         resolveLlmProvider(tomoriState.config.vision_llm_id),
       ]);
 
+    const nextLlmId = deletingActiveProvider && tomoriState.config.user_byok_mode ? null : tomoriState.config.llm_id;
     const nextEmbeddingModelId =
       embeddingProvider === selectedProvider.toLowerCase()
         ? activeDefaults.embedding_model_id
@@ -189,7 +203,20 @@ export async function execute(
     const nextFallbackIds = fallbackRows
       .filter((row) => row.llm_provider.toLowerCase() !== selectedProvider.toLowerCase())
       .map((row) => row.llm_id);
+    const nextConfigApiKey =
+      deletingActiveProvider && tomoriState.config.user_byok_mode ? null : tomoriState.config.api_key;
+    const nextConfigKeyVersion =
+      deletingActiveProvider && tomoriState.config.user_byok_mode ? 1 : (tomoriState.config.key_version ?? 1);
+    const nextCustomEndpointUrl =
+      deletingActiveProvider && tomoriState.config.user_byok_mode ? null : tomoriState.config.custom_endpoint_url;
+    const nextCustomModelName =
+      deletingActiveProvider && tomoriState.config.user_byok_mode ? null : tomoriState.config.custom_model_name;
+    const nextCustomNumCtx =
+      deletingActiveProvider && tomoriState.config.user_byok_mode ? null : tomoriState.config.custom_num_ctx;
 
+    if (nextLlmId !== tomoriState.config.llm_id) {
+      reassignmentLines.push(`- Text model -> ${nextLlmId ? `\`${nextLlmId}\`` : "*cleared*"}`);
+    }
     if (nextEmbeddingModelId !== tomoriState.config.embedding_model_id) {
       reassignmentLines.push(
         `- Embedding model -> ${nextEmbeddingModelId ? `\`${nextEmbeddingModelId}\`` : "*cleared*"}`,
@@ -217,7 +244,13 @@ export async function execute(
 
     await sql`
       UPDATE tomori_configs
-      SET embedding_model_id = ${nextEmbeddingModelId},
+      SET llm_id = ${nextLlmId},
+          api_key = ${nextConfigApiKey},
+          key_version = ${nextConfigKeyVersion},
+          custom_endpoint_url = ${nextCustomEndpointUrl},
+          custom_model_name = ${nextCustomModelName},
+          custom_num_ctx = ${nextCustomNumCtx},
+          embedding_model_id = ${nextEmbeddingModelId},
           diffusion_model_id = ${nextDiffusionModelId},
           nai_diffusion_model_id = ${nextNaiDiffusionModelId},
           video_model_id = ${nextVideoModelId},

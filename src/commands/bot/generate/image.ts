@@ -25,6 +25,7 @@ import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
 import { runHiddenImageTurn } from "@/utils/provider/hiddenImageTurn";
+import { applyPersonalProviderSelectionsToTomoriState } from "@/utils/provider/personalProviderRuntime";
 import { getCachedWhitelistStatus } from "@/utils/cache/channelWhitelistCache";
 import { getCachedPersonalSpotlightStatus } from "@/utils/cache/personalSpotlightCache";
 import { filterPersonasForTrigger, isPersonaAllowedForTrigger } from "@/utils/db/personaAccess";
@@ -332,8 +333,8 @@ export async function execute(
   }
 
   // 4. Load server state.
-  const tomoriState = await loadTomoriState(interaction.guild.id);
-  if (!tomoriState) {
+  const baseTomoriState = await loadTomoriState(interaction.guild.id);
+  if (!baseTomoriState) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",
@@ -342,6 +343,7 @@ export async function execute(
     });
     return;
   }
+  const { tomoriState } = await applyPersonalProviderSelectionsToTomoriState(baseTomoriState, userData.user_id ?? null);
 
   // 4a. Load all persona summaries for the sender selector.
   const personaSummaries = await loadServerPersonaSummaries(tomoriState.server_id);
@@ -644,6 +646,7 @@ export async function execute(
       tomoriState,
       locale,
       interactingUserId: interaction.user.id,
+      internalUserId: userData.user_id ?? null,
       backend: selectedBackend,
       presetLabel: settingPreset.plannerLabel,
       presetInstruction: settingPreset.plannerInstruction,

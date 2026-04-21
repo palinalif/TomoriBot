@@ -21,7 +21,14 @@ import { extractTextFromBuffer } from "@/utils/documents/textExtractor";
 import { generateEmbeddingsBatched, providerSupportsEmbeddingTaskType } from "@/utils/embeddings/embeddingProvider";
 import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
 import type { SelectOption } from "@/types/discord/modal";
-import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
+import {
+  CredentialUnavailableError,
+  getResolvedCapabilityModelId,
+  PersonalProviderRequiredError,
+  type ResolvedCredentials,
+  resolveCapabilityCredentials,
+} from "@/utils/provider/credentialResolver";
+import { applyPersonalProviderSelectionsToTomoriState } from "@/utils/provider/personalProviderRuntime";
 
 const MAX_DOCUMENT_NAME_LENGTH = 64;
 type DocumentScope = "persona" | "serverwide";
@@ -176,6 +183,8 @@ export async function execute(
       });
       return;
     }
+    const overlayResult = await applyPersonalProviderSelectionsToTomoriState(tomoriState, userData.user_id ?? null);
+    tomoriState = overlayResult.tomoriState;
 
     // 6. Check teaching permission (reuse server memory setting)
     if (!tomoriState.config.server_memteaching_enabled && !hasManagePermission) {
@@ -189,7 +198,37 @@ export async function execute(
     }
 
     // 7. Validate embedding model configuration
-    const embeddingModelId = tomoriState.config.embedding_model_id;
+    let embeddingCreds: ResolvedCredentials;
+    try {
+      embeddingCreds = await resolveCapabilityCredentials(tomoriState.server_id, "embedding", {
+        userId: userData.user_id ?? null,
+      });
+    } catch (error) {
+      if (error instanceof PersonalProviderRequiredError) {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "general.errors.personal_provider_required_title",
+          descriptionKey: "general.errors.personal_provider_required_description",
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      if (error instanceof CredentialUnavailableError && error.source === "personal") {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "general.errors.api_key_error_title",
+          descriptionKey: "general.errors.personal_provider_credentials_error_description",
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      throw error;
+    }
+
+    const embeddingModelId =
+      getResolvedCapabilityModelId(embeddingCreds, "embedding") ?? tomoriState.config.embedding_model_id;
     if (!embeddingModelId) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.teach.document.no_embedding_model_title",
@@ -504,11 +543,9 @@ export async function execute(
       return;
     }
 
-    const creds = await resolveCapabilityCredentials(tomoriState.server_id, "embedding");
-
     const embeddings = await generateEmbeddingsBatched({
       provider: embeddingModel.provider,
-      apiKey: creds.apiKey,
+      apiKey: embeddingCreds.apiKey,
       model: embeddingModel.codename,
       inputs: chunks,
       taskType: (await providerSupportsEmbeddingTaskType(embeddingModel.provider)) ? "RETRIEVAL_DOCUMENT" : undefined,

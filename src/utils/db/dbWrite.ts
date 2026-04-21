@@ -17,6 +17,8 @@ import {
   type NaiPresetRow,
   savedProviderConfigSchema,
   type SavedProviderConfigUpsert,
+  userSavedProviderConfigSchema,
+  type UserSavedProviderConfigUpsert,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import { validateTomoriConfigFields, validateTomoriFields, validateUserFields } from "./sqlSecurity";
@@ -1914,6 +1916,116 @@ export async function deleteSavedProviderConfig(serverId: number, provider: stri
     return deleted;
   } catch (error) {
     log.error(`Error deleting saved provider config for server ${serverId}, provider ${provider}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Upserts a personal saved provider config snapshot.
+ * Inserts a new row if none exists for this user+provider, otherwise updates the existing row.
+ * @param userId - Internal users.user_id
+ * @param config - The personal provider config fields to save
+ * @returns True on success, false on failure
+ */
+export async function upsertUserSavedProviderConfig(
+  userId: number,
+  config: UserSavedProviderConfigUpsert,
+): Promise<boolean> {
+  try {
+    const provider = config.provider.toLowerCase();
+    const enabledCapabilitiesLiteral = `{${(config.enabled_capabilities ?? []).map((capability) => `"${capability.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
+    const fallbackJson = JSON.stringify(config.fallback_llm_ids ?? []);
+    const logitBiasesJson = JSON.stringify(config.llm_logit_biases ?? []);
+    const disabledParamsLiteral = `{${(config.llm_disabled_params ?? []).map((param) => `"${param.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
+
+    const rows = await sql`
+			INSERT INTO user_saved_provider_configs (
+				user_id, provider, api_key, key_version,
+				llm_id, diffusion_model_id, embedding_model_id,
+				video_model_id,
+				nai_diffusion_model_id, vision_llm_id, nai_preset_name,
+				custom_endpoint_url, custom_model_name, custom_num_ctx, thinking_level,
+				enabled_capabilities, fallback_llm_ids,
+				llm_temperature, llm_top_p, llm_top_k,
+				llm_frequency_penalty, llm_presence_penalty, llm_min_p,
+				llm_logit_biases, llm_disabled_params
+			) VALUES (
+				${userId}, ${provider}, ${config.api_key}, ${config.key_version},
+				${config.llm_id}, ${config.diffusion_model_id}, ${config.embedding_model_id},
+				${config.video_model_id ?? null},
+				${config.nai_diffusion_model_id}, ${config.vision_llm_id ?? null}, ${config.nai_preset_name},
+				${config.custom_endpoint_url}, ${config.custom_model_name}, ${config.custom_num_ctx ?? null}, ${config.thinking_level},
+				${enabledCapabilitiesLiteral}::text[], ${fallbackJson}::jsonb,
+				${config.llm_temperature ?? null}, ${config.llm_top_p ?? null}, ${config.llm_top_k ?? null},
+				${config.llm_frequency_penalty ?? null}, ${config.llm_presence_penalty ?? null}, ${config.llm_min_p ?? null},
+				${logitBiasesJson}::jsonb, ${disabledParamsLiteral}::text[]
+			)
+			ON CONFLICT (user_id, provider) DO UPDATE SET
+				api_key = EXCLUDED.api_key,
+				key_version = EXCLUDED.key_version,
+				llm_id = EXCLUDED.llm_id,
+				diffusion_model_id = EXCLUDED.diffusion_model_id,
+				embedding_model_id = EXCLUDED.embedding_model_id,
+				video_model_id = EXCLUDED.video_model_id,
+				nai_diffusion_model_id = EXCLUDED.nai_diffusion_model_id,
+				vision_llm_id = EXCLUDED.vision_llm_id,
+				nai_preset_name = EXCLUDED.nai_preset_name,
+				custom_endpoint_url = EXCLUDED.custom_endpoint_url,
+				custom_model_name = EXCLUDED.custom_model_name,
+				custom_num_ctx = EXCLUDED.custom_num_ctx,
+				thinking_level = EXCLUDED.thinking_level,
+				enabled_capabilities = EXCLUDED.enabled_capabilities,
+				fallback_llm_ids = EXCLUDED.fallback_llm_ids,
+				llm_temperature = EXCLUDED.llm_temperature,
+				llm_top_p = EXCLUDED.llm_top_p,
+				llm_top_k = EXCLUDED.llm_top_k,
+				llm_frequency_penalty = EXCLUDED.llm_frequency_penalty,
+				llm_presence_penalty = EXCLUDED.llm_presence_penalty,
+				llm_min_p = EXCLUDED.llm_min_p,
+				llm_logit_biases = EXCLUDED.llm_logit_biases,
+				llm_disabled_params = EXCLUDED.llm_disabled_params
+			RETURNING *
+		`;
+
+    if (rows.length > 0) {
+      const parsed = userSavedProviderConfigSchema.safeParse(rows[0]);
+      if (!parsed.success) {
+        log.warn(
+          `Upserted user saved provider config failed validation for user ${userId}, provider ${provider}: ${parsed.error.message}`,
+        );
+        return false;
+      }
+    }
+
+    log.info(`Upserted user saved provider config for user ${userId}, provider ${provider}`);
+    return true;
+  } catch (error) {
+    log.error(`Error upserting user saved provider config for user ${userId}, provider ${config.provider}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Deletes a personal saved provider config for a user+provider pair.
+ * @param userId - Internal users.user_id
+ * @param provider - Provider name (lowercase)
+ * @returns True if a row was deleted, false if not found or error
+ */
+export async function deleteUserSavedProviderConfig(userId: number, provider: string): Promise<boolean> {
+  try {
+    const result = await sql`
+			DELETE FROM user_saved_provider_configs
+			WHERE user_id = ${userId}
+			  AND provider = ${provider.toLowerCase()}
+		`;
+
+    const deleted = result.count > 0;
+    if (deleted) {
+      log.info(`Deleted user saved provider config for user ${userId}, provider ${provider}`);
+    }
+    return deleted;
+  } catch (error) {
+    log.error(`Error deleting user saved provider config for user ${userId}, provider ${provider}:`, error);
     return false;
   }
 }

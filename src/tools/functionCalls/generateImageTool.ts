@@ -20,7 +20,7 @@ import { sql } from "../../utils/db/client";
 import { checkImageQuota, incrementImageQuota } from "../../utils/quota/imageQuotaManager";
 import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
 import { ZAI_CODING_IMAGES_GENERATIONS_URL, ZAI_GENERAL_IMAGES_GENERATIONS_URL } from "@/providers/zai/zaiShared";
-import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
+import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
 /**
  * Tool for generating images using the active provider's native image API
@@ -564,7 +564,11 @@ export class GenerateImageTool extends BaseTool {
 
     try {
       // Get the diffusion model codename from database
-      const diffusionModelId = context.tomoriState.config.diffusion_model_id;
+      const creds = await resolveCapabilityCredentials(context.tomoriState.server_id, "image-standard", {
+        userId: context.internalUserId ?? null,
+      });
+      const diffusionModelId =
+        getResolvedCapabilityModelId(creds, "image-standard") ?? context.tomoriState.config.diffusion_model_id;
 
       if (!diffusionModelId) {
         return {
@@ -578,7 +582,6 @@ export class GenerateImageTool extends BaseTool {
 
       log.info(`Using diffusion model: ${modelCodename} for image generation`);
 
-      const creds = await resolveCapabilityCredentials(context.tomoriState.server_id, "image-standard");
       const apiKey = creds.apiKey;
       const executionProvider = creds.provider;
 

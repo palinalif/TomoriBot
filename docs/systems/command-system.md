@@ -313,14 +313,14 @@ Rules:
 - `server`: trigger(add/delete), whitelist(channel/persona/role/remove), stm(manage), cooldown(triggers), auto-trigger(*), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove)
 - `persona`: create, generate, import, export, default, swap, remove, attribute(add/edit/remove), sample-dialogue(add/edit/remove), prompt(set/remove), history(import/remove)
 - `memory`: document(add/remove), personal(add/edit/remove/import/export), server(add/edit/remove/import/export)
-- `personal`: privacy, language, nickname, cache, config(import/export/remove), impersonate(prompt), spotlight(set/manage)
+- `personal`: privacy, language, nickname, cache, config(import/export/remove), provider(add/remove/model-text/model-embedding/model-image/model-video/model-vision/toggle-models), model(fallback), samplers, impersonate(prompt), spotlight(set/manage)
 - `scheduled-task`: remove
 - `conditioning`: manage, reward(headpat/hug/kiss/tickle), punish(spank/pinch/bite/squeeze)
 - `tool`: ping, status, refresh, compact, comment
 
 `/server auto-trigger` is channel-scoped and uses one shared cycle across its configured channels. Threshold `0` enables always-reply in those channels. Positive values use either a fixed trigger (`min = max`) or a shared inclusive random range (`min-max`), rerolling after each successful auto-trigger. The cycle only advances on qualifying real user-like messages; TomoriBot and alter webhook self-messages do not advance or consume the auto-trigger counter. Removing a channel disables auto-trigger behavior for that channel. `/server auto-trigger channels` can also target a single channel and assign one persona to that room's auto-trigger fallback instead of always using the main persona.
 
-`/bot generate image` is a modal-driven, fire-and-forget scene snapshot command. It plans against the current channel context with the active text provider, then renders with either the current provider's native image path or NovelAI's tag-based image tool when a NovelAI backend is available.
+`/bot generate image` is a modal-driven, fire-and-forget scene snapshot command. It plans against the current channel context with the active text provider, then renders with either the current provider's native image path or NovelAI's tag-based image tool when a NovelAI backend is available. Personal provider overlays apply before the hidden turn is built so personal text/image routing is respected.
 
 `/generate video` is a modal-driven async generation command. It validates `videogen_enabled`, provider capability, API key, configured `video_model_id`, and server quota before polling the selected provider until the MP4 result is ready.
 

@@ -51,14 +51,19 @@ function buildThoughtLogEmbeds(args: {
   tomoriState: TomoriState;
   sourceChannel: StreamContext["channel"];
   thoughtLog: ThoughtLogPayload;
+  attributionLine?: string;
 }): EmbedBuilder[] {
-  const { locale, tomoriState, sourceChannel, thoughtLog } = args;
+  const { locale, tomoriState, sourceChannel, thoughtLog, attributionLine } = args;
   const embeds: EmbedBuilder[] = [];
   // Raw jump URL auto-links in Discord embeds; masked links with channel mentions don't render cleanly.
   const sourceLine = thoughtLog.firstReplyUrl ?? sourceChannel.toString();
-  const description = localizer(locale, "genai.thought_log.description", {
-    source_line: sourceLine,
-  }).slice(0, EMBED_DESCRIPTION_LIMIT);
+  const descriptionLines = [
+    localizer(locale, "genai.thought_log.description", {
+      source_line: sourceLine,
+    }),
+    attributionLine?.trim(),
+  ].filter((line): line is string => Boolean(line?.trim()));
+  const description = descriptionLines.join("\n").slice(0, EMBED_DESCRIPTION_LIMIT);
   const footerText = localizer(locale, "genai.thought_log.footer", {
     provider: tomoriState.llm.llm_provider,
     model: getLlmDisplayName(tomoriState.llm, tomoriState.config.custom_model_name),
@@ -209,6 +214,7 @@ interface SendThoughtLogEmbedArgs {
   thoughtLogChannelId: string;
   thoughtLog: ThoughtLogPayload;
   owner?: ThoughtLogOwner;
+  attributionLine?: string;
 }
 
 export type ThoughtLogOwner =
@@ -250,6 +256,7 @@ export async function sendThoughtLogEmbed({
   thoughtLogChannelId,
   thoughtLog,
   owner,
+  attributionLine,
 }: SendThoughtLogEmbedArgs): Promise<void> {
   if (!hasThoughtLogContent(thoughtLog)) {
     return;
@@ -274,6 +281,7 @@ export async function sendThoughtLogEmbed({
     tomoriState,
     sourceChannel,
     thoughtLog,
+    attributionLine,
   });
 
   try {

@@ -41,7 +41,7 @@ import {
 } from "@/utils/image/naiImageGeneration";
 import { loadCharRefAsBase64 } from "@/utils/storage/charrefStorage";
 import { loadSavedProviderConfig } from "@/utils/db/dbRead";
-import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
+import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
 // Disabled by default because the suggest-tags endpoint is currently unstable and
 // can hurt generation reliability; enable again once the API is consistently healthy.
@@ -937,9 +937,18 @@ export class GenerateImageNaiTool extends BaseTool {
     }
 
     try {
+      const creds = await resolveCapabilityCredentials(context.tomoriState.server_id, "image-nai", {
+        userId: context.internalUserId ?? null,
+      });
+      const resolvedConfig = {
+        ...context.tomoriState.config,
+        nai_diffusion_model_id:
+          getResolvedCapabilityModelId(creds, "image-nai") ?? context.tomoriState.config.nai_diffusion_model_id,
+      };
+
       // 3. Resolve the NovelAI diffusion model from dedicated override, shared
       // config compatibility, or the seeded NovelAI default model.
-      const resolvedModel = await resolveNaiDiffusionModel(context.tomoriState.config);
+      const resolvedModel = await resolveNaiDiffusionModel(resolvedConfig);
       const baseModelCodename = resolvedModel.codename;
 
       log.info(
@@ -953,7 +962,6 @@ export class GenerateImageNaiTool extends BaseTool {
         };
       }
 
-      const creds = await resolveCapabilityCredentials(context.tomoriState.server_id, "image-nai");
       const apiKey = creds.apiKey;
 
       if (!context.suppressProgressNotices) {

@@ -56,6 +56,10 @@ export default {
       api_key_missing_description: `I need an active provider to function, but none is configured for this server. A server member with \`Manage Server\` permissions can set one using \`/setup\` (first time) or \`/config provider add\`.`,
       api_key_error_title: `API Key Error`,
       api_key_error_description: `There was an issue accessing or decrypting the configured provider credentials. Please reconfigure them using \`/config provider add\`.`,
+      personal_provider_required_title: `Personal Provider Required`,
+      personal_provider_required_description: `This server is using member-provided AI access for user-triggered messages. Run \`/help personal-provider\` and then \`/personal provider add\` to set up your own provider.`,
+      personal_provider_credentials_error_title: `Personal Provider Error`,
+      personal_provider_credentials_error_description: `Your enabled personal provider could not be used. Update it with \`/personal provider add\` or disable it with \`/personal provider toggle-models\`.`,
       context_error_title: `Context Building Error`,
       context_error_description: `I encountered an error while trying to understand the conversation context.`,
       critical_error_title: `Critical Error`,
@@ -139,6 +143,7 @@ export default {
     thought_log: {
       title: `Thought Log`,
       description: `Source: {source_line}`,
+      personal_attribution: `Generated via {user_mention}'s personal {provider} configuration.`,
       summary_field: `Thought Summary`,
       raw_field: `Raw Thoughts`,
       fetched_content_field: `Fetched Content`,
@@ -1240,6 +1245,18 @@ Please try again with different inputs or check your API key.`,
       },
     },
     help: {
+      "personal-provider": {
+        description: `Learn how personal providers work.`,
+        title: `Personal Providers`,
+        description_body: `Personal providers let your messages use your own API keys and models instead of the server's defaults.`,
+        setup_field: `Setup`,
+        setup_value: `1. Run {add_command} to save a provider.\n2. Run {model_command} to choose a model.\n3. Run {toggle_command} to turn that capability on.`,
+        behavior_field: `Behavior`,
+        behavior_value: `When enabled, your personal provider overrides the server for that capability. Thought logs attribute those turns, and you can tune them with {samplers_command} and {fallback_command}.`,
+        byok_field: `BYOK Servers`,
+        byok_value: `Servers can require member-provided providers with {byok_command}. If that mode is enabled, user-triggered messages need your personal provider before I can answer.`,
+        footer: `Your personal providers apply across every server you use TomoriBot in.`,
+      },
       features: {
         description: `Shows what TomoriBot can do`,
         title: `TomoriBot Features (Version {version})`,
@@ -1596,23 +1613,24 @@ Leave unset for endpoints that require no authentication (e.g. local Ollama).`,
         vertex_title: `Setting Up Google Vertex AI`,
         vertex_description: `Google Vertex AI provides enterprise-grade access to Gemini models through Google Cloud.
 - Uses Application Default Credentials (ADC) for authentication — no API key to manage
-- Supports chat, tool calling, streaming, structured output, compaction, embeddings, and preset generation
-- Best for self-hosted or trusted deployments where the bot runs with a GCP identity
+- Best for developers or users running TomoriBot locally on their PC
 - [Vertex AI Documentation](https://cloud.google.com/vertex-ai/docs)`,
         vertex_getting_key_title: `Configuration:`,
         vertex_getting_key_description: `1. Ensure you have a Google Cloud project with the Vertex AI API enabled
-2. Set up Application Default Credentials on the host machine:
-   - **Service account**: Attach a service account to your VM/container with Vertex AI access
-   - **Local dev**: Run \`gcloud auth application-default login\`
-   - **Env var**: Set \`GOOGLE_APPLICATION_CREDENTIALS\` to your service account key file
-3. Enter your configuration as \`{project_id}::{location}\` using {configSetup} or {configApikeySet}
+2. Set up Application Default Credentials on your PC:
+   - Install the Google Cloud CLI
+   - Run \`gcloud auth application-default login\` to log in via your browser
+3. Find your Project ID by running:
+   - \`gcloud projects list\`
+4. Enter your configuration as \`{project_id}::{location}\` using {configSetup} or {configApikeySet}
    - Example: \`my-gcp-project::us-central1\``,
         vertex_important_title: `Important Notes:`,
         vertex_important_description: `- The stored value is **configuration** (project + location), not a credential secret
-- All Vertex requests use the host's ADC identity — there is no per-server credential isolation
-- This provider is intended for self-hosted or trusted private deployments
+- All Vertex requests use your PC's Google Cloud CLI identity
 - Supports chat, tool calling, streaming, structured output, compaction, embeddings, and preset generation`,
         vertex_footer: `After setting up this provider, you may change its default model with {configModel}`,
+        personal_provider_title: `Personal Providers`,
+        personal_provider_description: `If a server enables member BYOK mode with {serverUserByokToggle}, each user may need their own provider. See {helpPersonalProvider} for the personal-provider flow.`,
       },
       elevenlabs: {
         description: `Learn how to set up ElevenLabs text-to-speech`,
@@ -3657,6 +3675,16 @@ A malicious server may send misleading instructions, collect data sent to its to
       },
     },
     server: {
+      "user-byok": {
+        description: `Manage member-provided provider mode for this server.`,
+        toggle: {
+          description: `Toggle whether user-triggered messages require a member's personal provider.`,
+          enabled_title: `User BYOK Enabled`,
+          enabled_description: `User-triggered messages now require each member's personal provider. Server-initiated triggers still use the server provider.`,
+          disabled_title: `User BYOK Disabled`,
+          disabled_description: `User-triggered messages can use the server provider again when no personal provider is enabled.`,
+        },
+      },
       config: {
         description: `Manage server configuration data.`,
         export: {
@@ -4236,6 +4264,102 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
     },
     personal: {
       description: `Manage your personal settings`,
+      provider: {
+        description: `Manage your personal AI providers.`,
+        no_saved_title: `No Personal Providers`,
+        no_saved_description: `You do not have any saved personal providers yet. Add one with \`/personal provider add\`.`,
+        capability_text: `Text`,
+        capability_embedding: `Embedding`,
+        capability_image: `Image`,
+        capability_video: `Video`,
+        capability_vision: `Vision`,
+        model_success_title: `Personal Model Updated`,
+        add: {
+          description: `Add or update a personal provider API key.`,
+          modal_title: `Add Personal Provider`,
+          provider_label: `Provider`,
+          provider_description: `Choose which provider to save for yourself.`,
+          provider_placeholder: `Select a provider...`,
+          api_key_label: `API Key`,
+          api_key_description: `Enter the API key you want Tomori to use for your messages.`,
+          api_key_placeholder: `Paste your API key here`,
+          already_existing_suffix: `saved`,
+          success_title: `Personal Provider Saved`,
+          success_description: `{provider} was added to your personal provider vault. Next: pick a model and enable it with \`/personal provider toggle-models\`.`,
+          updated_description: `{provider} was updated in your personal provider vault.`,
+        },
+        remove: {
+          description: `Remove one of your saved personal providers.`,
+          no_saved_title: `No Personal Providers`,
+          no_saved_description: `You do not have any saved personal providers to remove.`,
+          picker_title: `Remove Personal Provider`,
+          picker_description: `Choose which personal provider to remove.`,
+          success_title: `Personal Provider Removed`,
+          success_description: `Removed your personal {provider} configuration.`,
+        },
+        "model-text": {
+          description: `Pick the text model for one of your personal providers.`,
+        },
+        "model-embedding": {
+          description: `Pick the embedding model for one of your personal providers.`,
+        },
+        "model-image": {
+          description: `Pick the image model for one of your personal providers.`,
+        },
+        "model-video": {
+          description: `Pick the video model for one of your personal providers.`,
+        },
+        "model-vision": {
+          description: `Pick the vision model for one of your personal providers.`,
+        },
+        model_text: {
+          success_description: `Your personal text provider is now {provider} using \`{model}\`.`,
+        },
+        model_embedding: {
+          success_description: `Your personal embedding provider is now {provider} using \`{model}\`.`,
+        },
+        model_image: {
+          success_description: `Your personal image provider is now {provider} using \`{model}\`.`,
+        },
+        model_video: {
+          success_description: `Your personal video provider is now {provider} using \`{model}\`.`,
+        },
+        model_vision: {
+          success_description: `Your personal vision provider is now {provider} using \`{model}\`.`,
+        },
+        "toggle-models": {
+          description: `Enable or disable which personal capabilities override the server.`,
+          modal_title: `Toggle Personal Provider Capabilities`,
+          group_label: `Capabilities`,
+          group_description: `Check the capabilities you want to route through your personal providers.`,
+          provider_description: `Assigned provider: {provider}`,
+          none_set_description: `None set — pick a model first`,
+          missing_model_title: `Model Required`,
+          missing_model_description: `{capability} does not have a personal model selected yet.`,
+          success_title: `Personal Routing Updated`,
+          success_description: `Updated your personal capability routing.\n\n{active_summary}`,
+        },
+      },
+      model: {
+        description: `Manage personal model failover.`,
+        fallback: {
+          description: `Set fallback models for your active personal text provider.`,
+          no_provider_title: `No Active Personal Text Provider`,
+          no_provider_description: `Enable a personal text provider first with \`/personal provider model-text\` and \`/personal provider toggle-models\`.`,
+          success_title: `Personal Fallback Updated`,
+          success_description: `Updated fallback models for your personal {provider} text provider.\n\n{model_list}`,
+          cleared_title: `Personal Fallback Cleared`,
+          cleared_description: `Cleared fallback models for your personal {provider} text provider.`,
+        },
+      },
+      samplers: {
+        description: `Adjust sampler settings for your personal providers.`,
+        provider_description: `Optional: choose a saved personal provider. Defaults to your active personal text provider.`,
+        no_provider_title: `No Personal Provider Selected`,
+        no_provider_description: `Save a personal provider first, or enable a personal text provider to use it as the default target.`,
+        success_title: `Personal Samplers Updated`,
+        success_description: `Updated personal sampler settings for {provider}: {settings}`,
+      },
       config: {
         description: `Manage your personal configuration data.`,
         export: {

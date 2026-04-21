@@ -90,6 +90,8 @@ export async function execute(
     const configModelEmbeddingMention = commandRegistry.getCommandMention("config", "model", "embedding");
     const configModelImageMention = commandRegistry.getCommandMention("config", "model", "image");
     const supportServerMention = commandRegistry.getCommandMention("support", "discord");
+    const helpPersonalProviderMention = commandRegistry.getCommandMention("help", "personal-provider");
+    const serverUserByokToggleMention = commandRegistry.getCommandMention("server", "user-byok", "toggle");
     const optionalkeyElevenlabsSetMention = commandRegistry.getCommandMention("optional-key", "elevenlabs", "set");
     const optionalkeyElevenlabsRemoveMention = commandRegistry.getCommandMention(
       "optional-key",
@@ -357,6 +359,20 @@ export async function execute(
       default:
         // Should never happen due to choices validation
         throw new Error(`Unknown provider: ${provider}`);
+    }
+
+    if (provider !== "brave" && provider !== "elevenlabs") {
+      embedOptions.fields = [
+        ...(embedOptions.fields ?? []),
+        {
+          nameKey: "commands.help.api-key.personal_provider_title",
+          value: localizer(locale, "commands.help.api-key.personal_provider_description", {
+            helpPersonalProvider: helpPersonalProviderMention,
+            serverUserByokToggle: serverUserByokToggleMention,
+          }),
+          inline: false,
+        },
+      ];
     }
 
     // Use replySummaryEmbed to show provider-specific guide

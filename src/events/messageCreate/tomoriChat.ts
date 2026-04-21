@@ -108,6 +108,13 @@ import { isAudioAttachment, transcribeMessageAudioAttachment } from "@/utils/aud
 import { getCachedVoiceTranscript, setCachedVoiceTranscript } from "@/utils/audio/voiceTranscriptCache";
 import { getCachedRenderedMarkdownTable } from "@/utils/text/markdownTableCache";
 import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
+import {
+  CredentialUnavailableError,
+  PersonalProviderRequiredError,
+  resolveCapabilityCredentials,
+} from "@/utils/provider/credentialResolver";
+import { applyPersonalProviderSelectionsToTomoriState } from "@/utils/provider/personalProviderRuntime";
+import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 
 // Base trigger words that will always work (with or without spaces for English)
 const BASE_TRIGGER_WORDS = process.env.BASE_TRIGGER_WORDS?.split(",").map((word) => word.trim()) || [
@@ -3261,6 +3268,62 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         return;
       }
 
+      const personalRoutingUserId = isSelfMessage && !isPersonaJob ? null : (userRow?.user_id ?? null);
+      let textCredentialSource: "server" | "personal" = "server";
+      let personalTextProvider: string | null = null;
+
+      if (tomoriState) {
+        try {
+          const textCreds = await resolveCapabilityCredentials(tomoriState.server_id, "text", {
+            userId: personalRoutingUserId,
+          });
+          textCredentialSource = textCreds.source;
+          personalTextProvider = textCreds.source === "personal" ? textCreds.provider : null;
+        } catch (error) {
+          if (error instanceof PersonalProviderRequiredError) {
+            await sendChannelEmbedOrFailImpersonation(
+              {
+                color: ColorCode.ERROR,
+                titleKey: "general.errors.personal_provider_required_title",
+                descriptionKey: "general.errors.personal_provider_required_description",
+              },
+              "A personal provider was required before starting generation.",
+              error,
+            );
+            return;
+          }
+
+          if (error instanceof CredentialUnavailableError) {
+            const isPersonalError = error.source === "personal";
+            const isMissingConfig = error.reason === "no_saved_config" || error.reason === "missing_model_id";
+            await sendChannelEmbedOrFailImpersonation(
+              {
+                color: ColorCode.ERROR,
+                titleKey: isPersonalError
+                  ? "general.errors.personal_provider_credentials_error_title"
+                  : isMissingConfig
+                    ? "general.errors.api_key_missing_title"
+                    : "general.errors.api_key_error_title",
+                descriptionKey: isPersonalError
+                  ? "general.errors.personal_provider_credentials_error_description"
+                  : isMissingConfig
+                    ? "general.errors.api_key_missing_description"
+                    : "general.errors.api_key_error_description",
+                ...(isDMChannel &&
+                  !isPersonalError && {
+                    footerKey: "general.errors.tomori_not_setup_dm_footer",
+                  }),
+              },
+              "Text credential resolution failed before generation started.",
+              error,
+            );
+            return;
+          }
+
+          throw error;
+        }
+      }
+
       const personaByNickname = new Map<string, TomoriState>();
       for (const persona of allPersonas) {
         const nicknameKey = persona.tomori_nickname?.toLowerCase();
@@ -3700,22 +3763,14 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           return;
         }
 
-        // Validate API key is configured
+        // Server text credentials may be intentionally absent when a member uses
+        // a personal provider or the server runs in BYOK mode. Final credential
+        // resolution happens after the trigger path is known.
         if (!tomoriState.config.api_key) {
           const contextMessage = isDMChannel
-            ? `User tried to use Tomori in DM but API key not configured for user ${userDiscId}.`
-            : `User mentioned Tomori in server ${serverDiscId} but API key not configured.`;
+            ? `No server API key configured for DM user ${userDiscId}; deferring final credential resolution.`
+            : `No server API key configured for server ${serverDiscId}; deferring final credential resolution.`;
           log.info(contextMessage);
-
-          await sendStandardEmbed(channel, locale, {
-            color: ColorCode.ERROR,
-            titleKey: "general.errors.api_key_missing_title",
-            descriptionKey: "general.errors.api_key_missing_description",
-            ...(isDMChannel && {
-              footerKey: "general.errors.tomori_not_setup_dm_footer",
-            }),
-          });
-          return;
         }
       } else if (!tomoriState) {
         // For non-direct messages, just log and return if Tomori isn't set up
@@ -3964,7 +4019,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       }
 
       // 8. Check message trigger cooldown (skip for stop responses and self messages)
-      if (!isStopResponse && !isSelfMessage) {
+      if (!isStopResponse && !isSelfMessage && textCredentialSource !== "personal") {
         const cooldownResult = await checkMessageTriggerCooldownWithWhitelist(
           guild?.id ?? message.author.id,
           cooldownUserDiscId,
@@ -4004,7 +4059,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
       // 8.5. Set message trigger cooldown (skip for stop responses and self messages)
       // Set early to prevent race conditions with concurrent triggers
-      if (!isStopResponse && !isSelfMessage) {
+      if (!isStopResponse && !isSelfMessage && textCredentialSource !== "personal") {
         await setMessageTriggerCooldownWithWhitelist(
           guild?.id ?? message.author.id,
           cooldownUserDiscId,
@@ -4029,7 +4084,8 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         !isDMChannel &&
         !isStopResponse &&
         !reminderRecipientID &&
-        !reminderData?.self_reminder;
+        !reminderData?.self_reminder &&
+        textCredentialSource !== "personal";
 
       if (shouldApplyTextQuota) {
         const existingTextQuotaState = textQuotaTriggerStates.get(effectiveTextQuotaTriggerKey);
@@ -5244,10 +5300,14 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
       for (let personaIndex = 0; personaIndex < personasToRespond.length; personaIndex++) {
         const currentPersona = personasToRespond[personaIndex];
+        const personaBaseState =
+          textCredentialSource === "personal"
+            ? (await applyPersonalProviderSelectionsToTomoriState(currentPersona, personalRoutingUserId)).tomoriState
+            : currentPersona;
         const trimmedPrefill = manualPrefill?.trim();
         let personaSnapshot: RequestSnapshot = {
           ...requestSnapshot,
-          tomoriState: currentPersona,
+          tomoriState: personaBaseState,
         };
         log.info(
           `Starting response ${personaIndex + 1}/${personasToRespond.length} from persona "${currentPersona.tomori_nickname}" (${currentPersona.is_alter ? "alter" : "main"})`,
@@ -5262,7 +5322,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
         // Assign currentPersona to tomoriState for this iteration
         // This allows all existing code to work without modification
-        tomoriState = currentPersona;
+        tomoriState = personaBaseState;
 
         // Resolve effective LLM by priority chain:
         //   1. persona_llm  — persona-specific override (set via /config model text scope:persona)
@@ -5270,13 +5330,17 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         //   3. global llm   — server-wide default in tomori_configs
         // User impersonation always uses the global text model so the bot speaks in the
         // target user's voice without inheriting persona/channel model customizations.
-        const channelLlmOverride = isUserImpersonation
-          ? null
-          : await getCachedChannelLlm(currentPersona.server_id, channel.id);
-        const effectiveLlm = isUserImpersonation
-          ? currentPersona.llm
-          : (currentPersona.persona_llm ?? channelLlmOverride ?? currentPersona.llm);
-        if (effectiveLlm !== currentPersona.llm) {
+        const channelLlmOverride =
+          isUserImpersonation || textCredentialSource === "personal"
+            ? null
+            : await getCachedChannelLlm(currentPersona.server_id, channel.id);
+        const effectiveLlm =
+          textCredentialSource === "personal"
+            ? personaBaseState.llm
+            : isUserImpersonation
+              ? personaBaseState.llm
+              : (personaBaseState.persona_llm ?? channelLlmOverride ?? personaBaseState.llm);
+        if (effectiveLlm !== personaBaseState.llm) {
           // Shallow-copy so the cached TomoriState is never mutated
           tomoriState = { ...tomoriState, llm: effectiveLlm };
 
@@ -5284,7 +5348,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           // decryptMainKey() reads tomoriState.config.api_key which is the Phase A mirror
           // of the global provider's key — using it for a different provider causes a 400.
           const overrideProvider = effectiveLlm.llm_provider.toLowerCase();
-          if (overrideProvider !== currentPersona.llm.llm_provider.toLowerCase()) {
+          if (overrideProvider !== personaBaseState.llm.llm_provider.toLowerCase()) {
             const overrideSavedConfig = await loadSavedProviderConfig(tomoriState.server_id, overrideProvider);
             if (overrideSavedConfig) {
               tomoriState = {
@@ -6855,6 +6919,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                     client,
                     message,
                     userId: userRow?.user_disc_id || userDiscId, // Use Discord user ID (not database ID) for cache consistency
+                    internalUserId: personalRoutingUserId ?? undefined,
                     guildId: message.guild?.id, // Pass guild ID for guild-specific features (e.g., server avatars)
                     tomoriState: effectiveTomoriState,
                     locale,
@@ -8159,6 +8224,13 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       } // END OF MULTI-PERSONA RESPONSE LOOP
 
       const finalThoughtLog = turnThoughtLog;
+      const thoughtLogAttributionLine =
+        textCredentialSource === "personal" && personalTextProvider
+          ? localizer(locale, "genai.thought_log.personal_attribution", {
+              user_mention: `<@${userDiscId}>`,
+              provider: getProviderDisplayName(personalTextProvider),
+            })
+          : undefined;
       // Never emit thought logs from private channels — their activity must remain isolated.
       // Also covers threads whose parent channel is private.
       const thoughtLogPrivateIds = tomoriState.config.private_channel_ids ?? [];
@@ -8181,6 +8253,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           thoughtLogChannelId: tomoriState.config.thought_log_channel_disc_id,
           thoughtLog: finalThoughtLog,
           owner: turnThoughtLogOwner,
+          attributionLine: thoughtLogAttributionLine,
         });
       }
 

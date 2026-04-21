@@ -18,7 +18,8 @@ import {
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { ContextItemTag, type StructuredContextItem } from "../../types/misc/context";
 import { ColorCode } from "@/utils/misc/logger";
-import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
+import { loadLlmById } from "@/utils/db/dbRead";
+import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
 /**
  * Provider-to-chat-completions-URL mapping for OpenAI-compatible providers.
@@ -107,7 +108,7 @@ export class PeekProfilePictureTool extends BaseTool {
     // A non-vision primary model with a vision_llm set will redirect analysis to
     // the vision model instead of using an enhanced context restart.
     const hasVision = context.tomoriState.llm.sees_images;
-    const hasVisionModel = !!context.tomoriState.vision_llm;
+    const hasVisionModel = !!context.tomoriState.vision_llm || !!context.tomoriState.config.vision_llm_id;
 
     if (!hasVision && !hasVisionModel) {
       log.info(
@@ -364,11 +365,23 @@ export class PeekProfilePictureTool extends BaseTool {
     reason: string,
     context: ToolContext,
   ): Promise<ToolResult> {
-    // Vision model is guaranteed to exist here (caller already checked)
-    // biome-ignore lint/style/noNonNullAssertion: caller checked vision_llm
-    const visionLlm = context.tomoriState.vision_llm!;
+    const creds = await resolveCapabilityCredentials(context.tomoriState.server_id, "vision", {
+      userId: context.internalUserId ?? null,
+    });
+    const visionLlmId = getResolvedCapabilityModelId(creds, "vision") ?? context.tomoriState.config.vision_llm_id;
+    const visionLlm =
+      visionLlmId === context.tomoriState.vision_llm?.llm_id
+        ? context.tomoriState.vision_llm
+        : visionLlmId
+          ? await loadLlmById(visionLlmId)
+          : null;
+    if (!visionLlm) {
+      return {
+        success: false,
+        error: "No vision model configured. Use /config model vision to set one.",
+      };
+    }
 
-    const creds = await resolveCapabilityCredentials(context.tomoriState.server_id, "vision");
     const apiKey = creds.apiKey;
 
     // 2. Resolve API model name and provider from the vision LLM row

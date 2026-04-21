@@ -360,6 +360,7 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   llm_disabled_params TEXT[] DEFAULT '{}', -- DEPRECATED Phase 1.5 Pass B: mirror of saved_provider_configs
   humanizer_degree INT DEFAULT 1,
   thinking_level TEXT DEFAULT 'auto', -- DEPRECATED Phase 1.5 Pass B: mirror of saved_provider_configs
+  user_byok_mode BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (tomori_id) REFERENCES tomoris(tomori_id) ON DELETE SET NULL,
@@ -2234,10 +2235,83 @@ SELECT add_column_if_not_exists('saved_provider_configs', 'thinking_level', 'TEX
 -- Migration: add custom_num_ctx column to saved_provider_configs (April 2026)
 SELECT add_column_if_not_exists('saved_provider_configs', 'custom_num_ctx', 'INT', 'NULL');
 
+-- Migration: add user_byok_mode column to tomori_configs (April 2026)
+SELECT add_column_if_not_exists('tomori_configs', 'user_byok_mode', 'BOOLEAN', 'false');
+
 -- Auto-update timestamp trigger
 DROP TRIGGER IF EXISTS update_saved_provider_configs_timestamp ON saved_provider_configs;
 CREATE TRIGGER update_saved_provider_configs_timestamp
   BEFORE UPDATE ON saved_provider_configs
+  FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+-- ============================================================
+-- User Saved Provider Configs (per-user provider config snapshots)
+-- Stores personal API keys, model selections, and sampler settings
+-- so individual users can power Tomori with their own providers.
+-- One row per provider per user. UPSERT on save, DELETE on remove.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_saved_provider_configs (
+  user_saved_config_id SERIAL PRIMARY KEY,
+  user_id INT NOT NULL,
+  provider TEXT NOT NULL,
+  api_key BYTEA,
+  key_version INTEGER DEFAULT 1,
+  llm_id INT,
+  diffusion_model_id INT,
+  embedding_model_id INT,
+  nai_diffusion_model_id INT,
+  video_model_id INT,
+  vision_llm_id INT,
+  nai_preset_name TEXT,
+  llm_temperature REAL,
+  llm_top_p REAL,
+  llm_top_k INTEGER,
+  llm_frequency_penalty REAL,
+  llm_presence_penalty REAL,
+  llm_min_p REAL,
+  llm_logit_biases JSONB DEFAULT '[]'::JSONB,
+  llm_disabled_params TEXT[] DEFAULT '{}',
+  custom_endpoint_url TEXT,
+  custom_model_name TEXT,
+  custom_num_ctx INT,
+  thinking_level TEXT DEFAULT 'auto',
+  enabled_capabilities TEXT[] DEFAULT '{}',
+  fallback_llm_ids JSONB DEFAULT '[]'::JSONB,
+  saved_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, provider),
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+  FOREIGN KEY (llm_id) REFERENCES llms(llm_id) ON DELETE SET NULL,
+  FOREIGN KEY (diffusion_model_id) REFERENCES image_diffusion_models(diffusion_model_id) ON DELETE SET NULL,
+  FOREIGN KEY (embedding_model_id) REFERENCES embedding_models(embedding_model_id) ON DELETE SET NULL,
+  FOREIGN KEY (nai_diffusion_model_id) REFERENCES image_diffusion_models(diffusion_model_id) ON DELETE SET NULL,
+  FOREIGN KEY (video_model_id) REFERENCES video_generation_models(video_model_id) ON DELETE SET NULL,
+  FOREIGN KEY (vision_llm_id) REFERENCES llms(llm_id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_saved_provider_configs_user
+  ON user_saved_provider_configs(user_id);
+
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'video_model_id', 'INTEGER', 'NULL');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'vision_llm_id', 'INTEGER', 'NULL');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_temperature', 'REAL', 'NULL');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_top_p', 'REAL', 'NULL');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_top_k', 'INTEGER', 'NULL');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_frequency_penalty', 'REAL', 'NULL');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_presence_penalty', 'REAL', 'NULL');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_min_p', 'REAL', 'NULL');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_logit_biases', 'JSONB', '''[]''::JSONB');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_disabled_params', 'TEXT[]', 'ARRAY[]::TEXT[]');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'custom_endpoint_url', 'TEXT', 'NULL');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'custom_model_name', 'TEXT', 'NULL');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'custom_num_ctx', 'INT', 'NULL');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'thinking_level', 'TEXT', '''auto''');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'enabled_capabilities', 'TEXT[]', 'ARRAY[]::TEXT[]');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'fallback_llm_ids', 'JSONB', '''[]''::JSONB');
+
+DROP TRIGGER IF EXISTS update_user_saved_provider_configs_timestamp ON user_saved_provider_configs;
+CREATE TRIGGER update_user_saved_provider_configs_timestamp
+  BEFORE UPDATE ON user_saved_provider_configs
   FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
 -- ============================================================

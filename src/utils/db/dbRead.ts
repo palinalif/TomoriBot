@@ -34,6 +34,8 @@ import {
   naiPresetSchema,
   savedProviderConfigSchema,
   type SavedProviderConfigRow,
+  userSavedProviderConfigSchema,
+  type UserSavedProviderConfigRow,
   type NaiPresetRow,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
@@ -2681,6 +2683,77 @@ export async function loadSavedProviderConfig(
     return parsed.data;
   } catch (error) {
     log.error(`Error loading saved provider config for server ${serverId}, provider ${provider}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Loads all saved personal provider configs for a user.
+ * @param userId - Internal users.user_id
+ * @returns Array of validated personal provider configs, or empty array on error/no results
+ */
+export async function loadUserSavedProviderConfigs(userId: number): Promise<UserSavedProviderConfigRow[]> {
+  try {
+    const rows = await sql`
+			SELECT * FROM user_saved_provider_configs
+			WHERE user_id = ${userId}
+			ORDER BY provider ASC
+		`;
+
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+
+    const validated: UserSavedProviderConfigRow[] = [];
+    for (const row of rows) {
+      const parsed = userSavedProviderConfigSchema.safeParse(row);
+      if (parsed.success) {
+        validated.push(parsed.data);
+      } else {
+        log.warn(
+          `Invalid user saved provider config row for user ${userId}, provider ${row.provider}: ${parsed.error.message}`,
+        );
+      }
+    }
+
+    return validated;
+  } catch (error) {
+    log.error(`Error loading user saved provider configs for user ${userId}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Loads a specific saved personal provider config for a user+provider pair.
+ * @param userId - Internal users.user_id
+ * @param provider - Provider name (lowercase)
+ * @returns The saved config row, or null if not found/error
+ */
+export async function loadUserSavedProviderConfig(
+  userId: number,
+  provider: string,
+): Promise<UserSavedProviderConfigRow | null> {
+  try {
+    const rows = await sql`
+			SELECT * FROM user_saved_provider_configs
+			WHERE user_id = ${userId}
+			  AND provider = ${provider.toLowerCase()}
+			LIMIT 1
+		`;
+
+    if (!rows || rows.length === 0) {
+      return null;
+    }
+
+    const parsed = userSavedProviderConfigSchema.safeParse(rows[0]);
+    if (!parsed.success) {
+      log.warn(`Invalid user saved provider config for user ${userId}, provider ${provider}: ${parsed.error.message}`);
+      return null;
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(`Error loading user saved provider config for user ${userId}, provider ${provider}:`, error);
     return null;
   }
 }

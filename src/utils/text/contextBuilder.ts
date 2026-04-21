@@ -57,6 +57,7 @@ import { createToolPromptMacroResolver, type ToolPromptMacroResolver } from "@/u
 import { MessageIdMap } from "@/utils/text/messageIdMap";
 import { formatChannelReferenceLabel } from "@/utils/discord/targetResolver";
 import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
+import { getResolvedCapabilityModelId } from "@/utils/provider/credentialResolver";
 
 /**
  * Maps userId -> nickname for the current mention replacement operation.
@@ -946,6 +947,7 @@ export interface BuildContextParams {
   parentChannelId?: string | null;
   client: Client;
   triggererName: string;
+  triggererUserId?: number;
   emojiStrings?: string[];
   tomoriNickname: string;
   tomoriAttributes: string[];
@@ -1103,6 +1105,7 @@ async function buildContextNative({
   tomoriConfig,
   personaPrompt,
   personaLineageId,
+  triggererUserId,
   isDMChannel = false,
   mediaContextWindow,
   snapshot,
@@ -2074,12 +2077,7 @@ async function buildContextNative({
   // server knowledge, users, STM) stays cache-friendly — RAG results change per query
   // and would invalidate everything that follows if left higher in the prompt.
   try {
-    if (
-      isRagAvailable() &&
-      memoryGuard.getStatus() !== "critical" &&
-      tomoriState?.server_id &&
-      tomoriState.config.embedding_model_id
-    ) {
+    if (isRagAvailable() && memoryGuard.getStatus() !== "critical" && tomoriState?.server_id) {
       const queryText = getLatestUserQuery(simplifiedMessageHistory);
       if (queryText && queryText.length >= DOCUMENT_QUERY_MIN_LENGTH) {
         const [documentRow] =
@@ -2103,10 +2101,15 @@ async function buildContextNative({
 						`;
 
         if (documentRow?.document_id) {
-          const embeddingModel = await loadEmbeddingModelById(tomoriState.config.embedding_model_id);
+          const creds = await resolveCapabilityCredentials(tomoriState.server_id, "embedding", {
+            userId: triggererUserId ?? null,
+          });
+          const resolvedEmbeddingModelId =
+            getResolvedCapabilityModelId(creds, "embedding") ?? tomoriState.config.embedding_model_id;
+          const embeddingModel = resolvedEmbeddingModelId
+            ? await loadEmbeddingModelById(resolvedEmbeddingModelId)
+            : null;
           if (embeddingModel) {
-            const creds = await resolveCapabilityCredentials(tomoriState.server_id, "embedding");
-
             const chunks = await retrieveRelevantDocumentChunks({
               serverId: tomoriState.server_id,
               tomoriId: tomoriState.tomori_id ?? null,

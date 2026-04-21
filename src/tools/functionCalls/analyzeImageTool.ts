@@ -11,12 +11,13 @@ import type { ToolContext, ToolResult, ToolParameterSchema } from "@/types/tool/
 import { log, ColorCode } from "@/utils/misc/logger";
 import { sendToolProgressNotice } from "@/utils/discord/toolProgressNotice";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
+import { loadLlmById } from "@/utils/db/dbRead";
 import {
   toZaiApiModelName,
   ZAI_CODING_CHAT_COMPLETIONS_URL,
   ZAI_GENERAL_CHAT_COMPLETIONS_URL,
 } from "@/providers/zai/zaiShared";
-import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
+import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
 /**
  * Provider-to-chat-completions-URL mapping for OpenAI-compatible providers.
@@ -122,16 +123,25 @@ export class AnalyzeImageTool extends BaseTool {
       };
     }
 
-    // 2. Verify vision model is configured
-    const visionLlm = context.tomoriState?.vision_llm;
-    if (!visionLlm) {
-      return {
-        success: false,
-        error: "No vision model configured. Use /config model vision to set one.",
-      };
-    }
-
     try {
+      const creds = await resolveCapabilityCredentials(context.tomoriState.server_id, "vision", {
+        userId: context.internalUserId ?? null,
+      });
+      const visionLlmId = getResolvedCapabilityModelId(creds, "vision") ?? context.tomoriState.config.vision_llm_id;
+      const visionLlm =
+        visionLlmId === context.tomoriState.vision_llm?.llm_id
+          ? context.tomoriState.vision_llm
+          : visionLlmId
+            ? await loadLlmById(visionLlmId)
+            : null;
+
+      if (!visionLlm) {
+        return {
+          success: false,
+          error: "No vision model configured. Use /config model vision to set one.",
+        };
+      }
+
       await sendToolProgressNotice(
         context,
         "image_analysis",
@@ -147,7 +157,6 @@ export class AnalyzeImageTool extends BaseTool {
       // 4. Extract images from the Discord message
       const images = await this.extractImagesFromMessage(messageId, context);
 
-      const creds = await resolveCapabilityCredentials(context.tomoriState.server_id, "vision");
       const apiKey = creds.apiKey;
 
       // 6. Resolve API model name and provider from the vision LLM row

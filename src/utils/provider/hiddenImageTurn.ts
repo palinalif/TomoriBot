@@ -73,6 +73,8 @@ export interface HiddenImageTurnParams {
   locale: string;
   /** Discord ID of the user who invoked the /bot generate image command. */
   interactingUserId: string;
+  /** Internal database user ID of the invoking user, if known. */
+  internalUserId?: number | null;
   /** "current_provider" → generate_image, "novelai" → generate_image_nai */
   backend: "current_provider" | "novelai";
   /** Human-readable label for the framing preset (e.g. "Character Focus"). */
@@ -135,6 +137,7 @@ export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise
     personaUsername,
     personaAvatarUrl,
     contextPersonaOverride,
+    internalUserId,
   } = params;
 
   // 1. Verify the active model supports function calling — required for tool-based generation.
@@ -245,6 +248,7 @@ export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise
       personaPrompt: persona.personaPrompt,
       personaLineageId: persona.personaLineageId,
       isDMChannel: false,
+      triggererUserId: internalUserId ?? undefined,
     });
     contextItems = contextBuild.contextItems;
     messageIdMap = contextBuild.messageIdMap;
@@ -345,6 +349,7 @@ export async function runHiddenImageTurn(params: HiddenImageTurnParams): Promise
     channel,
     client,
     userId: interactingUserId,
+    internalUserId: internalUserId ?? undefined,
     guildId: guild.id,
     tomoriState,
     locale,

@@ -29,7 +29,6 @@ import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/
 import { loadAllPersonasForServer, loadEmbeddingModelById } from "@/utils/db/dbRead";
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
 import { memoryGuard, reserveDocumentQuota } from "@/utils/security/rateLimiter";
-import { decryptApiKey } from "@/utils/security/crypto";
 import { insertDocumentWithChunks } from "@/utils/documents/documentService";
 import { generateEmbeddingsBatched, providerSupportsEmbeddingTaskType } from "@/utils/embeddings/embeddingProvider";
 import { fetchHistoryUntilMarker } from "@/utils/discord/historyFetcher";
@@ -41,7 +40,14 @@ import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 import { extractHistoryWindowForProvider } from "@/providers/utils/providerFeatureExecutors";
 import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
 import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
-import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
+import {
+  CredentialUnavailableError,
+  getResolvedCapabilityModelId,
+  PersonalProviderRequiredError,
+  type ResolvedCredentials,
+  resolveCapabilityCredentials,
+} from "@/utils/provider/credentialResolver";
+import { applyPersonalProviderSelectionsToTomoriState } from "@/utils/provider/personalProviderRuntime";
 
 /** Maximum document name length */
 const MAX_DOCUMENT_NAME_LENGTH = 64;
@@ -495,6 +501,8 @@ export async function execute(
       });
       return;
     }
+    const overlayResult = await applyPersonalProviderSelectionsToTomoriState(tomoriState, userData.user_id ?? null);
+    tomoriState = overlayResult.tomoriState;
 
     // 7. Check model supports structured output
     if (!tomoriState.llm.supports_structoutput) {
@@ -518,21 +526,47 @@ export async function execute(
     }
 
     // 8. Validate embedding model
-    const embeddingModelId = tomoriState.config.embedding_model_id;
+    let textCreds: ResolvedCredentials;
+    let embeddingCreds: ResolvedCredentials;
+    try {
+      [textCreds, embeddingCreds] = await Promise.all([
+        resolveCapabilityCredentials(tomoriState.server_id, "text", {
+          userId: userData.user_id ?? null,
+        }),
+        resolveCapabilityCredentials(tomoriState.server_id, "embedding", {
+          userId: userData.user_id ?? null,
+        }),
+      ]);
+    } catch (error) {
+      if (error instanceof PersonalProviderRequiredError) {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "general.errors.personal_provider_required_title",
+          descriptionKey: "general.errors.personal_provider_required_description",
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      if (error instanceof CredentialUnavailableError && error.source === "personal") {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "general.errors.api_key_error_title",
+          descriptionKey: "general.errors.personal_provider_credentials_error_description",
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      throw error;
+    }
+
+    const embeddingModelId =
+      getResolvedCapabilityModelId(embeddingCreds, "embedding") ?? tomoriState.config.embedding_model_id;
     if (!embeddingModelId) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.memory.history.import.no_embedding_model_title",
         descriptionKey: "commands.memory.history.import.no_embedding_model_description",
-        color: ColorCode.ERROR,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    if (!tomoriState.config.api_key) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.memory.history.import.no_api_key_title",
-        descriptionKey: "commands.memory.history.import.no_api_key_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -557,9 +591,6 @@ export async function execute(
       scopeInput === "automatic" ? "automatic" : scopeInput === "global" ? "global" : "persona";
 
     // 10. Decrypt API key
-    const decryptedKey = await decryptApiKey(tomoriState.config.api_key, tomoriState.config.key_version || 1);
-    const embeddingCreds = await resolveCapabilityCredentials(tomoriState.server_id, "embedding");
-
     const provider = tomoriState.llm.llm_provider.toLowerCase();
     const model = getEffectiveLlmModelName(tomoriState.llm, tomoriState.config.custom_model_name);
     const endpointUrl = tomoriState.config.custom_endpoint_url ?? undefined;
@@ -643,7 +674,7 @@ export async function execute(
         messageFetchLimit,
         provider,
         model,
-        apiKey: decryptedKey,
+        apiKey: textCreds.apiKey,
         endpointUrl,
         replyInteraction: personaSelectionInteraction,
         locale,
@@ -727,7 +758,7 @@ export async function execute(
         messageFetchLimit,
         provider,
         model,
-        apiKey: decryptedKey,
+        apiKey: textCreds.apiKey,
         endpointUrl,
         replyInteraction: interaction,
         locale,
@@ -787,7 +818,7 @@ export async function execute(
       messageFetchLimit,
       provider,
       model,
-      apiKey: decryptedKey,
+      apiKey: textCreds.apiKey,
       endpointUrl,
       replyInteraction: interaction,
       locale,

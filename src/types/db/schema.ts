@@ -205,6 +205,23 @@ function normalizeFallbackLlmIds(value: unknown): number[] {
     .filter((id): id is number => id !== null);
 }
 
+function normalizeEnabledCapabilities(value: unknown): string[] {
+  let source: unknown = value;
+  if (typeof source === "string") {
+    try {
+      source = JSON.parse(source);
+    } catch {
+      return [];
+    }
+  }
+
+  if (!Array.isArray(source)) {
+    return [];
+  }
+
+  return source.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
 function normalizeToolNoticeHiddenKeys(value: unknown): ToolNoticeKey[] {
   let source: unknown = value;
   if (typeof source === "string") {
@@ -311,6 +328,7 @@ export const tomoriConfigSchema = z.object({
   personal_memories_enabled: z.boolean().default(true),
   humanizer_degree: z.nativeEnum(HumanizerDegree).default(HumanizerDegree.LIGHT),
   thinking_level: z.enum(THINKING_LEVEL_VALUES).default(DEFAULT_THINKING_LEVEL), // Added April 2026 - General reasoning/thinking effort hint
+  user_byok_mode: z.boolean().default(false), // Added April 2026 - Require per-user personal providers for user-attributed triggers
   emoji_usage_enabled: z.boolean().default(true), // Added May 5, 2025
   sticker_usage_enabled: z.boolean().default(true), // Added May 5, 2025
   manage_message_enabled: z.boolean().default(true), // Added November 5, 2025 - Permission gate for message management tools
@@ -1048,6 +1066,63 @@ export type SavedProviderConfigRow = z.infer<typeof savedProviderConfigSchema>;
  * Omits auto-generated fields (saved_config_id, saved_at, updated_at).
  */
 export type SavedProviderConfigUpsert = Omit<SavedProviderConfigRow, "saved_config_id" | "saved_at" | "updated_at">;
+
+export const personalProviderCapabilitySchema = z.enum(["text", "embedding", "image", "video", "vision"]);
+export type PersonalProviderCapability = z.infer<typeof personalProviderCapabilitySchema>;
+
+/**
+ * User Saved Provider Config — personal provider snapshot stored in
+ * user_saved_provider_configs. One row per provider per user; UPSERT on save.
+ */
+export const userSavedProviderConfigSchema = z.object({
+  user_saved_config_id: z.number().optional(),
+  user_id: z.number(),
+  provider: z.string(),
+  api_key: z.instanceof(Buffer).nullable(),
+  key_version: z.number().int().default(1),
+  llm_id: z.number().nullable(),
+  diffusion_model_id: z.number().nullable(),
+  embedding_model_id: z.number().nullable(),
+  nai_diffusion_model_id: z.number().nullable(),
+  video_model_id: z.number().nullable().optional(),
+  vision_llm_id: z.number().nullable().optional(),
+  nai_preset_name: z.string().nullable(),
+  llm_temperature: z.number().nullable().optional(),
+  llm_top_p: z.number().nullable().optional(),
+  llm_top_k: z.number().int().nullable().optional(),
+  llm_frequency_penalty: z.number().nullable().optional(),
+  llm_presence_penalty: z.number().nullable().optional(),
+  llm_min_p: z.number().nullable().optional(),
+  llm_disabled_params: z.preprocess(
+    (value) => normalizeDisabledLlmParams(value),
+    z.array(supportedParamSchema).default([]),
+  ),
+  llm_logit_biases: z.preprocess(
+    (value) => normalizeLogitBiasEntries(value),
+    z.array(logitBiasEntrySchema).default([]),
+  ),
+  custom_endpoint_url: z.string().nullable(),
+  custom_model_name: z.string().nullable(),
+  custom_num_ctx: z.number().int().min(512).nullable().optional(),
+  thinking_level: z.enum(THINKING_LEVEL_VALUES).default(DEFAULT_THINKING_LEVEL),
+  enabled_capabilities: z.preprocess(
+    (value) => normalizeEnabledCapabilities(value),
+    z.array(personalProviderCapabilitySchema).default([]),
+  ),
+  fallback_llm_ids: z.preprocess((value) => normalizeFallbackLlmIds(value), z.array(z.number().int()).default([])),
+  saved_at: z.coerce.date().optional(),
+  updated_at: z.coerce.date().optional(),
+});
+export type UserSavedProviderConfigRow = z.infer<typeof userSavedProviderConfigSchema>;
+
+/**
+ * Input type for upserting a user saved provider config.
+ * Omits auto-generated fields (user_saved_config_id, saved_at, updated_at).
+ */
+export type UserSavedProviderConfigUpsert = Omit<
+  UserSavedProviderConfigRow,
+  "user_saved_config_id" | "saved_at" | "updated_at"
+>;
 
 /**
  * SillyTavern Preset — imported preset metadata + raw JSON blob.

@@ -3,6 +3,8 @@ import type {
   SavedProviderConfigUpsert,
   TomoriConfigRow,
   TomoriState,
+  UserSavedProviderConfigRow,
+  UserSavedProviderConfigUpsert,
 } from "@/types/db/schema";
 import {
   loadDefaultDiffusionModelForProvider,
@@ -11,6 +13,7 @@ import {
   loadDefaultVideoGenerationModelForProvider,
   loadDefaultVisionModelForProvider,
   loadSavedProviderConfigs,
+  loadUserSavedProviderConfigs,
 } from "@/utils/db/dbRead";
 import { isCustomProvider } from "@/utils/discord/customProviderModal";
 import {
@@ -146,11 +149,81 @@ export async function buildSavedProviderConfigFromExistingOrDefaults(params: {
   };
 }
 
+export async function buildUserSavedProviderConfigFromExistingOrDefaults(params: {
+  userId: number;
+  provider: string;
+  apiKey: Buffer | null;
+  keyVersion: number;
+  baseConfig: TomoriConfigRow;
+  existingConfig?: UserSavedProviderConfigRow | null;
+  llmId?: number | null;
+  customEndpointUrl?: string | null;
+  customModelName?: string | null;
+  customNumCtx?: number | null;
+  enabledCapabilities?: Array<"text" | "embedding" | "image" | "video" | "vision">;
+}): Promise<UserSavedProviderConfigUpsert> {
+  const normalizedProvider = params.provider.toLowerCase();
+  const existingConfig = params.existingConfig ?? null;
+  const defaults = existingConfig ? null : await loadProviderDefaultSelectionIds(normalizedProvider);
+
+  return {
+    user_id: params.userId,
+    provider: normalizedProvider,
+    api_key: params.apiKey,
+    key_version: params.keyVersion,
+    llm_id: params.llmId ?? existingConfig?.llm_id ?? defaults?.llm_id ?? null,
+    diffusion_model_id: existingConfig?.diffusion_model_id ?? defaults?.diffusion_model_id ?? null,
+    embedding_model_id: existingConfig?.embedding_model_id ?? defaults?.embedding_model_id ?? null,
+    nai_diffusion_model_id: existingConfig?.nai_diffusion_model_id ?? defaults?.nai_diffusion_model_id ?? null,
+    video_model_id: existingConfig?.video_model_id ?? defaults?.video_model_id ?? null,
+    vision_llm_id: existingConfig?.vision_llm_id ?? defaults?.vision_llm_id ?? null,
+    nai_preset_name: existingConfig?.nai_preset_name ?? null,
+    llm_temperature: existingConfig?.llm_temperature ?? params.baseConfig.llm_temperature,
+    llm_top_p: existingConfig?.llm_top_p ?? params.baseConfig.llm_top_p,
+    llm_top_k: existingConfig?.llm_top_k ?? params.baseConfig.llm_top_k,
+    llm_frequency_penalty: existingConfig?.llm_frequency_penalty ?? params.baseConfig.llm_frequency_penalty,
+    llm_presence_penalty: existingConfig?.llm_presence_penalty ?? params.baseConfig.llm_presence_penalty,
+    llm_min_p: existingConfig?.llm_min_p ?? params.baseConfig.llm_min_p,
+    llm_disabled_params: existingConfig?.llm_disabled_params ?? params.baseConfig.llm_disabled_params ?? [],
+    llm_logit_biases: existingConfig?.llm_logit_biases ?? params.baseConfig.llm_logit_biases ?? [],
+    custom_endpoint_url: params.customEndpointUrl ?? existingConfig?.custom_endpoint_url ?? null,
+    custom_model_name: params.customModelName ?? existingConfig?.custom_model_name ?? null,
+    custom_num_ctx: params.customNumCtx ?? existingConfig?.custom_num_ctx ?? null,
+    thinking_level: existingConfig?.thinking_level ?? params.baseConfig.thinking_level,
+    enabled_capabilities: params.enabledCapabilities ?? existingConfig?.enabled_capabilities ?? [],
+    fallback_llm_ids: existingConfig?.fallback_llm_ids ?? [],
+  };
+}
+
 export async function loadSavedProvidersForCapability(
   serverId: number,
   capability: SavedProviderCapability,
 ): Promise<SavedProviderConfigRow[]> {
   const savedConfigs = await loadSavedProviderConfigs(serverId);
+
+  return savedConfigs.filter((config) => {
+    switch (capability) {
+      case "text":
+        return true;
+      case "embedding":
+        return supportsEmbeddingCapability(config.provider);
+      case "image":
+        return supportsImageCapability(config.provider);
+      case "video":
+        return supportsVideoCapability(config.provider);
+      case "vision":
+        return supportsVisionCapability(config.provider);
+      default:
+        return false;
+    }
+  });
+}
+
+export async function loadUserSavedProvidersForCapability(
+  userId: number,
+  capability: SavedProviderCapability,
+): Promise<UserSavedProviderConfigRow[]> {
+  const savedConfigs = await loadUserSavedProviderConfigs(userId);
 
   return savedConfigs.filter((config) => {
     switch (capability) {

@@ -131,6 +131,7 @@ export interface ToolContext {
   // Optional additional context
   emojiStrings?: string[];
   userId?: string;
+  internalUserId?: number;
   guildId?: string;
   streamContext?: StreamingContext; // Optional streaming context for enhanced functionality
 

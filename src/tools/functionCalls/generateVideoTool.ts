@@ -21,7 +21,7 @@ import { sql } from "../../utils/db/client";
 import { checkVideoQuota, incrementVideoQuota } from "../../utils/quota/videoQuotaManager";
 import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
 import type { ProviderNativeVideoResolution } from "@/types/provider/featureInterfaces";
-import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
+import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
 /** Discord file size limit for non-boosted servers (25 MB) */
 const DISCORD_FILE_SIZE_LIMIT = 25 * 1024 * 1024;
@@ -325,7 +325,10 @@ export class GenerateVideoTool extends BaseTool {
 
     try {
       // 5. Get the video model codename from database
-      const videoModelId = context.tomoriState.config.video_model_id;
+      const creds = await resolveCapabilityCredentials(context.tomoriState.server_id, "video", {
+        userId: context.internalUserId ?? null,
+      });
+      const videoModelId = getResolvedCapabilityModelId(creds, "video") ?? context.tomoriState.config.video_model_id;
 
       if (!videoModelId) {
         return {
@@ -338,7 +341,6 @@ export class GenerateVideoTool extends BaseTool {
       const modelCodename = await this.getVideoModelCodename(videoModelId);
       log.info(`Using video model: ${modelCodename} for video generation`);
 
-      const creds = await resolveCapabilityCredentials(context.tomoriState.server_id, "video");
       const apiKey = creds.apiKey;
       const executionProvider = creds.provider;
 
