@@ -40,6 +40,9 @@ export interface ThinkingModeRequest {
 }
 
 export interface CustomThinkingRequest {
+  /** Ollama-native boolean thinking toggle (on/off only). */
+  think?: boolean;
+  /** OpenAI-convention effort level (vLLM, other compatible servers). */
   reasoning_effort?: "none" | "low" | "medium" | "high";
 }
 
@@ -297,18 +300,18 @@ export function buildCustomThinkingRequest(
   configuredLevel: string | null | undefined,
   forceReason?: boolean,
 ): CustomThinkingRequest {
-  if (!endpointUrl || !looksLikeOllamaEndpoint(endpointUrl)) {
-    return {};
-  }
-
   const effectiveLevel = resolveEffectiveThinkingLevel(configuredLevel, forceReason);
   if (effectiveLevel === "auto") {
     return {};
   }
 
-  return {
-    reasoning_effort: effectiveLevel,
-  };
+  // Ollama supports a boolean think toggle only (no budget levels).
+  if (endpointUrl && looksLikeOllamaEndpoint(endpointUrl)) {
+    return { think: effectiveLevel !== "none" };
+  }
+
+  // Non-Ollama OpenAI-compatible servers (vLLM, etc.) may support reasoning_effort.
+  return { reasoning_effort: effectiveLevel };
 }
 
 export function getNovelAiThinkingDirective(

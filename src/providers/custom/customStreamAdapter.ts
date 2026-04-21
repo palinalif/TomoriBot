@@ -75,9 +75,13 @@ export class CustomStreamAdapter extends OpenAICompatibleStreamAdapter {
           context.tomoriState.config.thinking_level,
           customConfig.forceReason,
         );
+        if (thinkingRequest.think !== undefined) {
+          requestBody.think = thinkingRequest.think;
+          log.info(`CustomStreamAdapter: Applying Ollama think=${thinkingRequest.think}`);
+        }
         if (thinkingRequest.reasoning_effort) {
           requestBody.reasoning_effort = thinkingRequest.reasoning_effort;
-          log.info(`CustomStreamAdapter: Applying Ollama reasoning_effort=${thinkingRequest.reasoning_effort}`);
+          log.info(`CustomStreamAdapter: Applying reasoning_effort=${thinkingRequest.reasoning_effort}`);
         }
       },
     });
