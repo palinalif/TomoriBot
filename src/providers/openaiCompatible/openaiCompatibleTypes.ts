@@ -99,6 +99,14 @@ export interface OpenAICompatibleStreamAdapterOptions {
   errorMessagePrefix: string;
   placeholderApiKey?: string;
   enableSpeakerGuard?: boolean;
+  /**
+   * Set to `false` to omit the newline-prefixed active-persona stop string from
+   * the request-level `stop` list while keeping the local speaker fallback guard.
+   *
+   * Useful for endpoints that legitimately emit `\n{persona}:` after a closed
+   * `<think>...</think>` block at the start of an assistant turn.
+   */
+  includePersonaSpeakerStop?: boolean;
   preserveReasoningContent?: boolean;
   /** Set to `false` to disable stripping `<think>` blocks from content. Defaults to `true`. */
   stripThinkBlocksFromContent?: boolean;

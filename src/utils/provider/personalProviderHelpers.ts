@@ -99,18 +99,27 @@ export async function setPersonalCapabilityEnabled(
   enabled: boolean,
 ): Promise<boolean> {
   const rows = await loadUserSavedProviderConfigs(userId);
-  const targetRow = getStoredPersonalProviderForCapability(rows, capability);
+  const targetRow =
+    getActivePersonalProviderForCapability(rows, capability) ??
+    getStoredPersonalProviderForCapability(rows, capability);
   if (!targetRow) {
     return false;
   }
 
   for (const row of rows) {
+    if (!enabled) {
+      if (row.enabled_capabilities.includes(capability)) {
+        await upsertUserSavedProviderConfig(userId, withCapabilityEnabled(row, capability, false));
+      }
+      continue;
+    }
+
     if (row.provider.toLowerCase() === targetRow.provider.toLowerCase()) {
       await upsertUserSavedProviderConfig(userId, withCapabilityEnabled(row, capability, enabled));
       continue;
     }
 
-    if (enabled && row.enabled_capabilities.includes(capability)) {
+    if (row.enabled_capabilities.includes(capability)) {
       await upsertUserSavedProviderConfig(userId, withCapabilityEnabled(row, capability, false));
     }
   }

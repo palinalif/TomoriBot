@@ -117,7 +117,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
       const stopStrings = buildProviderStopStrings({
         providerName: this.options.providerName,
         model: config.model,
-        personaName: context.tomoriState.tomori_nickname,
+        personaName: this.options.includePersonaSpeakerStop === false ? null : context.tomoriState.tomori_nickname,
       });
       if (stopStrings) {
         requestBody.stop = stopStrings;

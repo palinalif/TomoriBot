@@ -31,6 +31,10 @@ export class CustomStreamAdapter extends OpenAICompatibleStreamAdapter {
       localeNamespace: ["genai", "custom"].join("."),
       errorMessagePrefix: "Custom endpoint error",
       placeholderApiKey: CUSTOM_PROVIDER_PLACEHOLDER_API_KEY,
+      // Some custom/Ollama-style endpoints validly emit "\n{persona}:" immediately
+      // after a closed <think>...</think> block, so the request-level stop string
+      // is too aggressive here. Keep the local fallback speaker guard instead.
+      includePersonaSpeakerStop: false,
       resolveApiUrl: (config) => normalizeCustomApiUrl(config.endpointUrl),
       shouldRetryWithoutStop: (statusCode, errorText) => {
         if (statusCode !== 400 && statusCode !== 422) {

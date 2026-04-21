@@ -26,7 +26,9 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
   subcommand
     .setName("add")
     .setDescription(localizer("en-US", "commands.personal.custom_models.add.description"))
-    .addStringOption((option) => option.setName("endpoint_label").setDescription("Endpoint label").setRequired(true))
+    .addStringOption((option) =>
+      option.setName("endpoint_label").setDescription("Saved nickname in Tomori, e.g. KoboldCPP").setRequired(true),
+    )
     .addStringOption((option) =>
       option
         .setName("capability")
@@ -52,7 +54,12 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     )
     .addStringOption((option) => option.setName("endpoint_url").setDescription("Endpoint URL").setRequired(true))
     .addStringOption((option) => option.setName("display_name").setDescription("Display name").setRequired(true))
-    .addStringOption((option) => option.setName("model_name").setDescription("Model name").setRequired(true))
+    .addStringOption((option) =>
+      option
+        .setName("model_name")
+        .setDescription("Exact remote model ID; some endpoints require the exact codename")
+        .setRequired(true),
+    )
     .addStringOption((option) => option.setName("auth_token").setDescription("Bearer token").setRequired(false))
     .addIntegerOption((option) => option.setName("num_ctx").setDescription("Context window").setRequired(false))
     .addBooleanOption((option) => option.setName("has_tools").setDescription("Supports tools").setRequired(false))
