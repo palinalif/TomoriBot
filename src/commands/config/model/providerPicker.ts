@@ -33,6 +33,12 @@ const PROVIDER_BUTTONS_PER_ROW = 4;
 export interface PickerOptions {
   /** Extra text appended to the picker embed description (e.g. guidance notes). */
   additionalDescription?: string;
+  /** Providers to render as disabled (greyed-out) buttons. */
+  disabledProviders?: string[];
+  /** Override the picker embed title locale key. */
+  titleKey?: string;
+  /** Override the picker embed description locale key. */
+  descriptionKey?: string;
 }
 
 export async function promptForSavedProvider(
@@ -59,14 +65,14 @@ export async function promptForSavedProvider(
   }
 
   const pickerEmbed = createStandardEmbed(locale, {
-    titleKey: "commands.config.model.providerPicker.title",
-    descriptionKey: "commands.config.model.providerPicker.description",
+    titleKey: options?.titleKey ?? "commands.config.model.providerPicker.title",
+    descriptionKey: options?.descriptionKey ?? "commands.config.model.providerPicker.description",
     color: ColorCode.INFO,
   });
   if (options?.additionalDescription) {
     pickerEmbed.setDescription(`${pickerEmbed.data.description ?? ""}\n\n${options.additionalDescription}`);
   }
-  const pickerComponents = buildProviderRows(savedProviders, locale);
+  const pickerComponents = buildProviderRows(savedProviders, locale, options?.disabledProviders);
 
   const baseReplyOptions: InteractionEditReplyOptions = {
     embeds: [pickerEmbed],
@@ -170,19 +176,24 @@ export async function replaceProviderPickerWithInfo(
 function buildProviderRows(
   savedProviders: SavedProviderConfigRow[],
   locale: string,
+  disabledProviders?: string[],
 ): Array<ActionRowBuilder<ButtonBuilder>> {
   const rows: Array<ActionRowBuilder<ButtonBuilder>> = [];
+  const disabledLower = disabledProviders?.map((p) => p.toLowerCase()) ?? [];
 
   for (let i = 0; i < savedProviders.length; i += PROVIDER_BUTTONS_PER_ROW) {
     const row = new ActionRowBuilder<ButtonBuilder>();
     const providerChunk = savedProviders.slice(i, i + PROVIDER_BUTTONS_PER_ROW);
 
     providerChunk.forEach((savedProvider) => {
+      const isDisabled = disabledLower.includes(savedProvider.provider.toLowerCase());
+
       row.addComponents(
         new ButtonBuilder()
           .setCustomId(`${PROVIDER_BUTTON_PREFIX}${savedProvider.provider.toLowerCase()}`)
           .setLabel(getProviderDisplayName(savedProvider.provider))
-          .setStyle(ButtonStyle.Secondary),
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(isDisabled),
       );
     });
 

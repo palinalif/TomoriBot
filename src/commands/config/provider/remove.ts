@@ -9,13 +9,13 @@ import { deleteSavedProviderConfig } from "@/utils/db/dbWrite";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import { replyInfoEmbed, promptWithRawModal } from "@/utils/discord/interactionHelper";
+import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import type { UserRow, ErrorContext } from "@/types/db/schema";
-import type { SelectOption, ModalComponent } from "@/types/discord/modal";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { isCustomProvider, deleteCustomLLMEntry } from "@/utils/discord/customProviderModal";
 import { sql } from "@/utils/db/client";
 import { loadProviderDefaultSelectionIds } from "@/utils/provider/savedProviderConfig";
+import { promptForSavedProvider } from "../model/providerPicker";
 
 async function resolveLlmProvider(llmId: number | null | undefined): Promise<string | null> {
   if (!llmId) return null;
@@ -61,17 +61,13 @@ async function resolveVideoProvider(videoModelId: number | null | undefined): Pr
   return row?.provider ? String(row.provider).toLowerCase() : null;
 }
 
-// Modal configuration constants
-const MODAL_CUSTOM_ID = "config_provider_remove_modal";
-const PROVIDER_SELECT_ID = "provider_remove_select";
-
 // Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand.setName("remove").setDescription(localizer("en-US", "commands.config.provider.remove.description"));
 
 /**
  * Removes a saved provider configuration from the database.
- * Only shows providers that have saved configs (excluding the active provider).
+ * Shows all saved providers with the active one as a disabled button.
  * @param _client - Discord client instance
  * @param interaction - Command interaction
  * @param userData - User data from database
@@ -107,16 +103,16 @@ export async function execute(
     return;
   }
 
-  // Track modal submit interaction for error handling in catch block
-  let modalSubmitInteraction: import("discord.js").ModalSubmitInteraction | undefined;
+  // Track the interaction used to display results (picker reply or original interaction)
+  let resultTarget: ChatInputCommandInteraction | import("discord.js").ButtonInteraction = interaction;
 
   try {
-    // 3. Load saved provider configs, excluding the currently active provider
+    // 3. Load all saved provider configs
     const allSavedConfigs = await loadSavedProviderConfigs(tomoriState.server_id);
     const currentProvider = tomoriState.llm.llm_provider.toLowerCase();
     const removableConfigs = allSavedConfigs.filter((c) => c.provider.toLowerCase() !== currentProvider);
 
-    // 4. If no saved configs to remove, show error
+    // 4. If no removable configs exist, show error
     if (removableConfigs.length === 0) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.provider.remove.no_saved_title",
@@ -127,51 +123,27 @@ export async function execute(
       return;
     }
 
-    // 5. Build select options from removable saved configs
-    const selectOptions: SelectOption[] = removableConfigs.map((config) => ({
-      label: getProviderDisplayName(config.provider),
-      value: config.provider.toLowerCase(),
-      description: undefined,
-    }));
+    // 5. Show provider picker — active provider shown as disabled button with explanation
+    const pickerResult = await promptForSavedProvider(interaction, locale, allSavedConfigs, {
+      disabledProviders: [currentProvider],
+      titleKey: "commands.config.provider.remove.picker_title",
+      descriptionKey: "commands.config.provider.remove.picker_description",
+      additionalDescription: localizer(locale, "commands.config.provider.remove.active_provider_note", {
+        provider: getProviderDisplayName(currentProvider),
+      }),
+    });
 
-    // 6. Show modal with provider selection
-    const modalComponents: ModalComponent[] = [
-      {
-        customId: PROVIDER_SELECT_ID,
-        labelKey: "commands.config.provider.remove.confirm_title",
-        descriptionKey: "commands.config.provider.remove.confirm_description",
-        placeholder: "commands.config.provider.remove.select_placeholder",
-        required: true,
-        options: selectOptions,
-      },
-    ];
+    if (!pickerResult) return; // cancelled or timed out
 
-    const modalResult = await promptWithRawModal(
-      interaction,
-      locale,
-      {
-        modalCustomId: MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.config.provider.remove.confirm_title",
-        components: modalComponents,
-      },
-      MessageFlags.Ephemeral,
-    );
+    const selectedProvider = pickerResult.provider;
+    resultTarget = pickerResult.pickerInteraction ?? pickerResult.interaction;
 
-    // 7. Handle modal outcome
-    if (modalResult.outcome !== "submit") {
-      log.info(`Provider remove modal ${modalResult.outcome} for user ${userData.user_id}`);
-      return;
+    // 6. If auto-selected (single provider, no picker shown), defer for follow-up edits
+    if (!pickerResult.pickerInteraction && !pickerResult.interaction.replied) {
+      await pickerResult.interaction.deferReply({ flags: MessageFlags.Ephemeral });
     }
 
-    modalSubmitInteraction = modalResult.interaction;
-    const selectedProvider = modalResult.values?.[PROVIDER_SELECT_ID];
-
-    if (!modalSubmitInteraction || !selectedProvider) {
-      log.error("Provider remove modal result unexpectedly missing interaction or values");
-      return;
-    }
-
-    // 8. Delete the saved config
+    // 7. Delete the saved config and reassign dependent model selections
     const activeProvider = tomoriState.llm.llm_provider.toLowerCase();
     const activeDefaults = await loadProviderDefaultSelectionIds(activeProvider);
     const reassignmentLines: string[] = [];
@@ -266,7 +238,7 @@ export async function execute(
     const deleted = await deleteSavedProviderConfig(tomoriState.server_id, selectedProvider);
 
     if (!deleted) {
-      await replyInfoEmbed(modalSubmitInteraction, locale, {
+      await replyInfoEmbed(resultTarget, locale, {
         titleKey: "general.errors.update_failed_title",
         descriptionKey: "general.errors.update_failed_description",
         color: ColorCode.ERROR,
@@ -274,15 +246,14 @@ export async function execute(
       return;
     }
 
-    // 9. Also purge rotation keys for that provider (clean break)
+    // 8. Purge rotation keys for that provider (clean break)
     const { purgeRotationKeysForProvider } = await import("../../../utils/security/keyRotation");
     const purgedCount = await purgeRotationKeysForProvider(tomoriState.server_id, selectedProvider);
     if (purgedCount > 0) {
       log.info(`Purged ${purgedCount} rotation key(s) for removed provider ${selectedProvider}`);
     }
 
-    // 10. If removing custom provider's saved config, clean up the custom LLM entry
-    // (only if the custom provider is NOT currently active)
+    // 9. If removing custom provider's saved config, clean up the custom LLM entry
     if (isCustomProvider(selectedProvider)) {
       log.info(`Removing saved custom provider config — cleaning up custom LLM entry`);
       await deleteCustomLLMEntry(serverId);
@@ -290,8 +261,8 @@ export async function execute(
 
     invalidateTomoriStateCache(serverId);
 
-    // 11. Success message
-    await replyInfoEmbed(modalSubmitInteraction, locale, {
+    // 10. Success message — update the picker embed or reply to the interaction
+    await replyInfoEmbed(resultTarget, locale, {
       titleKey: "commands.config.provider.remove.success_title",
       descriptionKey:
         reassignmentLines.length > 0
@@ -328,8 +299,7 @@ export async function execute(
       context,
     );
 
-    const replyTarget = modalSubmitInteraction ?? interaction;
-    await replyInfoEmbed(replyTarget, locale, {
+    await replyInfoEmbed(resultTarget, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",
       color: ColorCode.ERROR,

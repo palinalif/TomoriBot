@@ -176,7 +176,10 @@ export async function execute(
     const nonNaiProviders = savedProviders.filter(
       (p) => getStaticProviderInfo(p.provider)?.featureSupport.imageGeneration !== "nai-pipeline",
     );
-    const hasNaiProviders = savedProviders.length > nonNaiProviders.length;
+    const naiProviders = savedProviders.filter(
+      (p) => getStaticProviderInfo(p.provider)?.featureSupport.imageGeneration === "nai-pipeline",
+    );
+    const hasNaiProviders = naiProviders.length > 0;
 
     // 4. If all image providers are NAI, show guidance pointing to the dedicated command
     if (nonNaiProviders.length === 0) {
@@ -191,11 +194,14 @@ export async function execute(
       return;
     }
 
-    // 5. Show provider picker with non-NAI providers; add footnote if NAI was filtered out
+    // 5. Show provider picker with NAI providers as disabled buttons + footnote
     const pickerOptions = hasNaiProviders
-      ? { additionalDescription: localizer(locale, "commands.config.model.image.nai_picker_note") }
+      ? {
+          disabledProviders: naiProviders.map((p) => p.provider.toLowerCase()),
+          additionalDescription: localizer(locale, "commands.config.model.image.nai_picker_note"),
+        }
       : undefined;
-    providerSelection = await promptForSavedProvider(interaction, locale, nonNaiProviders, pickerOptions);
+    providerSelection = await promptForSavedProvider(interaction, locale, savedProviders, pickerOptions);
 
     if (!providerSelection) {
       return;

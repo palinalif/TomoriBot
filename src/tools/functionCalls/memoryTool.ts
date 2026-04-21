@@ -25,7 +25,7 @@ export class MemoryTool extends BaseTool {
       memory_content: {
         type: "string",
         description:
-          "The specific piece of information, fact, or preference to remember. Be concise, clear, and ensure it's new information not already in your knowledge base. IMPORTANT: Use {bot} instead of hardcoded bot names (e.g., 'Tomori', 'Elen') and {user} instead of hardcoded user names in your memory content. Example: '{bot} likes {user}'s dogs' instead of 'Tomori likes John's dogs'.",
+          "The specific piece of information, fact, or preference to remember. Be concise, clear, and ensure it's new information not already in your knowledge base. IMPORTANT: Use {char} instead of hardcoded character names and {user} instead of hardcoded user names in your memory content. Example: '{char} likes {user}'s dogs'",
       },
       memory_scope: {
         type: "string",
@@ -383,11 +383,11 @@ export class MemoryTool extends BaseTool {
           log.warn(`Self-teach: Resolved target user ${resolvedTargetUserId} not found in Tomori records`);
           return {
             success: false,
-            error: `Tomori doesn't know ${resolvedTargetUserLabel} yet, so it cannot save a personal memory for them.`,
+            error: `I don't know ${resolvedTargetUserLabel} yet, so I cannot save a personal memory for them.`,
             data: {
               status: "memory_save_failed_user_not_found",
               scope: "target_user",
-              reason: "Tomori can only save personal memories for users it already knows.",
+              reason: "I can only save personal memories for users I already know.",
             },
           };
         }

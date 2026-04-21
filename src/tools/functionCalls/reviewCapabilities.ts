@@ -127,7 +127,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       const supportsVideoGen = providerSupportsFeature(provider, "videoGeneration");
 
       // 2. Build dynamic capabilities markdown with model information
-      let capabilitiesContent = "# TomoriBot Chat Capabilities\n\n";
+      let capabilitiesContent = "# Your Chat Capabilities\n\n";
       capabilitiesContent += `The current model powering you is **${displayModelName}** (${llm.llm_provider})`;
       if (llm.llm_description && provider !== "custom") {
         capabilitiesContent += `, which is ${llm.llm_description}`;
@@ -1006,7 +1006,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       const categoryDirs = getAllFiles(commandsPath, true);
 
       // 3. Build markdown documentation
-      let commandsMarkdown = "# TomoriBot Slash Commands\n\n";
+      let commandsMarkdown = "# Your Slash Commands\n\n";
       commandsMarkdown +=
         "Here are all available slash commands organized by category. Commands may use the format `/{category} {subcommand}` or `/{category} {group} {subcommand}`.\n\n";
 

@@ -452,10 +452,10 @@ export class ReminderTool extends BaseTool {
             log.warn(`Reminder: Resolved target user ${resolvedTargetUserId} is unknown to TomoriBot`);
             return {
               success: false,
-              error: `TomoriBot doesn't know ${resolvedTargetUserLabel} yet, so it cannot create a reminder for them.`,
+              error: `I don't know ${resolvedTargetUserLabel} yet, so I cannot create a reminder for them.`,
               data: {
                 status: "reminder_creation_failed_user_not_found",
-                reason: "TomoriBot can only create reminders for users it already knows.",
+                reason: "I can only create reminders for users I already know.",
               },
             };
           }

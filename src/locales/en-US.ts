@@ -19,7 +19,7 @@ export default {
     message_cooldown_footer_server_wide: `Server Setting: Server-Wide Cooldown`,
     message_cooldown_footer_strict: `Server Setting: Strict Server-Wide Cooldown`,
     interaction: {
-      cancel_title: `🔴 Command Cancelled`,
+      cancel_title: `Command Cancelled`,
       cancel_description: `The command has been cancelled.`,
       timeout_title: `⏰ Command Timed Out`,
       timeout_description: `You didn't respond in time. Please try again.`,
@@ -1368,12 +1368,12 @@ After the bot accepts an invite, it now posts a short reminder in the Matrix roo
         usage_title: `Using It From Matrix`,
         usage_description: `- Talk in Matrix normally after the room is linked
 - Matrix messages relay into the linked Discord channel as webhook messages
-- TomoriBot replies back into the Matrix room
+- I reply back into the Matrix room
 - The only Matrix text commands are /kill and /refresh`,
         limitations_title: `Current Limitations`,
         limitations_description: `- No slash commands from Matrix
 - No DMs / DM-based cooldown reminders
-- Matrix user profile pictures are not visible to TomoriBot
+- Matrix user profile pictures are not visible to me
 - Cannot pin messages
 - Custom emojis and Markdown do not render reliably
 - Embeds relay as plain text
@@ -1456,14 +1456,14 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 - If enabled nodes still contain unsupported preset macros after import, the import summary warns you; those tags may still be sent literally or behave differently here
 - Unknown markers are skipped
 - Order is literal: if you place \`chatHistory\` before \`dialogueExamples\`, live chat comes first
-- Tomori uses \`prompt_order\` in the .json with \`character_id: 100001\`, and falls back to \`100000\` only if \`100001\` is missing
+- I use the \`prompt_order\` in the .json with \`character_id: 100001\`, and falls back to \`100000\` only if \`100001\` is missing
 - If sample chats end up last, the bot adds a short separator so strict providers do not continue the example`,
         embed2_footer: `If something looks missing, compare the imported node list in {stPresetToggle} against your preset JSON`,
         embed3_title: `Limits And Compatibility (Page 2)`,
         embed3_description: `- Post-history / depth injections are merged into existing chat history entries, not inserted as standalone messages
 - Multiple nodes at the same depth are batched together
 - \`{{setvar}}\` and \`{{addvar}}\` work across enabled nodes in node order, but variables are global for the whole preset
-- Most native blocks are moved, not removed: \`main\`, \`charDescription\`, \`charPersonality\`, \`dialogueExamples\`, \`chatHistory\`, and \`worldInfo\` markers reposition Tomori's own system prompt, persona prompt, persona attributes, sample chats, live history, and retrieved docs
+- Most native blocks are moved, not removed: \`main\`, \`charDescription\`, \`charPersonality\`, \`dialogueExamples\`, \`chatHistory\`, and \`worldInfo\` markers reposition my own system prompt, persona prompt, persona attributes, sample chats, live history, and retrieved docs
 - The real suppressions are narrow: the built-in fallback system prompt is removed only if you did not set {configSystemPromptSet}, and native \`charDescription\` / \`charPersonality\` are skipped only when a custom node already expands \`{{description}}\` / \`{{personality}}\`
 - Tomori-only automatic blocks are not owned by ST markers: server info, memories, emoji/sticker context flush after \`main\` / \`charDescription\` / \`charPersonality\`; users-in-conversation, STM, conditioning, and leftover RAG flush before \`dialogueExamples\` / \`chatHistory\`
 - User impersonation via {botImpersonate} ignores the preset and uses the normal layout
@@ -1872,7 +1872,7 @@ Bot response: {bot}: Fufu~ I like knitting tiny clothes for tiny plushies~♥
       mcp: {
         description: `Learn how to add and manage MCP tool servers`,
         title: `MCP Server Setup Guide`,
-        description_text: `MCP (Model Context Protocol) servers extend Tomori's capabilities with external tools. Here's how to get started.`,
+        description_text: `MCP (Model Context Protocol) servers extend TomoriBot's capabilities with external tools. Here's how to get started.`,
         online_title: `Adding an Online MCP`,
         online_description: `Any publicly hosted MCP server with an HTTPS endpoint can be added, Smithery.ai is one example source.
 
@@ -1897,7 +1897,7 @@ If you are running your own instance, point the URL to your local server (e.g. \
 A malicious MCP server can:
 - **Prompt-inject** me by sending hidden instructions that override her behavior
 - **Exfiltrate data** that users pass to its tools (messages, file content, etc.)
-- Return **harmful or false results** that Tomori will relay to your server
+- Return **harmful or false results** that TomoriBot will relay to your server
 
 Treat MCP servers with the same caution as browser extensions or third-party apps. If in doubt, do not add it.`,
         footer: `Always review an MCP's described tools before adding it.`,
@@ -2622,7 +2622,7 @@ Your donations help:
           provider_description: `Choose the provider to add or rotate credentials for.`,
           provider_placeholder: `Select a provider...`,
           already_existing_suffix: `Already Existing`,
-          already_existing_description: `This provider is already configured. Submitting will update its credentials.`,
+          already_existing_description: `This provider is already configured. Submit again to update credentials.`,
           api_key_label: `API Key or Endpoint URL`,
           api_key_description_with_custom: `API Key, or OpenAI endpoint URL if using Custom (e.g., http://localhost:11434/v1)`,
           api_key_placeholder: `Do NOT share this key with anyone`,
@@ -2634,6 +2634,9 @@ Your donations help:
           description: `Remove a saved provider configuration.`,
           no_saved_title: `No Saved Configs`,
           no_saved_description: `There are no saved provider configurations to remove. Add a provider first with \`/config provider add\`.`,
+          picker_title: `Remove Provider Configuration`,
+          picker_description: `Select a provider to remove. This will delete the stored API key and reset any dependent model selections.`,
+          active_provider_note: `**{provider}** is your active **text model** provider and cannot be removed while in use. Switch to a different provider with \`/config model text\` first.`,
           select_placeholder: `Select a provider to remove...`,
           success_title: `Saved Config Removed`,
           success_description: `The saved configuration for **{provider}** has been removed. Use \`/config provider add\` to register it again.`,
@@ -2976,7 +2979,7 @@ Click the button below and enter your OpenRouter model codename (e.g., \`xai/gro
           current_none: `None`,
           nai_only_title: `NovelAI Image Models`,
           nai_only_description: `Your saved image providers only include NovelAI. NovelAI image models are configured separately — use \`/novelai image model\` to select a model.`,
-          nai_picker_note: `NovelAI image models are configured via \`/novelai image model\`.`,
+          nai_picker_note: `NovelAI image models are different from your main image model and are configured via \`/novelai image model\` instead. Use \`/config model image clear\` to remove either the standard image model or the NovelAI image model, or both.`,
         },
         video: {
           description: `Change the video generation model for this server.`,
@@ -4442,7 +4445,7 @@ You can change this anytime using \`/personal privacy\`.`,
           scope_choice_automatic: `Automatic`,
           scope_choice_global: `Global`,
           rag_disabled_title: `Document RAG Disabled`,
-          rag_disabled_description: `Document retrieval requires the [pgvector](https://github.com/pgvector/pgvector) PostgreSQL extension. Install pgvector and restart TomoriBot to enable it (see README.md).`,
+          rag_disabled_description: `Document retrieval requires the [pgvector](https://github.com/pgvector/pgvector) PostgreSQL extension in your database. Install pgvector and restart me to enable it (see README.md).`,
           no_permission_title: `Permission Denied`,
           no_permission_description: `You need the **Manage Server** permission to extract channel history.`,
           model_incompatible_title: `Model Incompatible`,
@@ -4484,7 +4487,7 @@ You can change this anytime using \`/personal privacy\`.`,
           select_description: `Choose which history document to remove`,
           select_placeholder: `Select a document...`,
           rag_disabled_title: `Document RAG Disabled`,
-          rag_disabled_description: `Document retrieval requires the [pgvector](https://github.com/pgvector/pgvector) PostgreSQL extension. Install pgvector and restart TomoriBot to enable it (see README.md).`,
+          rag_disabled_description: `Document retrieval requires the [pgvector](https://github.com/pgvector/pgvector) PostgreSQL extension. Install pgvector and restart me to enable it (see README.md).`,
           none_title: `No History Documents`,
           none_description: `There are no history-extracted documents to remove in this scope. Extract some with \`/memory history import\`.`,
           success_title: `History Document Removed`,
@@ -4681,7 +4684,7 @@ Click **Confirm** to edit it.`,
         main_persona_description: `Main Persona`,
         alter_persona_description: `Alter Persona`,
         rag_disabled_title: `Document RAG Disabled`,
-        rag_disabled_description: `Document retrieval requires the [pgvector](https://github.com/pgvector/pgvector) PostgreSQL extension. Install pgvector and restart TomoriBot to enable it (see README.md).`,
+        rag_disabled_description: `Document retrieval requires the [pgvector](https://github.com/pgvector/pgvector) PostgreSQL extension. Install pgvector in your database and restart me to enable it (see README.md).`,
         teaching_disabled_title: `Document Teaching Disabled`,
         teaching_disabled_description: `Members are not currently allowed to add or remove documents on this server. A server member with \`Manage Server\` permissions can enable this using \`/server member-permissions\`.`,
         no_embedding_model_title: `No Embedding Model Set`,
@@ -4848,7 +4851,7 @@ Click **Confirm** to edit it.`,
         select_description: `Choose which document to remove`,
         select_placeholder: `Select a document...`,
         rag_disabled_title: `Document RAG Disabled`,
-        rag_disabled_description: `Document retrieval requires the [pgvector](https://github.com/pgvector/pgvector) PostgreSQL extension. Install pgvector and restart TomoriBot to enable it (see README.md).`,
+        rag_disabled_description: `Document retrieval requires the [pgvector](https://github.com/pgvector/pgvector) PostgreSQL extension. Install pgvector in your database and restart me to enable it (see README.md).`,
         none_title: `No Documents`,
         none_description: `There are no documents to remove in this scope. Add one with \`/memory document add\`.`,
         success_title: `Document Removed`,

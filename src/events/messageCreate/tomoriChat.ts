@@ -467,7 +467,47 @@ function findReplyContextTargetInMessage(
   return null;
 }
 
+/**
+ * Resolves a display name for a message author, accounting for
+ * webhooks, personas, nicknames, and blacklisted users.
+ */
+async function resolveMessageAuthorDisplayName(params: {
+  message: Message;
+  clientUserId: string | undefined;
+  botDisplayName: string | null | undefined;
+  personaByNickname: Map<string, TomoriState>;
+  serverDiscId: string;
+  serverPersonalizationDisabled: boolean;
+}): Promise<string> {
+  const { message, clientUserId, botDisplayName, personaByNickname, serverDiscId, serverPersonalizationDisabled } =
+    params;
+
+  const webhookName = stripBridgePrefix(message.author.username);
+  const matchedPersona = message.webhookId ? personaByNickname.get(webhookName.toLowerCase()) : undefined;
+  const userRow =
+    message.author.id !== clientUserId && !matchedPersona ? await getCachedUserRow(message.author.id) : null;
+  const userBlacklisted = userRow !== null ? await getCachedBlacklistStatus(serverDiscId, message.author.id) : false;
+  const fallbackName = resolvePreferredDiscordDisplayName({
+    memberDisplayName: message.member?.displayName,
+    user: message.author,
+    fallback: webhookName,
+  });
+
+  return message.author.id === clientUserId
+    ? botDisplayName || "Bot"
+    : (matchedPersona?.tomori_nickname ??
+        (userBlacklisted || serverPersonalizationDisabled || !userRow?.user_nickname
+          ? fallbackName
+          : userRow.user_nickname));
+}
+
+/**
+ * Builds the `[System: ...]` annotation that tells the LLM a message is a reply.
+ * Both the reply and the referenced message get opaque `ref_N` IDs so the LLM
+ * can target either one with `interact_with_recent_message`.
+ */
 async function buildReplyReferenceContextAnnotation(params: {
+  replyMessage: Message;
   referencedMessage: Message;
   clientUserId: string | undefined;
   botDisplayName: string | null | undefined;
@@ -477,6 +517,7 @@ async function buildReplyReferenceContextAnnotation(params: {
   messageIdMap: MessageIdMap;
 }): Promise<string> {
   const {
+    replyMessage,
     referencedMessage,
     clientUserId,
     botDisplayName,
@@ -486,30 +527,28 @@ async function buildReplyReferenceContextAnnotation(params: {
     messageIdMap,
   } = params;
 
-  const referencedWebhookName = stripBridgePrefix(referencedMessage.author.username);
-  const referencedMatchedPersona = referencedMessage.webhookId
-    ? personaByNickname.get(referencedWebhookName.toLowerCase())
-    : undefined;
-  const referencedUserRow =
-    referencedMessage.author.id !== clientUserId && !referencedMatchedPersona
-      ? await getCachedUserRow(referencedMessage.author.id)
-      : null;
-  const referencedUserBlacklisted =
-    referencedUserRow !== null ? await getCachedBlacklistStatus(serverDiscId, referencedMessage.author.id) : false;
-  const referencedFallbackName = resolvePreferredDiscordDisplayName({
-    memberDisplayName: referencedMessage.member?.displayName,
-    user: referencedMessage.author,
-    fallback: referencedWebhookName,
+  const replyAuthorName = await resolveMessageAuthorDisplayName({
+    message: replyMessage,
+    clientUserId,
+    botDisplayName,
+    personaByNickname,
+    serverDiscId,
+    serverPersonalizationDisabled,
   });
-  const referencedAuthorName =
-    referencedMessage.author.id === clientUserId
-      ? botDisplayName || "Bot"
-      : (referencedMatchedPersona?.tomori_nickname ??
-        (referencedUserBlacklisted || serverPersonalizationDisabled || !referencedUserRow?.user_nickname
-          ? referencedFallbackName
-          : referencedUserRow.user_nickname));
 
-  return `[System: This message is referring to a previous message (ID: ${messageIdMap.register(referencedMessage.id, "ref")}) by ${referencedAuthorName} saying: ${formatInlineSystemContent(referencedMessage.content)}${buildReplyReferenceAttachmentInfo(referencedMessage)}]`;
+  const referencedAuthorName = await resolveMessageAuthorDisplayName({
+    message: referencedMessage,
+    clientUserId,
+    botDisplayName,
+    personaByNickname,
+    serverDiscId,
+    serverPersonalizationDisabled,
+  });
+
+  const replyRef = messageIdMap.register(replyMessage.id, "ref");
+  const referencedRef = messageIdMap.register(referencedMessage.id, "ref");
+
+  return `[System: This message (ID: ${replyRef}) by ${replyAuthorName} is referring to a previous message (ID: ${referencedRef}) by ${referencedAuthorName} saying: ${formatInlineSystemContent(referencedMessage.content)}${buildReplyReferenceAttachmentInfo(referencedMessage)}]`;
 }
 
 function buildQueuedReplyAttachmentSummary(message: Message): string | null {
@@ -4352,6 +4391,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 };
 
                 processedContent = `${await buildReplyReferenceContextAnnotation({
+                  replyMessage: msg,
                   referencedMessage: msgReferencedMessage,
                   clientUserId: client.user?.id,
                   botDisplayName: tomoriState?.tomori_nickname,
@@ -4377,6 +4417,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                   };
 
                   const referenceContext = await buildReplyReferenceContextAnnotation({
+                    replyMessage: msg,
                     referencedMessage: msgReferencedMessage,
                     clientUserId: client.user?.id,
                     botDisplayName: tomoriState?.tomori_nickname,

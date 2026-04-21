@@ -364,10 +364,10 @@ export class UpdateLongTermMemoryTool extends BaseTool {
       if (!targetUserRow?.user_id) {
         return {
           success: false,
-          error: `Tomori doesn't know ${resolvedTargetUserLabel} yet, so this personal memory cannot be updated.`,
+          error: `I don't know ${resolvedTargetUserLabel} yet, so this personal memory cannot be updated.`,
           data: {
             status: "memory_update_failed_user_not_found",
-            reason: "Tomori can only update personal memories for users it already knows.",
+            reason: "I can only update personal memories for users I already know.",
           },
         };
       }
