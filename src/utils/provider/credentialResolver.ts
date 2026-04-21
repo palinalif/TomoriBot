@@ -1,4 +1,5 @@
 import type {
+  CustomEndpointRow,
   PersonalProviderCapability,
   SavedProviderConfigRow,
   TomoriConfigRow,
@@ -8,8 +9,10 @@ import { personalProviderCapabilitySchema, tomoriConfigSchema } from "@/types/db
 import { sql } from "@/utils/db/client";
 import { loadSavedProviderConfig, loadUserSavedProviderConfigs } from "@/utils/db/dbRead";
 import { log } from "@/utils/misc/logger";
+import { resolveCustomEndpointForProvider } from "@/utils/provider/customEndpointService";
 import { decryptApiKey } from "@/utils/security/crypto";
 import { CUSTOM_ENDPOINT_PLACEHOLDER_KEY } from "@/utils/discord/customProviderModal";
+import { isCustomProvider } from "@/utils/provider/customProviderUtils";
 
 export type Capability = "text" | "embedding" | "image-standard" | "image-nai" | "video" | "vision";
 
@@ -19,6 +22,8 @@ export interface ResolvedCredentials {
   keyVersion: number;
   savedConfig: SavedProviderConfigRow | UserSavedProviderConfigRow;
   source: "server" | "personal";
+  customEndpoint?: CustomEndpointRow;
+  apiStyle?: string;
 }
 
 interface ResolverOptions {
@@ -244,6 +249,19 @@ async function decryptResolvedApiKey(
   source: "server" | "personal",
   contextLabel: string,
 ): Promise<ResolvedCredentials> {
+  const customEndpointCapability =
+    capability === "image-standard"
+      ? "image"
+      : capability === "vision"
+        ? "text"
+        : capability === "image-nai"
+          ? null
+          : capability;
+  const customEndpoint =
+    isCustomProvider(provider) && customEndpointCapability
+      ? await resolveCustomEndpointForProvider(provider, customEndpointCapability)
+      : null;
+
   if (!savedConfig.api_key) {
     throw new CredentialUnavailableError(provider, capability, "no_saved_config", source);
   }
@@ -257,6 +275,17 @@ async function decryptResolvedApiKey(
   }
 
   if (!decryptedKey || decryptedKey === CUSTOM_ENDPOINT_PLACEHOLDER_KEY) {
+    if (customEndpoint && customEndpoint.requires_auth === false) {
+      return {
+        provider,
+        apiKey: "",
+        keyVersion: savedConfig.key_version || 1,
+        savedConfig,
+        source,
+        customEndpoint,
+        apiStyle: customEndpoint.api_style,
+      };
+    }
     throw new CredentialUnavailableError(provider, capability, "placeholder_key", source);
   }
 
@@ -266,6 +295,8 @@ async function decryptResolvedApiKey(
     keyVersion: savedConfig.key_version || 1,
     savedConfig,
     source,
+    customEndpoint: customEndpoint ?? undefined,
+    apiStyle: customEndpoint?.api_style,
   };
 }
 

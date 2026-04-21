@@ -11,6 +11,7 @@ import type { SelectOption } from "../../../types/discord/modal";
 import { promptForSavedProvider, replaceProviderPickerWithInfo } from "@/commands/config/model/providerPicker";
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
+import { isCustomProvider } from "@/utils/provider/customProviderUtils";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "config_model_vision_modal";
@@ -103,6 +104,54 @@ export async function execute(
     }
     const selectedProvider = providerSelection.provider;
     responseInteraction = providerSelection.interaction;
+
+    if (isCustomProvider(selectedProvider)) {
+      const selectedSavedConfig = savedProviders.find((row) => row.provider.toLowerCase() === selectedProvider) ?? null;
+      if (!selectedSavedConfig?.vision_llm_id) {
+        await replyInfoEmbed(responseInteraction, locale, {
+          titleKey: "commands.config.model.vision.no_models_title",
+          descriptionKey: "commands.config.model.vision.no_models_description",
+          descriptionVars: {
+            provider: getProviderDisplayName(selectedProvider),
+          },
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      const [updatedRow] = await sql`
+				UPDATE tomori_configs
+				SET vision_llm_id = ${selectedSavedConfig.vision_llm_id}
+				WHERE server_id = ${tomoriState.server_id}
+				RETURNING *
+			`;
+
+      const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
+      if (!validatedConfig.success || !updatedRow) {
+        await replyInfoEmbed(responseInteraction, locale, {
+          titleKey: "general.errors.update_failed_title",
+          descriptionKey: "general.errors.update_failed_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+
+      invalidateTomoriStateCache(serverId);
+      await replyInfoEmbed(responseInteraction, locale, {
+        titleKey: "commands.config.model.vision.success_title",
+        descriptionKey: tomoriState.llm.has_tools
+          ? "commands.config.model.vision.success_description"
+          : "commands.config.model.vision.success_no_tools_description",
+        descriptionVars: {
+          model_name: selectedSavedConfig.custom_model_name ?? getProviderDisplayName(selectedProvider),
+          chat_model: tomoriState.llm.llm_codename,
+          provider: getProviderDisplayName(selectedProvider),
+        },
+        color: ColorCode.SUCCESS,
+      });
+      return;
+    }
 
     const allModels = await loadAvailableModelsForProvider(selectedProvider);
     const visionModels = allModels?.filter((m) => m.sees_images) ?? [];

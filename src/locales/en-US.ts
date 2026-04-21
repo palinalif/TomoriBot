@@ -10,6 +10,11 @@ export default {
     defaults: {
       bot_name: `Tomori`,
     },
+    api_styles: {
+      openai_compatible: `OpenAI-Compatible`,
+      comfyui: `ComfyUI`,
+      ollama_native: `Ollama Native`,
+    },
     cooldown_title: `⌛ Please wait!`,
     cooldown: `You need to wait {seconds} seconds before using a \`/{category}\` command again.`,
     message_cooldown_title: `⌛ Please wait!`,
@@ -92,6 +97,10 @@ export default {
       },
       operation_failed_title: `Operation Failed`,
       operation_failed_description: `The requested operation could not be completed. Please try again.`,
+      custom_endpoint_unreachable_title: `Custom Endpoint Unreachable`,
+      custom_endpoint_unreachable_description: `Tomori couldn't reach that custom endpoint. Check the URL, auth, and remote access settings, then try again.`,
+      comfyui_poll_timeout_title: `ComfyUI Timed Out`,
+      comfyui_poll_timeout_description: `The ComfyUI workflow did not finish before the timeout. Increase the timeout or simplify the workflow and try again.`,
       provider_not_supported_title: `Provider Not Supported`,
       provider_not_supported_description: `The selected AI provider is not currently supported.`,
       user_blacklisted_title: `User Blacklisted`,
@@ -1263,6 +1272,20 @@ Please try again with different inputs or check your API key.`,
         byok_field: `BYOK Servers`,
         byok_value: `Servers can require member-provided providers with {byok_command}. If that mode is enabled, user-triggered messages need your personal provider before I can answer.`,
         footer: `Your personal providers apply across every server you use TomoriBot in.`,
+      },
+      custom_models: {
+        description: `Learn how custom models work.`,
+        title: `Custom Models`,
+        description_body: `Custom models let you register self-hosted or proxy-backed endpoints such as Ollama, LM Studio, LiteLLM, or ComfyUI as labeled providers.`,
+        server_field: `Server Scope`,
+        server_value: `Use {add_command} to register a server-wide endpoint and {remove_command} to remove one capability from that label.`,
+        personal_field: `Personal Scope`,
+        personal_value: `Use {add_command} to register your own labeled endpoint and {remove_command} to delete it again.`,
+        selection_field: `Selecting Them`,
+        selection_value: `After registration, choose the label from {text_command}, {image_command}, or {video_command}. Vision-capable text endpoints also appear in \`/config model vision\`.`,
+      },
+      "custom-models": {
+        description: `Learn how custom models work.`,
       },
       features: {
         description: `Shows what TomoriBot can do`,
@@ -2651,6 +2674,49 @@ Your donations help:
         num_ctx_placeholder: `e.g., 8192 or 16384. Only overrides Ollama & KoboldCPP.`,
         num_ctx_invalid: `Context window size must be a number of at least 512. Leave blank to use the endpoint default.`,
       },
+      custom_models: {
+        description: `Manage labeled custom endpoints.`,
+        add: {
+          description: `Register a labeled custom endpoint.`,
+          label_description: `Saved nickname for this endpoint inside Tomori.`,
+          capability_description: `Which capability this endpoint provides.`,
+          api_style_description: `Which API format this endpoint speaks.`,
+          endpoint_url_description: `Base URL for the endpoint.`,
+          display_name_description: `Friendly name shown in status and confirmations.`,
+          model_name_description: `Exact remote model identifier the endpoint expects for text or embedding requests.`,
+          auth_token_description: `Optional bearer token for protected endpoints.`,
+          num_ctx_description: `Optional context window override for text endpoints.`,
+          has_tools_description: `Whether the text endpoint supports tool calling.`,
+          sees_images_description: `Whether the text endpoint supports vision input.`,
+          supports_structoutput_description: `Whether the text endpoint supports structured output.`,
+          workflow_description: `ComfyUI workflow JSON attachment for image/video endpoints.`,
+          success_title: `Custom Endpoint Added`,
+          success_description: `Added **{display_name}** under label **{label}** for **{capability}**. Select it with \`/config model\`.`,
+        },
+        remove: {
+          description: `Remove one capability from a labeled custom endpoint.`,
+          label_description: `Label to remove from.`,
+          capability_description: `Capability to remove.`,
+          not_found: `No custom endpoint exists for that label and capability.`,
+          success_title: `Custom Endpoint Removed`,
+          success_description: `Removed **{capability}** from custom label **{label}**.`,
+        },
+        validation: {
+          invalid_label: `Labels must use only lowercase letters, numbers, underscores, or hyphens, and be 1-40 characters long.`,
+          unreachable: `Tomori could not reach that endpoint: {reason}`,
+          workflow_required: `ComfyUI image and video endpoints require a workflow JSON attachment.`,
+          model_name_required: `Text and embedding endpoints require a remote model name.`,
+        },
+      },
+      "custom-models": {
+        description: `Manage labeled custom endpoints.`,
+        add: {
+          description: `Register a labeled custom endpoint.`,
+        },
+        remove: {
+          description: `Remove one capability from a labeled custom endpoint.`,
+        },
+      },
       provider: {
         description: `Manage saved provider configurations`,
         add: {
@@ -2664,6 +2730,7 @@ Your donations help:
           provider_placeholder: `Select a provider...`,
           already_existing_suffix: `Already Existing`,
           already_existing_description: `This provider is already configured. Submit again to update credentials.`,
+          api_key_description: `This key will be securely stored. Use the '/help api-key' command for instructions in getting one.`,
           api_key_label: `API Key or Endpoint URL`,
           api_key_description_with_custom: `API Key, or OpenAI endpoint URL if using Custom (e.g., http://localhost:11434/v1)`,
           api_key_placeholder: `Do NOT share this key with anyone`,
@@ -4299,6 +4366,28 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
     },
     personal: {
       description: `Manage your personal settings`,
+      custom_models: {
+        description: `Manage your personal labeled custom endpoints.`,
+        add: {
+          description: `Register a personal custom endpoint.`,
+          success_title: `Personal Custom Endpoint Added`,
+          success_description: `Added **{display_name}** under your personal custom label **{label}** for **{capability}**.`,
+        },
+        remove: {
+          description: `Remove one capability from a personal custom endpoint.`,
+          success_title: `Personal Custom Endpoint Removed`,
+          success_description: `Removed **{capability}** from your personal custom label **{label}**.`,
+        },
+      },
+      "custom-models": {
+        description: `Manage your personal labeled custom endpoints.`,
+        add: {
+          description: `Register a personal custom endpoint.`,
+        },
+        remove: {
+          description: `Remove one capability from a personal custom endpoint.`,
+        },
+      },
       provider: {
         description: `Manage your personal AI providers.`,
         no_saved_title: `No Personal Providers`,
@@ -4385,6 +4474,18 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
           success_description: `Updated fallback models for your personal {provider} text provider.\n\n{model_list}`,
           cleared_title: `Personal Fallback Cleared`,
           cleared_description: `Cleared fallback models for your personal {provider} text provider.`,
+        },
+      },
+      "model-fallback": {
+        remove: {
+          description: `Remove models from your personal fallback chain.`,
+          none_title: `No Personal Fallbacks`,
+          none_description: `Your active personal text provider does not have any fallback models configured.`,
+          modal_title: `Remove Personal Fallback Models`,
+          checkbox_label: `Keep these fallback models`,
+          checkbox_description: `Unchecked models will be removed from your personal fallback chain.`,
+          success_title: `Personal Fallback Updated`,
+          success_description: `Updated your personal fallback chain. Remaining models: **{remaining_count}**.`,
         },
       },
       samplers: {

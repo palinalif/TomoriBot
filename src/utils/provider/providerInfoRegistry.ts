@@ -14,6 +14,7 @@ import { nvidiaProviderInfo } from "@/providers/nvidia/providerInfo";
 import { openrouterProviderInfo } from "@/providers/openrouter/providerInfo";
 import { vertexProviderInfo } from "@/providers/vertex/providerInfo";
 import { anthropicProviderInfo } from "@/providers/anthropic/providerInfo";
+import { getCustomProviderDisplayName, isCustomProvider } from "@/utils/provider/customProviderUtils";
 
 const providerInfos: readonly ProviderInfo[] = [
   googleProviderInfo,
@@ -80,6 +81,9 @@ const providerFeatureImplementations: Partial<
 
 export function normalizeProviderName(providerName: string): string {
   const normalizedName = providerName.toLowerCase().trim();
+  if (isCustomProvider(normalizedName)) {
+    return "custom";
+  }
   return providerAliasToCanonicalName.get(normalizedName) ?? normalizedName;
 }
 
@@ -89,10 +93,23 @@ export function getStaticProviderInfo(providerName: string): ProviderInfo | null
 }
 
 export function getProviderDisplayName(providerName: string): string {
+  if (isCustomProvider(providerName)) {
+    return getCustomProviderDisplayName(providerName);
+  }
   return getStaticProviderInfo(providerName)?.displayName ?? providerName;
 }
 
 export function providerSupportsFeature(providerName: string, featureName: ProviderFeatureName): boolean {
+  if (isCustomProvider(providerName)) {
+    if (
+      featureName === "imageGeneration" ||
+      featureName === "videoGeneration" ||
+      featureName === "embeddings" ||
+      featureName === "liveTokenCounting"
+    ) {
+      return featureName !== "liveTokenCounting";
+    }
+  }
   const featureValue = getStaticProviderInfo(providerName)?.featureSupport[featureName];
   if (typeof featureValue === "string") {
     return featureValue !== "none";

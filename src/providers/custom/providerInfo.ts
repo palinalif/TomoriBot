@@ -14,7 +14,7 @@ export const customProviderInfo: ProviderInfo = {
   featureSupport: {
     imageGeneration: "none",
     videoGeneration: "none",
-    embeddings: false,
+    embeddings: true,
     structuredOutput: true,
     presetGeneration: true,
     expressionInitialization: true,

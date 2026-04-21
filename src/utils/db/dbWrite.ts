@@ -1,6 +1,7 @@
 import { sql } from "@/utils/db/client";
 import type { SqlParameterArray } from "@/types/db/sqlOperations";
 import {
+  customEndpointSchema,
   tomoriSchema,
   userSchema,
   tomoriConfigSchema,
@@ -15,6 +16,9 @@ import {
   randomTriggerSchema,
   type RandomTriggerRow,
   type NaiPresetRow,
+  type CustomEndpointApiStyle,
+  type CustomEndpointCapability,
+  type CustomEndpointRow,
   savedProviderConfigSchema,
   type SavedProviderConfigUpsert,
   userSavedProviderConfigSchema,
@@ -2039,6 +2043,153 @@ export async function deleteUserSavedProviderConfig(userId: number, provider: st
     return deleted;
   } catch (error) {
     log.error(`Error deleting user saved provider config for user ${userId}, provider ${provider}:`, error);
+    return false;
+  }
+}
+
+export async function upsertCustomEndpoint(params: {
+  serverId?: number | null;
+  userId?: number | null;
+  label: string;
+  capability: CustomEndpointCapability;
+  apiStyle: CustomEndpointApiStyle;
+  endpointUrl: string;
+  modelName?: string | null;
+  displayName: string;
+  numCtx?: number | null;
+  requiresAuth: boolean;
+  extraConfig?: Record<string, unknown>;
+  hasTools?: boolean;
+  seesImages?: boolean;
+  seesVideos?: boolean;
+  supportsStructOutput?: boolean;
+  isDefault?: boolean;
+}): Promise<CustomEndpointRow | null> {
+  const {
+    serverId = null,
+    userId = null,
+    label,
+    capability,
+    apiStyle,
+    endpointUrl,
+    modelName = null,
+    displayName,
+    numCtx = null,
+    requiresAuth,
+    extraConfig = {},
+    hasTools = false,
+    seesImages = false,
+    seesVideos = false,
+    supportsStructOutput = false,
+    isDefault = true,
+  } = params;
+
+  try {
+    const rows = await sql`
+			INSERT INTO custom_endpoints (
+				server_id,
+				user_id,
+				label,
+				capability,
+				api_style,
+				endpoint_url,
+				model_name,
+				display_name,
+				num_ctx,
+				requires_auth,
+				extra_config,
+				has_tools,
+				sees_images,
+				sees_videos,
+				supports_structoutput,
+				is_default
+			) VALUES (
+				${serverId},
+				${userId},
+				${label},
+				${capability},
+				${apiStyle},
+				${endpointUrl},
+				${modelName},
+				${displayName},
+				${numCtx},
+				${requiresAuth},
+				${JSON.stringify(extraConfig)}::jsonb,
+				${hasTools},
+				${seesImages},
+				${seesVideos},
+				${supportsStructOutput},
+				${isDefault}
+			)
+			ON CONFLICT (server_id, user_id, label, capability) DO UPDATE SET
+				api_style = EXCLUDED.api_style,
+				endpoint_url = EXCLUDED.endpoint_url,
+				model_name = EXCLUDED.model_name,
+				display_name = EXCLUDED.display_name,
+				num_ctx = EXCLUDED.num_ctx,
+				requires_auth = EXCLUDED.requires_auth,
+				extra_config = EXCLUDED.extra_config,
+				has_tools = EXCLUDED.has_tools,
+				sees_images = EXCLUDED.sees_images,
+				sees_videos = EXCLUDED.sees_videos,
+				supports_structoutput = EXCLUDED.supports_structoutput,
+				is_default = EXCLUDED.is_default,
+				updated_at = CURRENT_TIMESTAMP
+			RETURNING *
+		`;
+
+    if (!rows.length) {
+      return null;
+    }
+
+    const parsed = customEndpointSchema.safeParse(rows[0]);
+    if (!parsed.success) {
+      log.warn(`Failed to validate custom endpoint ${label}/${capability}: ${parsed.error.message}`);
+      return null;
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(
+      `Error upserting custom endpoint ${label}/${capability} for ${serverId !== null ? `server ${serverId}` : `user ${userId}`}:`,
+      error,
+    );
+    return null;
+  }
+}
+
+export async function deleteCustomEndpoint(params: {
+  serverId?: number | null;
+  userId?: number | null;
+  label: string;
+  capability: CustomEndpointCapability;
+}): Promise<boolean> {
+  const { serverId = null, userId = null, label, capability } = params;
+
+  try {
+    const result =
+      serverId !== null
+        ? await sql`
+            DELETE FROM custom_endpoints
+            WHERE server_id = ${serverId}
+              AND user_id IS NULL
+              AND label = ${label}
+              AND capability = ${capability}
+          `
+        : await sql`
+            DELETE FROM custom_endpoints
+            WHERE user_id = ${userId}
+              AND server_id IS NULL
+              AND label = ${label}
+              AND capability = ${capability}
+          `;
+
+    return result.count > 0;
+  } catch (error) {
+    log.error(
+      `Error deleting custom endpoint ${label}/${capability} for ${serverId !== null ? `server ${serverId}` : `user ${userId}`}:`,
+      error,
+    );
     return false;
   }
 }

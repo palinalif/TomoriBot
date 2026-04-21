@@ -605,16 +605,15 @@ WHERE COALESCE(autoch_threshold, 0) > 0
   AND COALESCE(autoch_threshold_max, 0) = 0;
 
 -- Add custom endpoint URL for self-hosted OpenAI-compatible LLM endpoints (January 2026)
--- Only used when llm_provider is 'custom', blocked in production environment
+-- DEPRECATED Phase 3 rollout: legacy inline custom field kept only for backward compatibility while labeled custom_endpoints takes over.
 SELECT add_column_if_not_exists('tomori_configs', 'custom_endpoint_url', 'TEXT');
 
 -- Add custom model name for custom endpoints (January 2026)
--- Stores the actual model name for endpoints that require exact model names (e.g., Ollama's "gemma3:latest")
--- Optional field - if empty, provider will fall back to llm_codename
+-- DEPRECATED Phase 3 rollout: legacy inline custom field kept only for backward compatibility while labeled custom_endpoints takes over.
 SELECT add_column_if_not_exists('tomori_configs', 'custom_model_name', 'TEXT');
 
 -- Add context window size for custom endpoints (April 2026)
--- Sent as options.num_ctx in Ollama-compatible requests; null means use endpoint default
+-- DEPRECATED Phase 3 rollout: legacy inline custom field kept only for backward compatibility while labeled custom_endpoints takes over.
 SELECT add_column_if_not_exists('tomori_configs', 'custom_num_ctx', 'INT');
 
 -- Add provider-agnostic thinking level hint (April 2026)
@@ -2048,8 +2047,9 @@ CREATE INDEX IF NOT EXISTS idx_nai_presets_model_target ON nai_presets(model_tar
 SELECT add_column_if_not_exists('tomori_configs', 'nai_preset_name', 'TEXT');
 
 -- Add fallback model chain for automatic provider failover (March 2026)
--- DEPRECATED Phase 1.5 Pass B: fallback_llm_ids is now canonical in saved_provider_configs
+-- DEPRECATED Phase 3 rollout: legacy fallback array kept only for backward compatibility until fallback_model_refs is fully adopted.
 SELECT add_column_if_not_exists('tomori_configs', 'fallback_llm_ids', 'JSONB', '''[]''::JSONB');
+SELECT add_column_if_not_exists('tomori_configs', 'fallback_model_refs', 'JSONB', '''[]''::JSONB');
 
 -- When true, hides the standard generate_image tool so only generate_image_nai is available (March 2026)
 SELECT add_column_if_not_exists('tomori_configs', 'nai_exclusive_imggen', 'BOOLEAN', 'false');
@@ -2186,11 +2186,11 @@ CREATE TABLE IF NOT EXISTS saved_provider_configs (
   embedding_model_id INT,                     -- Embedding model at time of save
   nai_diffusion_model_id INT,                 -- Dedicated NovelAI image model at time of save
   nai_preset_name TEXT,                       -- NovelAI sampling preset at time of save
-  custom_endpoint_url TEXT,                   -- Custom provider endpoint URL
-  custom_model_name TEXT,                     -- Custom provider model name
-  custom_num_ctx INT,                         -- Custom provider context window size (e.g., Ollama num_ctx)
+  custom_endpoint_url TEXT,                   -- DEPRECATED Phase 3 rollout: legacy inline custom field; new registrations live in custom_endpoints
+  custom_model_name TEXT,                     -- DEPRECATED Phase 3 rollout: legacy inline custom field; new registrations live in custom_endpoints
+  custom_num_ctx INT,                         -- DEPRECATED Phase 3 rollout: legacy inline custom field; new registrations live in custom_endpoints
   thinking_level TEXT DEFAULT 'auto',         -- Provider-specific thinking/reasoning effort snapshot
-  fallback_llm_ids JSONB DEFAULT '[]'::JSONB, -- Ordered fallback model IDs
+  fallback_llm_ids JSONB DEFAULT '[]'::JSONB, -- DEPRECATED Phase 3 rollout: legacy fallback array; replace with fallback_model_refs before dropping
   channel_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- DEPRECATED Phase 1.5 Pass B: switch-snapshot baggage; no longer written after switch.ts removed
   persona_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- DEPRECATED Phase 1.5 Pass B: switch-snapshot baggage; no longer written after switch.ts removed
   llm_logit_biases JSONB DEFAULT '[]'::JSONB, -- Snapshot: [{id, text, value}, ...]
@@ -2234,6 +2234,7 @@ SELECT add_column_if_not_exists('saved_provider_configs', 'thinking_level', 'TEX
 
 -- Migration: add custom_num_ctx column to saved_provider_configs (April 2026)
 SELECT add_column_if_not_exists('saved_provider_configs', 'custom_num_ctx', 'INT', 'NULL');
+SELECT add_column_if_not_exists('saved_provider_configs', 'fallback_model_refs', 'JSONB', '''[]''::JSONB');
 
 -- Migration: add user_byok_mode column to tomori_configs (April 2026)
 SELECT add_column_if_not_exists('tomori_configs', 'user_byok_mode', 'BOOLEAN', 'false');
@@ -2253,6 +2254,43 @@ END $$;
 DROP TRIGGER IF EXISTS update_saved_provider_configs_timestamp ON saved_provider_configs;
 CREATE TRIGGER update_saved_provider_configs_timestamp
   BEFORE UPDATE ON saved_provider_configs
+  FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+-- ============================================================
+-- Custom Endpoints (Phase 3)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS custom_endpoints (
+  custom_endpoint_id SERIAL PRIMARY KEY,
+  server_id INT NULL,
+  user_id INT NULL,
+  label TEXT NOT NULL,
+  capability TEXT NOT NULL,
+  api_style TEXT NOT NULL,
+  endpoint_url TEXT NOT NULL,
+  model_name TEXT NULL,
+  display_name TEXT NOT NULL,
+  num_ctx INT NULL,
+  requires_auth BOOLEAN DEFAULT false,
+  extra_config JSONB DEFAULT '{}'::JSONB,
+  has_tools BOOLEAN DEFAULT false,
+  sees_images BOOLEAN DEFAULT false,
+  sees_videos BOOLEAN DEFAULT false,
+  supports_structoutput BOOLEAN DEFAULT false,
+  is_default BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (server_id, user_id, label, capability),
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_endpoints_server ON custom_endpoints(server_id);
+CREATE INDEX IF NOT EXISTS idx_custom_endpoints_user ON custom_endpoints(user_id);
+CREATE INDEX IF NOT EXISTS idx_custom_endpoints_label ON custom_endpoints(label);
+
+DROP TRIGGER IF EXISTS update_custom_endpoints_timestamp ON custom_endpoints;
+CREATE TRIGGER update_custom_endpoints_timestamp
+  BEFORE UPDATE ON custom_endpoints
   FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
 -- ============================================================
@@ -2282,12 +2320,12 @@ CREATE TABLE IF NOT EXISTS user_saved_provider_configs (
   llm_min_p REAL,
   llm_logit_biases JSONB DEFAULT '[]'::JSONB,
   llm_disabled_params TEXT[] DEFAULT '{}',
-  custom_endpoint_url TEXT,
-  custom_model_name TEXT,
-  custom_num_ctx INT,
+  custom_endpoint_url TEXT, -- DEPRECATED Phase 3 rollout: legacy inline custom field; new registrations live in custom_endpoints
+  custom_model_name TEXT, -- DEPRECATED Phase 3 rollout: legacy inline custom field; new registrations live in custom_endpoints
+  custom_num_ctx INT, -- DEPRECATED Phase 3 rollout: legacy inline custom field; new registrations live in custom_endpoints
   thinking_level TEXT DEFAULT 'auto',
   enabled_capabilities TEXT[] DEFAULT '{}',
-  fallback_llm_ids JSONB DEFAULT '[]'::JSONB,
+  fallback_llm_ids JSONB DEFAULT '[]'::JSONB, -- DEPRECATED Phase 3 rollout: legacy fallback array; replace with fallback_model_refs before dropping
   saved_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(user_id, provider),
@@ -2319,6 +2357,7 @@ SELECT add_column_if_not_exists('user_saved_provider_configs', 'custom_num_ctx',
 SELECT add_column_if_not_exists('user_saved_provider_configs', 'thinking_level', 'TEXT', '''auto''');
 SELECT add_column_if_not_exists('user_saved_provider_configs', 'enabled_capabilities', 'TEXT[]', 'ARRAY[]::TEXT[]');
 SELECT add_column_if_not_exists('user_saved_provider_configs', 'fallback_llm_ids', 'JSONB', '''[]''::JSONB');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'fallback_model_refs', 'JSONB', '''[]''::JSONB');
 
 DROP TRIGGER IF EXISTS update_user_saved_provider_configs_timestamp ON user_saved_provider_configs;
 CREATE TRIGGER update_user_saved_provider_configs_timestamp

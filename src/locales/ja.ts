@@ -10,6 +10,11 @@ export default {
     defaults: {
       bot_name: `ともり`,
     },
+    api_styles: {
+      openai_compatible: `OpenAI互換`,
+      comfyui: `ComfyUI`,
+      ollama_native: `Ollamaネイティブ`,
+    },
     cooldown_title: `⌛ お待ちください！`,
     cooldown: `再度 \`/{category}\` コマンドを使用するまで {seconds} 秒待つ必要があります。`,
     message_cooldown_title: `⌛ お待ちください！`,
@@ -92,6 +97,10 @@ export default {
       },
       operation_failed_title: `操作に失敗しました`,
       operation_failed_description: `要求された操作を完了できませんでした。もう一度お試しください。`,
+      custom_endpoint_unreachable_title: `カスタムエンドポイントに接続できません`,
+      custom_endpoint_unreachable_description: `指定されたカスタムエンドポイントに接続できませんでした。URL、認証、公開設定を確認してからもう一度お試しください。`,
+      comfyui_poll_timeout_title: `ComfyUIがタイムアウトしました`,
+      comfyui_poll_timeout_description: `ComfyUIワークフローが制限時間内に完了しませんでした。タイムアウトを延ばすか、ワークフローを軽くしてもう一度お試しください。`,
       provider_not_supported_title: `サポートされていないプロバイダー`,
       provider_not_supported_description: `選択されたAIプロバイダーは現在サポートされていません。`,
       user_blacklisted_title: `ユーザーがブラックリスト登録済み`,
@@ -1263,6 +1272,20 @@ export default {
         byok_field: `BYOKサーバー`,
         byok_value: `{byok_command} により、メンバー自身のプロバイダーが必須になるサーバーがあります。このモードでは、ユーザー発言に対する応答に個人プロバイダーが必要です。`,
         footer: `個人プロバイダー設定は、TomoriBot を使うすべてのサーバーで共通です。`,
+      },
+      custom_models: {
+        description: `カスタムモデルの使い方を確認します。`,
+        title: `カスタムモデル`,
+        description_body: `カスタムモデルを使うと、Ollama、LM Studio、LiteLLM、ComfyUI などの自己ホスト/プロキシ型エンドポイントをラベル付きプロバイダーとして登録できます。`,
+        server_field: `サーバー登録`,
+        server_value: `{add_command} でサーバー共通のエンドポイントを登録し、{remove_command} でそのラベルの機能を削除できます。`,
+        personal_field: `個人登録`,
+        personal_value: `{add_command} で自分専用のラベル付きエンドポイントを登録し、{remove_command} で削除できます。`,
+        selection_field: `使い方`,
+        selection_value: `登録後は {text_command}、{image_command}、{video_command} からラベルを選択してください。画像理解対応のテキストエンドポイントは \`/config model vision\` にも表示されます。`,
+      },
+      "custom-models": {
+        description: `カスタムモデルの使い方を確認します。`,
       },
       features: {
         description: `TomoriBotができることを表示`,
@@ -2672,6 +2695,49 @@ Prompt Guidance Rescale: {cfg_rescale}
         num_ctx_placeholder: `例：8192 または 16384 — OllamaとKoboldCPPのみに適用。`,
         num_ctx_invalid: `コンテキストウィンドウサイズは512以上の数値を入力してください。空欄のままにするとエンドポイントのデフォルト値が使用されます。`,
       },
+      custom_models: {
+        description: `ラベル付きカスタムエンドポイントを管理します。`,
+        add: {
+          description: `ラベル付きカスタムエンドポイントを登録します。`,
+          label_description: `Tomori内でこのエンドポイントを識別する保存用ラベル。`,
+          capability_description: `このエンドポイントが提供する機能。`,
+          api_style_description: `このエンドポイントが使うAPI形式。`,
+          endpoint_url_description: `エンドポイントのベースURL。`,
+          display_name_description: `状態表示や確認画面で使う表示名。`,
+          model_name_description: `テキスト/埋め込みリクエストでエンドポイントが要求する正確なリモートモデル識別子。`,
+          auth_token_description: `保護されたエンドポイント用のBearerトークン（任意）。`,
+          num_ctx_description: `テキストエンドポイント用の任意のコンテキストウィンドウ上書き。`,
+          has_tools_description: `そのテキストエンドポイントがツール呼び出しに対応しているか。`,
+          sees_images_description: `そのテキストエンドポイントが画像入力に対応しているか。`,
+          supports_structoutput_description: `そのテキストエンドポイントが構造化出力に対応しているか。`,
+          workflow_description: `画像/動画エンドポイント用のComfyUIワークフローJSON。`,
+          success_title: `カスタムエンドポイントを追加しました`,
+          success_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。\`/config model\` から選択できます。`,
+        },
+        remove: {
+          description: `ラベル付きカスタムエンドポイントから1つの機能を削除します。`,
+          label_description: `削除対象のラベル。`,
+          capability_description: `削除する機能。`,
+          not_found: `そのラベルと機能に一致するカスタムエンドポイントはありません。`,
+          success_title: `カスタムエンドポイントを削除しました`,
+          success_description: `カスタムラベル **{label}** から **{capability}** を削除しました。`,
+        },
+        validation: {
+          invalid_label: `ラベルは英小文字・数字・アンダースコア・ハイフンのみ使用でき、長さは1〜40文字です。`,
+          unreachable: `そのエンドポイントに接続できませんでした: {reason}`,
+          workflow_required: `ComfyUI の画像/動画エンドポイントではワークフローJSONの添付が必要です。`,
+          model_name_required: `テキストと埋め込みのエンドポイントではモデル名が必要です。`,
+        },
+      },
+      "custom-models": {
+        description: `ラベル付きカスタムエンドポイントを管理します。`,
+        add: {
+          description: `ラベル付きカスタムエンドポイントを登録します。`,
+        },
+        remove: {
+          description: `ラベル付きカスタムエンドポイントから1つの機能を削除します。`,
+        },
+      },
       provider: {
         description: `保存されたプロバイダー設定を管理`,
         add: {
@@ -2685,6 +2751,7 @@ Prompt Guidance Rescale: {cfg_rescale}
           provider_placeholder: `プロバイダーを選択...`,
           already_existing_suffix: `Already Existing`,
           already_existing_description: `このプロバイダーは既に設定済みです。送信すると認証情報が更新されます。`,
+          api_key_description: `このキーは安全に保存されます。取得方法については、'/help api-key'コマンドを使用してください。`,
           api_key_label: `APIキーまたはエンドポイントURL`,
           api_key_description_with_custom: `APIキー、またはCustomの場合はOpenAIエンドポイントURL（例：http://localhost:11434/v1）`,
           api_key_placeholder: `このキーは誰とも共有しないでください`,
@@ -4318,6 +4385,28 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
     },
     personal: {
       description: `あなたの個人的な設定を管理します`,
+      custom_models: {
+        description: `自分用のラベル付きカスタムエンドポイントを管理します。`,
+        add: {
+          description: `個人用カスタムエンドポイントを登録します。`,
+          success_title: `個人用カスタムエンドポイントを追加しました`,
+          success_description: `**{display_name}** を個人ラベル **{label}** の **{capability}** として追加しました。`,
+        },
+        remove: {
+          description: `個人用カスタムエンドポイントから1つの機能を削除します。`,
+          success_title: `個人用カスタムエンドポイントを削除しました`,
+          success_description: `個人ラベル **{label}** から **{capability}** を削除しました。`,
+        },
+      },
+      "custom-models": {
+        description: `自分用のラベル付きカスタムエンドポイントを管理します。`,
+        add: {
+          description: `個人用カスタムエンドポイントを登録します。`,
+        },
+        remove: {
+          description: `個人用カスタムエンドポイントから1つの機能を削除します。`,
+        },
+      },
       provider: {
         description: `あなたの個人AIプロバイダーを管理します。`,
         no_saved_title: `個人プロバイダーがありません`,
@@ -4404,6 +4493,18 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
           success_description: `個人 {provider} テキストプロバイダーのフォールバックモデルを更新しました。\n\n{model_list}`,
           cleared_title: `個人フォールバックをクリアしました`,
           cleared_description: `個人 {provider} テキストプロバイダーのフォールバックモデルをクリアしました。`,
+        },
+      },
+      "model-fallback": {
+        remove: {
+          description: `個人用フォールバックチェーンからモデルを削除します。`,
+          none_title: `個人用フォールバックがありません`,
+          none_description: `現在有効な個人用テキストプロバイダーにはフォールバックモデルが設定されていません。`,
+          modal_title: `個人用フォールバックモデルを削除`,
+          checkbox_label: `残すフォールバックモデル`,
+          checkbox_description: `チェックを外したモデルは個人用フォールバックチェーンから削除されます。`,
+          success_title: `個人用フォールバックを更新しました`,
+          success_description: `個人用フォールバックチェーンを更新しました。残りモデル数: **{remaining_count}**。`,
         },
       },
       samplers: {

@@ -46,12 +46,20 @@ import { log } from "../../utils/misc/logger";
 import type {
   CompactConversationResult,
   CompactRoleplayResult,
+  EmbeddingRequest,
+  ProviderNativeImageGenerationRequest,
+  ProviderNativeImageGenerationResult,
+  ProviderNativeVideoGenerationRequest,
+  ProviderNativeVideoGenerationResult,
   PresetGenerationResult,
   ProviderCompactSummaryRequest,
   ProviderPresetGenerationRequest,
   ProviderStructuredJsonRequest,
   StructuredOutputResult,
+  SupportsEmbeddings,
   SupportsConversationCompaction,
+  SupportsNativeImageGeneration,
+  SupportsNativeVideoGeneration,
   SupportsPresetGeneration,
   SupportsStructuredOutput,
 } from "../../types/provider/featureInterfaces";
@@ -68,6 +76,8 @@ import {
 import { loadSavedProviderConfig } from "@/utils/db/dbRead";
 import { getCustomToolAdapter } from "./customToolAdapter";
 import { customProviderInfo } from "./providerInfo";
+import { resolveCustomEndpointForProvider } from "@/utils/provider/customEndpointService";
+import { buildCustomHeaders } from "@/providers/custom/customOpenAICompatibleUtils";
 
 /**
  * Default model name placeholder for custom provider
@@ -100,7 +110,14 @@ export interface CustomProviderConfig extends ProviderConfig {
  */
 export class CustomProvider
   extends BaseLLMProvider
-  implements LLMProvider, SupportsStructuredOutput, SupportsConversationCompaction, SupportsPresetGeneration
+  implements
+    LLMProvider,
+    SupportsStructuredOutput,
+    SupportsConversationCompaction,
+    SupportsPresetGeneration,
+    SupportsEmbeddings,
+    SupportsNativeImageGeneration,
+    SupportsNativeVideoGeneration
 {
   /**
    * Get provider information and capabilities
@@ -130,6 +147,51 @@ export class CustomProvider
   formatErrorDescription(error: ProviderError, locale: string): string | null {
     const customAdapter = new CustomStreamAdapter();
     return customAdapter.createErrorDescription(error, locale);
+  }
+
+  supportsEmbeddingTaskType(): boolean {
+    return false;
+  }
+
+  async generateEmbeddings(request: EmbeddingRequest): Promise<number[][]> {
+    const customEndpoint = await resolveCustomEndpointForProvider(request.provider, "embedding");
+    const endpointUrl = customEndpoint?.endpoint_url ?? null;
+    const modelName = customEndpoint?.model_name ?? request.model;
+
+    if (!endpointUrl) {
+      throw new Error("Custom embedding endpoint is not configured.");
+    }
+
+    const response = await fetch(`${endpointUrl.replace(/\/+$/, "")}/embeddings`, {
+      method: "POST",
+      headers: buildCustomHeaders(request.apiKey),
+      body: JSON.stringify({
+        model: modelName,
+        input: request.inputs,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Custom embedding request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const payload = (await response.json()) as {
+      data?: Array<{ embedding?: number[] }>;
+    };
+
+    return payload.data?.map((row) => row.embedding ?? []) ?? [];
+  }
+
+  async generateNativeImage(
+    _request: ProviderNativeImageGenerationRequest,
+  ): Promise<ProviderNativeImageGenerationResult> {
+    throw new Error("Custom native image generation is routed through the custom endpoint dispatcher.");
+  }
+
+  async generateNativeVideo(
+    _request: ProviderNativeVideoGenerationRequest,
+  ): Promise<ProviderNativeVideoGenerationResult> {
+    throw new Error("Custom native video generation is routed through the custom endpoint dispatcher.");
   }
 
   /**

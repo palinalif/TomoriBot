@@ -54,6 +54,8 @@ This document summarizes the current PostgreSQL schema used by TomoriBot.
 - `opt_api_keys`
 - `api_key_rotation`
 - `saved_provider_configs`
+- `user_saved_provider_configs`
+- `custom_endpoints`
 
 ### Quota system
 
@@ -179,6 +181,8 @@ Encrypted columns are stored as `BYTEA` with key version tracking:
 - `api_key_rotation.api_key` + `api_key_rotation.key_version`
 - `saved_provider_configs.api_key` + `saved_provider_configs.key_version`
 - `saved_provider_configs.thinking_level` mirrors `tomori_configs.thinking_level` so provider switching can restore the previous provider-specific reasoning preference.
+- `saved_provider_configs.fallback_model_refs` and `user_saved_provider_configs.fallback_model_refs` store ordered polymorphic fallback references as JSON objects shaped like `{type: "llm" | "custom_endpoint", id: number}`. The legacy `fallback_llm_ids` arrays remain during rollout for backward compatibility.
+- `custom_endpoints` stores labeled self-hosted or proxy-backed endpoint registrations. Rows are scoped either to `server_id` or `user_id`, keyed by `(scope, label, capability)`, and carry adapter metadata such as `api_style`, `endpoint_url`, `model_name`, capability flags, workflow JSON (`extra_config`), and whether auth is required.
 
 ### Logit bias snapshot storage
 
@@ -188,6 +192,7 @@ Encrypted columns are stored as `BYTEA` with key version tracking:
 ### Provider snapshot model storage
 
 - `saved_provider_configs.video_model_id` mirrors the last saved video model for that provider so capability-specific cleanup and future migrations can reason about prior selections; Phase 1 provider switching does not automatically restore video model slots.
+- `saved_provider_configs.provider` and `user_saved_provider_configs.provider` may now hold internal custom provider IDs (`custom:s<server_id>:<label>` / `custom:u<user_id>:<label>`) so labeled custom endpoints can coexist side-by-side without colliding with each other or with classic providers.
 
 ## Migration Style
 

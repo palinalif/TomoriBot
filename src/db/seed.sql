@@ -3,11 +3,53 @@ SELECT add_column_if_not_exists('tomori_configs', 'voice_transcript_chat_mode', 
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_codename', 'TEXT');
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_capabilities', 'JSONB');
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_capabilities_fetched_at', 'TIMESTAMP');
+SELECT add_column_if_not_exists('tomori_configs', 'fallback_model_refs', 'JSONB', '''[]''::JSONB');
 SELECT add_column_if_not_exists('tomori_configs', 'autoch_persona_overrides', 'JSONB', '''[]''::JSONB');
 SELECT add_column_if_not_exists('tomori_configs', 'hide_respond_embed', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('tomori_configs', 'hide_impersonation_embeds', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('tomori_configs', 'tool_notice_hidden_keys', 'TEXT[]', 'ARRAY[]::TEXT[]');
 SELECT add_column_if_not_exists('tomori_configs', 'prompt_snapshot_enabled', 'BOOLEAN', 'false');
+
+-- Ensure all required columns exist in saved_provider_configs table
+SELECT add_column_if_not_exists('saved_provider_configs', 'fallback_model_refs', 'JSONB', '''[]''::JSONB');
+
+-- Ensure all required columns exist in user_saved_provider_configs table
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'fallback_model_refs', 'JSONB', '''[]''::JSONB');
+
+-- Phase 3: labeled custom endpoints live in a dedicated registry table.
+CREATE TABLE IF NOT EXISTS custom_endpoints (
+    custom_endpoint_id SERIAL PRIMARY KEY,
+    server_id INT NULL,
+    user_id INT NULL,
+    label TEXT NOT NULL,
+    capability TEXT NOT NULL,
+    api_style TEXT NOT NULL,
+    endpoint_url TEXT NOT NULL,
+    model_name TEXT NULL,
+    display_name TEXT NOT NULL,
+    num_ctx INT NULL,
+    requires_auth BOOLEAN DEFAULT false,
+    extra_config JSONB DEFAULT '{}'::JSONB,
+    has_tools BOOLEAN DEFAULT false,
+    sees_images BOOLEAN DEFAULT false,
+    sees_videos BOOLEAN DEFAULT false,
+    supports_structoutput BOOLEAN DEFAULT false,
+    is_default BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (server_id, user_id, label, capability),
+    FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_custom_endpoints_server ON custom_endpoints(server_id);
+CREATE INDEX IF NOT EXISTS idx_custom_endpoints_user ON custom_endpoints(user_id);
+CREATE INDEX IF NOT EXISTS idx_custom_endpoints_label ON custom_endpoints(label);
+
+DROP TRIGGER IF EXISTS update_custom_endpoints_timestamp ON custom_endpoints;
+CREATE TRIGGER update_custom_endpoints_timestamp
+    BEFORE UPDATE ON custom_endpoints
+    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
 -- Migrate legacy notice visibility booleans into the shared hidden-key registry
 UPDATE tomori_configs
@@ -22,6 +64,104 @@ SET tool_notice_hidden_keys = ARRAY(
 )
 WHERE hide_respond_embed = true
    OR hide_impersonation_embeds = true;
+
+-- Phase 3 migration: backfill polymorphic fallback_model_refs from legacy
+-- fallback_llm_ids arrays while keeping the old column during rollout.
+UPDATE tomori_configs
+SET fallback_model_refs = COALESCE((
+    SELECT jsonb_agg(
+        jsonb_build_object(
+            'type', 'llm',
+            'id', fallback_entry.value::INTEGER
+        )
+        ORDER BY fallback_entry.ordinality
+    )
+    FROM jsonb_array_elements_text(
+        CASE
+            WHEN jsonb_typeof(COALESCE(tomori_configs.fallback_llm_ids, '[]'::JSONB)) = 'array'
+                THEN COALESCE(tomori_configs.fallback_llm_ids, '[]'::JSONB)
+            ELSE '[]'::JSONB
+        END
+    ) WITH ORDINALITY AS fallback_entry(value, ordinality)
+), '[]'::JSONB)
+WHERE (
+        CASE
+            WHEN jsonb_typeof(COALESCE(tomori_configs.fallback_model_refs, '[]'::JSONB)) = 'array'
+                THEN jsonb_array_length(COALESCE(tomori_configs.fallback_model_refs, '[]'::JSONB))
+            ELSE 0
+        END
+    ) = 0
+  AND (
+        CASE
+            WHEN jsonb_typeof(COALESCE(tomori_configs.fallback_llm_ids, '[]'::JSONB)) = 'array'
+                THEN jsonb_array_length(COALESCE(tomori_configs.fallback_llm_ids, '[]'::JSONB))
+            ELSE 0
+        END
+    ) > 0;
+
+UPDATE saved_provider_configs
+SET fallback_model_refs = COALESCE((
+    SELECT jsonb_agg(
+        jsonb_build_object(
+            'type', 'llm',
+            'id', fallback_entry.value::INTEGER
+        )
+        ORDER BY fallback_entry.ordinality
+    )
+    FROM jsonb_array_elements_text(
+        CASE
+            WHEN jsonb_typeof(COALESCE(saved_provider_configs.fallback_llm_ids, '[]'::JSONB)) = 'array'
+                THEN COALESCE(saved_provider_configs.fallback_llm_ids, '[]'::JSONB)
+            ELSE '[]'::JSONB
+        END
+    ) WITH ORDINALITY AS fallback_entry(value, ordinality)
+), '[]'::JSONB)
+WHERE (
+        CASE
+            WHEN jsonb_typeof(COALESCE(saved_provider_configs.fallback_model_refs, '[]'::JSONB)) = 'array'
+                THEN jsonb_array_length(COALESCE(saved_provider_configs.fallback_model_refs, '[]'::JSONB))
+            ELSE 0
+        END
+    ) = 0
+  AND (
+        CASE
+            WHEN jsonb_typeof(COALESCE(saved_provider_configs.fallback_llm_ids, '[]'::JSONB)) = 'array'
+                THEN jsonb_array_length(COALESCE(saved_provider_configs.fallback_llm_ids, '[]'::JSONB))
+            ELSE 0
+        END
+    ) > 0;
+
+UPDATE user_saved_provider_configs
+SET fallback_model_refs = COALESCE((
+    SELECT jsonb_agg(
+        jsonb_build_object(
+            'type', 'llm',
+            'id', fallback_entry.value::INTEGER
+        )
+        ORDER BY fallback_entry.ordinality
+    )
+    FROM jsonb_array_elements_text(
+        CASE
+            WHEN jsonb_typeof(COALESCE(user_saved_provider_configs.fallback_llm_ids, '[]'::JSONB)) = 'array'
+                THEN COALESCE(user_saved_provider_configs.fallback_llm_ids, '[]'::JSONB)
+            ELSE '[]'::JSONB
+        END
+    ) WITH ORDINALITY AS fallback_entry(value, ordinality)
+), '[]'::JSONB)
+WHERE (
+        CASE
+            WHEN jsonb_typeof(COALESCE(user_saved_provider_configs.fallback_model_refs, '[]'::JSONB)) = 'array'
+                THEN jsonb_array_length(COALESCE(user_saved_provider_configs.fallback_model_refs, '[]'::JSONB))
+            ELSE 0
+        END
+    ) = 0
+  AND (
+        CASE
+            WHEN jsonb_typeof(COALESCE(user_saved_provider_configs.fallback_llm_ids, '[]'::JSONB)) = 'array'
+                THEN jsonb_array_length(COALESCE(user_saved_provider_configs.fallback_llm_ids, '[]'::JSONB))
+            ELSE 0
+        END
+    ) > 0;
 
 -- Ensure all required columns exist in persona_configs table
 SELECT add_column_if_not_exists('persona_configs', 'reward_conditioning_enabled', 'BOOLEAN', 'true');

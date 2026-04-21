@@ -130,19 +130,19 @@ Rule:
 
 ## Custom Provider Notes
 
-`custom` provider is for self-hosted OpenAI-compatible endpoints (Ollama, KoboldCPP, vLLM, LocalAI, etc.).
+Phase 3 promotes custom endpoints into labeled provider entries instead of a single anonymous `custom` slot.
 
-- endpoint URL stored in `tomori_configs.custom_endpoint_url`
-- optional model override in `tomori_configs.custom_model_name`
-- model capabilities are user-declared and stored in `llms`
-- the server-scoped custom `llms` row is preserved across normal provider switches so saved custom configs can be restored later; explicit saved-config removal still cleans it up
-- designed for non-production usage
-- text chat streaming is supported
-- structured output, history extraction, and `/server initialize expressions` work when the configured custom model is marked with the required capabilities
-- conversation compaction and roleplay compaction work through the custom endpoint using the effective configured model name
-- persona preset generation works through the custom endpoint when the configured model supports structured output, and optional web search works when the model supports tools
-- `/config logit-bias` entries are stored in config snapshots, but Tomori does not currently auto-tokenize plain text for custom endpoints
-- the `thinking_level` option in `/config samplers` currently sends `reasoning_effort` only for Ollama-style OpenAI endpoints; KoboldCpp, llama.cpp, and generic vLLM reasoning knobs are not sent automatically because their request-side controls are backend/template-specific
+- registration happens through `/config custom-models add` and `/personal custom-models add`
+- endpoints are stored in `custom_endpoints`, keyed by `(server_id | user_id, label, capability)`
+- the saved credential row is namespaced per label as an internal provider ID such as `custom:s42:ollama-local` or `custom:u7:lmstudio`
+- custom endpoints can now be registered independently for `text`, `embedding`, `image`, and `video`
+- text and embedding use the OpenAI-compatible path; image and video currently route through either OpenAI-compatible image/video endpoints or ComfyUI workflow dispatch
+- text-capability custom endpoints can declare `has_tools`, `sees_images`, `sees_videos`, and `supports_structoutput`, which drive picker visibility and request shaping
+- `/config model text|embedding|image|video|vision` shows each registered custom label as its own provider choice when that capability is available
+- legacy inline fields on `tomori_configs` and saved-provider rows (`custom_endpoint_url`, `custom_model_name`, `custom_num_ctx`) remain for backward compatibility during rollout, but new registrations write through the labeled `custom_endpoints` table
+- conversation compaction, history extraction, persona preset generation, and image-analysis helpers all resolve through the effective custom endpoint metadata when a custom label is active
+- `/config logit-bias` entries are still stored in config snapshots, but Tomori does not auto-tokenize plain-text entries for custom endpoints
+- `thinking_level` still only maps to generic OpenAI-compatible reasoning controls where the target backend accepts them; backend-specific knobs remain adapter-specific
 
 ## Anthropic Provider Notes
 

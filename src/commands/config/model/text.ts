@@ -1,7 +1,7 @@
 import type { ChatInputCommandInteraction, ButtonInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
-import { loadAvailableModelsForProvider, loadNaiPresetsForModel } from "../../../utils/db/dbRead";
+import { loadAvailableModelsForProvider, loadLlmById, loadNaiPresetsForModel } from "../../../utils/db/dbRead";
 import { setChannelLlmOverride, setPersonaLlmOverride, applyNaiPreset } from "../../../utils/db/dbWrite";
 import {
   getCachedTomoriState,
@@ -21,11 +21,7 @@ import {
 } from "../../../utils/discord/interactionHelper";
 import { type UserRow, type ErrorContext, tomoriConfigSchema, type LlmRow } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
-import {
-  isCustomProvider,
-  promptCustomCapabilities,
-  DEFAULT_CUSTOM_MODEL_NAME,
-} from "../../../utils/discord/customProviderModal";
+import { isCustomProvider } from "../../../utils/discord/customProviderModal";
 import { resolveLogitBiasEntriesForLlm } from "@/utils/provider/logitBiasResolver";
 import { promptForSavedProvider, replaceProviderPickerWithInfo } from "@/commands/config/model/providerPicker";
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
@@ -327,79 +323,66 @@ export async function execute(
     const responseInteraction = providerSelection.interaction;
     const selectedSavedConfig = savedProviders.find((p) => p.provider.toLowerCase() === selectedProvider) ?? null;
 
-    // 3a. Custom provider: reconfigure capabilities for the saved custom endpoint
+    // 3a. Custom provider: activate the already-registered labeled endpoint directly
     if (isCustomProvider(selectedProvider)) {
-      if (responseInteraction.isChatInputCommand()) {
-        await responseInteraction.deferReply({ flags: MessageFlags.Ephemeral });
-      } else if (!responseInteraction.deferred && !responseInteraction.replied) {
-        // ButtonInteraction from the provider picker — acknowledge in-place so
-        // promptCustomCapabilities can editReply() on it
-        await (responseInteraction as ButtonInteraction).deferUpdate();
-      }
-
-      const capabilitiesResult = await promptCustomCapabilities(
-        responseInteraction as unknown as import("discord.js").ModalSubmitInteraction,
-        locale,
-        serverId,
-      );
-
-      if (!capabilitiesResult.success) {
+      const customModel = selectedSavedConfig?.llm_id ? await loadLlmById(selectedSavedConfig.llm_id) : null;
+      if (!selectedSavedConfig || !customModel?.llm_id) {
         await replyInfoEmbed(responseInteraction, locale, {
-          titleKey: "general.errors.operation_failed_title",
-          description: capabilitiesResult.error || localizer(locale, "commands.config.custom.capabilities_timeout"),
+          titleKey: "commands.config.model.text.no_models_title",
+          descriptionKey: "commands.config.model.text.no_models_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+      const resolvedLogitBiases = resolveLogitBiasEntriesForLlm(
+        selectedSavedConfig.llm_logit_biases ?? tomoriState.config.llm_logit_biases ?? [],
+        customModel,
+      );
+      const resolvedLogitBiasesJson = JSON.stringify(resolvedLogitBiases.entries);
+      const disabledParamsLiteral = `{${(selectedSavedConfig.llm_disabled_params ?? []).map((param) => `"${param.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
+      const clearFallbacks = tomoriState.llm?.llm_provider?.toLowerCase() !== selectedProvider;
+      const fallbackLlmIdsJson = clearFallbacks ? "[]" : JSON.stringify(selectedSavedConfig.fallback_llm_ids ?? []);
+
+      const [updatedRow] = await sql`
+        UPDATE tomori_configs
+        SET llm_id = ${customModel.llm_id},
+            api_key = ${selectedSavedConfig.api_key},
+            key_version = ${selectedSavedConfig.key_version ?? 1},
+            thinking_level = ${selectedSavedConfig.thinking_level ?? "auto"},
+            fallback_llm_ids = ${fallbackLlmIdsJson}::jsonb,
+            llm_temperature = ${selectedSavedConfig.llm_temperature ?? tomoriState.config.llm_temperature ?? 1.0},
+            llm_top_p = ${selectedSavedConfig.llm_top_p ?? tomoriState.config.llm_top_p ?? 0.95},
+            llm_top_k = ${selectedSavedConfig.llm_top_k ?? tomoriState.config.llm_top_k ?? 0},
+            llm_frequency_penalty = ${selectedSavedConfig.llm_frequency_penalty ?? tomoriState.config.llm_frequency_penalty ?? 0.0},
+            llm_presence_penalty = ${selectedSavedConfig.llm_presence_penalty ?? tomoriState.config.llm_presence_penalty ?? 0.0},
+            llm_min_p = ${selectedSavedConfig.llm_min_p ?? tomoriState.config.llm_min_p ?? 0.05},
+            llm_disabled_params = ${disabledParamsLiteral}::text[],
+            llm_logit_biases = ${resolvedLogitBiasesJson}::jsonb,
+            custom_model_name = ${selectedSavedConfig.custom_model_name ?? customModel.llm_description ?? customModel.llm_codename},
+            custom_endpoint_url = ${selectedSavedConfig.custom_endpoint_url ?? null},
+            custom_num_ctx = ${selectedSavedConfig.custom_num_ctx ?? null}
+        WHERE server_id = ${tomoriState.server_id}
+        RETURNING *
+      `;
+
+      const validatedConfig = tomoriConfigSchema.safeParse(updatedRow);
+      if (!validatedConfig.success || !updatedRow) {
+        await replyInfoEmbed(responseInteraction, locale, {
+          titleKey: "general.errors.update_failed_title",
+          descriptionKey: "general.errors.update_failed_description",
           color: ColorCode.ERROR,
         });
         return;
       }
 
-      const llmIdToSet = capabilitiesResult.llmId ?? selectedSavedConfig?.llm_id ?? null;
-      if (llmIdToSet) {
-        const [updatedRow] = await sql`
-          UPDATE tomori_configs
-          SET llm_id = ${llmIdToSet},
-              api_key = ${selectedSavedConfig?.api_key ?? null},
-              key_version = ${selectedSavedConfig?.key_version ?? 1},
-              custom_model_name = ${capabilitiesResult.modelName || null},
-              custom_endpoint_url = ${selectedSavedConfig?.custom_endpoint_url ?? null},
-              custom_num_ctx = ${capabilitiesResult.numCtx ?? null}
-          WHERE server_id = ${tomoriState.server_id}
-          RETURNING *
-        `;
-
-        if (!updatedRow) {
-          await replyInfoEmbed(responseInteraction, locale, {
-            titleKey: "general.errors.update_failed_title",
-            descriptionKey: "general.errors.update_failed_description",
-            color: ColorCode.ERROR,
-          });
-          return;
-        }
-      }
-
-      log.info(
-        `Custom model capabilities updated: tools=${capabilitiesResult.hasTools}, images=${capabilitiesResult.seesImages}, videos=${capabilitiesResult.seesVideos}, structOutput=${capabilitiesResult.supportsStructOutput}`,
-      );
       invalidateTomoriStateCache(serverId);
-
-      const enabledCapabilities: string[] = [];
-      if (capabilitiesResult.hasTools)
-        enabledCapabilities.push(localizer(locale, "commands.config.custom.capability_tools_label"));
-      if (capabilitiesResult.seesImages)
-        enabledCapabilities.push(localizer(locale, "commands.config.custom.capability_images_label"));
-      if (capabilitiesResult.seesVideos)
-        enabledCapabilities.push(localizer(locale, "commands.config.custom.capability_videos_label"));
-      if (capabilitiesResult.supportsStructOutput)
-        enabledCapabilities.push(localizer(locale, "commands.config.custom.capability_structoutput_label"));
-
-      const capabilitiesDisplay =
-        enabledCapabilities.length > 0 ? enabledCapabilities.join(", ") : localizer(locale, "general.none");
-
       await replyInfoEmbed(responseInteraction, locale, {
-        titleKey: "commands.config.model.text.custom_updated_title",
-        descriptionKey: "commands.config.model.text.custom_updated_description",
+        titleKey: "commands.config.model.text.success_title",
+        descriptionKey: "commands.config.model.text.success_description",
         descriptionVars: {
-          model_name: capabilitiesResult.modelName || DEFAULT_CUSTOM_MODEL_NAME,
-          capabilities: capabilitiesDisplay,
+          model_name: selectedSavedConfig.custom_model_name ?? customModel.llm_description ?? customModel.llm_codename,
+          previous_model: tomoriState.llm?.llm_codename ?? localizer(locale, "general.unknown"),
+          provider: getProviderDisplayName(selectedProvider),
         },
         color: ColorCode.SUCCESS,
       });

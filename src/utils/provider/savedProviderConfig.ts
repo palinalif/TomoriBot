@@ -15,7 +15,7 @@ import {
   loadSavedProviderConfigs,
   loadUserSavedProviderConfigs,
 } from "@/utils/db/dbRead";
-import { isCustomProvider } from "@/utils/discord/customProviderModal";
+import { isCustomProvider } from "@/utils/provider/customProviderUtils";
 import {
   getStaticProviderInfo,
   supportsEmbeddingCapability,
@@ -61,6 +61,7 @@ export function buildSavedProviderSnapshotFromTomoriState(tomoriState: TomoriSta
     custom_num_ctx: tomoriState.config.custom_num_ctx ?? null,
     thinking_level: tomoriState.config.thinking_level,
     fallback_llm_ids: tomoriState.config.fallback_llm_ids ?? [],
+    fallback_model_refs: tomoriState.config.fallback_model_refs ?? [],
     channel_llm_overrides: [],
     persona_llm_overrides: [],
   };
@@ -144,6 +145,7 @@ export async function buildSavedProviderConfigFromExistingOrDefaults(params: {
     custom_num_ctx: params.customNumCtx ?? existingConfig?.custom_num_ctx ?? null,
     thinking_level: existingConfig?.thinking_level ?? params.baseConfig.thinking_level,
     fallback_llm_ids: existingConfig?.fallback_llm_ids ?? [],
+    fallback_model_refs: existingConfig?.fallback_model_refs ?? [],
     channel_llm_overrides: existingConfig?.channel_llm_overrides ?? [],
     persona_llm_overrides: existingConfig?.persona_llm_overrides ?? [],
   };
@@ -192,6 +194,7 @@ export async function buildUserSavedProviderConfigFromExistingOrDefaults(params:
     thinking_level: existingConfig?.thinking_level ?? params.baseConfig.thinking_level,
     enabled_capabilities: params.enabledCapabilities ?? existingConfig?.enabled_capabilities ?? [],
     fallback_llm_ids: existingConfig?.fallback_llm_ids ?? [],
+    fallback_model_refs: existingConfig?.fallback_model_refs ?? [],
   };
 }
 
@@ -202,6 +205,23 @@ export async function loadSavedProvidersForCapability(
   const savedConfigs = await loadSavedProviderConfigs(serverId);
 
   return savedConfigs.filter((config) => {
+    if (isCustomProvider(config.provider)) {
+      switch (capability) {
+        case "text":
+          return config.llm_id !== null;
+        case "embedding":
+          return config.embedding_model_id !== null;
+        case "image":
+          return config.diffusion_model_id !== null || config.nai_diffusion_model_id !== null;
+        case "video":
+          return config.video_model_id !== null;
+        case "vision":
+          return config.vision_llm_id !== null;
+        default:
+          return false;
+      }
+    }
+
     switch (capability) {
       case "text":
         return true;
@@ -226,6 +246,23 @@ export async function loadUserSavedProvidersForCapability(
   const savedConfigs = await loadUserSavedProviderConfigs(userId);
 
   return savedConfigs.filter((config) => {
+    if (isCustomProvider(config.provider)) {
+      switch (capability) {
+        case "text":
+          return config.llm_id !== null;
+        case "embedding":
+          return config.embedding_model_id !== null;
+        case "image":
+          return config.diffusion_model_id !== null || config.nai_diffusion_model_id !== null;
+        case "video":
+          return config.video_model_id !== null;
+        case "vision":
+          return config.vision_llm_id !== null;
+        default:
+          return false;
+      }
+    }
+
     switch (capability) {
       case "text":
         return true;

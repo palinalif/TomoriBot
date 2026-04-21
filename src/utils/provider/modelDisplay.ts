@@ -1,4 +1,5 @@
 import type { LlmRow } from "@/types/db/schema";
+import { isCustomProvider } from "@/utils/provider/customProviderUtils";
 
 export function getEffectiveLlmModelName(
   llm: LlmRow,
@@ -6,7 +7,7 @@ export function getEffectiveLlmModelName(
   otherModelCodename?: string | null,
 ): string {
   const trimmedCustomModelName = customModelName?.trim();
-  if (llm.llm_provider === "custom" && trimmedCustomModelName) {
+  if (isCustomProvider(llm.llm_provider) && trimmedCustomModelName) {
     return trimmedCustomModelName;
   }
 

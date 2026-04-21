@@ -20,6 +20,7 @@ import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema }
 import { sql } from "../../utils/db/client";
 import { checkVideoQuota, incrementVideoQuota } from "../../utils/quota/videoQuotaManager";
 import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
+import { generateCustomVideoViaEndpoint } from "@/providers/custom/customEndpointDispatcher";
 import type { ProviderNativeVideoResolution } from "@/types/provider/featureInterfaces";
 import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
@@ -403,7 +404,18 @@ export class GenerateVideoTool extends BaseTool {
       let videoData: Buffer | null = null;
       const videoImplementation = resolveProviderFeatureImplementation(executionProvider, "videoGeneration");
 
-      if (videoImplementation === "google") {
+      if (creds.customEndpoint) {
+        const result = await generateCustomVideoViaEndpoint({
+          endpoint: creds.customEndpoint,
+          apiKey,
+          prompt,
+          aspectRatio,
+          durationSeconds,
+          resolution,
+          referenceImages,
+        });
+        videoData = result.videoData;
+      } else if (videoImplementation === "google") {
         const { generateGoogleNativeVideo } = await import("@/providers/google/googleVideoGeneration");
         const result = await generateGoogleNativeVideo({
           apiKey,

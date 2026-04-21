@@ -9,6 +9,7 @@ import type { LLMProvider, ProviderInfo } from "../../types/provider/interfaces"
 import type { TomoriState } from "../../types/db/schema";
 import * as path from "node:path";
 import { Glob } from "bun";
+import { normalizeProviderName } from "@/utils/provider/providerInfoRegistry";
 
 /**
  * Provider factory namespace for creating LLM provider instances
@@ -110,7 +111,7 @@ export namespace ProviderFactory {
     // Ensure discovery has run
     await discoverProviders();
 
-    const normalizedName = providerName.toLowerCase().trim();
+    const normalizedName = normalizeProviderName(providerName);
 
     // 1. Check if we already have an instance (check cache first for canonical and alias)
     if (providerInstances.has(normalizedName)) {
@@ -194,7 +195,7 @@ export namespace ProviderFactory {
       throw new Error("No LLM provider configured in TomoriState");
     }
 
-    const providerName = tomoriState.llm.llm_provider.toLowerCase().trim();
+    const providerName = normalizeProviderName(tomoriState.llm.llm_provider);
     const modelCodename = tomoriState.llm.llm_codename;
 
     // Get the provider instance (handles aliases automatically)
@@ -271,7 +272,7 @@ export namespace ProviderFactory {
     // Ensure discovery has run
     await discoverProviders();
 
-    const normalizedName = providerName.toLowerCase().trim();
+    const normalizedName = normalizeProviderName(providerName);
 
     // Check if it's a canonical name
     if (providerRegistry.has(normalizedName)) {

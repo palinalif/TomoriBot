@@ -19,6 +19,7 @@ import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema }
 import { sql } from "../../utils/db/client";
 import { checkImageQuota, incrementImageQuota } from "../../utils/quota/imageQuotaManager";
 import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
+import { generateCustomImageViaEndpoint } from "@/providers/custom/customEndpointDispatcher";
 import { ZAI_CODING_IMAGES_GENERATIONS_URL, ZAI_GENERAL_IMAGES_GENERATIONS_URL } from "@/providers/zai/zaiShared";
 import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
@@ -678,7 +679,16 @@ export class GenerateImageTool extends BaseTool {
       let referenceImagesIgnoredReason = "";
       const imageGenerationImplementation = resolveProviderFeatureImplementation(executionProvider, "imageGeneration");
 
-      if (imageGenerationImplementation === "openrouter") {
+      if (creds.customEndpoint) {
+        const result = await generateCustomImageViaEndpoint({
+          endpoint: creds.customEndpoint,
+          apiKey,
+          prompt,
+          aspectRatio,
+          referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+        });
+        generatedImageData = result.imageData;
+      } else if (imageGenerationImplementation === "openrouter") {
         // Use OpenRouter API
         const result = await this.generateImageWithOpenRouter(
           apiKey,

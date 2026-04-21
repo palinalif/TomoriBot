@@ -62,7 +62,7 @@ export async function execute(
     return;
   }
 
-  const uniqueProviders = (await loadUniqueProviders()) ?? [];
+  const uniqueProviders = ((await loadUniqueProviders()) ?? []).filter((provider) => !isCustomProvider(provider));
   if (!uniqueProviders.length) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.config.api-key.set.no_providers_title",
@@ -107,7 +107,7 @@ export async function execute(
       {
         customId: API_KEY_INPUT_ID,
         labelKey: "commands.config.provider.add.api_key_label",
-        descriptionKey: "commands.config.provider.add.api_key_description_with_custom",
+        descriptionKey: "commands.config.provider.add.api_key_description",
         placeholder: "commands.config.provider.add.api_key_placeholder",
         required: true,
         style: TextInputStyle.Short,

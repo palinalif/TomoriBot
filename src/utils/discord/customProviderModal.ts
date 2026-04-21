@@ -28,6 +28,7 @@ import {
 import { sql } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
 import type { McpUrlValidationResult } from "@/utils/mcp/mcpUrlSecurity";
+import { isCustomProvider as isCustomProviderHelper } from "@/utils/provider/customProviderUtils";
 import { localizer } from "@/utils/text/localizer";
 
 /**
@@ -610,7 +611,7 @@ export async function promptOtherModelConfig(
  * @returns boolean - True if the provider is "custom"
  */
 export function isCustomProvider(provider: string): boolean {
-  return provider.toLowerCase() === "custom";
+  return isCustomProviderHelper(provider);
 }
 
 /**

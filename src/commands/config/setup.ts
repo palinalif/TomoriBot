@@ -211,11 +211,13 @@ export async function execute(
     }
 
     // Create provider options for the select menu
-    const providerSelectOptions: SelectOption[] = uniqueProviders.map((provider) => ({
-      label: getProviderDisplayName(provider),
-      value: provider,
-      description: undefined,
-    }));
+    const providerSelectOptions: SelectOption[] = uniqueProviders
+      .filter((provider) => !isCustomProvider(provider))
+      .map((provider) => ({
+        label: getProviderDisplayName(provider),
+        value: provider,
+        description: undefined,
+      }));
     if (!isDMChannel) {
       providerSelectOptions.push({
         label: localizer(locale, "commands.config.setup.api_provider_user_byok_label"),
@@ -274,11 +276,7 @@ export async function execute(
           {
             customId: "api_key",
             labelKey: "commands.config.setup.api_key_label",
-            // Show custom endpoint hint when not in production (custom provider available)
-            descriptionKey:
-              process.env.RUN_ENV !== "production"
-                ? "commands.config.setup.api_key_description_with_custom"
-                : "commands.config.setup.api_key_description",
+            descriptionKey: "commands.config.setup.api_key_description",
             placeholder: "commands.config.setup.api_key_placeholder",
             style: TextInputStyle.Short,
             required: false,

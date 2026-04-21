@@ -163,6 +163,44 @@ export const embeddingModelSchema = z.object({
 });
 export type EmbeddingModelRow = z.infer<typeof embeddingModelSchema>;
 
+export const customEndpointCapabilitySchema = z.enum(["text", "embedding", "image", "video"]);
+export type CustomEndpointCapability = z.infer<typeof customEndpointCapabilitySchema>;
+
+export const customEndpointApiStyleSchema = z.enum(["openai-compatible", "comfyui", "ollama-native"]);
+export type CustomEndpointApiStyle = z.infer<typeof customEndpointApiStyleSchema>;
+
+export const customEndpointSchema = z.object({
+  custom_endpoint_id: z.number().optional(),
+  server_id: z.number().nullable().optional(),
+  user_id: z.number().nullable().optional(),
+  label: z.string(),
+  capability: customEndpointCapabilitySchema,
+  api_style: customEndpointApiStyleSchema,
+  endpoint_url: z.string(),
+  model_name: z.string().nullable().optional(),
+  display_name: z.string(),
+  num_ctx: z.number().int().min(512).nullable().optional(),
+  requires_auth: z.boolean().default(false),
+  extra_config: z.preprocess((value) => {
+    if (typeof value === "string") {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return {};
+      }
+    }
+    return value ?? {};
+  }, z.record(z.string(), z.unknown()).default({})),
+  has_tools: z.boolean().default(false),
+  sees_images: z.boolean().default(false),
+  sees_videos: z.boolean().default(false),
+  supports_structoutput: z.boolean().default(false),
+  is_default: z.boolean().default(false),
+  created_at: z.coerce.date().optional(),
+  updated_at: z.coerce.date().optional(),
+});
+export type CustomEndpointRow = z.infer<typeof customEndpointSchema>;
+
 /**
  * Normalizes a JSONB array value from the database driver.
  * Handles the case where Bun SQL returns JSONB columns as strings
@@ -203,6 +241,18 @@ function normalizeFallbackLlmIds(value: unknown): number[] {
       return Number.isInteger(parsed) ? parsed : null;
     })
     .filter((id): id is number => id !== null);
+}
+
+export const fallbackModelRefSchema = z.object({
+  type: z.enum(["llm", "custom_endpoint"]),
+  id: z.number().int(),
+});
+export type FallbackModelRef = z.infer<typeof fallbackModelRefSchema>;
+
+function normalizeFallbackModelRefs(value: unknown): FallbackModelRef[] {
+  const rows = normalizeJsonbArray(value);
+  const parsed = fallbackModelRefSchema.array().safeParse(rows);
+  return parsed.success ? parsed.data : [];
 }
 
 function normalizeEnabledCapabilities(value: unknown): string[] {
@@ -353,13 +403,17 @@ export const tomoriConfigSchema = z.object({
   context_note_depth: z.number().int().min(0).max(100).default(0), // Added April 2026 - Depth from bottom (0=lowest, 100=max)
   cooldown_type: z.nativeEnum(CooldownType).default(CooldownType.OFF), // Added January 2026 - Message trigger cooldown type
   cooldown_length: z.number().int().min(1).max(86400).default(5), // Added January 2026 - Cooldown duration in seconds
-  custom_endpoint_url: z.string().nullable().optional(), // Added January 2026 - Custom OpenAI-compatible endpoint URL (non-production only)
-  custom_model_name: z.string().nullable().optional(), // Added January 2026 - Actual model name for custom endpoints (e.g., "gemma3:latest" for Ollama)
-  custom_num_ctx: z.number().int().min(512).nullable().optional(), // Added April 2026 - Context window size for custom endpoints (e.g., Ollama num_ctx)
+  custom_endpoint_url: z.string().nullable().optional(), // DEPRECATED Phase 3 rollout - Legacy inline custom field; new registrations should resolve via custom_endpoints
+  custom_model_name: z.string().nullable().optional(), // DEPRECATED Phase 3 rollout - Legacy inline custom field; new registrations should resolve via custom_endpoints
+  custom_num_ctx: z.number().int().min(512).nullable().optional(), // DEPRECATED Phase 3 rollout - Legacy inline custom field; new registrations should resolve via custom_endpoints
   nai_preset_name: z.string().nullable().optional(), // Added March 2026 - Active NovelAI sampling preset name (null for non-NAI providers)
-  fallback_llm_ids: z.preprocess((value) => normalizeFallbackLlmIds(value), z.array(z.number().int()).default([])), // Added March 2026 - Ordered fallback llm_ids for provider failover (stored as JSONB)
+  fallback_llm_ids: z.preprocess((value) => normalizeFallbackLlmIds(value), z.array(z.number().int()).default([])), // DEPRECATED Phase 3 rollout - Legacy fallback array; migrate readers/writers to fallback_model_refs before dropping
+  fallback_model_refs: z.preprocess(
+    (value) => normalizeFallbackModelRefs(value),
+    fallbackModelRefSchema.array().default([]),
+  ),
   nai_exclusive_imggen: z.boolean().default(false), // Added March 2026 - Hides standard generate_image when NovelAI opt key is present
-  other_model_codename: z.string().nullable().optional(), // Added March 2026 - Real OpenRouter model codename for other-model (e.g. "xai/grok-2")
+  other_model_codename: z.string().nullable().optional(), // DEPRECATED Phase 3 rollout - Legacy other-model side-channel; retire after custom endpoint migration lands
   other_model_capabilities: z.preprocess(
     (value) => (typeof value === "string" ? JSON.parse(value) : value),
     z
@@ -371,11 +425,11 @@ export const tomoriConfigSchema = z.object({
       })
       .nullable()
       .optional(),
-  ), // Added March 2026 - Cached capabilities for other-model (stored as JSONB)
+  ), // DEPRECATED Phase 3 rollout - Legacy other-model cache; retire after custom endpoint migration lands
   other_model_capabilities_fetched_at: z.preprocess(
     (value) => (typeof value === "string" ? new Date(value) : value),
     z.date().nullable().optional(),
-  ), // Added March 2026 - Timestamp of last capability fetch for other-model
+  ), // DEPRECATED Phase 3 rollout - Legacy other-model cache timestamp; retire after custom endpoint migration lands
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
@@ -1040,11 +1094,15 @@ export const savedProviderConfigSchema = z.object({
     (value) => normalizeLogitBiasEntries(value),
     z.array(logitBiasEntrySchema).default([]),
   ), // Added March 2026 - Logit bias snapshot
-  custom_endpoint_url: z.string().nullable(),
-  custom_model_name: z.string().nullable(),
-  custom_num_ctx: z.number().int().min(512).nullable().optional(),
+  custom_endpoint_url: z.string().nullable(), // DEPRECATED Phase 3 rollout - Legacy inline custom field mirrored for backward compatibility
+  custom_model_name: z.string().nullable(), // DEPRECATED Phase 3 rollout - Legacy inline custom field mirrored for backward compatibility
+  custom_num_ctx: z.number().int().min(512).nullable().optional(), // DEPRECATED Phase 3 rollout - Legacy inline custom field mirrored for backward compatibility
   thinking_level: z.enum(THINKING_LEVEL_VALUES).default(DEFAULT_THINKING_LEVEL),
-  fallback_llm_ids: z.preprocess((value) => normalizeFallbackLlmIds(value), z.array(z.number().int()).default([])),
+  fallback_llm_ids: z.preprocess((value) => normalizeFallbackLlmIds(value), z.array(z.number().int()).default([])), // DEPRECATED Phase 3 rollout - Legacy fallback array mirrored for backward compatibility
+  fallback_model_refs: z.preprocess(
+    (value) => normalizeFallbackModelRefs(value),
+    fallbackModelRefSchema.array().default([]),
+  ),
   channel_llm_overrides: z.preprocess(
     (value) => normalizeJsonbArray(value),
     z
@@ -1112,15 +1170,19 @@ export const userSavedProviderConfigSchema = z.object({
     (value) => normalizeLogitBiasEntries(value),
     z.array(logitBiasEntrySchema).default([]),
   ),
-  custom_endpoint_url: z.string().nullable(),
-  custom_model_name: z.string().nullable(),
-  custom_num_ctx: z.number().int().min(512).nullable().optional(),
+  custom_endpoint_url: z.string().nullable(), // DEPRECATED Phase 3 rollout - Legacy inline custom field mirrored for backward compatibility
+  custom_model_name: z.string().nullable(), // DEPRECATED Phase 3 rollout - Legacy inline custom field mirrored for backward compatibility
+  custom_num_ctx: z.number().int().min(512).nullable().optional(), // DEPRECATED Phase 3 rollout - Legacy inline custom field mirrored for backward compatibility
   thinking_level: z.enum(THINKING_LEVEL_VALUES).default(DEFAULT_THINKING_LEVEL),
   enabled_capabilities: z.preprocess(
     (value) => normalizeEnabledCapabilities(value),
     z.array(personalProviderCapabilitySchema).default([]),
   ),
-  fallback_llm_ids: z.preprocess((value) => normalizeFallbackLlmIds(value), z.array(z.number().int()).default([])),
+  fallback_llm_ids: z.preprocess((value) => normalizeFallbackLlmIds(value), z.array(z.number().int()).default([])), // DEPRECATED Phase 3 rollout - Legacy fallback array mirrored for backward compatibility
+  fallback_model_refs: z.preprocess(
+    (value) => normalizeFallbackModelRefs(value),
+    fallbackModelRefSchema.array().default([]),
+  ),
   saved_at: z.coerce.date().optional(),
   updated_at: z.coerce.date().optional(),
 });

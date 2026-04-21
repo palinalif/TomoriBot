@@ -26,6 +26,9 @@ import {
   serverStickerSchema,
   reminderSchema,
   type ReminderRow,
+  customEndpointSchema,
+  type CustomEndpointCapability,
+  type CustomEndpointRow,
   type TomoriPresetRow,
   type SystemPromptPresetRow,
   type ApiKeyRotationRow,
@@ -1051,7 +1054,7 @@ export async function loadAvailableModelsForProvider(
   }
 
   // Validate provider name format (alphanumeric, hyphens, and underscores only)
-  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+  if (!/^[a-zA-Z0-9:_-]+$/.test(providerName.trim())) {
     log.error(`Invalid provider name format: ${providerName}`);
     return null;
   }
@@ -1159,7 +1162,7 @@ export async function loadDefaultModelForProvider(
   }
 
   // Validate provider name format (alphanumeric, hyphens, and underscores only)
-  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+  if (!/^[a-zA-Z0-9:_-]+$/.test(providerName.trim())) {
     log.error(`Invalid provider name format: ${providerName}`);
     return null;
   }
@@ -1238,7 +1241,7 @@ export async function loadAvailableEmbeddingModelsForProvider(
     return null;
   }
 
-  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+  if (!/^[a-zA-Z0-9:_-]+$/.test(providerName.trim())) {
     log.error(`Invalid provider name format: ${providerName}`);
     return null;
   }
@@ -1295,7 +1298,7 @@ export async function loadDefaultEmbeddingModelForProvider(
     return null;
   }
 
-  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+  if (!/^[a-zA-Z0-9:_-]+$/.test(providerName.trim())) {
     log.error(`Invalid provider name format: ${providerName}`);
     return null;
   }
@@ -1365,7 +1368,7 @@ export async function loadAvailableDiffusionModelsForProvider(
     return null;
   }
 
-  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+  if (!/^[a-zA-Z0-9:_-]+$/.test(providerName.trim())) {
     log.error(`Invalid provider name format: ${providerName}`);
     return null;
   }
@@ -1419,7 +1422,7 @@ export async function loadDefaultDiffusionModelForProvider(
     return null;
   }
 
-  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+  if (!/^[a-zA-Z0-9:_-]+$/.test(providerName.trim())) {
     log.error(`Invalid provider name format: ${providerName}`);
     return null;
   }
@@ -1478,7 +1481,7 @@ export async function loadAvailableVideoGenerationModelsForProvider(
     return null;
   }
 
-  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+  if (!/^[a-zA-Z0-9:_-]+$/.test(providerName.trim())) {
     log.error(`Invalid provider name format: ${providerName}`);
     return null;
   }
@@ -1532,7 +1535,7 @@ export async function loadDefaultVideoGenerationModelForProvider(
     return null;
   }
 
-  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+  if (!/^[a-zA-Z0-9:_-]+$/.test(providerName.trim())) {
     log.error(`Invalid provider name format: ${providerName}`);
     return null;
   }
@@ -1591,7 +1594,7 @@ export async function loadDefaultVisionModelForProvider(
     return null;
   }
 
-  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+  if (!/^[a-zA-Z0-9:_-]+$/.test(providerName.trim())) {
     log.error(`Invalid provider name format: ${providerName}`);
     return null;
   }
@@ -1686,7 +1689,7 @@ export async function loadSmartestModel(providerName: string, includeDeprecated 
   }
 
   // Validate provider name format (alphanumeric, hyphens, and underscores only)
-  if (!/^[a-zA-Z0-9-_]+$/.test(providerName.trim())) {
+  if (!/^[a-zA-Z0-9:_-]+$/.test(providerName.trim())) {
     log.error(`Invalid provider name format: ${providerName}`);
     return null;
   }
@@ -2773,6 +2776,96 @@ export async function loadUserSavedProviderConfig(
     return parsed.data;
   } catch (error) {
     log.error(`Error loading user saved provider config for user ${userId}, provider ${provider}:`, error);
+    return null;
+  }
+}
+
+export async function loadCustomEndpointsForServer(serverId: number): Promise<CustomEndpointRow[]> {
+  try {
+    const rows = await sql<unknown[]>`
+			SELECT *
+			FROM custom_endpoints
+			WHERE server_id = ${serverId}
+			  AND user_id IS NULL
+			ORDER BY label ASC, capability ASC
+		`;
+
+    return rows
+      .map((row: unknown) => customEndpointSchema.safeParse(row))
+      .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
+  } catch (error) {
+    log.error(`Error loading custom endpoints for server ${serverId}:`, error);
+    return [];
+  }
+}
+
+export async function loadCustomEndpointsForUser(userId: number): Promise<CustomEndpointRow[]> {
+  try {
+    const rows = await sql<unknown[]>`
+			SELECT *
+			FROM custom_endpoints
+			WHERE user_id = ${userId}
+			  AND server_id IS NULL
+			ORDER BY label ASC, capability ASC
+		`;
+
+    return rows
+      .map((row: unknown) => customEndpointSchema.safeParse(row))
+      .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
+  } catch (error) {
+    log.error(`Error loading custom endpoints for user ${userId}:`, error);
+    return [];
+  }
+}
+
+export async function loadCustomEndpoint(params: {
+  serverId?: number | null;
+  userId?: number | null;
+  label: string;
+  capability: CustomEndpointCapability;
+}): Promise<CustomEndpointRow | null> {
+  const { serverId = null, userId = null, label, capability } = params;
+
+  try {
+    const rows =
+      serverId !== null
+        ? await sql`
+            SELECT *
+            FROM custom_endpoints
+            WHERE server_id = ${serverId}
+              AND user_id IS NULL
+              AND label = ${label}
+              AND capability = ${capability}
+            LIMIT 1
+          `
+        : await sql`
+            SELECT *
+            FROM custom_endpoints
+            WHERE user_id = ${userId}
+              AND server_id IS NULL
+              AND label = ${label}
+              AND capability = ${capability}
+            LIMIT 1
+          `;
+
+    if (!rows.length) {
+      return null;
+    }
+
+    const parsed = customEndpointSchema.safeParse(rows[0]);
+    if (!parsed.success) {
+      log.warn(
+        `Invalid custom endpoint row for ${serverId !== null ? `server ${serverId}` : `user ${userId}`}, label ${label}, capability ${capability}: ${parsed.error.message}`,
+      );
+      return null;
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(
+      `Error loading custom endpoint for ${serverId !== null ? `server ${serverId}` : `user ${userId}`}, label ${label}, capability ${capability}:`,
+      error,
+    );
     return null;
   }
 }

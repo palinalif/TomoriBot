@@ -15,6 +15,7 @@ import { promptForSavedProvider, replaceProviderPickerWithInfo } from "@/command
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
+import { isCustomProvider } from "@/utils/provider/customProviderUtils";
 
 const MODAL_CUSTOM_ID = "config_model_embedding_modal";
 const MODEL_SELECT_ID = "model_select";
@@ -73,6 +74,51 @@ export async function execute(
     }
     const selectedProvider = providerSelection.provider;
     responseInteraction = providerSelection.interaction;
+
+    if (isCustomProvider(selectedProvider)) {
+      const selectedSavedConfig = savedProviders.find((row) => row.provider.toLowerCase() === selectedProvider) ?? null;
+      if (!selectedSavedConfig?.embedding_model_id) {
+        await replyInfoEmbed(responseInteraction, locale, {
+          titleKey: "commands.config.model.embedding.no_models_title",
+          descriptionKey: "commands.config.model.embedding.no_models_description",
+          descriptionVars: {
+            provider: getProviderDisplayName(selectedProvider),
+          },
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      const [updatedRow] = await sql`
+				UPDATE tomori_configs
+				SET embedding_model_id = ${selectedSavedConfig.embedding_model_id}
+				WHERE server_id = ${tomoriState.server_id}
+				RETURNING *
+			`;
+
+      if (!updatedRow) {
+        await replyInfoEmbed(responseInteraction, locale, {
+          titleKey: "general.errors.update_failed_title",
+          descriptionKey: "general.errors.update_failed_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+
+      invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
+      await replyInfoEmbed(responseInteraction, locale, {
+        titleKey: "commands.config.model.embedding.success_title",
+        descriptionKey: "commands.config.model.embedding.success_description",
+        descriptionVars: {
+          model_name: selectedSavedConfig.custom_model_name ?? getProviderDisplayName(selectedProvider),
+          previous_model: localizer(locale, "commands.config.model.embedding.current_none"),
+          provider: getProviderDisplayName(selectedProvider),
+        },
+        color: ColorCode.SUCCESS,
+      });
+      return;
+    }
 
     const availableModels = (await loadAvailableEmbeddingModelsForProvider(selectedProvider, false)) ?? [];
     if (!availableModels.length) {

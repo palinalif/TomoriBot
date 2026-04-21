@@ -173,7 +173,11 @@ export class AnalyzeImageTool extends BaseTool {
         analysisResult = await this.callGoogleVision(apiKey, apiModelName, images, prompt);
       } else {
         // OpenAI-compatible providers (openrouter, zai, zaicoding, deepseek, custom)
-        const endpointUrl = this.getEndpointUrl(provider, context, creds.savedConfig.custom_endpoint_url);
+        const endpointUrl = this.getEndpointUrl(
+          provider,
+          context,
+          creds.customEndpoint?.endpoint_url ?? creds.savedConfig.custom_endpoint_url,
+        );
         analysisResult = await this.callOpenAICompatibleVision(apiKey, apiModelName, endpointUrl, images, prompt);
       }
 
