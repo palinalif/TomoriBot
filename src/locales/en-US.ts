@@ -759,6 +759,8 @@ I have built-in features to help reduce costs from abusers or spammers in your s
           success_regenerate_description: `Deleted {count} message(s) from **{persona_name}**. Re-triggering...`,
           partial_title: `⚠️ Partial Deletion`,
           partial_description: `Deleted {deleted_count}/{total_count} message(s) from **{persona_name}**. Some messages could not be deleted.`,
+          bot_no_delete_title: `Cannot Delete Messages`,
+          bot_no_delete_description: `I don't have the **Manage Messages** permission in this channel, and couldn't delete any messages through webhook fallback either. Please grant me the **Manage Messages** permission or ensure my webhook is available.`,
         },
       },
       prompt: {

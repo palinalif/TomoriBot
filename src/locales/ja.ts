@@ -759,6 +759,8 @@ export default {
           success_regenerate_description: `**{persona_name}** の {count} 件のメッセージを削除しました。再トリガー中...`,
           partial_title: `⚠️ 一部削除されました`,
           partial_description: `**{persona_name}** の {deleted_count}/{total_count} 件のメッセージを削除しました。一部のメッセージは削除できませんでした。`,
+          bot_no_delete_title: `メッセージを削除できません`,
+          bot_no_delete_description: `このチャンネルで**メッセージ管理**権限がなく、ウェブフックフォールバックでもメッセージを削除できませんでした。**メッセージ管理**権限を付与するか、ウェブフックが利用可能であることを確認してください。`,
         },
       },
       prompt: {
