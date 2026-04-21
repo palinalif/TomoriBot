@@ -27,6 +27,7 @@ Phase 2 of the provider rehaul adds per-user provider routing on top of the serv
 
 ## Commands
 
+- `/config setup` can bootstrap a guild directly into `None (User BYOK)` with no server text provider
 - `/personal provider add`
 - `/personal provider remove`
 - `/personal provider model-text`
@@ -45,3 +46,4 @@ Phase 2 of the provider rehaul adds per-user provider routing on top of the serv
 - Server cooldown and text quota checks are bypassed for personal text turns.
 - Memory/document embedding commands resolve personal embedding credentials when available.
 - `/config provider remove` can remove the active server provider when `user_byok_mode` is enabled.
+- A BYOK-only server intentionally has `tomori_configs.llm_id = NULL`; the runtime overlays a real model only when a qualifying personal provider is active for that user.

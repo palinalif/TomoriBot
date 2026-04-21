@@ -248,6 +248,72 @@ async function resolveThoughtLogOwnerIdentity(
   return await resolvePersonaWebhookIdentity(owner.persona, thoughtLogChannel.guild);
 }
 
+/**
+ * Sends a standalone attribution embed to the thought-logs channel when a
+ * personal provider was used but the model produced no reasoning/thinking
+ * content (so no thought-log embed was emitted). This ensures server admins
+ * can always see whose credentials were used, regardless of model type.
+ */
+export async function sendAttributionOnlyEmbed({
+  client,
+  locale,
+  tomoriState,
+  sourceChannel,
+  thoughtLogChannelId,
+  attributionLine,
+}: {
+  client: Client;
+  locale: string;
+  tomoriState: TomoriState;
+  sourceChannel: StreamContext["channel"];
+  thoughtLogChannelId: string;
+  attributionLine: string;
+}): Promise<void> {
+  const thoughtLogChannel = await client.channels.fetch(thoughtLogChannelId).catch(() => null);
+
+  if (
+    !thoughtLogChannel ||
+    !("send" in thoughtLogChannel) ||
+    typeof thoughtLogChannel.send !== "function" ||
+    ("isDMBased" in thoughtLogChannel &&
+      typeof thoughtLogChannel.isDMBased === "function" &&
+      thoughtLogChannel.isDMBased())
+  ) {
+    log.warn(`Thought log channel ${thoughtLogChannelId} is missing or unavailable. Skipping attribution-only post.`);
+    return;
+  }
+
+  const descriptionLines = [
+    localizer(locale, "genai.thought_log.description", { source_line: sourceChannel.toString() }),
+    attributionLine.trim(),
+  ].filter((line): line is string => Boolean(line.trim()));
+  const footerText = localizer(locale, "genai.thought_log.footer", {
+    provider: tomoriState.llm.llm_provider,
+    model: getLlmDisplayName(tomoriState.llm, tomoriState.config.custom_model_name),
+  });
+
+  const embed = new EmbedBuilder()
+    .setColor(ColorCode.INFO)
+    .setTitle(localizer(locale, "genai.thought_log.personal_attribution_title"))
+    .setDescription(descriptionLines.join("\n").slice(0, EMBED_DESCRIPTION_LIMIT))
+    .setTimestamp()
+    .setFooter({ text: footerText });
+
+  try {
+    await thoughtLogChannel.send({
+      embeds: [embed],
+      allowedMentions: { parse: [] as [] },
+      flags: ["SuppressNotifications"] as const,
+    });
+    log.info(`Posted attribution-only embed to channel ${thoughtLogChannelId}`);
+  } catch (error) {
+    log.warn(
+      `Failed to send attribution-only embed to channel ${thoughtLogChannelId}`,
+      error instanceof Error ? error : new Error(String(error)),
+    );
+  }
+}
+
 export async function sendThoughtLogEmbed({
   client,
   locale,

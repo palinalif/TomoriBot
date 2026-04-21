@@ -58,6 +58,7 @@ import { loadGuildMcpServers } from "@/utils/db/guildMcpDb";
 import { loadPresetsForServer, loadToggleableNodes } from "@/utils/db/stPresetDb";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { getThinkingLevelLocalizerKey } from "@/utils/provider/thinkingControl";
+import { commandRegistry } from "@/utils/discord/commandRegistry";
 
 // Constants
 const MAX_ITEMS_DISPLAY = 5; // Max channel/member items before switching to count-only
@@ -1060,6 +1061,21 @@ export async function execute(
         const activeStPresetValue = formatActiveStPresetValue(activeStPreset, locale);
         const stPresetNodeSummaryValue = formatStPresetNodeSummary(activeStPresetNodes, locale);
         const mcpServersValue = formatMcpServers(guildMcpServers, locale);
+        const serverUserByokToggleMention = commandRegistry.getCommandMention("server", "user-byok", "toggle");
+        const modelValue = config.llm_id
+          ? formatLlmDisplayLabel(llm, config.custom_model_name, config.other_model_codename)
+          : config.user_byok_mode
+            ? localizer(locale, "commands.choices.none_user_byok")
+            : localizer(locale, "commands.choices.none");
+        const userByokValue = localizer(
+          locale,
+          config.user_byok_mode
+            ? "commands.tool.status.field_user_byok_enabled"
+            : "commands.tool.status.field_user_byok_disabled",
+          {
+            toggle_command: serverUserByokToggleMention,
+          },
+        );
 
         // ── Page 1: Model & Sampling ───────────────────────────────────
         const serverPage1: SummaryEmbedOptions = {
@@ -1069,7 +1085,7 @@ export async function execute(
           fields: [
             {
               nameKey: "commands.tool.status.field_model",
-              value: formatLlmDisplayLabel(llm, config.custom_model_name, config.other_model_codename),
+              value: modelValue,
               inline: false,
             },
             {
@@ -1215,6 +1231,11 @@ export async function execute(
               nameKey: "commands.tool.status.field_deliberate_trigger",
               value: formatBooleanLocalized(config.deliberate_trigger_mode ?? false, locale),
               inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_user_byok",
+              value: userByokValue,
+              inline: false,
             },
           ],
         };

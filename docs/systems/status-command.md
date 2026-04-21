@@ -38,12 +38,14 @@ Server status is split across multiple pages so durable state stays visible with
 
 - Model and sampling:
   - active text model
+  - `None (User BYOK)` when the server intentionally has no server text provider
   - real OpenRouter `other-model` codename
   - vision / fallback / image / video / embedding models
   - custom endpoint presence
 - Behavior:
   - timezone
   - fetch / send / cooldown / trigger limits
+  - member BYOK mode status
 - Channels and automation:
   - auto-chat, RP, private, cross-channel blocklist
   - welcome channel and welcome prompt presence

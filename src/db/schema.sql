@@ -339,7 +339,7 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   tomori_config_id SERIAL PRIMARY KEY,
   tomori_id INT UNIQUE, -- Legacy pointer (nullable; server_id is the primary linkage)
   server_id INT, -- Server-scoped config (nullable for legacy rows)
-  llm_id INT NOT NULL,
+  llm_id INT,
   embedding_model_id INT,
   llm_temperature REAL NOT NULL DEFAULT 1.0 CHECK (llm_temperature >= 0.0 AND llm_temperature <= 2.0), -- DEPRECATED Phase 1.5 Pass B: mirror of saved_provider_configs; drop after checklist passes
   api_key BYTEA, -- encrypted; DEPRECATED Phase 1.5 Pass B: mirror of saved_provider_configs.api_key
@@ -2237,6 +2237,17 @@ SELECT add_column_if_not_exists('saved_provider_configs', 'custom_num_ctx', 'INT
 
 -- Migration: add user_byok_mode column to tomori_configs (April 2026)
 SELECT add_column_if_not_exists('tomori_configs', 'user_byok_mode', 'BOOLEAN', 'false');
+
+-- Migration: BYOK-only servers may intentionally operate without a server text model (April 2026)
+DO $$
+BEGIN
+  BEGIN
+    ALTER TABLE tomori_configs ALTER COLUMN llm_id DROP NOT NULL;
+  EXCEPTION
+    WHEN undefined_table THEN
+      NULL;
+  END;
+END $$;
 
 -- Auto-update timestamp trigger
 DROP TRIGGER IF EXISTS update_saved_provider_configs_timestamp ON saved_provider_configs;

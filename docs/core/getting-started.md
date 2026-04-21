@@ -75,7 +75,9 @@ Run in your test server:
 /config setup
 ```
 
-`/config setup` already captures your initial provider credentials.
+`/config setup` normally captures your initial provider credentials.
+
+If you are testing a server that should start in member-funded mode, `/config setup` also exposes a `None (User BYOK)` option. That bootstraps the server with no server-side text provider and immediately enables member BYOK, so users must configure their own personal providers.
 
 If you want to save an additional provider afterward:
 

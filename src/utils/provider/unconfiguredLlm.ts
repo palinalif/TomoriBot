@@ -1,0 +1,31 @@
+import type { LlmRow } from "@/types/db/schema";
+
+export const UNCONFIGURED_LLM_PROVIDER = "user-byok";
+export const UNCONFIGURED_LLM_CODENAME = "None";
+
+const UNCONFIGURED_LLM: LlmRow = {
+  llm_id: 0,
+  llm_provider: UNCONFIGURED_LLM_PROVIDER,
+  llm_codename: UNCONFIGURED_LLM_CODENAME,
+  is_smartest: false,
+  is_default: false,
+  is_reasoning: false,
+  is_deprecated: false,
+  is_free: false,
+  has_tools: false,
+  sees_images: false,
+  sees_videos: false,
+  sees_youtube: false,
+  is_uncensored: false,
+  supports_structoutput: false,
+  llm_description: null,
+  ja_description: null,
+};
+
+export function getUnconfiguredLlm(): LlmRow {
+  return { ...UNCONFIGURED_LLM };
+}
+
+export function isUnconfiguredLlm(llm: LlmRow | null | undefined): boolean {
+  return (llm?.llm_provider ?? "").toLowerCase() === UNCONFIGURED_LLM_PROVIDER;
+}

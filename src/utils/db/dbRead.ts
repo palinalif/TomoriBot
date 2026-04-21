@@ -1,4 +1,5 @@
 import { sql, withCachedPlanRetry } from "@/utils/db/client";
+import { getUnconfiguredLlm } from "@/utils/provider/unconfiguredLlm";
 import {
   tomoriStateSchema,
   userSchema,
@@ -274,23 +275,31 @@ export async function loadTomoriState(serverDiscId: string): Promise<TomoriState
       return null;
     }
 
-    // 3. Load LLM data using the llm_id from the config (with cache fallback)
-    let llmData = getCachedLLM(configData.llm_id);
+    // 3. Load LLM data using the llm_id from the config (with cache fallback).
+    // BYOK-only servers may intentionally leave llm_id NULL until a personal provider is overlaid.
+    let llmData: LlmRow;
+    if (!configData.llm_id) {
+      llmData = getUnconfiguredLlm();
+    } else {
+      const cachedLlm = getCachedLLM(configData.llm_id);
 
-    // Fallback to database if cache miss (cache not initialized or LLM not found)
-    if (!llmData) {
-      log.info(`Cache miss for LLM ID ${configData.llm_id}, querying database`);
-      const llmRows = await sql`
+      // Fallback to database if cache miss (cache not initialized or LLM not found)
+      if (!cachedLlm) {
+        log.info(`Cache miss for LLM ID ${configData.llm_id}, querying database`);
+        const llmRows = await sql`
 				SELECT * FROM llms
 				WHERE llm_id = ${configData.llm_id}
 				LIMIT 1
 			`;
 
-      if (!llmRows.length) {
-        log.error(`Found Tomori config but no LLM data for server ${serverDiscId}, llm_id: ${configData.llm_id}`);
-        return null;
+        if (!llmRows.length) {
+          log.error(`Found Tomori config but no LLM data for server ${serverDiscId}, llm_id: ${configData.llm_id}`);
+          return null;
+        }
+        llmData = llmRows[0] as LlmRow;
+      } else {
+        llmData = cachedLlm as LlmRow;
       }
-      llmData = llmRows[0] as LlmRow;
     }
 
     // 4. Load persona-scoped trigger words + optional persona prompt
@@ -486,21 +495,31 @@ export async function loadAllPersonasForServer(serverDiscId: string): Promise<To
           );
         }
 
-        // 4. Load LLM data once (with cache fallback)
-        let llmData = getCachedLLM(configData.llm_id);
-        if (!llmData) {
-          log.info(`Cache miss for LLM ID ${configData.llm_id}, querying database`);
-          const llmRows = await sql`
+        // 4. Load LLM data once (with cache fallback). BYOK-only servers may intentionally
+        // omit the server text model until a member overlays a personal provider.
+        let llmData: LlmRow;
+        if (!configData.llm_id) {
+          llmData = getUnconfiguredLlm();
+        } else {
+          const cachedLlm = getCachedLLM(configData.llm_id);
+          if (!cachedLlm) {
+            log.info(`Cache miss for LLM ID ${configData.llm_id}, querying database`);
+            const llmRows = await sql`
 						SELECT * FROM llms
 						WHERE llm_id = ${configData.llm_id}
 						LIMIT 1
 					`;
 
-          if (!llmRows.length) {
-            log.error(`Found persona config but no LLM data for server ${serverDiscId}, llm_id: ${configData.llm_id}`);
-            return [];
+            if (!llmRows.length) {
+              log.error(
+                `Found persona config but no LLM data for server ${serverDiscId}, llm_id: ${configData.llm_id}`,
+              );
+              return [];
+            }
+            llmData = llmRows[0] as LlmRow;
+          } else {
+            llmData = cachedLlm as LlmRow;
           }
-          llmData = llmRows[0] as LlmRow;
         }
 
         // 5. Load rotation keys once (server-scoped)

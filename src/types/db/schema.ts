@@ -268,7 +268,7 @@ export const tomoriConfigSchema = z.object({
   tomori_config_id: z.number().optional(),
   tomori_id: z.number().nullable().optional(), // Legacy pointer (server-scoped configs use server_id)
   server_id: z.number().nullable().optional(), // Added January 2026 - Server-scoped config (nullable for legacy rows)
-  llm_id: z.number(),
+  llm_id: z.number().int().nullable(),
   embedding_model_id: z.number().int().nullable().optional(), // Added February 2026 - Embedding model for document retrieval
   diffusion_model_id: z.number().int().nullable().optional(), // Added December 2025 - Image generation model
   vision_llm_id: z.number().int().nullable().optional(), // Added March 2026 - Dedicated vision model for non-vision chat models (FK to llms)
@@ -954,18 +954,29 @@ export const tomoriStateSchema = tomoriSchema.extend({
 /**
  * Configuration data needed for server setup
  */
-export const setupConfigSchema = z.object({
-  serverId: z.string(),
-  encryptedApiKey: z.instanceof(Buffer),
-  keyVersion: z.number().int().default(1), // Encryption key version
-  provider: z.string(), // LLM provider name (e.g., "google", "openai")
-  presetId: z.number(),
-  humanizer: z.number().default(1),
-  tomoriName: z.string(),
-  timezoneOffset: z.number().int().min(-12).max(14).default(0), // Timezone offset in hours
-  locale: z.string(),
-  registrationLocale: z.string().nullable(), // Analytics-only locale captured at setup; not used for functionality
-});
+export const setupConfigSchema = z
+  .object({
+    serverId: z.string(),
+    encryptedApiKey: z.instanceof(Buffer).nullable(),
+    keyVersion: z.number().int().default(1), // Encryption key version
+    provider: z.string().nullable(), // Null when bootstrapping BYOK-only setup with no server provider
+    presetId: z.number(),
+    humanizer: z.number().default(1),
+    tomoriName: z.string(),
+    timezoneOffset: z.number().int().min(-12).max(14).default(0), // Timezone offset in hours
+    locale: z.string(),
+    registrationLocale: z.string().nullable(), // Analytics-only locale captured at setup; not used for functionality
+    userByokMode: z.boolean().default(false),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.userByokMode && (!value.provider || !value.encryptedApiKey)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Standard setup requires both provider and encrypted API key.",
+        path: ["provider"],
+      });
+    }
+  });
 export type SetupConfig = z.infer<typeof setupConfigSchema>;
 
 /**

@@ -346,10 +346,15 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
   try {
     // Start transaction for atomicity (Rule 15)
     const result = await sql.transaction(async (tx) => {
-      // Find the default model for the selected provider within the transaction to avoid race conditions
-      // First try to get the default model (is_default = true) for this provider, excluding deprecated
-      let selectedLlm = (
-        await tx`
+      let selectedLlm: { llm_id: number; llm_codename: string } | null = null;
+      let selectedDiffusionModel: { diffusion_model_id: number; codename: string } | null = null;
+      let selectedEmbeddingModel: { embedding_model_id: number; codename: string } | null = null;
+
+      if (validConfig.provider) {
+        // Find the default model for the selected provider within the transaction to avoid race conditions
+        // First try to get the default model (is_default = true) for this provider, excluding deprecated
+        selectedLlm = (
+          await tx`
                 SELECT * FROM llms
                 WHERE llm_provider = ${validConfig.provider} 
                   AND is_default = true 
@@ -357,35 +362,35 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
                 ORDER BY llm_id ASC
                 LIMIT 1
             `
-      )[0];
+        )[0];
 
-      // Fallback: if no default model found, get the first available non-deprecated model for this provider
-      if (!selectedLlm) {
-        selectedLlm = (
-          await tx`
+        // Fallback: if no default model found, get the first available non-deprecated model for this provider
+        if (!selectedLlm) {
+          selectedLlm = (
+            await tx`
 					SELECT * FROM llms
 					WHERE llm_provider = ${validConfig.provider} 
 					  AND is_deprecated = false
 					ORDER BY llm_id ASC
 					LIMIT 1
 				`
-        )[0];
+          )[0];
 
-        if (!selectedLlm) {
-          throw new Error(`No available models found for provider: ${validConfig.provider}`);
+          if (!selectedLlm) {
+            throw new Error(`No available models found for provider: ${validConfig.provider}`);
+          }
+
+          log.warn(
+            `No default model found for provider ${validConfig.provider}, using fallback: ${selectedLlm.llm_codename}`,
+          );
+        } else {
+          log.info(`Using default model for ${validConfig.provider}: ${selectedLlm.llm_codename}`);
         }
 
-        log.warn(
-          `No default model found for provider ${validConfig.provider}, using fallback: ${selectedLlm.llm_codename}`,
-        );
-      } else {
-        log.info(`Using default model for ${validConfig.provider}: ${selectedLlm.llm_codename}`);
-      }
-
-      // Find the default diffusion model for the selected provider (for image generation)
-      // First try to get the default diffusion model (is_default = true) for this provider, excluding deprecated
-      let selectedDiffusionModel = (
-        await tx`
+        // Find the default diffusion model for the selected provider (for image generation)
+        // First try to get the default diffusion model (is_default = true) for this provider, excluding deprecated
+        selectedDiffusionModel = (
+          await tx`
 					SELECT * FROM image_diffusion_models
 					WHERE provider = ${validConfig.provider}
 					  AND is_default = true
@@ -393,36 +398,36 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
 					ORDER BY diffusion_model_id ASC
 					LIMIT 1
 				`
-      )[0];
+        )[0];
 
-      // Fallback: if no default diffusion model found, get the first available non-deprecated model for this provider
-      if (!selectedDiffusionModel) {
-        selectedDiffusionModel = (
-          await tx`
+        // Fallback: if no default diffusion model found, get the first available non-deprecated model for this provider
+        if (!selectedDiffusionModel) {
+          selectedDiffusionModel = (
+            await tx`
 						SELECT * FROM image_diffusion_models
 						WHERE provider = ${validConfig.provider}
 						  AND is_deprecated = false
 						ORDER BY diffusion_model_id ASC
 						LIMIT 1
 					`
-        )[0];
+          )[0];
 
-        if (selectedDiffusionModel) {
-          log.warn(
-            `No default diffusion model found for provider ${validConfig.provider}, using fallback: ${selectedDiffusionModel.codename}`,
-          );
+          if (selectedDiffusionModel) {
+            log.warn(
+              `No default diffusion model found for provider ${validConfig.provider}, using fallback: ${selectedDiffusionModel.codename}`,
+            );
+          } else {
+            log.info(
+              `No diffusion models available for provider ${validConfig.provider} (image generation not supported)`,
+            );
+          }
         } else {
-          log.info(
-            `No diffusion models available for provider ${validConfig.provider} (image generation not supported)`,
-          );
+          log.info(`Using default diffusion model for ${validConfig.provider}: ${selectedDiffusionModel.codename}`);
         }
-      } else {
-        log.info(`Using default diffusion model for ${validConfig.provider}: ${selectedDiffusionModel.codename}`);
-      }
 
-      // Find the default embedding model for the selected provider (for document retrieval)
-      let selectedEmbeddingModel = (
-        await tx`
+        // Find the default embedding model for the selected provider (for document retrieval)
+        selectedEmbeddingModel = (
+          await tx`
 					SELECT * FROM embedding_models
 					WHERE provider = ${validConfig.provider}
 					  AND is_default = true
@@ -430,34 +435,38 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
 					ORDER BY embedding_model_id ASC
 					LIMIT 1
 				`
-      )[0];
+        )[0];
 
-      // Fallback: if no default embedding model found, get the first available non-deprecated model
-      if (!selectedEmbeddingModel) {
-        selectedEmbeddingModel = (
-          await tx`
+        // Fallback: if no default embedding model found, get the first available non-deprecated model
+        if (!selectedEmbeddingModel) {
+          selectedEmbeddingModel = (
+            await tx`
 						SELECT * FROM embedding_models
 						WHERE provider = ${validConfig.provider}
 						  AND is_deprecated = false
 						ORDER BY embedding_model_id ASC
 						LIMIT 1
 					`
-        )[0];
+          )[0];
 
-        if (selectedEmbeddingModel) {
-          log.warn(
-            `No default embedding model found for provider ${validConfig.provider}, using fallback: ${selectedEmbeddingModel.codename}`,
-          );
+          if (selectedEmbeddingModel) {
+            log.warn(
+              `No default embedding model found for provider ${validConfig.provider}, using fallback: ${selectedEmbeddingModel.codename}`,
+            );
+          } else {
+            log.info(
+              `No embedding models available for provider ${validConfig.provider} (document retrieval not supported)`,
+            );
+          }
         } else {
-          log.info(
-            `No embedding models available for provider ${validConfig.provider} (document retrieval not supported)`,
-          );
+          log.info(`Using default embedding model for ${validConfig.provider}: ${selectedEmbeddingModel.codename}`);
         }
       } else {
-        log.info(`Using default embedding model for ${validConfig.provider}: ${selectedEmbeddingModel.codename}`);
+        log.info("Setup is bootstrapping BYOK-only mode with no server text provider");
       }
 
-      // Extract diffusion_model_id (null if no model found)
+      // Extract IDs (null when BYOK-only setup intentionally skips server-provider defaults)
+      const selectedLlmId = selectedLlm ? selectedLlm.llm_id : null;
       const selectedDiffusionModelId = selectedDiffusionModel ? selectedDiffusionModel.diffusion_model_id : null;
       const selectedEmbeddingModelId = selectedEmbeddingModel ? selectedEmbeddingModel.embedding_model_id : null;
 
@@ -540,12 +549,13 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
 					sampledialogue_memteaching_enabled,
 					timezone_offset,
 					diffusion_model_id,
-					system_prompt
+					system_prompt,
+					user_byok_mode
 				)
 				VALUES (
 					${tomori.tomori_id},
 					${server.server_id},
-					${selectedLlm.llm_id},
+					${selectedLlmId},
 					${selectedEmbeddingModelId},
 					${validConfig.encryptedApiKey},
 					${validConfig.keyVersion},
@@ -555,7 +565,8 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
 					${isDMChannel},
 					${validConfig.timezoneOffset},
 					${selectedDiffusionModelId},
-					${DEFAULT_SYSTEM_PROMPT}
+					${DEFAULT_SYSTEM_PROMPT},
+					${validConfig.userByokMode}
 				)
 				RETURNING *
 			`;
@@ -570,7 +581,8 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
       // Seed the saved_provider_configs row for the provider registered at setup.
       // Without this, /config model text shows "no saved providers" until the next bot restart
       // triggers the seed.sql backfill block.
-      await tx`
+      if (validConfig.provider && validConfig.encryptedApiKey && selectedLlmId) {
+        await tx`
 				INSERT INTO saved_provider_configs (
 					server_id, provider, api_key, key_version,
 					llm_id, diffusion_model_id, embedding_model_id,
@@ -582,7 +594,7 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
 					llm_logit_biases, llm_disabled_params
 				) VALUES (
 					${server.server_id}, ${validConfig.provider}, ${validConfig.encryptedApiKey}, ${validConfig.keyVersion},
-					${selectedLlm.llm_id}, ${selectedDiffusionModelId}, ${selectedEmbeddingModelId},
+					${selectedLlmId}, ${selectedDiffusionModelId}, ${selectedEmbeddingModelId},
 					NULL, NULL, NULL,
 					NULL, NULL, NULL, NULL,
 					'auto', '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
@@ -592,6 +604,7 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
 				)
 				ON CONFLICT (server_id, provider) DO NOTHING
 			`;
+      }
 
       // 4. Register guild emojis in bulk insert (only for guild contexts, Rule 16)
       const emojis = [];

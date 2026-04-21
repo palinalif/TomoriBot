@@ -101,6 +101,7 @@ import { buildForcedMentionsForUser } from "@/utils/discord/mentionHelper";
 import {
   hasThoughtLogContent,
   mergeThoughtLogPayload,
+  sendAttributionOnlyEmbed,
   sendThoughtLogEmbed,
   type ThoughtLogOwner,
 } from "@/utils/discord/thoughtLog";
@@ -3294,6 +3295,17 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           }
 
           if (error instanceof CredentialUnavailableError) {
+            if (
+              error.reason === "missing_model_id" &&
+              personalRoutingUserId === null &&
+              tomoriState.config.user_byok_mode
+            ) {
+              log.info(
+                `Skipping server-initiated turn in BYOK-only mode for server ${tomoriState.server_id} because no server text model is configured.`,
+              );
+              return;
+            }
+
             const isPersonalError = error.source === "personal";
             const isMissingConfig = error.reason === "no_saved_config" || error.reason === "missing_model_id";
             await sendChannelEmbedOrFailImpersonation(
@@ -8253,6 +8265,26 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           thoughtLogChannelId: tomoriState.config.thought_log_channel_disc_id,
           thoughtLog: finalThoughtLog,
           owner: turnThoughtLogOwner,
+          attributionLine: thoughtLogAttributionLine,
+        });
+      }
+
+      // When a personal provider was used but the model produced no reasoning
+      // content, send a standalone attribution embed so server admins can still
+      // see whose credentials were used.
+      if (
+        !isDMChannel &&
+        !isPrivateChannel &&
+        tomoriState.config.thought_log_channel_disc_id &&
+        thoughtLogAttributionLine &&
+        !(finalThoughtLog && hasThoughtLogContent(finalThoughtLog))
+      ) {
+        await sendAttributionOnlyEmbed({
+          client,
+          locale,
+          tomoriState,
+          sourceChannel: channel,
+          thoughtLogChannelId: tomoriState.config.thought_log_channel_disc_id,
           attributionLine: thoughtLogAttributionLine,
         });
       }

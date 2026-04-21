@@ -31,12 +31,14 @@ import {
   type CustomCapabilitiesResult,
 } from "@/utils/discord/customProviderModal";
 import { validateRemoteMcpUrl } from "@/utils/mcp/mcpUrlSecurity";
+import { formatLlmDisplayLabel } from "@/utils/provider/modelDisplay";
 
 import type { HumanizerDegree } from "@/types/db/schema";
 
 // Define constants at the top (Rule #20)
 const SETUP_API_KEY_MAX_LENGTH = 500;
 const SETUP_TIMEZONE_MAX_LENGTH = 6;
+const SETUP_USER_BYOK_PROVIDER = "__user_byok__";
 
 // Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
@@ -106,11 +108,54 @@ export async function execute(
 			`;
 
       if (mainPersonaRows.length > 0) {
+        const existingTomoriState = await loadTomoriState(serverId);
+        const providerAddMention = commandRegistry.getCommandMention("config", "provider", "add");
+        const modelTextMention = commandRegistry.getCommandMention("config", "model", "text");
+        const userByokToggleMention = commandRegistry.getCommandMention("server", "user-byok", "toggle");
+        const helpPersonalProviderMention = commandRegistry.getCommandMention("help", "personal-provider");
+        const currentModelValue =
+          existingTomoriState?.config.llm_id && existingTomoriState.llm
+            ? formatLlmDisplayLabel(
+                existingTomoriState.llm,
+                existingTomoriState.config.custom_model_name,
+                existingTomoriState.config.other_model_codename,
+              )
+            : existingTomoriState?.config.user_byok_mode
+              ? localizer(locale, "commands.choices.none_user_byok")
+              : localizer(locale, "commands.choices.none");
+
         // 3. Main persona exists — server is fully set up, block re-setup
-        await replyInfoEmbed(interaction, locale, {
+        await replySummaryEmbed(interaction, locale, {
           titleKey: "commands.config.setup.already_setup_title",
-          descriptionKey: "commands.config.setup.already_setup_description",
+          descriptionKey: "commands.config.setup.already_setup_summary_description",
           color: ColorCode.WARN,
+          fields: [
+            {
+              nameKey: "commands.config.setup.current_provider_field",
+              value: currentModelValue,
+            },
+            {
+              nameKey: "commands.config.setup.current_byok_field",
+              value: localizer(
+                locale,
+                existingTomoriState?.config.user_byok_mode
+                  ? "commands.config.setup.current_byok_enabled_value"
+                  : "commands.config.setup.current_byok_disabled_value",
+                {
+                  toggle_command: userByokToggleMention,
+                },
+              ),
+            },
+            {
+              nameKey: "commands.config.setup.already_setup_next_steps_field",
+              value: localizer(locale, "commands.config.setup.already_setup_next_steps_value", {
+                provider_add_command: providerAddMention,
+                model_text_command: modelTextMention,
+                byok_toggle_command: userByokToggleMention,
+                help_personal_provider: helpPersonalProviderMention,
+              }),
+            },
+          ],
           flags: MessageFlags.Ephemeral,
         });
         return;
@@ -171,6 +216,13 @@ export async function execute(
       value: provider,
       description: undefined,
     }));
+    if (!isDMChannel) {
+      providerSelectOptions.push({
+        label: localizer(locale, "commands.config.setup.api_provider_user_byok_label"),
+        value: SETUP_USER_BYOK_PROVIDER,
+        description: localizer(locale, "commands.config.setup.api_provider_user_byok_description"),
+      });
+    }
 
     // Create preset options for the select menu
     const presetSelectOptions: SelectOption[] = presetOptions.map((preset) => ({
@@ -229,7 +281,7 @@ export async function execute(
                 : "commands.config.setup.api_key_description",
             placeholder: "commands.config.setup.api_key_placeholder",
             style: TextInputStyle.Short,
-            required: true,
+            required: false,
             maxLength: SETUP_API_KEY_MAX_LENGTH,
           },
           {
@@ -283,10 +335,10 @@ export async function execute(
       const timezoneOffsetStr = modalResult.values?.timezone_offset;
 
       // Validate that all required values are present - let helper functions manage interaction state
-      if (!apiProvider || !apiKey || !presetName || !humanizerDegreeStr) {
+      if (!apiProvider || !presetName || !humanizerDegreeStr) {
         log.error("Missing required modal values:", {
           apiProvider: apiProvider || "MISSING",
-          apiKey: apiKey ? "PROVIDED" : "MISSING",
+          apiKey: apiKey ? "PROVIDED" : "OPTIONAL_OR_MISSING",
           presetName: presetName || "MISSING",
           humanizerDegree: humanizerDegreeStr || "MISSING",
           allValuesKeys: modalResult.values ? Object.keys(modalResult.values) : "NO_VALUES",
@@ -303,11 +355,12 @@ export async function execute(
       // Validate and transform inputs
 
       // 1. Validate API Provider (case-insensitive)
-      const normalizedProvider = uniqueProviders.find(
-        (provider) => provider.toLowerCase() === apiProvider.toLowerCase(),
-      );
+      const isUserByokSetup = !isDMChannel && apiProvider === SETUP_USER_BYOK_PROVIDER;
+      const normalizedProvider = isUserByokSetup
+        ? null
+        : (uniqueProviders.find((provider) => provider.toLowerCase() === apiProvider.toLowerCase()) ?? null);
 
-      if (!apiProvider || !normalizedProvider) {
+      if (!apiProvider || (!isUserByokSetup && !normalizedProvider)) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "general.errors.operation_failed_title",
           descriptionKey: "commands.config.setup.provider_invalid",
@@ -317,12 +370,14 @@ export async function execute(
       }
 
       // 2. Handle Custom Provider vs Regular Providers differently
-      let encryptedKey: Buffer;
-      let keyVersion: number;
+      let encryptedKey: Buffer | null = null;
+      let keyVersion = 1;
       let customCapabilitiesResult: CustomCapabilitiesResult | null = null;
       let customEndpointUrl: string | null = null;
 
-      if (isCustomProvider(normalizedProvider)) {
+      if (isUserByokSetup) {
+        log.info("User BYOK bootstrap selected - skipping server provider credential setup");
+      } else if (normalizedProvider && isCustomProvider(normalizedProvider)) {
         // Custom Provider Flow: apiKey field contains the endpoint URL
         log.info(`Custom provider selected - treating api_key as endpoint URL`);
 
@@ -386,7 +441,7 @@ export async function execute(
         });
 
         try {
-          const provider = await ProviderFactory.getProviderByName(normalizedProvider);
+          const provider = await ProviderFactory.getProviderByName(normalizedProvider as string);
 
           const validationResult = await provider.validateApiKey(apiKey);
           if (!validationResult.valid) {
@@ -539,6 +594,7 @@ export async function execute(
         timezoneOffset: timezoneOffset, // Add timezone offset to config
         locale: serverLocale, // Persist guild locale for server analytics/triggers; DM falls back to user locale
         registrationLocale, // Analytics-only locale for servers
+        userByokMode: isUserByokSetup,
       };
 
       // Validate config using zod schema
@@ -589,7 +645,12 @@ export async function execute(
       }
 
       // Custom provider post-processing: update config with endpoint URL and LLM ID
-      if (isCustomProvider(normalizedProvider) && customCapabilitiesResult?.llmId && customEndpointUrl) {
+      if (
+        normalizedProvider &&
+        isCustomProvider(normalizedProvider) &&
+        customCapabilitiesResult?.llmId &&
+        customEndpointUrl
+      ) {
         // Non-null assertion is safe here - we've verified llmId is truthy in the if condition
         const customLlmId = customCapabilitiesResult.llmId as number;
         try {
@@ -691,7 +752,7 @@ export async function execute(
       ];
       const humanizerLabel = humanizerLabels[humanizerDegree] || "Unknown";
       let configuredModelName = customCapabilitiesResult?.modelName || null;
-      if (!configuredModelName) {
+      if (!configuredModelName && normalizedProvider) {
         const defaultModel = await loadDefaultModelForProvider(normalizedProvider);
         if (defaultModel) {
           configuredModelName = defaultModel.llm_codename;
@@ -733,7 +794,7 @@ export async function execute(
       }
 
       // Add Bearer token hint for custom providers
-      if (isCustomProvider(normalizedProvider)) {
+      if (normalizedProvider && isCustomProvider(normalizedProvider)) {
         const apiKeySetMention = commandRegistry.getCommandMention("config", "provider", "add");
         const providerSwitchMention = commandRegistry.getCommandMention("config", "provider", "switch");
         successFields.push({
@@ -741,6 +802,18 @@ export async function execute(
           value: localizer(locale, "commands.config.setup.custom_bearer_hint_value", {
             apiKeySet: apiKeySetMention,
             providerSwitch: providerSwitchMention,
+          }),
+        });
+      }
+
+      if (isUserByokSetup) {
+        const userByokToggleMention = commandRegistry.getCommandMention("server", "user-byok", "toggle");
+        const helpPersonalProviderMention = commandRegistry.getCommandMention("help", "personal-provider");
+        successFields.push({
+          nameKey: "commands.config.setup.byok_bootstrap_field",
+          value: localizer(locale, "commands.config.setup.byok_bootstrap_value", {
+            toggle_command: userByokToggleMention,
+            help_personal_provider: helpPersonalProviderMention,
           }),
         });
       }
@@ -763,13 +836,17 @@ export async function execute(
       });
 
       // Show success message
-      const successDescriptionKey = configuredModelName
+      const successDescriptionKey = isUserByokSetup
         ? isDMChannel
-          ? "commands.config.setup.success_desc_dm_with_model"
-          : "commands.config.setup.success_desc_with_model"
-        : isDMChannel
           ? "commands.config.setup.success_desc_dm"
-          : "commands.config.setup.success_desc";
+          : "commands.config.setup.success_desc_byok"
+        : configuredModelName
+          ? isDMChannel
+            ? "commands.config.setup.success_desc_dm_with_model"
+            : "commands.config.setup.success_desc_with_model"
+          : isDMChannel
+            ? "commands.config.setup.success_desc_dm"
+            : "commands.config.setup.success_desc";
 
       await replySummaryEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.config.setup.success_title",
