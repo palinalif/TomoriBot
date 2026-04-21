@@ -179,12 +179,12 @@ jobs:
           echo "Downloading Python packages (musllinux wheels for Alpine 3.20 Python 3.12)..."
 
           # Create directory for pip packages
-          mkdir -p docker-pip-cache
+          mkdir -p docker/pip-cache
 
           # Download platform-specific wheels for Alpine Linux (musllinux)
           # Target Python 3.12 (used by Alpine 3.20) with musllinux_1_2 compatibility
           pip3 download \
-            --dest docker-pip-cache \
+            --dest docker/pip-cache \
             --platform musllinux_1_2_x86_64 \
             --platform musllinux_1_1_x86_64 \
             --python-version 3.12 \
@@ -193,8 +193,8 @@ jobs:
             --only-binary :all: \
             mcp-server-fetch==2025.4.7
 
-          echo "Packages downloaded to docker-pip-cache/"
-          ls -lah docker-pip-cache/
+          echo "Packages downloaded to docker/pip-cache/"
+          ls -lah docker/pip-cache/
 
       - name: Build Docker image
         run: |

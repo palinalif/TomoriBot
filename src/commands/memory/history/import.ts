@@ -21,6 +21,7 @@ import type {
 } from "discord.js";
 import { MessageFlags, EmbedBuilder } from "discord.js";
 import { sql } from "@/utils/db/client";
+import { isRagAvailable } from "@/utils/db/ragDetection";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { replyInfoEmbed, replyPaginatedPersonaChoicesV2 } from "@/utils/discord/interactionHelper";
@@ -415,8 +416,6 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
-  const ragEnabled = process.env.RUN_ENV === "production" || process.env.ACTIVATE_LOCAL_RAG === "true";
-
   // 1. Ensure command is run in a valid channel context
   if (!interaction.channel) {
     await replyInfoEmbed(interaction, locale, {
@@ -433,7 +432,7 @@ export async function execute(
 
   try {
     // 2. Check RAG is enabled
-    if (!ragEnabled) {
+    if (!isRagAvailable()) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.memory.history.import.rag_disabled_title",
         descriptionKey: "commands.memory.history.import.rag_disabled_description",

@@ -1,5 +1,5 @@
 -- RAG (Document Memory) schema
--- This file is loaded only when RAG is enabled (production or ACTIVATE_LOCAL_RAG=true).
+-- This file is loaded only when pgvector is detected in the database (auto-detect on startup).
 
 -- Make sure pgvector extension is enabled for embeddings
 CREATE EXTENSION IF NOT EXISTS vector;

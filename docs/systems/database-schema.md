@@ -73,7 +73,7 @@ This document summarizes the current PostgreSQL schema used by TomoriBot.
 
 ## Optional RAG Tables
 
-When enabled (`RUN_ENV=production` or `ACTIVATE_LOCAL_RAG=true`):
+When enabled (production, or non-production with pgvector detected):
 
 - `documents`
 - `document_chunks`

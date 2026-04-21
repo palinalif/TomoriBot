@@ -33,7 +33,7 @@ export async function getQuotaConfig(serverId: number): Promise<ImageQuotaConfig
     // 2. Create default config if not exists
     const [newConfig] = await sql<ImageQuotaConfigRow[]>`
 			INSERT INTO image_quota_configs (server_id, daily_user_quota, serverwide_quota, serverwide_quota_resets_in, enabled)
-			VALUES (${serverId}, 10, 0, 365, true)
+			VALUES (${serverId}, 0, 0, 365, false)
 			RETURNING *
 		`;
 
@@ -45,10 +45,10 @@ export async function getQuotaConfig(serverId: number): Promise<ImageQuotaConfig
     // Return safe defaults on error
     return {
       server_id: serverId,
-      daily_user_quota: 10,
+      daily_user_quota: 0,
       serverwide_quota: 0,
       serverwide_quota_resets_in: 365,
-      enabled: true,
+      enabled: false,
     };
   }
 }

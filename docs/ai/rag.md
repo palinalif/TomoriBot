@@ -8,16 +8,16 @@ RAG lets TomoriBot reference long documents without sending them in full to the 
 
 ## Feature Gate (Local vs Production)
 
-RAG is always on in production. In non-production, it is disabled unless:
+RAG is always on in production. In non-production, it is auto-detected based on whether the [pgvector](https://github.com/pgvector/pgvector) extension is available in the connected PostgreSQL server:
 
-```
-ACTIVATE_LOCAL_RAG=true
-```
+- On startup, TomoriBot queries `pg_available_extensions` to check if `vector` is present.
+- If pgvector is available, the RAG schema (tables, indexes) is initialized automatically.
+- If pgvector is not available, RAG features are disabled and users are directed to install pgvector (see README.md).
 
 This gate affects both schema initialization and runtime behavior:
-- The pgvector extension and document tables are not created locally unless RAG is enabled.
-- `/memory document add` and `/memory document remove` are blocked locally unless RAG is enabled.
-- Automatic retrieval is skipped locally unless RAG is enabled.
+- The pgvector extension and document tables are not created locally unless pgvector is detected.
+- `/memory document add` and `/memory document remove` are blocked locally unless pgvector is detected.
+- Automatic retrieval is skipped locally unless pgvector is detected.
 
 ## End-to-End Flow (Detailed)
 
@@ -70,7 +70,7 @@ Each chunk stores:
 ## Retrieval Flow (Detailed)
 
 Retrieval runs on every chat message that passes these checks:
-- RAG enabled (production or `ACTIVATE_LOCAL_RAG=true`)
+- RAG enabled (production, or pgvector detected in non-production)
 - Memory guard not critical
 - Server has at least one document
 - Embedding model and API key exist
@@ -146,7 +146,7 @@ Limits live in `.env.optional.example` and are enforced at upload time:
 - `MAX_DOCUMENTS_PER_SERVER`
 - `MAX_DOCUMENT_CHUNKS_PER_SERVER`
 - `MAX_DOCUMENT_OPERATIONS_PER_DAY`
-- `ACTIVATE_LOCAL_RAG` (non-production only)
+- pgvector auto-detection on startup (no env var needed)
 
 Runtime guards:
 - Memory guard can disable retrieval under critical memory pressure.

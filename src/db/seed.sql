@@ -1573,3 +1573,19 @@ ON CONFLICT (preset_name, model_target) DO UPDATE
         is_default     = EXCLUDED.is_default,
         preset_desc    = EXCLUDED.preset_desc,
         ja_preset_desc = EXCLUDED.ja_preset_desc;
+
+-- Migrate quota configs: reset all non-zero quota defaults to 0 (unlimited)
+-- Only matches rows that still have the original default values
+UPDATE image_quota_configs
+SET daily_user_quota = 0
+WHERE daily_user_quota = 10
+  AND serverwide_quota = 0
+  AND serverwide_quota_resets_in = 365
+  AND enabled = true;
+
+UPDATE video_quota_configs
+SET daily_user_quota = 0
+WHERE daily_user_quota = 3
+  AND serverwide_quota = 0
+  AND serverwide_quota_resets_in = 365
+  AND enabled = true;

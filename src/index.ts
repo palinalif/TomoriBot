@@ -1,6 +1,7 @@
 import { Client, GatewayIntentBits, Partials } from "discord.js";
 import { config } from "dotenv";
 import { sql } from "@/utils/db/client";
+import { detectRagAvailability } from "@/utils/db/ragDetection";
 import { log } from "./utils/misc/logger";
 import path from "node:path";
 import { createServer } from "node:http";
@@ -206,7 +207,7 @@ async function initializeDatabase(maxRetries = 3, delayMs = 1000): Promise<void>
   const ragSchemaPath = path.join(import.meta.dir, "db", "schema_rag.sql");
   const stPresetSchemaPath = path.join(import.meta.dir, "db", "schema_stpreset.sql");
   const seedPath = path.join(import.meta.dir, "db", "seed.sql");
-  const ragEnabled = process.env.RUN_ENV === "production" || process.env.ACTIVATE_LOCAL_RAG === "true";
+  const ragAvailable = await detectRagAvailability();
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -214,11 +215,13 @@ async function initializeDatabase(maxRetries = 3, delayMs = 1000): Promise<void>
       await sql.file(schemaPath);
       log.success("PostgreSQL database schema verified");
 
-      if (ragEnabled) {
+      if (ragAvailable) {
         await sql.file(ragSchemaPath);
         log.success("PostgreSQL RAG schema verified");
       } else {
-        log.info("Skipping RAG schema init (set ACTIVATE_LOCAL_RAG=true to enable in non-production).");
+        log.info(
+          "Skipping RAG schema init (pgvector extension not detected). Install pgvector to enable document features (see README.md).",
+        );
       }
 
       // Initialize ST preset schema (always-on — lightweight tables)

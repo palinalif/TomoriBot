@@ -15,7 +15,7 @@ This document reflects the current `src/index.ts` startup pipeline.
 5. Register process/client error handlers.
 6. Initialize database:
    - run `src/db/schema.sql`
-   - run `src/db/schema_rag.sql` only when RAG is enabled (`RUN_ENV=production` or `ACTIVATE_LOCAL_RAG=true`)
+   - run `src/db/schema_rag.sql` only when pgvector is detected in the database (auto-detect on startup)
    - run `src/db/seed.sql`
 7. Cleanup expired cooldown rows at startup (`cleanupExpiredCooldowns`).
 8. Attempt optional `pg_cron` registration for hourly cooldown cleanup job.

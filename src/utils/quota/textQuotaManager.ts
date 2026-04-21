@@ -31,7 +31,7 @@ export async function getTextQuotaConfig(serverId: number): Promise<TextQuotaCon
     // 2. Create default config if not exists
     const [newConfig] = await sql<TextQuotaConfigRow[]>`
 			INSERT INTO text_quota_configs (server_id, daily_user_quota, serverwide_quota, serverwide_quota_resets_in, enabled)
-			VALUES (${serverId}, 0, 0, 365, true)
+			VALUES (${serverId}, 0, 0, 365, false)
 			RETURNING *
 		`;
 
@@ -46,7 +46,7 @@ export async function getTextQuotaConfig(serverId: number): Promise<TextQuotaCon
       daily_user_quota: 0,
       serverwide_quota: 0,
       serverwide_quota_resets_in: 365,
-      enabled: true,
+      enabled: false,
     };
   }
 }

@@ -7,6 +7,7 @@ import {
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { sql } from "@/utils/db/client";
+import { isRagAvailable } from "@/utils/db/ragDetection";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
 import {
@@ -119,8 +120,6 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
-  const ragEnabled = process.env.RUN_ENV === "production" || process.env.ACTIVATE_LOCAL_RAG === "true";
-
   if (!interaction.channel) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.channel_only_title",
@@ -136,7 +135,7 @@ export async function execute(
   let personaSelectionInteraction: ButtonInteraction | null = null;
 
   try {
-    if (!ragEnabled) {
+    if (!isRagAvailable()) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.forget.document.rag_disabled_title",
         descriptionKey: "commands.forget.document.rag_disabled_description",

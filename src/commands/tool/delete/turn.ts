@@ -196,6 +196,12 @@ export async function execute(
       if (!msg) continue;
 
       if (!msg.webhookId) {
+        // Skip embed-only bot messages (e.g., error embeds) — they don't
+        // represent persona turns and shouldn't interrupt block detection
+        if (msg.author.id === client.user?.id && !msg.content.trim() && msg.embeds.length > 0) {
+          continue;
+        }
+
         // Non-webhook message — check if it's the bot's own direct message,
         // which represents the main persona speaking without a webhook
         if (msg.author.id === client.user?.id) {

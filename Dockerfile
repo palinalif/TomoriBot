@@ -46,11 +46,11 @@ ENV NODE_PATH="/usr/lib/node_modules"
 # Copy pre-downloaded Python packages (downloaded by GitHub Actions runner)
 # This avoids network issues during Docker build in CI/CD
 # For local builds, this directory may be empty (packages will be downloaded from PyPI)
-COPY --chown=tomori:tomori docker-pip-cache/ /tmp/pip-packages/
+COPY --chown=tomori:tomori docker/pip-cache/ /tmp/pip-packages/
 
 # Install Python-based MCP servers as tomori user
 # Use --break-system-packages for Alpine Linux PEP 668 compliance
-RUN if [ "$(ls -A /tmp/pip-packages 2>/dev/null)" ]; then \
+RUN if [ "$(ls /tmp/pip-packages/*.whl 2>/dev/null)" ]; then \
         echo "Installing Python MCP servers from pre-downloaded packages..." && \
         pip3 install --user --break-system-packages --no-index --find-links=/tmp/pip-packages mcp-server-fetch; \
     else \

@@ -745,10 +745,10 @@ export type ApiKeyRotationRow = z.infer<typeof apiKeyRotationSchema>;
  */
 export const imageQuotaConfigSchema = z.object({
   server_id: z.number(), // Foreign key to servers table
-  daily_user_quota: z.number().int().min(0).max(100).default(10), // Per-user daily limit (0 = unlimited)
+  daily_user_quota: z.number().int().min(0).max(100).default(0), // Per-user daily limit (0 = unlimited)
   serverwide_quota: z.number().int().min(0).max(99999).default(0), // Total server quota (0 = unlimited)
-  serverwide_quota_resets_in: z.number().int().min(1).max(365).default(365), // Days before server quota resets
-  enabled: z.boolean().default(true), // Master toggle for quota system
+  serverwide_quota_resets_in: z.number().int().min(0).max(365).default(365), // Days before server quota resets (1-365)
+  enabled: z.boolean().default(false), // Master toggle for quota system
   created_at: z.date().optional(), // Handled by DB default
   updated_at: z.date().optional(), // Handled by DB default/trigger
 });
@@ -789,8 +789,8 @@ export const textQuotaConfigSchema = z.object({
   server_id: z.number(), // Foreign key to servers table
   daily_user_quota: z.number().int().min(0).max(100).default(0), // Per-user daily limit (0 = unlimited)
   serverwide_quota: z.number().int().min(0).max(99999).default(0), // Total server quota (0 = unlimited)
-  serverwide_quota_resets_in: z.number().int().min(1).max(365).default(365), // Days before server quota resets
-  enabled: z.boolean().default(true), // Master toggle for quota system
+  serverwide_quota_resets_in: z.number().int().min(0).max(365).default(365), // Days before server quota resets (1-365)
+  enabled: z.boolean().default(false), // Master toggle for quota system
   created_at: z.date().optional(), // Handled by DB default
   updated_at: z.date().optional(), // Handled by DB default/trigger
 });
@@ -826,14 +826,13 @@ export type TextServerwideQuotaRow = z.infer<typeof textServerwideQuotaSchema>;
 /**
  * Schema for video quota configuration (per-server settings)
  * Controls daily user quotas and server-wide quota pools for video generation
- * Lower defaults than image quotas since video generation is more expensive
  */
 export const videoQuotaConfigSchema = z.object({
   server_id: z.number(), // Foreign key to servers table
-  daily_user_quota: z.number().int().min(0).max(100).default(3), // Per-user daily limit (0 = unlimited)
+  daily_user_quota: z.number().int().min(0).max(100).default(0), // Per-user daily limit (0 = unlimited)
   serverwide_quota: z.number().int().min(0).max(99999).default(0), // Total server quota (0 = unlimited)
-  serverwide_quota_resets_in: z.number().int().min(1).max(365).default(365), // Days before server quota resets
-  enabled: z.boolean().default(true), // Master toggle for quota system
+  serverwide_quota_resets_in: z.number().int().min(0).max(365).default(365), // Days before server quota resets (1-365)
+  enabled: z.boolean().default(false), // Master toggle for quota system
   created_at: z.date().optional(), // Handled by DB default
   updated_at: z.date().optional(), // Handled by DB default/trigger
 });

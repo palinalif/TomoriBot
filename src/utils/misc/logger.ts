@@ -31,6 +31,19 @@ const isTestProduction = process.env.TEST_PRODUCTION === "true";
 const shouldHideLogs = isProduction && !isTestProduction;
 
 /**
+ * Check if pino-pretty is available (it's a devDependency, absent in production Docker builds).
+ * Wrapping in try/catch avoids crashing when the package isn't installed.
+ */
+const hasPinoPretty = (() => {
+  try {
+    require.resolve("pino-pretty/package.json");
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+/**
  * Pino logger instance with custom levels and formatting
  */
 const pinoLogger = pino({
@@ -41,18 +54,19 @@ const pinoLogger = pino({
     metric: 52, // Above error (50) so periodic metrics reach CloudWatch in production
     rateLimit: 55, // Between error (50) and fatal (60)
   },
-  transport: !shouldHideLogs
-    ? {
-        target: "pino-pretty",
-        options: {
-          colorize: false,
-          translateTime: "HH:MM:ss",
-          ignore: "pid,hostname",
-          customLevels:
-            "trace:10,debug:20,info:30,section:31,success:35,warn:40,error:50,metric:52,rateLimit:55,fatal:60",
-        },
-      }
-    : undefined,
+  transport:
+    !shouldHideLogs && hasPinoPretty
+      ? {
+          target: "pino-pretty",
+          options: {
+            colorize: false,
+            translateTime: "HH:MM:ss",
+            ignore: "pid,hostname",
+            customLevels:
+              "trace:10,debug:20,info:30,section:31,success:35,warn:40,error:50,metric:52,rateLimit:55,fatal:60",
+          },
+        }
+      : undefined,
 });
 
 /**

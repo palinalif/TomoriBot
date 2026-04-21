@@ -307,7 +307,7 @@ Before running TomoriBot, ensure you have the following installed:
   ```sql
   CREATE EXTENSION vector;
   ```
-  - Don't forget to set `ACTIVATE_LOCAL_RAG` as true in your .env
+  - TomoriBot auto-detects pgvector on startup — no additional configuration needed.
 
   **pg_cron (Optional for periodic cleanup jobs):**
   - Use this only for optional database maintenance jobs such as cooldown/reminder cleanup. Reminder delivery and random triggers run in the app, not in `pg_cron`.

@@ -13,7 +13,7 @@ TomoriBot is a TypeScript + Bun Discord AI chatbot focused on configurable perso
 - Tool execution
   - Built-in tools, MCP servers, and Brave REST tools behind one tool registry
 - RAG document memory
-  - Optional in local/dev (`ACTIVATE_LOCAL_RAG=true`), always enabled in production
+  - Optional in local/dev (auto-detected via pgvector), always enabled in production
 - Localization
   - `en-US` and `ja` loaded from `src/locales/*.ts`
 - Security

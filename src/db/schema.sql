@@ -1634,10 +1634,10 @@ EXECUTE FUNCTION update_timestamp();
 -- Server-level quota configuration
 CREATE TABLE IF NOT EXISTS image_quota_configs (
 	server_id INT PRIMARY KEY,
-	daily_user_quota INT NOT NULL DEFAULT 10,                -- Per-user daily limit (0 = unlimited)
+	daily_user_quota INT NOT NULL DEFAULT 0,                 -- Per-user daily limit (0 = unlimited)
 	serverwide_quota INT NOT NULL DEFAULT 0,                 -- Total server quota (0 = unlimited)
 	serverwide_quota_resets_in INT NOT NULL DEFAULT 365,     -- Days before server quota resets (1-365)
-	enabled BOOLEAN NOT NULL DEFAULT true,                   -- Master toggle for quota system
+	enabled BOOLEAN NOT NULL DEFAULT false,                  -- Master toggle for quota system
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
@@ -1740,7 +1740,7 @@ CREATE TABLE IF NOT EXISTS text_quota_configs (
 	daily_user_quota INT NOT NULL DEFAULT 0,                 -- Per-user daily limit (0 = unlimited)
 	serverwide_quota INT NOT NULL DEFAULT 0,                 -- Total server quota (0 = unlimited)
 	serverwide_quota_resets_in INT NOT NULL DEFAULT 365,     -- Days before server quota resets (1-365)
-	enabled BOOLEAN NOT NULL DEFAULT true,                   -- Master toggle for quota system
+	enabled BOOLEAN NOT NULL DEFAULT false,                  -- Master toggle for quota system
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
@@ -1841,10 +1841,10 @@ $$ LANGUAGE plpgsql;
 -- Server-level video quota configuration
 CREATE TABLE IF NOT EXISTS video_quota_configs (
 	server_id INT PRIMARY KEY,
-	daily_user_quota INT NOT NULL DEFAULT 3,                 -- Per-user daily limit (0 = unlimited)
+	daily_user_quota INT NOT NULL DEFAULT 0,                 -- Per-user daily limit (0 = unlimited)
 	serverwide_quota INT NOT NULL DEFAULT 0,                 -- Total server quota (0 = unlimited)
 	serverwide_quota_resets_in INT NOT NULL DEFAULT 365,     -- Days before server quota resets (1-365)
-	enabled BOOLEAN NOT NULL DEFAULT true,                   -- Master toggle for quota system
+	enabled BOOLEAN NOT NULL DEFAULT false,                  -- Master toggle for quota system
 	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 	FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE

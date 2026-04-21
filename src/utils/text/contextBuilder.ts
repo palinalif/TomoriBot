@@ -1,6 +1,7 @@
 import type { Client, GuildTextBasedChannel, PresenceStatus } from "discord.js";
 import { GatewayIntentBits } from "discord.js";
-import { sql } from "../db/client"; // Import SQL client for database queries
+import { sql } from "../db/client";
+import { isRagAvailable } from "../db/ragDetection";
 import {
   isBlacklisted, // Import blacklist checker
   getPrivacyLevel, // Import privacy level checker
@@ -76,8 +77,6 @@ const DOCUMENT_QUERY_MAX_LENGTH = 1000;
 const DOCUMENT_QUERY_MIN_LENGTH = 3;
 const DOCUMENT_MAX_RESULTS = 6;
 const DOCUMENT_MIN_SIMILARITY = 0.2;
-const IS_PRODUCTION = process.env.RUN_ENV === "production";
-const ENABLE_LOCAL_RAG = process.env.ACTIVATE_LOCAL_RAG === "true";
 const MEDIA_IMAGE_MESSAGE_LIMIT = (() => {
   const parsed = Number.parseInt(process.env.MEDIA_IMAGE_MESSAGE_LIMIT || "3", 10);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 3;
@@ -2076,7 +2075,7 @@ async function buildContextNative({
   // and would invalidate everything that follows if left higher in the prompt.
   try {
     if (
-      (IS_PRODUCTION || ENABLE_LOCAL_RAG) &&
+      isRagAvailable() &&
       memoryGuard.getStatus() !== "critical" &&
       tomoriState?.server_id &&
       tomoriState.config.embedding_model_id

@@ -1,6 +1,7 @@
 import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
+import { isRagAvailable } from "@/utils/db/ragDetection";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
@@ -38,8 +39,6 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
-  const ragEnabled = process.env.RUN_ENV === "production" || process.env.ACTIVATE_LOCAL_RAG === "true";
-
   if (!interaction.channel) {
     await replyInfoEmbed(interaction, userData.language_pref, {
       titleKey: "general.errors.channel_only_title",
@@ -242,7 +241,7 @@ export async function execute(
 
     invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
-    if (shouldReembed && ragEnabled) {
+    if (shouldReembed && isRagAvailable()) {
       const [docCountRow] = await sql`
 				SELECT COUNT(*) as doc_count
 				FROM documents
