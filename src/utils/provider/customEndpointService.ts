@@ -546,19 +546,30 @@ export async function validateCustomEndpointReachability(params: {
   apiStyle: CustomEndpointApiStyle;
   endpointUrl: string;
   apiKey?: string | null;
+  strict?: boolean;
 }): Promise<{ ok: true } | { ok: false; reason: string }> {
   const headers: Record<string, string> = {};
   if (params.apiKey?.trim()) {
     headers.Authorization = `Bearer ${params.apiKey.trim()}`;
   }
 
+  const fetchOptions = { strict: params.strict };
+
   try {
     if (params.apiStyle === "comfyui") {
-      const response = await fetchUserRemoteUrl(`${params.endpointUrl.replace(/\/+$/, "")}/system_stats`, { headers });
+      const response = await fetchUserRemoteUrl(
+        `${params.endpointUrl.replace(/\/+$/, "")}/system_stats`,
+        { headers },
+        fetchOptions,
+      );
       return response.ok ? { ok: true } : { ok: false, reason: `HTTP ${response.status} ${response.statusText}` };
     }
 
-    const response = await fetchUserRemoteUrl(`${params.endpointUrl.replace(/\/+$/, "")}/models`, { headers });
+    const response = await fetchUserRemoteUrl(
+      `${params.endpointUrl.replace(/\/+$/, "")}/models`,
+      { headers },
+      fetchOptions,
+    );
     return response.ok ? { ok: true } : { ok: false, reason: `HTTP ${response.status} ${response.statusText}` };
   } catch (error) {
     return {

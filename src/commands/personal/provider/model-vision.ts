@@ -15,6 +15,9 @@ import { replyLegacyOpenRouterOtherModelMoved } from "@/utils/discord/openrouter
 const MODEL_SELECT_ID = "model_select";
 
 function getLocalizedDescription(model: LlmRow, locale: string): string {
+  if (model.is_scoped_registration) {
+    return localizer(locale, "general.scoped_openrouter_model_description");
+  }
   const normalizedLocale = locale.toLowerCase().split("-")[0];
   const description = normalizedLocale === "ja" ? model.ja_description : model.llm_description;
   const baseDescription = description || model.llm_description || `${model.llm_provider} model`;

@@ -517,10 +517,6 @@ export async function registerOpenRouterModelForScope(
     };
   }
 
-  if (!(await modelExistsInOpenRouterCatalog(normalizedModelName))) {
-    return { status: "invalid_model" };
-  }
-
   const visibleModels = await loadRegisteredOpenRouterEntriesForCapability(scope, capability);
   const alreadyRegistered = visibleModels.find((model) => model.codename === normalizedModelName);
   if (alreadyRegistered) {
@@ -532,6 +528,11 @@ export async function registerOpenRouterModelForScope(
 
   switch (capability) {
     case "text": {
+      // Only text models appear in OpenRouter's LLM catalog — validate before upserting
+      if (!(await modelExistsInOpenRouterCatalog(normalizedModelName))) {
+        return { status: "invalid_model" };
+      }
+
       const llm = await upsertScopedOpenRouterLlm(normalizedModelName);
       const entry = llm ? buildRegisteredEntryFromLlm(llm) : null;
       if (!entry) {

@@ -29,14 +29,13 @@ const CLEAR_VISION_VALUE = "__clear__";
  * @returns Localized description with flags prepended
  */
 function getLocalizedDescription(model: LlmRow, locale: string): string {
-  // Normalize locale to handle variations (e.g., "ja-JP" -> "ja")
+  if (model.is_scoped_registration) {
+    return localizer(locale, "general.scoped_openrouter_model_description");
+  }
   const normalizedLocale = locale.toLowerCase().split("-")[0];
-
   const description = normalizedLocale === "ja" ? model.ja_description : model.llm_description;
-
   const baseDescription = description || model.llm_description || `${model.llm_provider} model`;
 
-  // Build flags array based on model capabilities
   const flags: string[] = [];
   if (model.is_free) flags.push("FREE");
   if (model.has_tools) flags.push("TOOLS");

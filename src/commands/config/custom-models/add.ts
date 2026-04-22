@@ -63,15 +63,15 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     )
     .addStringOption((option) =>
       option
-        .setName("display_name")
-        .setDescription(localizer("en-US", "commands.config.custom_models.add.display_name_description"))
+        .setName("model_name")
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.model_name_description"))
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
-        .setName("model_name")
-        .setDescription(localizer("en-US", "commands.config.custom_models.add.model_name_description"))
-        .setRequired(true),
+        .setName("display_name")
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.display_name_description"))
+        .setRequired(false),
     )
     .addStringOption((option) =>
       option
@@ -143,8 +143,8 @@ export async function execute(
     const capability = interaction.options.getString("capability", true) as CustomEndpointCapability;
     const apiStyle = interaction.options.getString("api_style", true) as CustomEndpointApiStyle;
     const endpointUrl = interaction.options.getString("endpoint_url", true).trim();
-    const displayName = interaction.options.getString("display_name", true).trim();
     const rawModelName = interaction.options.getString("model_name", true);
+    const displayName = interaction.options.getString("display_name")?.trim() || rawModelName.trim();
     const authToken = interaction.options.getString("auth_token");
     const numCtx = interaction.options.getInteger("num_ctx");
     const hasTools = interaction.options.getBoolean("has_tools") ?? false;

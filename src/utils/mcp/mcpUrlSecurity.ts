@@ -219,8 +219,18 @@ function buildBlockedAddressDetails(
   );
 }
 
-export async function validateRemoteMcpUrl(url: string): Promise<McpUrlValidationResult> {
+export interface ValidateRemoteMcpUrlOptions {
+  /** Always enforce the private/link-local/loopback blocklist, regardless of RUN_ENV.
+   *  Use for user-scoped (personal) endpoints where the operator cannot vet the target. */
+  strict?: boolean;
+}
+
+export async function validateRemoteMcpUrl(
+  url: string,
+  options?: ValidateRemoteMcpUrlOptions,
+): Promise<McpUrlValidationResult> {
   const isProduction = isProductionRuntime();
+  const enforceBlocklist = isProduction || options?.strict === true;
 
   let parsedUrl: URL;
   try {
@@ -263,12 +273,12 @@ export async function validateRemoteMcpUrl(url: string): Promise<McpUrlValidatio
     };
   }
 
-  if (isProduction && isLocalHost) {
+  if (enforceBlocklist && isLocalHost) {
     return {
       valid: false,
       failureCode: "PRODUCTION_LOCALHOST_FORBIDDEN",
       hostname,
-      details: "Localhost is not allowed for guild MCP servers in production.",
+      details: "Localhost is not allowed for this endpoint.",
     };
   }
 
@@ -294,7 +304,7 @@ export async function validateRemoteMcpUrl(url: string): Promise<McpUrlValidatio
     };
   }
 
-  if (isProduction) {
+  if (enforceBlocklist) {
     const blockedAddress = resolvedAddresses.find((entry) => entry.blockedInProduction);
     if (blockedAddress) {
       return {

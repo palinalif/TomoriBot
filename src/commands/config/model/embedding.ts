@@ -21,6 +21,9 @@ const MODAL_CUSTOM_ID = "config_model_embedding_modal";
 const MODEL_SELECT_ID = "model_select";
 
 function getLocalizedDescription(model: EmbeddingModelRow, locale: string): string {
+  if (model.is_scoped_registration) {
+    return localizer(locale, "general.scoped_openrouter_model_description");
+  }
   const normalizedLocale = locale.toLowerCase().split("-")[0];
   const description = normalizedLocale === "ja" ? model.ja_description : model.model_description;
   const baseDescription = description || model.model_description || `${model.provider} model`;

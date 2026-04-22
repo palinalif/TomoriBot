@@ -7,6 +7,7 @@ export default {
     confirm: `確認`,
     none: `なし`,
     unknown: `不明`,
+    scoped_openrouter_model_description: `/openrouter models から追加`,
     openrouter_model_moved_title: `機能の場所が変わりました`,
     openrouter_model_moved_description: `\`other-model\` の直接選択は OpenRouter モデル登録に移動しました。まず {add_command} で正確なモデルコードネームを登録し、不要な登録は {remove_command} で削除してください。その後、通常の OpenRouter モデル一覧から登録済みモデルを選択してください。`,
     defaults: {

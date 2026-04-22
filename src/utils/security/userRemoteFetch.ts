@@ -94,7 +94,13 @@ function toPinnedDnsRecords(addresses: string[]): PinnedDnsRecord[] {
     .filter((entry): entry is PinnedDnsRecord => entry !== null);
 }
 
-function createPinnedDispatcher(records: PinnedDnsRecord[]): Agent {
+function createPinnedDispatcher(records: PinnedDnsRecord[]): Agent | null {
+  // interceptors.dns is absent in Bun's built-in undici shim; fall back to
+  // no pinning (validateRemoteMcpUrl already validated the resolved IPs).
+  if (typeof interceptors?.dns !== "function") {
+    return null;
+  }
+
   return new Agent({
     interceptors: {
       Agent: [
@@ -138,9 +144,10 @@ async function fetchUserRemoteUrlInternal(
   input: RequestInfo | URL,
   init: RequestInit | undefined,
   redirectCount: number,
+  strict: boolean,
 ): Promise<Response> {
   const { url, requestInit } = await normalizeRequestInput(input, init);
-  const validation = await validateRemoteMcpUrl(url.toString());
+  const validation = await validateRemoteMcpUrl(url.toString(), { strict });
   if (!validation.valid) {
     throw new Error(validation.details ?? `Remote URL validation failed for '${url.hostname}'.`);
   }
@@ -185,6 +192,7 @@ async function fetchUserRemoteUrlInternal(
       nextUrl,
       buildRedirectRequestInit(requestInit, response.status),
       redirectCount + 1,
+      strict,
     );
   } finally {
     if (dispatcher) {
@@ -193,8 +201,18 @@ async function fetchUserRemoteUrlInternal(
   }
 }
 
-export async function fetchUserRemoteUrl(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return await fetchUserRemoteUrlInternal(input, init, 0);
+export interface FetchUserRemoteUrlOptions {
+  /** Enforce the private/link-local/loopback blocklist even outside production.
+   *  Pass true for personal (user-scoped) endpoint calls. */
+  strict?: boolean;
+}
+
+export async function fetchUserRemoteUrl(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  options?: FetchUserRemoteUrlOptions,
+): Promise<Response> {
+  return await fetchUserRemoteUrlInternal(input, init, 0, options?.strict === true);
 }
 
 export const fetchUserRemoteUrlUndici: typeof undiciFetch = async (

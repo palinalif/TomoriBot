@@ -42,26 +42,18 @@ interface ImageDiffusionModelRow {
  * @returns Localized description with flags prepended (e.g., "(FREE+UNCENSORED) Description")
  */
 function getLocalizedDescription(model: ImageDiffusionModelRow, locale: string): string {
-  // Normalize locale to handle variations (e.g., "ja-JP" -> "ja")
-  const normalizedLocale = locale.toLowerCase().split("-")[0];
-
-  // Select description based on locale
-  let description: string | null | undefined;
-  if (normalizedLocale === "ja") {
-    description = model.ja_description;
-  } else {
-    description = model.model_description;
+  if (model.is_scoped_registration) {
+    return localizer(locale, "general.scoped_openrouter_model_description");
   }
 
-  // Fallback chain: locale-specific -> default -> provider fallback
+  const normalizedLocale = locale.toLowerCase().split("-")[0];
+  const description = normalizedLocale === "ja" ? model.ja_description : model.model_description;
   const baseDescription = description || model.model_description || `${model.provider} model`;
 
-  // Build flags array based on model capabilities
   const flags: string[] = [];
   if (model.is_free) flags.push("FREE");
   if (model.is_uncensored) flags.push("UNCENSORED");
 
-  // Prepend flags with + connector if any exist
   const flagPrefix = flags.length > 0 ? `(${flags.join("+")}) ` : "";
   return `${flagPrefix}${baseDescription}`;
 }
