@@ -4,13 +4,28 @@ import type { ErrorContext, UserRow } from "@/types/db/schema";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
-import { registerOpenRouterModelForScope } from "@/utils/provider/openrouterModelRegistry";
+import {
+  type OpenRouterModelCapability,
+  registerOpenRouterModelForScope,
+} from "@/utils/provider/openrouterModelRegistry";
 import { localizer } from "@/utils/text/localizer";
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("add")
     .setDescription(localizer("en-US", "commands.openrouter.models.add.description"))
+    .addStringOption((option) =>
+      option
+        .setName("capability")
+        .setDescription(localizer("en-US", "commands.openrouter.models.add.capability_description"))
+        .setRequired(true)
+        .addChoices(
+          { name: "Text", value: "text" },
+          { name: "Embedding", value: "embedding" },
+          { name: "Image", value: "image" },
+          { name: "Video", value: "video" },
+        ),
+    )
     .addStringOption((option) =>
       option
         .setName("model_name")
@@ -36,6 +51,7 @@ export async function execute(
   }
 
   try {
+    const capability = interaction.options.getString("capability", true) as OpenRouterModelCapability;
     const modelName = interaction.options.getString("model_name", true).trim();
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -44,6 +60,7 @@ export async function execute(
         kind: "server",
         ownerId: tomoriState.server_id,
       },
+      capability,
       modelName,
     );
 
@@ -60,7 +77,7 @@ export async function execute(
         await replyInfoEmbed(interaction, locale, {
           titleKey: "commands.openrouter.models.add.already_available_title",
           descriptionKey: "commands.openrouter.models.add.already_available_description",
-          descriptionVars: { model_name: result.llm.llm_codename },
+          descriptionVars: { capability, model_name: result.model.codename },
           color: ColorCode.WARN,
         });
         return;
@@ -68,7 +85,7 @@ export async function execute(
         await replyInfoEmbed(interaction, locale, {
           titleKey: "commands.openrouter.models.add.already_registered_title",
           descriptionKey: "commands.openrouter.models.add.already_registered_description",
-          descriptionVars: { model_name: result.llm.llm_codename },
+          descriptionVars: { capability, model_name: result.model.codename },
           color: ColorCode.WARN,
         });
         return;
@@ -76,7 +93,7 @@ export async function execute(
         await replyInfoEmbed(interaction, locale, {
           titleKey: "commands.openrouter.models.add.success_title",
           descriptionKey: "commands.openrouter.models.add.success_description",
-          descriptionVars: { model_name: result.llm.llm_codename },
+          descriptionVars: { capability, model_name: result.model.codename },
           color: ColorCode.SUCCESS,
         });
         return;

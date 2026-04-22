@@ -4,6 +4,9 @@ SELECT add_column_if_not_exists('tomori_configs', 'other_model_codename', 'TEXT'
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_capabilities', 'JSONB');
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_capabilities_fetched_at', 'TIMESTAMP');
 SELECT add_column_if_not_exists('llms', 'is_scoped_registration', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('image_diffusion_models', 'is_scoped_registration', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('video_generation_models', 'is_scoped_registration', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('embedding_models', 'is_scoped_registration', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('tomori_configs', 'fallback_model_refs', 'JSONB', '''[]''::JSONB');
 SELECT add_column_if_not_exists('tomori_configs', 'autoch_persona_overrides', 'JSONB', '''[]''::JSONB');
 SELECT add_column_if_not_exists('tomori_configs', 'hide_respond_embed', 'BOOLEAN', 'false');
@@ -78,6 +81,99 @@ CREATE INDEX IF NOT EXISTS idx_openrouter_model_registrations_llm ON openrouter_
 DROP TRIGGER IF EXISTS update_openrouter_model_registrations_timestamp ON openrouter_model_registrations;
 CREATE TRIGGER update_openrouter_model_registrations_timestamp
     BEFORE UPDATE ON openrouter_model_registrations
+    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+CREATE TABLE IF NOT EXISTS openrouter_embedding_model_registrations (
+    openrouter_embedding_model_registration_id SERIAL PRIMARY KEY,
+    server_id INT NULL,
+    user_id INT NULL,
+    embedding_model_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (embedding_model_id) REFERENCES embedding_models(embedding_model_id) ON DELETE CASCADE,
+    CHECK ((server_id IS NULL) <> (user_id IS NULL))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_embedding_model_registrations_server_model
+    ON openrouter_embedding_model_registrations(server_id, embedding_model_id)
+    WHERE user_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_embedding_model_registrations_user_model
+    ON openrouter_embedding_model_registrations(user_id, embedding_model_id)
+    WHERE server_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_openrouter_embedding_model_registrations_server
+    ON openrouter_embedding_model_registrations(server_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_embedding_model_registrations_user
+    ON openrouter_embedding_model_registrations(user_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_embedding_model_registrations_model
+    ON openrouter_embedding_model_registrations(embedding_model_id);
+
+DROP TRIGGER IF EXISTS update_openrouter_embedding_model_registrations_timestamp ON openrouter_embedding_model_registrations;
+CREATE TRIGGER update_openrouter_embedding_model_registrations_timestamp
+    BEFORE UPDATE ON openrouter_embedding_model_registrations
+    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+CREATE TABLE IF NOT EXISTS openrouter_image_model_registrations (
+    openrouter_image_model_registration_id SERIAL PRIMARY KEY,
+    server_id INT NULL,
+    user_id INT NULL,
+    diffusion_model_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (diffusion_model_id) REFERENCES image_diffusion_models(diffusion_model_id) ON DELETE CASCADE,
+    CHECK ((server_id IS NULL) <> (user_id IS NULL))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_image_model_registrations_server_model
+    ON openrouter_image_model_registrations(server_id, diffusion_model_id)
+    WHERE user_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_image_model_registrations_user_model
+    ON openrouter_image_model_registrations(user_id, diffusion_model_id)
+    WHERE server_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_openrouter_image_model_registrations_server
+    ON openrouter_image_model_registrations(server_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_image_model_registrations_user
+    ON openrouter_image_model_registrations(user_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_image_model_registrations_model
+    ON openrouter_image_model_registrations(diffusion_model_id);
+
+DROP TRIGGER IF EXISTS update_openrouter_image_model_registrations_timestamp ON openrouter_image_model_registrations;
+CREATE TRIGGER update_openrouter_image_model_registrations_timestamp
+    BEFORE UPDATE ON openrouter_image_model_registrations
+    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+CREATE TABLE IF NOT EXISTS openrouter_video_model_registrations (
+    openrouter_video_model_registration_id SERIAL PRIMARY KEY,
+    server_id INT NULL,
+    user_id INT NULL,
+    video_model_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (video_model_id) REFERENCES video_generation_models(video_model_id) ON DELETE CASCADE,
+    CHECK ((server_id IS NULL) <> (user_id IS NULL))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_video_model_registrations_server_model
+    ON openrouter_video_model_registrations(server_id, video_model_id)
+    WHERE user_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_video_model_registrations_user_model
+    ON openrouter_video_model_registrations(user_id, video_model_id)
+    WHERE server_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_openrouter_video_model_registrations_server
+    ON openrouter_video_model_registrations(server_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_video_model_registrations_user
+    ON openrouter_video_model_registrations(user_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_video_model_registrations_model
+    ON openrouter_video_model_registrations(video_model_id);
+
+DROP TRIGGER IF EXISTS update_openrouter_video_model_registrations_timestamp ON openrouter_video_model_registrations;
+CREATE TRIGGER update_openrouter_video_model_registrations_timestamp
+    BEFORE UPDATE ON openrouter_video_model_registrations
     FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
 -- Migrate legacy notice visibility booleans into the shared hidden-key registry
@@ -269,16 +365,16 @@ VALUES
   ('novelai', 'llama-3-erato-v1', false, false, false, false, false, false, false, false, false, false, false, 'Based on the Llama 3 70B Base model, trained on the most high-quality NovelAI storytelling dataset', 'Llama 3 70Bベースモデルを基に、NovelAI最高品質のストーリーテリングデータセットで学習したモデル'),
   -- OpenRouter Models (structured output support varies by model, user configures manually)
   ('openrouter', 'stepfun-ai/step3', false, false, false, true, false, true, true, false, false, false, true, 'General-use model that can see images and is also great in role-play (deprecated, use stepfun/step-3.5-flash)', '画像を見ることができ、ロールプレイにも優れた汎用モデル（非推奨、stepfun/step-3.5-flash を使用）'),
-  ('openrouter', 'stepfun/step-3.5-flash', false, false, false, false, false, true, false, false, false, false, false, 'Fast Stepfun model with tool support only', 'ツール利用のみに対応した高速Stepfunモデル'),
+  ('openrouter', 'stepfun/step-3.5-flash', false, false, false, true, false, true, false, false, false, false, false, 'Fast Stepfun model with tool support only', 'ツール利用のみに対応した高速Stepfunモデル'),
   ('openrouter', 'z-ai/glm-4.6', false, false, true, true, false, true, false, false, false, false, true, 'State-of-the-art human-aligned model that also performs natural role-play', '自然なロールプレイも可能な最先端の人間調整型モデル'),
   ('openrouter', 'z-ai/glm-4.7', false, false, true, true, false, true, false, false, false, false, true, 'Latest State-of-the-art human-aligned model that also performs natural role-play', '最新の自然なロールプレイも可能な最先端の人間調整型モデル'),
-  ('openrouter', 'z-ai/glm-4.7-flash', false, false, false, false, false, true, false, false, false, false, true, 'Fast GLM 4.7 variant for responsive general-purpose tasks', '応答性の高い汎用タスク向けの高速GLM 4.7バリアント'),
+  ('openrouter', 'z-ai/glm-4.7-flash', false, false, false, true, false, true, false, false, false, false, true, 'Fast GLM 4.7 variant for responsive general-purpose tasks', '応答性の高い汎用タスク向けの高速GLM 4.7バリアント'),
   ('openrouter', 'z-ai/glm-5', false, false, false, false, false, true, false, false, false, false, true, 'Latest GLM 5 model with advanced natural language understanding and role-play capabilities', '高度な自然言語理解とロールプレイ機能を備えた最新のGLM 5モデル'),
   ('openrouter', 'openrouter/pony-alpha', false, false, false, true, true, true, false, false, false, false, true, 'Free OpenRouter Pony Alpha model with tools and structured output support (DEPRECATED)', 'ツールと構造化出力に対応した無料のOpenRouter Pony Alphaモデル（非推奨）'),
   ('openrouter', 'thedrummer/cydonia-24b-v4.1', false, false, false, false, false, false, false, false, false, true, true, 'Uncensored model specializing in creative writing and role-play', '創作とロールプレイに特化した無検閲モデル'),
   ('openrouter', 'deepseek/deepseek-v3.2-exp', false, false, false, true, false, true, false, false, false, true, true, 'Cost-efficient Experimental Model that is also great in role-play', 'ロールプレイにも優れたコスト効率の良い実験モデル'),
   ('openrouter', 'deepseek/deepseek-v3.2', false, false, false, false, false, true, false, false, false, true, true, 'Cost-efficient stable model that is also great in role-play', 'ロールプレイにも優れたコスト効率の良い安定版モデル'),
-  ('openrouter', 'tngtech/deepseek-r1t2-chimera', false, false, true, false, false, true, false, false, false, true, true, 'Advanced Chimera DeepSeek model that is great at role-playing', 'ロールプレイに優れた高度なChimera DeepSeekモデル'),
+  ('openrouter', 'tngtech/deepseek-r1t2-chimera', false, false, true, true, false, true, false, false, false, true, true, 'Advanced Chimera DeepSeek model that is great at role-playing', 'ロールプレイに優れた高度なChimera DeepSeekモデル'),
   ('openrouter', 'x-ai/grok-4-fast', false, false, true, true, false, true, true, false, false, false, true, 'Fast and efficient general-purpose model', '高速かつ効率的な汎用モデル'),
   ('openrouter', 'x-ai/grok-4.1-fast', false, false, true, false, false, true, true, false, false, false, true, 'Latest fast and efficient general-purpose model', '高速かつ効率的な汎用モデル'),
   ('openrouter', 'google/gemini-3-flash-preview', false, false, false, false, false, true, true, true, true, false, true, 'Latest Gemini 3 Flash preview via OpenRouter with tool use, image understanding, and YouTube video support', 'OpenRouter経由でツール利用・画像理解・YouTube動画処理に対応した最新のGemini 3 Flashプレビュー'),
@@ -286,6 +382,7 @@ VALUES
   ('openrouter', 'google/gemini-3-pro-preview', false, false, false, true, false, true, true, true, true, false, true, 'Gemini 3 Pro preview via OpenRouter with tool, image, video, and YouTube support (deprecated, use google/gemini-3.1-pro-preview)', 'OpenRouter経由でツール利用・画像理解・動画・YouTube処理に対応したGemini 3 Proプレビュー（非推奨、google/gemini-3.1-pro-preview を使用）'),
   ('openrouter', 'google/gemini-3.1-pro-preview', false, false, false, false, false, true, true, true, true, false, true, 'Latest Gemini 3.1 Pro preview via OpenRouter with tool, image, video, and YouTube support', 'OpenRouter経由でツール利用・画像理解・動画・YouTube処理に対応した最新のGemini 3.1 Proプレビュー'),
   ('openrouter', 'google/gemma-4-31b-it', false, false, false, false, false, true, true, false, false, false, true, 'OpenRouter-hosted Google Gemma 4.31B IT model with tool use, vision, and structured output support (video disabled)', '動画非対応ながらツール利用・画像理解・構造化出力に対応するOpenRouter経由のGoogle Gemma 4.31B ITモデル'),
+  ('openrouter', 'google/gemma-4-31b-it:free', false, true, false, false, true, true, true, false, false, false, true, 'Free OpenRouter-hosted Google Gemma 4.31B IT model with tool use, vision, and structured output support (video disabled)', '動画非対応ながらツール利用・画像理解・構造化出力に対応するOpenRouter経由の無料版Google Gemma 4.31B ITモデル'),
   ('openrouter', 'anthropic/claude-sonnet-4.5', false, false, false, true, false, true, true, false, false, false, true, 'State-of-the-art performance in complex tasks and problems, also great in role-playing and creative writing', '複雑なタスクや問題に優れた最先端性能を持ち、ロールプレイや創作にも秀でたモデル'),
   ('openrouter', 'anthropic/claude-sonnet-4.6', false, false, false, false, false, true, true, false, false, false, true, 'Balanced Claude model with strong quality, speed, and cost tradeoffs', '品質・速度・コストのバランスに優れたClaudeモデル'),
   ('openrouter', 'anthropic/claude-haiku-4.5', false, false, false, false, false, true, true, false, false, false, true, 'Lightweight version of claude-sonnet-4.5', 'claude-sonnet-4.5の軽量版'),
@@ -298,7 +395,7 @@ VALUES
   ('openrouter', 'mistralai/mistral-small-3.2-24b-instruct:free', false, false, false, true, true, false, false, false, false, false, false, 'Free general-purpose model', '無料の汎用モデル'),
   ('openrouter', 'tngtech/deepseek-r1t2-chimera:free', false, false, true, true, true, true, false, false, false, true, false, 'Free model for solving complex tasks and problems', '複雑なタスクや問題の解決に適した無料モデル'),
   ('openrouter', 'mistralai/mistral-small-3.1-24b-instruct:free', false, false, false, true, true, true, true, false, false, false, false, 'Free multimodal model with enhanced reasoning and vision capabilities', '強化された推論とビジョン機能を備えた無料のマルチモーダルモデル'),
-  ('openrouter', 'z-ai/glm-4.5-air:free', false, true, false, false, true, true, false, false, false, false, false, 'Free lightweight model with thinking mode for reasoning and agent tasks', '推論とエージェントタスク向けのシンキングモードを備えた無料軽量モデル'),
+  ('openrouter', 'z-ai/glm-4.5-air:free', false, false, false, true, true, true, false, false, false, false, false, 'Free lightweight model with thinking mode for reasoning and agent tasks', '推論とエージェントタスク向けのシンキングモードを備えた無料軽量モデル'),
   ('openrouter', 'tngtech/tng-r1t-chimera:free', false, false, false, true, true, true, false, false, false, false, false, 'Free experimental model for creative storytelling and character interaction', '創作とキャラクター対話に特化した無料の実験モデル'),
   ('openrouter', 'qwen/qwen3.5-35b-a3b', false, false, false, true, false, true, true, true, false, false, true, 'Qwen 3.5 35B A3B model with tool use, vision, and structured output support (deprecated)', 'ツール利用・画像理解・構造化出力に対応したQwen 3.5 35B A3Bモデル（非推奨）'),
   ('openrouter', 'qwen/qwen3.5-27b', false, false, false, false, false, true, true, true, false, false, true, 'Qwen 3.5 27B model with tool use, vision, and structured output support', 'ツール利用・画像理解・構造化出力に対応したQwen 3.5 27Bモデル'),
@@ -752,6 +849,7 @@ EXCEPTION
 END $$;
 
 -- Ensure all required columns exist in image_diffusion_models table
+SELECT add_column_if_not_exists('image_diffusion_models', 'is_scoped_registration', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('image_diffusion_models', 'is_default', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('image_diffusion_models', 'is_deprecated', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('image_diffusion_models', 'is_free', 'BOOLEAN', 'false');
@@ -903,6 +1001,7 @@ ON CONFLICT (provider, codename) DO UPDATE SET
   is_deprecated = EXCLUDED.is_deprecated,
   is_free = EXCLUDED.is_free,
   is_uncensored = EXCLUDED.is_uncensored,
+  is_scoped_registration = false,
   provider = EXCLUDED.provider,
   updated_at = CURRENT_TIMESTAMP;
 
@@ -978,6 +1077,7 @@ ON CONFLICT (provider, codename) DO UPDATE SET
   is_default = EXCLUDED.is_default,
   is_deprecated = EXCLUDED.is_deprecated,
   is_free = EXCLUDED.is_free,
+  is_scoped_registration = false,
   provider = EXCLUDED.provider,
   updated_at = CURRENT_TIMESTAMP;
 
@@ -991,6 +1091,7 @@ WHERE tc.llm_id = l.llm_id
   AND tc.video_model_id IS NULL;
 
 -- Ensure all required columns exist in embedding_models table
+SELECT add_column_if_not_exists('embedding_models', 'is_scoped_registration', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('embedding_models', 'model_family', 'TEXT');
 SELECT add_column_if_not_exists('embedding_models', 'model_description', 'TEXT');
 SELECT add_column_if_not_exists('embedding_models', 'ja_description', 'TEXT');
@@ -1056,6 +1157,7 @@ ON CONFLICT (provider, codename) DO UPDATE SET
   ja_description = EXCLUDED.ja_description,
   is_default = EXCLUDED.is_default,
   is_deprecated = EXCLUDED.is_deprecated,
+  is_scoped_registration = false,
   provider = EXCLUDED.provider,
   updated_at = CURRENT_TIMESTAMP;
 

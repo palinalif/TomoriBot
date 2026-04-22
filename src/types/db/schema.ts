@@ -125,6 +125,7 @@ export const diffusionModelSchema = z.object({
   diffusion_model_id: z.number().optional(),
   provider: z.string(),
   codename: z.string(),
+  is_scoped_registration: z.boolean().default(false), // Scoped OpenRouter registration; exclude from global image pickers unless explicitly joined for the owner
   model_description: z.string().nullable().optional(),
   ja_description: z.string().nullable().optional(),
   is_default: z.boolean().default(false),
@@ -140,6 +141,7 @@ export const videoGenerationModelSchema = z.object({
   video_model_id: z.number().optional(),
   provider: z.string(),
   codename: z.string(),
+  is_scoped_registration: z.boolean().default(false), // Scoped OpenRouter registration; exclude from global video pickers unless explicitly joined for the owner
   model_description: z.string().nullable().optional(),
   ja_description: z.string().nullable().optional(),
   is_default: z.boolean().default(false),
@@ -155,6 +157,7 @@ export const embeddingModelSchema = z.object({
   provider: z.string(),
   codename: z.string(),
   model_family: z.string(),
+  is_scoped_registration: z.boolean().default(false), // Scoped OpenRouter registration; exclude from global embedding pickers unless explicitly joined for the owner
   model_description: z.string().nullable().optional(),
   ja_description: z.string().nullable().optional(),
   is_default: z.boolean().default(false),
@@ -211,6 +214,36 @@ export const openRouterModelRegistrationSchema = z.object({
   updated_at: z.coerce.date().optional(),
 });
 export type OpenRouterModelRegistrationRow = z.infer<typeof openRouterModelRegistrationSchema>;
+
+export const openRouterEmbeddingModelRegistrationSchema = z.object({
+  openrouter_embedding_model_registration_id: z.number().optional(),
+  server_id: z.number().nullable().optional(),
+  user_id: z.number().nullable().optional(),
+  embedding_model_id: z.number().int(),
+  created_at: z.coerce.date().optional(),
+  updated_at: z.coerce.date().optional(),
+});
+export type OpenRouterEmbeddingModelRegistrationRow = z.infer<typeof openRouterEmbeddingModelRegistrationSchema>;
+
+export const openRouterImageModelRegistrationSchema = z.object({
+  openrouter_image_model_registration_id: z.number().optional(),
+  server_id: z.number().nullable().optional(),
+  user_id: z.number().nullable().optional(),
+  diffusion_model_id: z.number().int(),
+  created_at: z.coerce.date().optional(),
+  updated_at: z.coerce.date().optional(),
+});
+export type OpenRouterImageModelRegistrationRow = z.infer<typeof openRouterImageModelRegistrationSchema>;
+
+export const openRouterVideoModelRegistrationSchema = z.object({
+  openrouter_video_model_registration_id: z.number().optional(),
+  server_id: z.number().nullable().optional(),
+  user_id: z.number().nullable().optional(),
+  video_model_id: z.number().int(),
+  created_at: z.coerce.date().optional(),
+  updated_at: z.coerce.date().optional(),
+});
+export type OpenRouterVideoModelRegistrationRow = z.infer<typeof openRouterVideoModelRegistrationSchema>;
 
 /**
  * Normalizes a JSONB array value from the database driver.

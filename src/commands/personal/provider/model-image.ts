@@ -67,7 +67,11 @@ export async function execute(
     );
     if (!providerSelection) return;
 
-    const availableModels = (await loadAvailableDiffusionModelsForProvider(providerSelection.provider, false)) ?? [];
+    const availableModels =
+      (await loadAvailableDiffusionModelsForProvider(providerSelection.provider, false, {
+        kind: "personal",
+        ownerId: userData.user_id,
+      })) ?? [];
     if (availableModels.length === 0) {
       await replyInfoEmbed(providerSelection.interaction, locale, {
         titleKey: "commands.config.model.image.no_models_title",

@@ -29,8 +29,14 @@ import {
   customEndpointSchema,
   type CustomEndpointCapability,
   type CustomEndpointRow,
+  openRouterEmbeddingModelRegistrationSchema,
+  type OpenRouterEmbeddingModelRegistrationRow,
+  openRouterImageModelRegistrationSchema,
   openRouterModelRegistrationSchema,
   type OpenRouterModelRegistrationRow,
+  openRouterVideoModelRegistrationSchema,
+  type OpenRouterImageModelRegistrationRow,
+  type OpenRouterVideoModelRegistrationRow,
   type TomoriPresetRow,
   type SystemPromptPresetRow,
   type ApiKeyRotationRow,
@@ -1062,69 +1068,352 @@ async function loadScopedOpenRouterModelRows(
   if (scope.kind === "server") {
     return includeDeprecated
       ? await sql`
-          SELECT DISTINCT l.*
+          SELECT l.*
           FROM llms l
-          LEFT JOIN openrouter_model_registrations omr ON omr.llm_id = l.llm_id
           WHERE l.llm_provider = 'openrouter'
             AND (
               COALESCE(l.is_scoped_registration, false) = false
               OR (
                 COALESCE(l.is_scoped_registration, false) = true
-                AND omr.server_id = ${scope.ownerId}
-                AND omr.user_id IS NULL
+                AND EXISTS (
+                  SELECT 1
+                  FROM openrouter_model_registrations omr
+                  WHERE omr.llm_id = l.llm_id
+                    AND omr.server_id = ${scope.ownerId}
+                    AND omr.user_id IS NULL
+                )
               )
             )
-          ORDER BY COALESCE(l.is_scoped_registration, false) ASC, l.llm_id ASC
+          ORDER BY l.is_scoped_registration ASC NULLS FIRST, l.llm_id ASC
         `
       : await sql`
-          SELECT DISTINCT l.*
+          SELECT l.*
           FROM llms l
-          LEFT JOIN openrouter_model_registrations omr ON omr.llm_id = l.llm_id
           WHERE l.llm_provider = 'openrouter'
             AND l.is_deprecated = false
             AND (
               COALESCE(l.is_scoped_registration, false) = false
               OR (
                 COALESCE(l.is_scoped_registration, false) = true
-                AND omr.server_id = ${scope.ownerId}
-                AND omr.user_id IS NULL
+                AND EXISTS (
+                  SELECT 1
+                  FROM openrouter_model_registrations omr
+                  WHERE omr.llm_id = l.llm_id
+                    AND omr.server_id = ${scope.ownerId}
+                    AND omr.user_id IS NULL
+                )
               )
             )
-          ORDER BY COALESCE(l.is_scoped_registration, false) ASC, l.llm_id ASC
+          ORDER BY l.is_scoped_registration ASC NULLS FIRST, l.llm_id ASC
         `;
   }
 
   return includeDeprecated
     ? await sql`
-        SELECT DISTINCT l.*
+        SELECT l.*
         FROM llms l
-        LEFT JOIN openrouter_model_registrations omr ON omr.llm_id = l.llm_id
         WHERE l.llm_provider = 'openrouter'
           AND (
             COALESCE(l.is_scoped_registration, false) = false
             OR (
               COALESCE(l.is_scoped_registration, false) = true
-              AND omr.user_id = ${scope.ownerId}
-              AND omr.server_id IS NULL
+              AND EXISTS (
+                SELECT 1
+                FROM openrouter_model_registrations omr
+                WHERE omr.llm_id = l.llm_id
+                  AND omr.user_id = ${scope.ownerId}
+                  AND omr.server_id IS NULL
+              )
             )
           )
-        ORDER BY COALESCE(l.is_scoped_registration, false) ASC, l.llm_id ASC
+        ORDER BY l.is_scoped_registration ASC NULLS FIRST, l.llm_id ASC
       `
     : await sql`
-        SELECT DISTINCT l.*
+        SELECT l.*
         FROM llms l
-        LEFT JOIN openrouter_model_registrations omr ON omr.llm_id = l.llm_id
         WHERE l.llm_provider = 'openrouter'
           AND l.is_deprecated = false
           AND (
             COALESCE(l.is_scoped_registration, false) = false
             OR (
               COALESCE(l.is_scoped_registration, false) = true
-              AND omr.user_id = ${scope.ownerId}
-              AND omr.server_id IS NULL
+              AND EXISTS (
+                SELECT 1
+                FROM openrouter_model_registrations omr
+                WHERE omr.llm_id = l.llm_id
+                  AND omr.user_id = ${scope.ownerId}
+                  AND omr.server_id IS NULL
+              )
             )
           )
-        ORDER BY COALESCE(l.is_scoped_registration, false) ASC, l.llm_id ASC
+        ORDER BY l.is_scoped_registration ASC NULLS FIRST, l.llm_id ASC
+      `;
+}
+
+async function loadScopedOpenRouterEmbeddingModelRows(
+  scope: OpenRouterModelScope,
+  includeDeprecated: boolean,
+): Promise<unknown[]> {
+  if (scope.kind === "server") {
+    return includeDeprecated
+      ? await sql`
+          SELECT em.*
+          FROM embedding_models em
+          WHERE em.provider = 'openrouter'
+            AND (
+              COALESCE(em.is_scoped_registration, false) = false
+              OR (
+                COALESCE(em.is_scoped_registration, false) = true
+                AND EXISTS (
+                  SELECT 1
+                  FROM openrouter_embedding_model_registrations oemr
+                  WHERE oemr.embedding_model_id = em.embedding_model_id
+                    AND oemr.server_id = ${scope.ownerId}
+                    AND oemr.user_id IS NULL
+                )
+              )
+            )
+          ORDER BY em.is_scoped_registration ASC NULLS FIRST, em.embedding_model_id ASC
+        `
+      : await sql`
+          SELECT em.*
+          FROM embedding_models em
+          WHERE em.provider = 'openrouter'
+            AND em.is_deprecated = false
+            AND (
+              COALESCE(em.is_scoped_registration, false) = false
+              OR (
+                COALESCE(em.is_scoped_registration, false) = true
+                AND EXISTS (
+                  SELECT 1
+                  FROM openrouter_embedding_model_registrations oemr
+                  WHERE oemr.embedding_model_id = em.embedding_model_id
+                    AND oemr.server_id = ${scope.ownerId}
+                    AND oemr.user_id IS NULL
+                )
+              )
+            )
+          ORDER BY em.is_scoped_registration ASC NULLS FIRST, em.embedding_model_id ASC
+        `;
+  }
+
+  return includeDeprecated
+    ? await sql`
+        SELECT em.*
+        FROM embedding_models em
+        WHERE em.provider = 'openrouter'
+          AND (
+            COALESCE(em.is_scoped_registration, false) = false
+            OR (
+              COALESCE(em.is_scoped_registration, false) = true
+              AND EXISTS (
+                SELECT 1
+                FROM openrouter_embedding_model_registrations oemr
+                WHERE oemr.embedding_model_id = em.embedding_model_id
+                  AND oemr.user_id = ${scope.ownerId}
+                  AND oemr.server_id IS NULL
+              )
+            )
+          )
+        ORDER BY em.is_scoped_registration ASC NULLS FIRST, em.embedding_model_id ASC
+      `
+    : await sql`
+        SELECT em.*
+        FROM embedding_models em
+        WHERE em.provider = 'openrouter'
+          AND em.is_deprecated = false
+          AND (
+            COALESCE(em.is_scoped_registration, false) = false
+            OR (
+              COALESCE(em.is_scoped_registration, false) = true
+              AND EXISTS (
+                SELECT 1
+                FROM openrouter_embedding_model_registrations oemr
+                WHERE oemr.embedding_model_id = em.embedding_model_id
+                  AND oemr.user_id = ${scope.ownerId}
+                  AND oemr.server_id IS NULL
+              )
+            )
+          )
+        ORDER BY em.is_scoped_registration ASC NULLS FIRST, em.embedding_model_id ASC
+      `;
+}
+
+async function loadScopedOpenRouterDiffusionModelRows(
+  scope: OpenRouterModelScope,
+  includeDeprecated: boolean,
+): Promise<unknown[]> {
+  if (scope.kind === "server") {
+    return includeDeprecated
+      ? await sql`
+          SELECT dm.*
+          FROM image_diffusion_models dm
+          WHERE dm.provider = 'openrouter'
+            AND (
+              COALESCE(dm.is_scoped_registration, false) = false
+              OR (
+                COALESCE(dm.is_scoped_registration, false) = true
+                AND EXISTS (
+                  SELECT 1
+                  FROM openrouter_image_model_registrations oimr
+                  WHERE oimr.diffusion_model_id = dm.diffusion_model_id
+                    AND oimr.server_id = ${scope.ownerId}
+                    AND oimr.user_id IS NULL
+                )
+              )
+            )
+          ORDER BY dm.is_scoped_registration ASC NULLS FIRST, dm.diffusion_model_id ASC
+        `
+      : await sql`
+          SELECT dm.*
+          FROM image_diffusion_models dm
+          WHERE dm.provider = 'openrouter'
+            AND dm.is_deprecated = false
+            AND (
+              COALESCE(dm.is_scoped_registration, false) = false
+              OR (
+                COALESCE(dm.is_scoped_registration, false) = true
+                AND EXISTS (
+                  SELECT 1
+                  FROM openrouter_image_model_registrations oimr
+                  WHERE oimr.diffusion_model_id = dm.diffusion_model_id
+                    AND oimr.server_id = ${scope.ownerId}
+                    AND oimr.user_id IS NULL
+                )
+              )
+            )
+          ORDER BY dm.is_scoped_registration ASC NULLS FIRST, dm.diffusion_model_id ASC
+        `;
+  }
+
+  return includeDeprecated
+    ? await sql`
+        SELECT dm.*
+        FROM image_diffusion_models dm
+        WHERE dm.provider = 'openrouter'
+          AND (
+            COALESCE(dm.is_scoped_registration, false) = false
+            OR (
+              COALESCE(dm.is_scoped_registration, false) = true
+              AND EXISTS (
+                SELECT 1
+                FROM openrouter_image_model_registrations oimr
+                WHERE oimr.diffusion_model_id = dm.diffusion_model_id
+                  AND oimr.user_id = ${scope.ownerId}
+                  AND oimr.server_id IS NULL
+              )
+            )
+          )
+        ORDER BY dm.is_scoped_registration ASC NULLS FIRST, dm.diffusion_model_id ASC
+      `
+    : await sql`
+        SELECT dm.*
+        FROM image_diffusion_models dm
+        WHERE dm.provider = 'openrouter'
+          AND dm.is_deprecated = false
+          AND (
+            COALESCE(dm.is_scoped_registration, false) = false
+            OR (
+              COALESCE(dm.is_scoped_registration, false) = true
+              AND EXISTS (
+                SELECT 1
+                FROM openrouter_image_model_registrations oimr
+                WHERE oimr.diffusion_model_id = dm.diffusion_model_id
+                  AND oimr.user_id = ${scope.ownerId}
+                  AND oimr.server_id IS NULL
+              )
+            )
+          )
+        ORDER BY dm.is_scoped_registration ASC NULLS FIRST, dm.diffusion_model_id ASC
+      `;
+}
+
+async function loadScopedOpenRouterVideoGenerationModelRows(
+  scope: OpenRouterModelScope,
+  includeDeprecated: boolean,
+): Promise<unknown[]> {
+  if (scope.kind === "server") {
+    return includeDeprecated
+      ? await sql`
+          SELECT vm.*
+          FROM video_generation_models vm
+          WHERE vm.provider = 'openrouter'
+            AND (
+              COALESCE(vm.is_scoped_registration, false) = false
+              OR (
+                COALESCE(vm.is_scoped_registration, false) = true
+                AND EXISTS (
+                  SELECT 1
+                  FROM openrouter_video_model_registrations ovmr
+                  WHERE ovmr.video_model_id = vm.video_model_id
+                    AND ovmr.server_id = ${scope.ownerId}
+                    AND ovmr.user_id IS NULL
+                )
+              )
+            )
+          ORDER BY vm.is_scoped_registration ASC NULLS FIRST, vm.video_model_id ASC
+        `
+      : await sql`
+          SELECT vm.*
+          FROM video_generation_models vm
+          WHERE vm.provider = 'openrouter'
+            AND vm.is_deprecated = false
+            AND (
+              COALESCE(vm.is_scoped_registration, false) = false
+              OR (
+                COALESCE(vm.is_scoped_registration, false) = true
+                AND EXISTS (
+                  SELECT 1
+                  FROM openrouter_video_model_registrations ovmr
+                  WHERE ovmr.video_model_id = vm.video_model_id
+                    AND ovmr.server_id = ${scope.ownerId}
+                    AND ovmr.user_id IS NULL
+                )
+              )
+            )
+          ORDER BY vm.is_scoped_registration ASC NULLS FIRST, vm.video_model_id ASC
+        `;
+  }
+
+  return includeDeprecated
+    ? await sql`
+        SELECT vm.*
+        FROM video_generation_models vm
+        WHERE vm.provider = 'openrouter'
+          AND (
+            COALESCE(vm.is_scoped_registration, false) = false
+            OR (
+              COALESCE(vm.is_scoped_registration, false) = true
+              AND EXISTS (
+                SELECT 1
+                FROM openrouter_video_model_registrations ovmr
+                WHERE ovmr.video_model_id = vm.video_model_id
+                  AND ovmr.user_id = ${scope.ownerId}
+                  AND ovmr.server_id IS NULL
+              )
+            )
+          )
+        ORDER BY vm.is_scoped_registration ASC NULLS FIRST, vm.video_model_id ASC
+      `
+    : await sql`
+        SELECT vm.*
+        FROM video_generation_models vm
+        WHERE vm.provider = 'openrouter'
+          AND vm.is_deprecated = false
+          AND (
+            COALESCE(vm.is_scoped_registration, false) = false
+            OR (
+              COALESCE(vm.is_scoped_registration, false) = true
+              AND EXISTS (
+                SELECT 1
+                FROM openrouter_video_model_registrations ovmr
+                WHERE ovmr.video_model_id = vm.video_model_id
+                  AND ovmr.user_id = ${scope.ownerId}
+                  AND ovmr.server_id IS NULL
+              )
+            )
+          )
+        ORDER BY vm.is_scoped_registration ASC NULLS FIRST, vm.video_model_id ASC
       `;
 }
 
@@ -1373,6 +1662,7 @@ export async function loadDefaultModelForProvider(
 export async function loadAvailableEmbeddingModelsForProvider(
   providerName: string,
   includeDeprecated = false,
+  scope?: OpenRouterModelScope,
 ): Promise<EmbeddingModelRow[] | null> {
   if (!providerName || providerName.trim().length === 0) {
     log.error("Provider name cannot be empty");
@@ -1388,16 +1678,23 @@ export async function loadAvailableEmbeddingModelsForProvider(
 
   try {
     const modelRows = includeDeprecated
-      ? await sql`
-				SELECT * FROM embedding_models
-				WHERE provider = ${normalizedProviderName}
-				ORDER BY embedding_model_id ASC
-			`
-      : await sql`
-				SELECT * FROM embedding_models
-				WHERE provider = ${normalizedProviderName} AND is_deprecated = false
-				ORDER BY embedding_model_id ASC
-			`;
+      ? normalizedProviderName === "openrouter" && scope
+        ? await loadScopedOpenRouterEmbeddingModelRows(scope, true)
+        : await sql`
+				    SELECT * FROM embedding_models
+				    WHERE provider = ${normalizedProviderName}
+              AND COALESCE(is_scoped_registration, false) = false
+				    ORDER BY embedding_model_id ASC
+			    `
+      : normalizedProviderName === "openrouter" && scope
+        ? await loadScopedOpenRouterEmbeddingModelRows(scope, false)
+        : await sql`
+				    SELECT * FROM embedding_models
+				    WHERE provider = ${normalizedProviderName}
+              AND is_deprecated = false
+              AND COALESCE(is_scoped_registration, false) = false
+				    ORDER BY embedding_model_id ASC
+			    `;
 
     if (!modelRows || modelRows.length === 0) {
       log.warn(`No available embedding models found for provider: ${normalizedProviderName}`);
@@ -1500,6 +1797,7 @@ export async function loadDefaultEmbeddingModelForProvider(
 export async function loadAvailableDiffusionModelsForProvider(
   providerName: string,
   includeDeprecated = false,
+  scope?: OpenRouterModelScope,
 ): Promise<DiffusionModelRow[] | null> {
   if (!providerName || providerName.trim().length === 0) {
     log.error("Provider name cannot be empty");
@@ -1515,16 +1813,23 @@ export async function loadAvailableDiffusionModelsForProvider(
 
   try {
     const modelRows = includeDeprecated
-      ? await sql`
-				SELECT * FROM image_diffusion_models
-				WHERE provider = ${normalizedProviderName}
-				ORDER BY diffusion_model_id ASC
-			`
-      : await sql`
-				SELECT * FROM image_diffusion_models
-				WHERE provider = ${normalizedProviderName} AND is_deprecated = false
-				ORDER BY diffusion_model_id ASC
-			`;
+      ? normalizedProviderName === "openrouter" && scope
+        ? await loadScopedOpenRouterDiffusionModelRows(scope, true)
+        : await sql`
+				    SELECT * FROM image_diffusion_models
+				    WHERE provider = ${normalizedProviderName}
+              AND COALESCE(is_scoped_registration, false) = false
+				    ORDER BY diffusion_model_id ASC
+			    `
+      : normalizedProviderName === "openrouter" && scope
+        ? await loadScopedOpenRouterDiffusionModelRows(scope, false)
+        : await sql`
+				    SELECT * FROM image_diffusion_models
+				    WHERE provider = ${normalizedProviderName}
+              AND is_deprecated = false
+              AND COALESCE(is_scoped_registration, false) = false
+				    ORDER BY diffusion_model_id ASC
+			    `;
 
     if (!modelRows || modelRows.length === 0) {
       log.warn(`No available diffusion models found for provider: ${normalizedProviderName}`);
@@ -1613,6 +1918,7 @@ export async function loadDefaultDiffusionModelForProvider(
 export async function loadAvailableVideoGenerationModelsForProvider(
   providerName: string,
   includeDeprecated = false,
+  scope?: OpenRouterModelScope,
 ): Promise<VideoGenerationModelRow[] | null> {
   if (!providerName || providerName.trim().length === 0) {
     log.error("Provider name cannot be empty");
@@ -1628,16 +1934,23 @@ export async function loadAvailableVideoGenerationModelsForProvider(
 
   try {
     const modelRows = includeDeprecated
-      ? await sql`
-				SELECT * FROM video_generation_models
-				WHERE provider = ${normalizedProviderName}
-				ORDER BY video_model_id ASC
-			`
-      : await sql`
-				SELECT * FROM video_generation_models
-				WHERE provider = ${normalizedProviderName} AND is_deprecated = false
-				ORDER BY video_model_id ASC
-			`;
+      ? normalizedProviderName === "openrouter" && scope
+        ? await loadScopedOpenRouterVideoGenerationModelRows(scope, true)
+        : await sql`
+				    SELECT * FROM video_generation_models
+				    WHERE provider = ${normalizedProviderName}
+              AND COALESCE(is_scoped_registration, false) = false
+				    ORDER BY video_model_id ASC
+			    `
+      : normalizedProviderName === "openrouter" && scope
+        ? await loadScopedOpenRouterVideoGenerationModelRows(scope, false)
+        : await sql`
+				    SELECT * FROM video_generation_models
+				    WHERE provider = ${normalizedProviderName}
+              AND is_deprecated = false
+              AND COALESCE(is_scoped_registration, false) = false
+				    ORDER BY video_model_id ASC
+			    `;
 
     if (!modelRows || modelRows.length === 0) {
       log.warn(`No available video generation models found for provider: ${normalizedProviderName}`);
@@ -1809,6 +2122,123 @@ export async function loadEmbeddingModelById(embeddingModelId: number): Promise<
     return parsed.data;
   } catch (error) {
     log.error(`Error loading embedding model ${embeddingModelId}:`, error);
+    return null;
+  }
+}
+
+export async function loadEmbeddingModelByProviderAndCodename(
+  providerName: string,
+  modelCodename: string,
+): Promise<EmbeddingModelRow | null> {
+  const normalizedProviderName = providerName.trim().toLowerCase();
+  const normalizedCodename = modelCodename.trim();
+
+  if (!normalizedProviderName || !normalizedCodename) {
+    return null;
+  }
+
+  try {
+    const rows = await sql`
+			SELECT * FROM embedding_models
+			WHERE provider = ${normalizedProviderName}
+			  AND codename = ${normalizedCodename}
+			LIMIT 1
+		`;
+
+    if (!rows.length) {
+      return null;
+    }
+
+    const parsed = embeddingModelSchema.safeParse(rows[0]);
+    if (!parsed.success) {
+      log.error(
+        `Failed to validate embedding model data for ${normalizedProviderName}/${normalizedCodename}:`,
+        parsed.error.flatten(),
+      );
+      return null;
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(`Error loading embedding model for ${normalizedProviderName}/${normalizedCodename}:`, error);
+    return null;
+  }
+}
+
+export async function loadDiffusionModelByProviderAndCodename(
+  providerName: string,
+  modelCodename: string,
+): Promise<DiffusionModelRow | null> {
+  const normalizedProviderName = providerName.trim().toLowerCase();
+  const normalizedCodename = modelCodename.trim();
+
+  if (!normalizedProviderName || !normalizedCodename) {
+    return null;
+  }
+
+  try {
+    const rows = await sql`
+			SELECT * FROM image_diffusion_models
+			WHERE provider = ${normalizedProviderName}
+			  AND codename = ${normalizedCodename}
+			LIMIT 1
+		`;
+
+    if (!rows.length) {
+      return null;
+    }
+
+    const parsed = diffusionModelSchema.safeParse(rows[0]);
+    if (!parsed.success) {
+      log.error(
+        `Failed to validate diffusion model data for ${normalizedProviderName}/${normalizedCodename}:`,
+        parsed.error.flatten(),
+      );
+      return null;
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(`Error loading diffusion model for ${normalizedProviderName}/${normalizedCodename}:`, error);
+    return null;
+  }
+}
+
+export async function loadVideoGenerationModelByProviderAndCodename(
+  providerName: string,
+  modelCodename: string,
+): Promise<VideoGenerationModelRow | null> {
+  const normalizedProviderName = providerName.trim().toLowerCase();
+  const normalizedCodename = modelCodename.trim();
+
+  if (!normalizedProviderName || !normalizedCodename) {
+    return null;
+  }
+
+  try {
+    const rows = await sql`
+			SELECT * FROM video_generation_models
+			WHERE provider = ${normalizedProviderName}
+			  AND codename = ${normalizedCodename}
+			LIMIT 1
+		`;
+
+    if (!rows.length) {
+      return null;
+    }
+
+    const parsed = videoGenerationModelSchema.safeParse(rows[0]);
+    if (!parsed.success) {
+      log.error(
+        `Failed to validate video generation model data for ${normalizedProviderName}/${normalizedCodename}:`,
+        parsed.error.flatten(),
+      );
+      return null;
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(`Error loading video generation model for ${normalizedProviderName}/${normalizedCodename}:`, error);
     return null;
   }
 }
@@ -2960,6 +3390,132 @@ export async function loadOpenRouterModelRegistrationsForUser(
   }
 }
 
+export async function loadOpenRouterEmbeddingModelRegistrationsForServer(
+  serverId: number,
+): Promise<OpenRouterEmbeddingModelRegistrationRow[]> {
+  try {
+    const rows = await sql<unknown[]>`
+			SELECT *
+			FROM openrouter_embedding_model_registrations
+			WHERE server_id = ${serverId}
+			  AND user_id IS NULL
+			ORDER BY embedding_model_id ASC
+		`;
+
+    return rows
+      .map((row: unknown) => openRouterEmbeddingModelRegistrationSchema.safeParse(row))
+      .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
+  } catch (error) {
+    log.error(`Error loading OpenRouter embedding model registrations for server ${serverId}:`, error);
+    return [];
+  }
+}
+
+export async function loadOpenRouterEmbeddingModelRegistrationsForUser(
+  userId: number,
+): Promise<OpenRouterEmbeddingModelRegistrationRow[]> {
+  try {
+    const rows = await sql<unknown[]>`
+			SELECT *
+			FROM openrouter_embedding_model_registrations
+			WHERE user_id = ${userId}
+			  AND server_id IS NULL
+			ORDER BY embedding_model_id ASC
+		`;
+
+    return rows
+      .map((row: unknown) => openRouterEmbeddingModelRegistrationSchema.safeParse(row))
+      .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
+  } catch (error) {
+    log.error(`Error loading OpenRouter embedding model registrations for user ${userId}:`, error);
+    return [];
+  }
+}
+
+export async function loadOpenRouterImageModelRegistrationsForServer(
+  serverId: number,
+): Promise<OpenRouterImageModelRegistrationRow[]> {
+  try {
+    const rows = await sql<unknown[]>`
+			SELECT *
+			FROM openrouter_image_model_registrations
+			WHERE server_id = ${serverId}
+			  AND user_id IS NULL
+			ORDER BY diffusion_model_id ASC
+		`;
+
+    return rows
+      .map((row: unknown) => openRouterImageModelRegistrationSchema.safeParse(row))
+      .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
+  } catch (error) {
+    log.error(`Error loading OpenRouter image model registrations for server ${serverId}:`, error);
+    return [];
+  }
+}
+
+export async function loadOpenRouterImageModelRegistrationsForUser(
+  userId: number,
+): Promise<OpenRouterImageModelRegistrationRow[]> {
+  try {
+    const rows = await sql<unknown[]>`
+			SELECT *
+			FROM openrouter_image_model_registrations
+			WHERE user_id = ${userId}
+			  AND server_id IS NULL
+			ORDER BY diffusion_model_id ASC
+		`;
+
+    return rows
+      .map((row: unknown) => openRouterImageModelRegistrationSchema.safeParse(row))
+      .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
+  } catch (error) {
+    log.error(`Error loading OpenRouter image model registrations for user ${userId}:`, error);
+    return [];
+  }
+}
+
+export async function loadOpenRouterVideoModelRegistrationsForServer(
+  serverId: number,
+): Promise<OpenRouterVideoModelRegistrationRow[]> {
+  try {
+    const rows = await sql<unknown[]>`
+			SELECT *
+			FROM openrouter_video_model_registrations
+			WHERE server_id = ${serverId}
+			  AND user_id IS NULL
+			ORDER BY video_model_id ASC
+		`;
+
+    return rows
+      .map((row: unknown) => openRouterVideoModelRegistrationSchema.safeParse(row))
+      .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
+  } catch (error) {
+    log.error(`Error loading OpenRouter video model registrations for server ${serverId}:`, error);
+    return [];
+  }
+}
+
+export async function loadOpenRouterVideoModelRegistrationsForUser(
+  userId: number,
+): Promise<OpenRouterVideoModelRegistrationRow[]> {
+  try {
+    const rows = await sql<unknown[]>`
+			SELECT *
+			FROM openrouter_video_model_registrations
+			WHERE user_id = ${userId}
+			  AND server_id IS NULL
+			ORDER BY video_model_id ASC
+		`;
+
+    return rows
+      .map((row: unknown) => openRouterVideoModelRegistrationSchema.safeParse(row))
+      .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
+  } catch (error) {
+    log.error(`Error loading OpenRouter video model registrations for user ${userId}:`, error);
+    return [];
+  }
+}
+
 export async function loadScopedOpenRouterModels(
   scope: OpenRouterModelScope,
   includeDeprecated = false,
@@ -2978,6 +3534,72 @@ export async function loadScopedOpenRouterModels(
     return parsed.data;
   } catch (error) {
     log.error(`Error loading scoped OpenRouter models for ${scope.kind} ${scope.ownerId}:`, error);
+    return [];
+  }
+}
+
+export async function loadScopedOpenRouterEmbeddingModels(
+  scope: OpenRouterModelScope,
+  includeDeprecated = false,
+): Promise<EmbeddingModelRow[]> {
+  try {
+    const rows = await loadScopedOpenRouterEmbeddingModelRows(scope, includeDeprecated);
+    const parsed = embeddingModelSchema.array().safeParse(rows);
+    if (!parsed.success) {
+      log.error(
+        `Failed to validate scoped OpenRouter embedding model data for ${scope.kind} ${scope.ownerId}:`,
+        parsed.error.flatten(),
+      );
+      return [];
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(`Error loading scoped OpenRouter embedding models for ${scope.kind} ${scope.ownerId}:`, error);
+    return [];
+  }
+}
+
+export async function loadScopedOpenRouterDiffusionModels(
+  scope: OpenRouterModelScope,
+  includeDeprecated = false,
+): Promise<DiffusionModelRow[]> {
+  try {
+    const rows = await loadScopedOpenRouterDiffusionModelRows(scope, includeDeprecated);
+    const parsed = diffusionModelSchema.array().safeParse(rows);
+    if (!parsed.success) {
+      log.error(
+        `Failed to validate scoped OpenRouter diffusion model data for ${scope.kind} ${scope.ownerId}:`,
+        parsed.error.flatten(),
+      );
+      return [];
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(`Error loading scoped OpenRouter diffusion models for ${scope.kind} ${scope.ownerId}:`, error);
+    return [];
+  }
+}
+
+export async function loadScopedOpenRouterVideoGenerationModels(
+  scope: OpenRouterModelScope,
+  includeDeprecated = false,
+): Promise<VideoGenerationModelRow[]> {
+  try {
+    const rows = await loadScopedOpenRouterVideoGenerationModelRows(scope, includeDeprecated);
+    const parsed = videoGenerationModelSchema.array().safeParse(rows);
+    if (!parsed.success) {
+      log.error(
+        `Failed to validate scoped OpenRouter video model data for ${scope.kind} ${scope.ownerId}:`,
+        parsed.error.flatten(),
+      );
+      return [];
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(`Error loading scoped OpenRouter video models for ${scope.kind} ${scope.ownerId}:`, error);
     return [];
   }
 }

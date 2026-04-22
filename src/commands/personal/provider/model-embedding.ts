@@ -63,7 +63,11 @@ export async function execute(
     );
     if (!providerSelection) return;
 
-    const availableModels = (await loadAvailableEmbeddingModelsForProvider(providerSelection.provider, false)) ?? [];
+    const availableModels =
+      (await loadAvailableEmbeddingModelsForProvider(providerSelection.provider, false, {
+        kind: "personal",
+        ownerId: userData.user_id,
+      })) ?? [];
     if (availableModels.length === 0) {
       await replyInfoEmbed(providerSelection.interaction, locale, {
         titleKey: "commands.config.model.embedding.no_models_title",

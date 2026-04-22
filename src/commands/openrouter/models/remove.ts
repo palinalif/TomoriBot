@@ -1,22 +1,51 @@
 import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { ErrorContext, UserRow } from "@/types/db/schema";
-import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
-import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
+import {
+  buildOpenRouterModelCheckboxGroups,
+  collectCheckedOpenRouterModelValues,
+  MAX_OPENROUTER_MODEL_GROUPS,
+} from "@/utils/discord/openrouterModelRemovalModal";
+import { promptWithRawModal, replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
-import { removeOpenRouterModelForScope } from "@/utils/provider/openrouterModelRegistry";
+import {
+  loadRegisteredOpenRouterModelsForScope,
+  removeOpenRouterModelForScope,
+  type OpenRouterModelCapability,
+  type RegisteredOpenRouterModelEntry,
+} from "@/utils/provider/openrouterModelRegistry";
 import { localizer } from "@/utils/text/localizer";
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand
-    .setName("remove")
-    .setDescription(localizer("en-US", "commands.openrouter.models.remove.description"))
-    .addStringOption((option) =>
-      option
-        .setName("model_name")
-        .setDescription(localizer("en-US", "commands.openrouter.models.remove.model_name_description"))
-        .setRequired(true),
-    );
+  subcommand.setName("remove").setDescription(localizer("en-US", "commands.openrouter.models.remove.description"));
+
+function getCapabilityLabel(locale: string, capability: OpenRouterModelCapability): string {
+  switch (capability) {
+    case "text":
+      return localizer(locale, "commands.openrouter.models.remove.capability_text");
+    case "embedding":
+      return localizer(locale, "commands.openrouter.models.remove.capability_embedding");
+    case "image":
+      return localizer(locale, "commands.openrouter.models.remove.capability_image");
+    case "video":
+      return localizer(locale, "commands.openrouter.models.remove.capability_video");
+  }
+}
+
+function formatRemovedModels(locale: string, models: RegisteredOpenRouterModelEntry[]): string {
+  const grouped = new Map<OpenRouterModelCapability, string[]>();
+
+  for (const model of models) {
+    const existing = grouped.get(model.capability) ?? [];
+    existing.push(`\`${model.codename}\``);
+    grouped.set(model.capability, existing);
+  }
+
+  return Array.from(grouped.entries())
+    .map(([capability, entries]) => `${getCapabilityLabel(locale, capability)}: ${entries.join(", ")}`)
+    .join("; ");
+}
 
 export async function execute(
   _client: Client,
@@ -36,46 +65,93 @@ export async function execute(
   }
 
   try {
-    const modelName = interaction.options.getString("model_name", true).trim();
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const scope = {
+      kind: "server" as const,
+      ownerId: tomoriState.server_id,
+    };
+    const registeredModels = await loadRegisteredOpenRouterModelsForScope(scope);
+    if (registeredModels.length === 0) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.openrouter.models.remove.none_title",
+        descriptionKey: "commands.openrouter.models.remove.none_description",
+        color: ColorCode.WARN,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
-    const result = await removeOpenRouterModelForScope(
+    const checkboxGroups = buildOpenRouterModelCheckboxGroups(registeredModels);
+    if (checkboxGroups.length > MAX_OPENROUTER_MODEL_GROUPS) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.openrouter.models.remove.too_many_title",
+        descriptionKey: "commands.openrouter.models.remove.too_many_description",
+        descriptionVars: {
+          max_groups: MAX_OPENROUTER_MODEL_GROUPS,
+        },
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const modalResult = await promptWithRawModal(
+      interaction,
+      locale,
       {
-        kind: "server",
-        ownerId: tomoriState.server_id,
+        modalCustomId: `openrouter_models_remove_modal_${interaction.id}`,
+        modalTitleKey: "commands.openrouter.models.remove.modal_title",
+        components: checkboxGroups,
       },
-      modelName,
+      MessageFlags.Ephemeral,
     );
 
-    switch (result.status) {
-      case "not_found":
-        await replyInfoEmbed(interaction, locale, {
-          titleKey: "general.errors.invalid_option_title",
-          descriptionKey: "commands.openrouter.models.remove.not_found_description",
-          descriptionVars: { model_name: modelName },
-          color: ColorCode.ERROR,
-        });
-        return;
-      case "already_available":
-        await replyInfoEmbed(interaction, locale, {
-          titleKey: "commands.openrouter.models.remove.already_available_title",
-          descriptionKey: "commands.openrouter.models.remove.already_available_description",
-          descriptionVars: { model_name: modelName },
-          color: ColorCode.WARN,
-        });
-        return;
-      case "removed":
-        invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
-        await replyInfoEmbed(interaction, locale, {
-          titleKey: "commands.openrouter.models.remove.success_title",
-          descriptionKey: result.stillReferenced
-            ? "commands.openrouter.models.remove.success_still_referenced_description"
-            : "commands.openrouter.models.remove.success_description",
-          descriptionVars: { model_name: modelName },
-          color: ColorCode.SUCCESS,
-        });
-        return;
+    if (modalResult.outcome !== "submit" || !modalResult.interaction) {
+      return;
     }
+
+    const checkedValues = collectCheckedOpenRouterModelValues(modalResult.multiValues, checkboxGroups.length);
+    const modelsToRemove = registeredModels.filter(
+      (model) => !checkedValues.has(`${model.capability}:${model.modelId}`),
+    );
+    if (modelsToRemove.length === 0) {
+      await replyInfoEmbed(modalResult.interaction, locale, {
+        titleKey: "commands.openrouter.models.remove.no_removals_title",
+        descriptionKey: "commands.openrouter.models.remove.no_removals_description",
+        color: ColorCode.INFO,
+      });
+      return;
+    }
+
+    const removedModels: RegisteredOpenRouterModelEntry[] = [];
+    let stillReferenced = false;
+
+    for (const model of modelsToRemove) {
+      const result = await removeOpenRouterModelForScope(scope, model.capability, model.codename);
+      if (result.status === "removed") {
+        removedModels.push(result.model);
+        stillReferenced ||= result.stillReferenced;
+      }
+    }
+
+    if (removedModels.length === 0) {
+      await replyInfoEmbed(modalResult.interaction, locale, {
+        titleKey: "general.errors.update_failed_title",
+        descriptionKey: "general.errors.update_failed_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    await replyInfoEmbed(modalResult.interaction, locale, {
+      titleKey: "commands.openrouter.models.remove.success_title",
+      descriptionKey: stillReferenced
+        ? "commands.openrouter.models.remove.success_still_referenced_description"
+        : "commands.openrouter.models.remove.success_description",
+      descriptionVars: {
+        models_removed: formatRemovedModels(locale, removedModels),
+      },
+      color: ColorCode.SUCCESS,
+    });
   } catch (error) {
     const context: ErrorContext = {
       userId: userData.user_id,
@@ -93,6 +169,7 @@ export async function execute(
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",
       color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
     });
   }
 }

@@ -120,7 +120,11 @@ export async function execute(
       return;
     }
 
-    const availableModels = (await loadAvailableEmbeddingModelsForProvider(selectedProvider, false)) ?? [];
+    const availableModels =
+      (await loadAvailableEmbeddingModelsForProvider(selectedProvider, false, {
+        kind: "server",
+        ownerId: tomoriState.server_id,
+      })) ?? [];
     if (!availableModels.length) {
       await replyInfoEmbed(responseInteraction, locale, {
         titleKey: "commands.config.model.embedding.no_models_title",

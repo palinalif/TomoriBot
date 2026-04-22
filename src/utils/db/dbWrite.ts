@@ -19,8 +19,14 @@ import {
   type CustomEndpointApiStyle,
   type CustomEndpointCapability,
   type CustomEndpointRow,
+  openRouterEmbeddingModelRegistrationSchema,
+  type OpenRouterEmbeddingModelRegistrationRow,
+  openRouterImageModelRegistrationSchema,
   openRouterModelRegistrationSchema,
   type OpenRouterModelRegistrationRow,
+  openRouterVideoModelRegistrationSchema,
+  type OpenRouterImageModelRegistrationRow,
+  type OpenRouterVideoModelRegistrationRow,
   savedProviderConfigSchema,
   type SavedProviderConfigUpsert,
   userSavedProviderConfigSchema,
@@ -2282,6 +2288,294 @@ export async function deleteOpenRouterModelRegistration(params: {
   } catch (error) {
     log.error(
       `Error deleting OpenRouter model registration for llm_id ${llmId} on ${serverId !== null ? `server ${serverId}` : `user ${userId}`}:`,
+      error,
+    );
+    return false;
+  }
+}
+
+export async function upsertOpenRouterEmbeddingModelRegistration(params: {
+  serverId?: number | null;
+  userId?: number | null;
+  embeddingModelId: number;
+}): Promise<OpenRouterEmbeddingModelRegistrationRow | null> {
+  const { serverId = null, userId = null, embeddingModelId } = params;
+
+  try {
+    const rows =
+      serverId !== null
+        ? await sql`
+            INSERT INTO openrouter_embedding_model_registrations (
+              server_id,
+              user_id,
+              embedding_model_id
+            ) VALUES (
+              ${serverId},
+              NULL,
+              ${embeddingModelId}
+            )
+            ON CONFLICT (server_id, embedding_model_id)
+              WHERE user_id IS NULL
+            DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+            RETURNING *
+          `
+        : await sql`
+            INSERT INTO openrouter_embedding_model_registrations (
+              server_id,
+              user_id,
+              embedding_model_id
+            ) VALUES (
+              NULL,
+              ${userId},
+              ${embeddingModelId}
+            )
+            ON CONFLICT (user_id, embedding_model_id)
+              WHERE server_id IS NULL
+            DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+            RETURNING *
+          `;
+
+    if (!rows.length) {
+      return null;
+    }
+
+    const parsed = openRouterEmbeddingModelRegistrationSchema.safeParse(rows[0]);
+    if (!parsed.success) {
+      log.warn(
+        `Failed to validate OpenRouter embedding model registration for embedding_model_id ${embeddingModelId}: ${parsed.error.message}`,
+      );
+      return null;
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(
+      `Error upserting OpenRouter embedding model registration for embedding_model_id ${embeddingModelId} on ${serverId !== null ? `server ${serverId}` : `user ${userId}`}:`,
+      error,
+    );
+    return null;
+  }
+}
+
+export async function deleteOpenRouterEmbeddingModelRegistration(params: {
+  serverId?: number | null;
+  userId?: number | null;
+  embeddingModelId: number;
+}): Promise<boolean> {
+  const { serverId = null, userId = null, embeddingModelId } = params;
+
+  try {
+    const result =
+      serverId !== null
+        ? await sql`
+            DELETE FROM openrouter_embedding_model_registrations
+            WHERE server_id = ${serverId}
+              AND user_id IS NULL
+              AND embedding_model_id = ${embeddingModelId}
+          `
+        : await sql`
+            DELETE FROM openrouter_embedding_model_registrations
+            WHERE user_id = ${userId}
+              AND server_id IS NULL
+              AND embedding_model_id = ${embeddingModelId}
+          `;
+
+    return result.count > 0;
+  } catch (error) {
+    log.error(
+      `Error deleting OpenRouter embedding model registration for embedding_model_id ${embeddingModelId} on ${serverId !== null ? `server ${serverId}` : `user ${userId}`}:`,
+      error,
+    );
+    return false;
+  }
+}
+
+export async function upsertOpenRouterImageModelRegistration(params: {
+  serverId?: number | null;
+  userId?: number | null;
+  diffusionModelId: number;
+}): Promise<OpenRouterImageModelRegistrationRow | null> {
+  const { serverId = null, userId = null, diffusionModelId } = params;
+
+  try {
+    const rows =
+      serverId !== null
+        ? await sql`
+            INSERT INTO openrouter_image_model_registrations (
+              server_id,
+              user_id,
+              diffusion_model_id
+            ) VALUES (
+              ${serverId},
+              NULL,
+              ${diffusionModelId}
+            )
+            ON CONFLICT (server_id, diffusion_model_id)
+              WHERE user_id IS NULL
+            DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+            RETURNING *
+          `
+        : await sql`
+            INSERT INTO openrouter_image_model_registrations (
+              server_id,
+              user_id,
+              diffusion_model_id
+            ) VALUES (
+              NULL,
+              ${userId},
+              ${diffusionModelId}
+            )
+            ON CONFLICT (user_id, diffusion_model_id)
+              WHERE server_id IS NULL
+            DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+            RETURNING *
+          `;
+
+    if (!rows.length) {
+      return null;
+    }
+
+    const parsed = openRouterImageModelRegistrationSchema.safeParse(rows[0]);
+    if (!parsed.success) {
+      log.warn(
+        `Failed to validate OpenRouter image model registration for diffusion_model_id ${diffusionModelId}: ${parsed.error.message}`,
+      );
+      return null;
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(
+      `Error upserting OpenRouter image model registration for diffusion_model_id ${diffusionModelId} on ${serverId !== null ? `server ${serverId}` : `user ${userId}`}:`,
+      error,
+    );
+    return null;
+  }
+}
+
+export async function deleteOpenRouterImageModelRegistration(params: {
+  serverId?: number | null;
+  userId?: number | null;
+  diffusionModelId: number;
+}): Promise<boolean> {
+  const { serverId = null, userId = null, diffusionModelId } = params;
+
+  try {
+    const result =
+      serverId !== null
+        ? await sql`
+            DELETE FROM openrouter_image_model_registrations
+            WHERE server_id = ${serverId}
+              AND user_id IS NULL
+              AND diffusion_model_id = ${diffusionModelId}
+          `
+        : await sql`
+            DELETE FROM openrouter_image_model_registrations
+            WHERE user_id = ${userId}
+              AND server_id IS NULL
+              AND diffusion_model_id = ${diffusionModelId}
+          `;
+
+    return result.count > 0;
+  } catch (error) {
+    log.error(
+      `Error deleting OpenRouter image model registration for diffusion_model_id ${diffusionModelId} on ${serverId !== null ? `server ${serverId}` : `user ${userId}`}:`,
+      error,
+    );
+    return false;
+  }
+}
+
+export async function upsertOpenRouterVideoModelRegistration(params: {
+  serverId?: number | null;
+  userId?: number | null;
+  videoModelId: number;
+}): Promise<OpenRouterVideoModelRegistrationRow | null> {
+  const { serverId = null, userId = null, videoModelId } = params;
+
+  try {
+    const rows =
+      serverId !== null
+        ? await sql`
+            INSERT INTO openrouter_video_model_registrations (
+              server_id,
+              user_id,
+              video_model_id
+            ) VALUES (
+              ${serverId},
+              NULL,
+              ${videoModelId}
+            )
+            ON CONFLICT (server_id, video_model_id)
+              WHERE user_id IS NULL
+            DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+            RETURNING *
+          `
+        : await sql`
+            INSERT INTO openrouter_video_model_registrations (
+              server_id,
+              user_id,
+              video_model_id
+            ) VALUES (
+              NULL,
+              ${userId},
+              ${videoModelId}
+            )
+            ON CONFLICT (user_id, video_model_id)
+              WHERE server_id IS NULL
+            DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+            RETURNING *
+          `;
+
+    if (!rows.length) {
+      return null;
+    }
+
+    const parsed = openRouterVideoModelRegistrationSchema.safeParse(rows[0]);
+    if (!parsed.success) {
+      log.warn(
+        `Failed to validate OpenRouter video model registration for video_model_id ${videoModelId}: ${parsed.error.message}`,
+      );
+      return null;
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(
+      `Error upserting OpenRouter video model registration for video_model_id ${videoModelId} on ${serverId !== null ? `server ${serverId}` : `user ${userId}`}:`,
+      error,
+    );
+    return null;
+  }
+}
+
+export async function deleteOpenRouterVideoModelRegistration(params: {
+  serverId?: number | null;
+  userId?: number | null;
+  videoModelId: number;
+}): Promise<boolean> {
+  const { serverId = null, userId = null, videoModelId } = params;
+
+  try {
+    const result =
+      serverId !== null
+        ? await sql`
+            DELETE FROM openrouter_video_model_registrations
+            WHERE server_id = ${serverId}
+              AND user_id IS NULL
+              AND video_model_id = ${videoModelId}
+          `
+        : await sql`
+            DELETE FROM openrouter_video_model_registrations
+            WHERE user_id = ${userId}
+              AND server_id IS NULL
+              AND video_model_id = ${videoModelId}
+          `;
+
+    return result.count > 0;
+  } catch (error) {
+    log.error(
+      `Error deleting OpenRouter video model registration for video_model_id ${videoModelId} on ${serverId !== null ? `server ${serverId}` : `user ${userId}`}:`,
       error,
     );
     return false;

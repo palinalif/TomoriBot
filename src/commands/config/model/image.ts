@@ -10,6 +10,7 @@ import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../
 import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
 import { promptForSavedProvider, replaceProviderPickerWithInfo } from "@/commands/config/model/providerPicker";
+import { loadAvailableDiffusionModelsForProvider } from "@/utils/db/dbRead";
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { getProviderDisplayName, getStaticProviderInfo } from "@/utils/provider/providerInfoRegistry";
 import { isCustomProvider } from "@/utils/provider/customProviderUtils";
@@ -22,15 +23,16 @@ const MODEL_SELECT_ID = "model_select";
  * Type definition for image diffusion model row
  */
 interface ImageDiffusionModelRow {
-  diffusion_model_id: number;
+  diffusion_model_id?: number;
   provider: string;
   codename: string;
-  model_description: string | null;
-  ja_description: string | null;
+  model_description?: string | null;
+  ja_description?: string | null;
   is_default: boolean;
   is_deprecated: boolean;
   is_free: boolean;
   is_uncensored: boolean;
+  is_scoped_registration?: boolean;
 }
 
 /**
@@ -257,15 +259,11 @@ export async function execute(
       return;
     }
 
-    const availableModels = await sql<ImageDiffusionModelRow[]>`
-      SELECT dm.diffusion_model_id, dm.provider, dm.codename,
-             dm.model_description, dm.ja_description,
-             dm.is_default, dm.is_deprecated, dm.is_free, dm.is_uncensored
-      FROM image_diffusion_models dm
-      WHERE dm.provider = ${selectedProvider}
-        AND dm.is_deprecated = false
-      ORDER BY dm.is_default DESC, dm.codename
-    `;
+    const availableModels =
+      (await loadAvailableDiffusionModelsForProvider(selectedProvider, false, {
+        kind: "server",
+        ownerId: tomoriState.server_id,
+      })) ?? [];
 
     if (!availableModels.length) {
       await replyInfoEmbed(responseInteraction, locale, {
@@ -288,11 +286,13 @@ export async function execute(
         : tomoriState.config.diffusion_model_id;
 
     // 5. Create model options for the select menu using localized descriptions
-    const modelSelectOptions: SelectOption[] = availableModels.map((model) => ({
-      label: safeSelectOptionText(model.codename), // Use codename as display label
-      value: safeSelectOptionText(model.diffusion_model_id.toString()), // Use diffusion_model_id as value
-      description: safeSelectOptionText(getLocalizedDescription(model, userData.language_pref)), // Use locale-specific description with flags
-    }));
+    const modelSelectOptions: SelectOption[] = availableModels
+      .filter((model) => model.diffusion_model_id !== undefined && model.diffusion_model_id !== null)
+      .map((model) => ({
+        label: safeSelectOptionText(model.codename), // Use codename as display label
+        value: safeSelectOptionText((model.diffusion_model_id ?? 0).toString()), // Use diffusion_model_id as value
+        description: safeSelectOptionText(getLocalizedDescription(model, userData.language_pref)), // Use locale-specific description with flags
+      }));
 
     // 6. Show the modal with model selection
     const modalResult = await promptWithRawModal(

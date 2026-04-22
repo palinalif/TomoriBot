@@ -15,6 +15,7 @@ import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../
 import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
 import { promptForSavedProvider, replaceProviderPickerWithInfo } from "@/commands/config/model/providerPicker";
+import { loadAvailableVideoGenerationModelsForProvider } from "@/utils/db/dbRead";
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { isCustomProvider } from "@/utils/provider/customProviderUtils";
@@ -28,14 +29,15 @@ const MODEL_SELECT_ID = "model_select";
  * Mirrors ImageDiffusionModelRow but without is_uncensored.
  */
 interface VideoGenerationModelRow {
-  video_model_id: number;
+  video_model_id?: number;
   provider: string;
   codename: string;
-  model_description: string | null;
-  ja_description: string | null;
+  model_description?: string | null;
+  ja_description?: string | null;
   is_default: boolean;
   is_deprecated: boolean;
   is_free: boolean;
+  is_scoped_registration?: boolean;
 }
 
 /**
@@ -169,15 +171,11 @@ export async function execute(
       return;
     }
 
-    const availableModels = await sql<VideoGenerationModelRow[]>`
-      SELECT vm.video_model_id, vm.provider, vm.codename,
-             vm.model_description, vm.ja_description,
-             vm.is_default, vm.is_deprecated, vm.is_free
-      FROM video_generation_models vm
-      WHERE vm.provider = ${selectedProvider}
-        AND vm.is_deprecated = false
-      ORDER BY vm.is_default DESC, vm.codename
-    `;
+    const availableModels =
+      (await loadAvailableVideoGenerationModelsForProvider(selectedProvider, false, {
+        kind: "server",
+        ownerId: tomoriState.server_id,
+      })) ?? [];
 
     if (!availableModels.length) {
       await replyInfoEmbed(responseInteraction, locale, {
@@ -193,11 +191,13 @@ export async function execute(
     }
 
     // 6. Create model options for the select menu using localized descriptions
-    const modelSelectOptions: SelectOption[] = availableModels.map((model) => ({
-      label: safeSelectOptionText(model.codename),
-      value: safeSelectOptionText(model.video_model_id.toString()),
-      description: safeSelectOptionText(getLocalizedDescription(model, userData.language_pref)),
-    }));
+    const modelSelectOptions: SelectOption[] = availableModels
+      .filter((model) => model.video_model_id !== undefined && model.video_model_id !== null)
+      .map((model) => ({
+        label: safeSelectOptionText(model.codename),
+        value: safeSelectOptionText((model.video_model_id ?? 0).toString()),
+        description: safeSelectOptionText(getLocalizedDescription(model, userData.language_pref)),
+      }));
 
     // 7. Show the modal with model selection
     const modalResult = await promptWithRawModal(

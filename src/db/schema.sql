@@ -266,6 +266,9 @@ SELECT add_column_if_not_exists('llms', 'is_uncensored', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'supports_structoutput', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'llm_description', 'TEXT');
 SELECT add_column_if_not_exists('llms', 'ja_description', 'TEXT');
+SELECT add_column_if_not_exists('image_diffusion_models', 'is_scoped_registration', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('video_generation_models', 'is_scoped_registration', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('embedding_models', 'is_scoped_registration', 'BOOLEAN', 'false');
 
 
 -- Removed updated_at trigger for llms table (static metadata, rarely changes)
@@ -276,6 +279,7 @@ CREATE TABLE IF NOT EXISTS image_diffusion_models (
   diffusion_model_id SERIAL PRIMARY KEY,
   provider TEXT NOT NULL,
   codename TEXT NOT NULL,
+  is_scoped_registration BOOLEAN DEFAULT false,
   model_description TEXT,
   ja_description TEXT,
   is_default BOOLEAN DEFAULT false,
@@ -300,6 +304,7 @@ CREATE TABLE IF NOT EXISTS video_generation_models (
   video_model_id SERIAL PRIMARY KEY,
   provider TEXT NOT NULL,
   codename TEXT NOT NULL,
+  is_scoped_registration BOOLEAN DEFAULT false,
   model_description TEXT,
   ja_description TEXT,
   is_default BOOLEAN DEFAULT false,
@@ -324,6 +329,7 @@ CREATE TABLE IF NOT EXISTS embedding_models (
   provider TEXT NOT NULL,
   codename TEXT NOT NULL,
   model_family TEXT NOT NULL,
+  is_scoped_registration BOOLEAN DEFAULT false,
   model_description TEXT,
   ja_description TEXT,
   is_default BOOLEAN DEFAULT false,
@@ -2350,6 +2356,102 @@ CREATE INDEX IF NOT EXISTS idx_openrouter_model_registrations_llm ON openrouter_
 DROP TRIGGER IF EXISTS update_openrouter_model_registrations_timestamp ON openrouter_model_registrations;
 CREATE TRIGGER update_openrouter_model_registrations_timestamp
   BEFORE UPDATE ON openrouter_model_registrations
+  FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+CREATE TABLE IF NOT EXISTS openrouter_embedding_model_registrations (
+  openrouter_embedding_model_registration_id SERIAL PRIMARY KEY,
+  server_id INT NULL,
+  user_id INT NULL,
+  embedding_model_id INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+  FOREIGN KEY (embedding_model_id) REFERENCES embedding_models(embedding_model_id) ON DELETE CASCADE,
+  CHECK ((server_id IS NULL) <> (user_id IS NULL))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_embedding_model_registrations_server_model
+  ON openrouter_embedding_model_registrations(server_id, embedding_model_id)
+  WHERE user_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_embedding_model_registrations_user_model
+  ON openrouter_embedding_model_registrations(user_id, embedding_model_id)
+  WHERE server_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_openrouter_embedding_model_registrations_server
+  ON openrouter_embedding_model_registrations(server_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_embedding_model_registrations_user
+  ON openrouter_embedding_model_registrations(user_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_embedding_model_registrations_model
+  ON openrouter_embedding_model_registrations(embedding_model_id);
+
+DROP TRIGGER IF EXISTS update_openrouter_embedding_model_registrations_timestamp
+  ON openrouter_embedding_model_registrations;
+CREATE TRIGGER update_openrouter_embedding_model_registrations_timestamp
+  BEFORE UPDATE ON openrouter_embedding_model_registrations
+  FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+CREATE TABLE IF NOT EXISTS openrouter_image_model_registrations (
+  openrouter_image_model_registration_id SERIAL PRIMARY KEY,
+  server_id INT NULL,
+  user_id INT NULL,
+  diffusion_model_id INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+  FOREIGN KEY (diffusion_model_id) REFERENCES image_diffusion_models(diffusion_model_id) ON DELETE CASCADE,
+  CHECK ((server_id IS NULL) <> (user_id IS NULL))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_image_model_registrations_server_model
+  ON openrouter_image_model_registrations(server_id, diffusion_model_id)
+  WHERE user_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_image_model_registrations_user_model
+  ON openrouter_image_model_registrations(user_id, diffusion_model_id)
+  WHERE server_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_openrouter_image_model_registrations_server
+  ON openrouter_image_model_registrations(server_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_image_model_registrations_user
+  ON openrouter_image_model_registrations(user_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_image_model_registrations_model
+  ON openrouter_image_model_registrations(diffusion_model_id);
+
+DROP TRIGGER IF EXISTS update_openrouter_image_model_registrations_timestamp
+  ON openrouter_image_model_registrations;
+CREATE TRIGGER update_openrouter_image_model_registrations_timestamp
+  BEFORE UPDATE ON openrouter_image_model_registrations
+  FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+CREATE TABLE IF NOT EXISTS openrouter_video_model_registrations (
+  openrouter_video_model_registration_id SERIAL PRIMARY KEY,
+  server_id INT NULL,
+  user_id INT NULL,
+  video_model_id INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+  FOREIGN KEY (video_model_id) REFERENCES video_generation_models(video_model_id) ON DELETE CASCADE,
+  CHECK ((server_id IS NULL) <> (user_id IS NULL))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_video_model_registrations_server_model
+  ON openrouter_video_model_registrations(server_id, video_model_id)
+  WHERE user_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_video_model_registrations_user_model
+  ON openrouter_video_model_registrations(user_id, video_model_id)
+  WHERE server_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_openrouter_video_model_registrations_server
+  ON openrouter_video_model_registrations(server_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_video_model_registrations_user
+  ON openrouter_video_model_registrations(user_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_video_model_registrations_model
+  ON openrouter_video_model_registrations(video_model_id);
+
+DROP TRIGGER IF EXISTS update_openrouter_video_model_registrations_timestamp
+  ON openrouter_video_model_registrations;
+CREATE TRIGGER update_openrouter_video_model_registrations_timestamp
+  BEFORE UPDATE ON openrouter_video_model_registrations
   FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
 -- ============================================================

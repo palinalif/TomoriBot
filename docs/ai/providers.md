@@ -109,7 +109,7 @@ Rule:
 
 - Startup cache fetch from `https://openrouter.ai/api/v1/models`
 - cache module: `src/utils/cache/openrouterCapabilityCache.ts`
-- arbitrary OpenRouter text model codenames can now be registered per server via `/openrouter models add` or per user via `/personal openrouter-models add`
+- arbitrary OpenRouter text, embedding, image, and video model codenames can now be registered per server via `/openrouter models add` or per user via `/personal openrouter-models add`
 - those registrations stay under the normal `openrouter` provider; they are not `custom_endpoints`
 - legacy picker selection of `other-model` is now only a migration notice path pointing users at the new registration commands, while already-configured legacy `other-model` selections still keep runtime compatibility during rollout
 - OpenRouter provider can override stale DB capability flags with API capabilities at runtime.
