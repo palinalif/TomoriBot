@@ -9,6 +9,7 @@ import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../
 import { type UserRow, type ErrorContext, type LlmRow, tomoriConfigSchema } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
 import { promptForSavedProvider, replaceProviderPickerWithInfo } from "@/commands/config/model/providerPicker";
+import { replyLegacyOpenRouterOtherModelMoved } from "@/utils/discord/openrouterModelMigrationNotice";
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { isCustomProvider } from "@/utils/provider/customProviderUtils";
@@ -153,7 +154,10 @@ export async function execute(
       return;
     }
 
-    const allModels = await loadAvailableModelsForProvider(selectedProvider);
+    const allModels = await loadAvailableModelsForProvider(selectedProvider, false, {
+      kind: "server",
+      ownerId: tomoriState.server_id,
+    });
     const visionModels = allModels?.filter((m) => m.sees_images) ?? [];
 
     if (visionModels.length === 0) {
@@ -273,6 +277,11 @@ export async function execute(
         descriptionKey: "commands.config.model.vision.invalid_model_description",
         color: ColorCode.ERROR,
       });
+      return;
+    }
+
+    if (selectedModel.llm_codename === "other-model") {
+      await replyLegacyOpenRouterOtherModelMoved(modalSubmitInteraction, locale, "server");
       return;
     }
 

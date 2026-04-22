@@ -24,6 +24,7 @@ import type { SelectOption } from "../../../types/discord/modal";
 import { isCustomProvider } from "../../../utils/discord/customProviderModal";
 import { resolveLogitBiasEntriesForLlm } from "@/utils/provider/logitBiasResolver";
 import { promptForSavedProvider, replaceProviderPickerWithInfo } from "@/commands/config/model/providerPicker";
+import { replyLegacyOpenRouterOtherModelMoved } from "@/utils/discord/openrouterModelMigrationNotice";
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 
@@ -112,7 +113,10 @@ export async function execute(
       const selectedProvider = providerSelection.provider;
       const responseInteraction = providerSelection.interaction;
 
-      const availableModels = await loadAvailableModelsForProvider(selectedProvider);
+      const availableModels = await loadAvailableModelsForProvider(selectedProvider, false, {
+        kind: "server",
+        ownerId: tomoriState.server_id,
+      });
       if (!availableModels?.length) {
         await replyInfoEmbed(responseInteraction, locale, {
           titleKey: "commands.config.model.text.no_models_title",
@@ -157,6 +161,11 @@ export async function execute(
           descriptionKey: "commands.config.model.text.invalid_model_description",
           color: ColorCode.ERROR,
         });
+        return;
+      }
+
+      if (selectedChannelModel.llm_codename === "other-model") {
+        await replyLegacyOpenRouterOtherModelMoved(modalSubmitInteraction, locale, "server");
         return;
       }
 
@@ -231,7 +240,10 @@ export async function execute(
         const selectedProvider = providerSelection.provider;
         const providerInteraction = providerSelection.interaction;
 
-        const personaAvailableModels = await loadAvailableModelsForProvider(selectedProvider);
+        const personaAvailableModels = await loadAvailableModelsForProvider(selectedProvider, false, {
+          kind: "server",
+          ownerId: tomoriState.server_id,
+        });
         if (!personaAvailableModels?.length) {
           await replyInfoEmbed(providerInteraction, locale, {
             titleKey: "commands.config.model.text.no_models_title",
@@ -285,6 +297,11 @@ export async function execute(
             descriptionKey: "commands.config.model.text.invalid_model_description",
             color: ColorCode.ERROR,
           });
+          return;
+        }
+
+        if (selectedPersonaModel.llm_codename === "other-model") {
+          await replyLegacyOpenRouterOtherModelMoved(personaModalInteraction, locale, "server");
           return;
         }
 
@@ -390,7 +407,10 @@ export async function execute(
     }
 
     // 3b. Regular provider: model picker
-    const availableModels = await loadAvailableModelsForProvider(selectedProvider);
+    const availableModels = await loadAvailableModelsForProvider(selectedProvider, false, {
+      kind: "server",
+      ownerId: tomoriState.server_id,
+    });
     if (!availableModels?.length) {
       await replyInfoEmbed(responseInteraction, locale, {
         titleKey: "commands.config.model.text.no_models_title",
@@ -459,82 +479,9 @@ export async function execute(
       return;
     }
 
-    // Special handling for other-model (OpenRouter custom model name entry)
     if (selectedModel.llm_codename === "other-model") {
-      try {
-        const { promptOtherModelConfig } = await import("../../../utils/discord/customProviderModal");
-        const { getOrFetchOpenRouterCapabilities } = await import("../../../utils/cache/openrouterCapabilityCache");
-
-        await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
-
-        const promptResult = await promptOtherModelConfig(modalSubmitInteraction, locale);
-        if (!promptResult.success || !promptResult.modelName) {
-          await replyInfoEmbed(modalSubmitInteraction, locale, {
-            titleKey: "general.interaction.timeout_title",
-            descriptionKey: "general.interaction.timeout_description",
-            color: ColorCode.ERROR,
-          });
-          return;
-        }
-
-        const enteredModelName = promptResult.modelName;
-
-        await replyInfoEmbed(modalSubmitInteraction, locale, {
-          titleKey: "commands.config.model.text.other_model_validating_title",
-          descriptionKey: "commands.config.model.text.other_model_validating_description",
-          descriptionVars: { model_name: enteredModelName },
-          color: ColorCode.INFO,
-        });
-
-        const capabilities = await getOrFetchOpenRouterCapabilities(enteredModelName);
-        if (!capabilities) {
-          await replyInfoEmbed(modalSubmitInteraction, locale, {
-            titleKey: "commands.config.model.text.other_model_validation_failed_title",
-            descriptionKey: "commands.config.model.text.other_model_validation_failed_description",
-            descriptionVars: { model_name: enteredModelName },
-            color: ColorCode.ERROR,
-          });
-          return;
-        }
-
-        const now = new Date();
-        await sql`
-          UPDATE tomori_configs
-          SET llm_id = ${selectedModel.llm_id},
-              api_key = ${selectedSavedConfig?.api_key ?? null},
-              key_version = ${selectedSavedConfig?.key_version ?? 1},
-              other_model_codename = ${enteredModelName},
-              other_model_capabilities = ${JSON.stringify(capabilities)}::jsonb,
-              other_model_capabilities_fetched_at = ${now}
-          WHERE server_id = ${tomoriState.server_id}
-        `;
-
-        invalidateTomoriStateCache(serverId);
-
-        const capabilityFlags: string[] = [];
-        if (capabilities.hasTools) capabilityFlags.push("TOOLS");
-        if (capabilities.seesImages) capabilityFlags.push("IMG");
-        if (capabilities.seesVideos) capabilityFlags.push("VID");
-        if (capabilities.supportsStructuredOutput) capabilityFlags.push("STRUCT");
-        const capabilitiesDisplay =
-          capabilityFlags.length > 0 ? capabilityFlags.join(" + ") : localizer(locale, "general.none");
-
-        await replyInfoEmbed(modalSubmitInteraction, locale, {
-          titleKey: "commands.config.model.text.other_model_configured_title",
-          descriptionKey: "commands.config.model.text.other_model_configured_description",
-          descriptionVars: { model_name: enteredModelName, capabilities: capabilitiesDisplay },
-          color: ColorCode.SUCCESS,
-        });
-        return;
-      } catch (error) {
-        await log.error(`Error configuring other-model for user ${userData.user_disc_id}`, error as Error);
-        await replyInfoEmbed(modalSubmitInteraction, locale, {
-          titleKey: "general.errors.unknown_error_title",
-          descriptionKey: "general.errors.unknown_error_description",
-          color: ColorCode.ERROR,
-        });
-        return;
-      }
+      await replyLegacyOpenRouterOtherModelMoved(modalSubmitInteraction, locale, "server");
+      return;
     }
 
     if (selectedModel.llm_id === tomoriState.config.llm_id) {

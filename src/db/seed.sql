@@ -3,6 +3,7 @@ SELECT add_column_if_not_exists('tomori_configs', 'voice_transcript_chat_mode', 
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_codename', 'TEXT');
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_capabilities', 'JSONB');
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_capabilities_fetched_at', 'TIMESTAMP');
+SELECT add_column_if_not_exists('llms', 'is_scoped_registration', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('tomori_configs', 'fallback_model_refs', 'JSONB', '''[]''::JSONB');
 SELECT add_column_if_not_exists('tomori_configs', 'autoch_persona_overrides', 'JSONB', '''[]''::JSONB');
 SELECT add_column_if_not_exists('tomori_configs', 'hide_respond_embed', 'BOOLEAN', 'false');
@@ -49,6 +50,34 @@ CREATE INDEX IF NOT EXISTS idx_custom_endpoints_label ON custom_endpoints(label)
 DROP TRIGGER IF EXISTS update_custom_endpoints_timestamp ON custom_endpoints;
 CREATE TRIGGER update_custom_endpoints_timestamp
     BEFORE UPDATE ON custom_endpoints
+    FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+CREATE TABLE IF NOT EXISTS openrouter_model_registrations (
+    openrouter_model_registration_id SERIAL PRIMARY KEY,
+    server_id INT NULL,
+    user_id INT NULL,
+    llm_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (llm_id) REFERENCES llms(llm_id) ON DELETE CASCADE,
+    CHECK ((server_id IS NULL) <> (user_id IS NULL))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_model_registrations_server_llm
+    ON openrouter_model_registrations(server_id, llm_id)
+    WHERE user_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_model_registrations_user_llm
+    ON openrouter_model_registrations(user_id, llm_id)
+    WHERE server_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_openrouter_model_registrations_server ON openrouter_model_registrations(server_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_model_registrations_user ON openrouter_model_registrations(user_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_model_registrations_llm ON openrouter_model_registrations(llm_id);
+
+DROP TRIGGER IF EXISTS update_openrouter_model_registrations_timestamp ON openrouter_model_registrations;
+CREATE TRIGGER update_openrouter_model_registrations_timestamp
+    BEFORE UPDATE ON openrouter_model_registrations
     FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
 -- Migrate legacy notice visibility booleans into the shared hidden-key registry
@@ -257,13 +286,14 @@ VALUES
   ('openrouter', 'google/gemini-3-pro-preview', false, false, false, true, false, true, true, true, true, false, true, 'Gemini 3 Pro preview via OpenRouter with tool, image, video, and YouTube support (deprecated, use google/gemini-3.1-pro-preview)', 'OpenRouter経由でツール利用・画像理解・動画・YouTube処理に対応したGemini 3 Proプレビュー（非推奨、google/gemini-3.1-pro-preview を使用）'),
   ('openrouter', 'google/gemini-3.1-pro-preview', false, false, false, false, false, true, true, true, true, false, true, 'Latest Gemini 3.1 Pro preview via OpenRouter with tool, image, video, and YouTube support', 'OpenRouter経由でツール利用・画像理解・動画・YouTube処理に対応した最新のGemini 3.1 Proプレビュー'),
   ('openrouter', 'google/gemma-4-31b-it', false, false, false, false, false, true, true, false, false, false, true, 'OpenRouter-hosted Google Gemma 4.31B IT model with tool use, vision, and structured output support (video disabled)', '動画非対応ながらツール利用・画像理解・構造化出力に対応するOpenRouter経由のGoogle Gemma 4.31B ITモデル'),
-  ('openrouter', 'anthropic/claude-sonnet-4.5', false, false, false, false, false, true, true, false, false, false, true, 'State-of-the-art performance in complex tasks and problems, also great in role-playing and creative writing', '複雑なタスクや問題に優れた最先端性能を持ち、ロールプレイや創作にも秀でたモデル'),
+  ('openrouter', 'anthropic/claude-sonnet-4.5', false, false, false, true, false, true, true, false, false, false, true, 'State-of-the-art performance in complex tasks and problems, also great in role-playing and creative writing', '複雑なタスクや問題に優れた最先端性能を持ち、ロールプレイや創作にも秀でたモデル'),
+  ('openrouter', 'anthropic/claude-sonnet-4.6', false, false, false, false, false, true, true, false, false, false, true, 'Balanced Claude model with strong quality, speed, and cost tradeoffs', '品質・速度・コストのバランスに優れたClaudeモデル'),
   ('openrouter', 'anthropic/claude-haiku-4.5', false, false, false, false, false, true, true, false, false, false, true, 'Lightweight version of claude-sonnet-4.5', 'claude-sonnet-4.5の軽量版'),
   ('openrouter', 'openai/gpt-5.1', true, false, true, true, false, true, true, false, false, false, true, 'State-of-the-art performance in complex tasks and problems', '複雑なタスクや問題に優れた最先端性能'),
   ('openrouter', 'openai/gpt-5.1-chat', true, false, true, false, false, true, true, false, false, false, true, 'State-of-the-art performance, more conversational', '複雑なタスクや問題に優れた最先端性能'),
   ('openrouter', 'mistralai/mistral-large-2512', false, false, false, true, false, true, true, false, false, false, true, 'Mistral’s most capable model to date, cheap and multimodal', 'Mistral史上最も高性能で、低コストなマルチモーダルモデル'),
   ('openrouter', 'mistralai/mistral-small-creative', false, false, false, true, false, true, false, false, false, false, false, 'Lightweight tool-capable model designed for creative writing and role-playing', '創作（文章執筆・ロールプレイ）に特化した軽量ツール対応モデル'),
-  ('openrouter', 'mistralai/mistral-small-3.1-24b-instruct', false, false, false, false, false, true, true, false, false, false, true, 'Multimodal lightweight general-purpose model from Mistral', 'Mistralの軽量マルチモーダル汎用モデル'),
+  ('openrouter', 'mistralai/mistral-small-3.1-24b-instruct', false, false, false, true, false, true, true, false, false, false, true, 'Multimodal lightweight general-purpose model from Mistral', 'Mistralの軽量マルチモーダル汎用モデル'),
   ('openrouter', 'deepseek/deepseek-chat-v3-0324:free', false, false, false, true, true, false, false, false, false, true, false, 'Free general-purpose model that also performs good role-play', 'ロールプレイにも優れた無料の汎用モデル'),
   ('openrouter', 'mistralai/mistral-small-3.2-24b-instruct:free', false, false, false, true, true, false, false, false, false, false, false, 'Free general-purpose model', '無料の汎用モデル'),
   ('openrouter', 'tngtech/deepseek-r1t2-chimera:free', false, false, true, true, true, true, false, false, false, true, false, 'Free model for solving complex tasks and problems', '複雑なタスクや問題の解決に適した無料モデル'),
@@ -275,8 +305,9 @@ VALUES
   ('openrouter', 'qwen/qwen3.5-flash-02-23', false, false, false, false, false, true, true, true, false, false, true, 'Fast Qwen 3.5 Flash (02-23) model with tool use, vision, and structured output support', 'ツール利用・画像理解・構造化出力に対応した高速Qwen 3.5 Flash（02-23）モデル'),
   ('openrouter', 'nvidia/nemotron-3-super-120b-a12b', false, false, false, false, false, true, false, false, false, false, true, 'Nemotron model with tool use and structured output support', 'ツール利用と構造化出力に対応したNemotronモデル'),
   ('openrouter', 'nvidia/nemotron-3-super-120b-a12b:free', false, false, false, true, true, true, false, false, false, false, true, 'Free Nemotron model with tool use and structured output support (deprecated, use non-free variant)', 'ツール利用と構造化出力に対応した無料のNemotronモデル（非推奨、有料バージョンを使用）'),
-  ('openrouter', 'moonshotai/kimi-k2.5', false, false, false, false, false, true, true, false, false, false, true, 'Moonshot AI''s state-of-the-art native multimodal model', 'Moonshot AIの最先端ネイティブ・マルチモーダルモデル'),
-  ('openrouter', 'aion-labs/aion-2.0', false, false, false, false, false, false, false, false, false, false, false, 'Cheap role-play fine-tune of DeepSeek with no tools, vision, or structured output support', 'ツール・画像理解・構造化出力に対応しない、DeepSeekベースの低コストなロールプレイ特化ファインチューニングモデル'),
+  ('openrouter', 'moonshotai/kimi-k2.5', false, false, false, true, false, true, true, false, false, false, true, 'Moonshot AI''s state-of-the-art native multimodal model', 'Moonshot AIの最先端ネイティブ・マルチモーダルモデル'),
+  ('openrouter', 'moonshotai/kimi-k2.6', false, false, false, false, false, true, true, false, false, false, true, 'Latest Moonshot AI native multimodal model', 'Moonshot AIの最新ネイティブ・マルチモーダルモデル'),
+  ('openrouter', 'aion-labs/aion-2.0', false, false, false, true, false, false, false, false, false, false, false, 'Cheap role-play fine-tune of DeepSeek with no tools, vision, or structured output support', 'ツール・画像理解・構造化出力に対応しない、DeepSeekベースの低コストなロールプレイ特化ファインチューニングモデル'),
   ('openrouter', 'account-setting', false, false, false, true, false, false, false, false, false, false, false, 'Legacy codename (deprecated, use other-model)', '旧コードネーム（非推奨、other-modelを使用）'),
   ('openrouter', 'other-model', false, false, false, false, false, true, true, true, true, false, true, 'Advanced: Use any OpenRouter model by entering its codename', '上級者向け：コードネームを入力して任意のOpenRouterモデルを使用'),
   -- DeepSeek Models (bounded MVP: text chat + seeded tool calling only)
@@ -324,6 +355,7 @@ ON CONFLICT (llm_provider, llm_codename) DO UPDATE SET
   is_smartest = EXCLUDED.is_smartest,
   is_default = EXCLUDED.is_default,
   is_reasoning = EXCLUDED.is_reasoning,
+  is_scoped_registration = false,
   is_deprecated = EXCLUDED.is_deprecated,
   is_free = EXCLUDED.is_free,
   has_tools = EXCLUDED.has_tools,
@@ -987,13 +1019,28 @@ END $$;
 INSERT INTO embedding_models (provider, codename, model_family, is_default, is_deprecated, model_description, ja_description)
 VALUES
   -- Google Gemini Embedding Models
-  ('google', 'gemini-embedding-001', 'gemini-embedding-001', true, false,
+  ('google', 'gemini-embedding-001', 'gemini-embedding-001', false, true,
+   'Legacy Gemini embedding model for document retrieval',
+   '文書検索向けのレガシーGemini埋め込みモデル'),
+  ('google', 'gemini-embedding-2-preview', 'gemini-embedding-2-preview', true, false,
    'Default Gemini embedding model for document retrieval',
    '文書検索向けのGeminiデフォルト埋め込みモデル'),
+  ('vertex', 'gemini-embedding-2-preview', 'gemini-embedding-2-preview', true, false,
+   'Default Gemini embedding model for document retrieval via Vertex AI',
+   'Vertex AI経由の文書検索向けGeminiデフォルト埋め込みモデル'),
   -- OpenRouter Embedding Models (via OpenRouter API)
-  ('openrouter', 'google/gemini-embedding-001', 'gemini-embedding-001', true, false,
+  ('openrouter', 'google/gemini-embedding-001', 'gemini-embedding-001', false, true,
+   'Legacy Gemini embedding model via OpenRouter (same family as Google)',
+   'OpenRouter経由のGemini埋め込みモデル（Googleと同一ファミリー）'),
+  ('openrouter', 'google/gemini-embedding-2-preview', 'gemini-embedding-2-preview', false, false,
    'Gemini embedding model via OpenRouter (same family as Google)',
    'OpenRouter経由のGemini埋め込みモデル（Googleと同一ファミリー）'),
+  ('openrouter', 'intfloat/multilingual-e5-large', 'multilingual-e5-large', true, false,
+   'Default multilingual embedding model via OpenRouter',
+   'OpenRouter経由のデフォルト多言語埋め込みモデル'),
+  ('openrouter', 'perplexity/pplx-embed-v1-4b', 'pplx-embed-v1-4b', false, false,
+   'Perplexity embedding model via OpenRouter',
+   'OpenRouter経由のPerplexity埋め込みモデル'),
   ('openrouter', 'qwen/qwen3-embedding-8b', 'qwen3-embedding-8b', false, true,
    'Deprecated embedding model (not selectable)',
    '非推奨の埋め込みモデル（選択不可）'),

@@ -7,6 +7,7 @@ const UNCONFIGURED_LLM: LlmRow = {
   llm_id: 0,
   llm_provider: UNCONFIGURED_LLM_PROVIDER,
   llm_codename: UNCONFIGURED_LLM_CODENAME,
+  is_scoped_registration: false,
   is_smartest: false,
   is_default: false,
   is_reasoning: false,

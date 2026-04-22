@@ -56,6 +56,7 @@ This document summarizes the current PostgreSQL schema used by TomoriBot.
 - `saved_provider_configs`
 - `user_saved_provider_configs`
 - `custom_endpoints`
+- `openrouter_model_registrations`
 
 ### Quota system
 
@@ -183,6 +184,7 @@ Encrypted columns are stored as `BYTEA` with key version tracking:
 - `saved_provider_configs.thinking_level` mirrors `tomori_configs.thinking_level` so provider switching can restore the previous provider-specific reasoning preference.
 - `saved_provider_configs.fallback_model_refs` and `user_saved_provider_configs.fallback_model_refs` store ordered polymorphic fallback references as JSON objects shaped like `{type: "llm" | "custom_endpoint", id: number}`. The legacy `fallback_llm_ids` arrays remain during rollout for backward compatibility.
 - `custom_endpoints` stores labeled self-hosted or proxy-backed endpoint registrations. Rows are scoped either to `server_id` or `user_id`, keyed by `(scope, label, capability)`, and carry adapter metadata such as `api_style`, `endpoint_url`, `model_name`, capability flags, workflow JSON (`extra_config`), and whether auth is required.
+- `openrouter_model_registrations` scopes extra OpenRouter `llms` rows to a specific `server_id` or `user_id`. Their backing `llms` rows set `is_scoped_registration = true`, so they stay hidden from global provider pickers unless joined through a matching registration for that owner.
 
 ### Logit bias snapshot storage
 

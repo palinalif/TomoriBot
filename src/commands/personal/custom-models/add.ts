@@ -27,12 +27,15 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     .setName("add")
     .setDescription(localizer("en-US", "commands.personal.custom_models.add.description"))
     .addStringOption((option) =>
-      option.setName("endpoint_label").setDescription("Saved nickname in Tomori, e.g. KoboldCPP").setRequired(true),
+      option
+        .setName("endpoint_label")
+        .setDescription(localizer("en-US", "commands.personal.custom_models.add.label_description"))
+        .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("capability")
-        .setDescription("Capability")
+        .setDescription(localizer("en-US", "commands.personal.custom_models.add.capability_description"))
         .setRequired(true)
         .addChoices(
           { name: "Text", value: "text" },
@@ -44,7 +47,7 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     .addStringOption((option) =>
       option
         .setName("api_style")
-        .setDescription("API style")
+        .setDescription(localizer("en-US", "commands.personal.custom_models.add.api_style_description"))
         .setRequired(true)
         .addChoices(
           { name: localizer("en-US", "general.api_styles.openai_compatible"), value: "openai-compatible" },
@@ -52,23 +55,59 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
           { name: localizer("en-US", "general.api_styles.ollama_native"), value: "ollama-native" },
         ),
     )
-    .addStringOption((option) => option.setName("endpoint_url").setDescription("Endpoint URL").setRequired(true))
-    .addStringOption((option) => option.setName("display_name").setDescription("Display name").setRequired(true))
+    .addStringOption((option) =>
+      option
+        .setName("endpoint_url")
+        .setDescription(localizer("en-US", "commands.personal.custom_models.add.endpoint_url_description"))
+        .setRequired(true),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("display_name")
+        .setDescription(localizer("en-US", "commands.personal.custom_models.add.display_name_description"))
+        .setRequired(true),
+    )
     .addStringOption((option) =>
       option
         .setName("model_name")
-        .setDescription("Exact remote model ID; some endpoints require the exact codename")
+        .setDescription(localizer("en-US", "commands.personal.custom_models.add.model_name_description"))
         .setRequired(true),
     )
-    .addStringOption((option) => option.setName("auth_token").setDescription("Bearer token").setRequired(false))
-    .addIntegerOption((option) => option.setName("num_ctx").setDescription("Context window").setRequired(false))
-    .addBooleanOption((option) => option.setName("has_tools").setDescription("Supports tools").setRequired(false))
-    .addBooleanOption((option) => option.setName("sees_images").setDescription("Sees images").setRequired(false))
+    .addStringOption((option) =>
+      option
+        .setName("auth_token")
+        .setDescription(localizer("en-US", "commands.personal.custom_models.add.auth_token_description"))
+        .setRequired(false),
+    )
+    .addIntegerOption((option) =>
+      option
+        .setName("num_ctx")
+        .setDescription(localizer("en-US", "commands.personal.custom_models.add.num_ctx_description"))
+        .setRequired(false),
+    )
     .addBooleanOption((option) =>
-      option.setName("supports_structoutput").setDescription("Supports structured output").setRequired(false),
+      option
+        .setName("has_tools")
+        .setDescription(localizer("en-US", "commands.personal.custom_models.add.has_tools_description"))
+        .setRequired(false),
+    )
+    .addBooleanOption((option) =>
+      option
+        .setName("sees_images")
+        .setDescription(localizer("en-US", "commands.personal.custom_models.add.sees_images_description"))
+        .setRequired(false),
+    )
+    .addBooleanOption((option) =>
+      option
+        .setName("supports_structoutput")
+        .setDescription(localizer("en-US", "commands.personal.custom_models.add.supports_structoutput_description"))
+        .setRequired(false),
     )
     .addAttachmentOption((option) =>
-      option.setName("workflow_json").setDescription("ComfyUI workflow JSON").setRequired(false),
+      option
+        .setName("workflow_json")
+        .setDescription(localizer("en-US", "commands.personal.custom_models.add.workflow_description"))
+        .setRequired(false),
     );
 
 export async function execute(

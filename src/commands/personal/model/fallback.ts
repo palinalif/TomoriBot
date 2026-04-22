@@ -10,6 +10,7 @@ import type { SelectOption } from "@/types/discord/modal";
 import { loadActivePersonalTextProvider } from "@/utils/provider/personalProviderHelpers";
 import { upsertUserSavedProviderConfig } from "@/utils/db/dbWrite";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
+import { replyLegacyOpenRouterOtherModelMoved } from "@/utils/discord/openrouterModelMigrationNotice";
 
 const SLOT_IDS = [
   "fallback_slot_1",
@@ -38,6 +39,32 @@ function getLocalizedDescription(model: LlmRow, locale: string): string {
   if (model.sees_videos) flags.push("VID");
   if (model.supports_structoutput) flags.push("STRUCT");
   return flags.length > 0 ? `(${flags.join("+")}) ${baseDescription}` : baseDescription;
+}
+
+function truncatePlaceholderValue(value: string): string {
+  return value.length > 90 ? `${value.slice(0, 87)}...` : value;
+}
+
+function buildCurrentFallbackPlaceholder(
+  locale: string,
+  model: LlmRow | null,
+  rawLlmId: number | null,
+  otherModelCodename?: string | null,
+): string {
+  let modelLabel = localizer(locale, "general.none");
+
+  if (model) {
+    modelLabel =
+      model.llm_codename === "other-model" && otherModelCodename
+        ? `other-model -> ${otherModelCodename}`
+        : model.llm_codename;
+  } else if (rawLlmId !== null) {
+    modelLabel = `${localizer(locale, "general.unknown")} (#${rawLlmId})`;
+  }
+
+  return localizer(locale, "commands.config.model.fallback.current_placeholder", {
+    model: truncatePlaceholderValue(modelLabel),
+  });
 }
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
@@ -74,7 +101,10 @@ export async function execute(
       return;
     }
 
-    const availableModels = await loadAvailableModelsForProvider(activeProvider.provider);
+    const availableModels = await loadAvailableModelsForProvider(activeProvider.provider, false, {
+      kind: "personal",
+      ownerId: userData.user_id,
+    });
     if (!availableModels?.length) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.model.fallback.no_models_title",
@@ -136,6 +166,12 @@ export async function execute(
       }
     }
 
+    const currentFallbackPlaceholders = SLOT_IDS.map((_, index) => {
+      const rawLlmId = activeProvider.fallback_llm_ids[index] ?? null;
+      const resolvedModel = rawLlmId ? (availableModels.find((model) => model.llm_id === rawLlmId) ?? null) : null;
+      return buildCurrentFallbackPlaceholder(locale, resolvedModel, rawLlmId);
+    });
+
     const modalResult = await promptWithRawModal(
       modalInteraction,
       locale,
@@ -145,7 +181,7 @@ export async function execute(
         components: SLOT_IDS.map((customId, index) => ({
           customId,
           labelKey: SLOT_LABEL_KEYS[index],
-          placeholder: localizer(locale, "commands.config.model.fallback.select_placeholder"),
+          placeholder: currentFallbackPlaceholders[index],
           required: index === 0,
           options: optionsForModal,
         })),
@@ -159,6 +195,12 @@ export async function execute(
 
     const rawSlots = SLOT_IDS.map((id) => (modalResult.values?.[id] ?? "").trim()).filter((value) => value !== "");
     const deduplicatedCodenames = Array.from(new Set(rawSlots));
+
+    if (activeProvider.provider === "openrouter" && deduplicatedCodenames.includes("other-model")) {
+      await replyLegacyOpenRouterOtherModelMoved(modalResult.interaction, locale, "personal");
+      return;
+    }
+
     const primaryCodename =
       availableModels.find((model) => model.llm_id === activeProvider.llm_id)?.llm_codename ?? null;
 

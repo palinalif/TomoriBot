@@ -12,11 +12,16 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
   subcommand
     .setName("remove")
     .setDescription(localizer("en-US", "commands.personal.custom_models.remove.description"))
-    .addStringOption((option) => option.setName("label").setDescription("Endpoint label").setRequired(true))
+    .addStringOption((option) =>
+      option
+        .setName("label")
+        .setDescription(localizer("en-US", "commands.personal.custom_models.remove.label_description"))
+        .setRequired(true),
+    )
     .addStringOption((option) =>
       option
         .setName("capability")
-        .setDescription("Capability")
+        .setDescription(localizer("en-US", "commands.personal.custom_models.remove.capability_description"))
         .setRequired(true)
         .addChoices(
           { name: "Text", value: "text" },

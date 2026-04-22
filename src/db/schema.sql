@@ -255,6 +255,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_llms_provider_codename
 SELECT add_column_if_not_exists('llms', 'is_smartest', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'is_default', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'is_reasoning', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('llms', 'is_scoped_registration', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'is_deprecated', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'is_free', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'has_tools', 'BOOLEAN', 'false');
@@ -2316,6 +2317,39 @@ CREATE INDEX IF NOT EXISTS idx_custom_endpoints_label ON custom_endpoints(label)
 DROP TRIGGER IF EXISTS update_custom_endpoints_timestamp ON custom_endpoints;
 CREATE TRIGGER update_custom_endpoints_timestamp
   BEFORE UPDATE ON custom_endpoints
+  FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+-- ============================================================
+-- Scoped OpenRouter Model Registrations
+-- Stores per-server / per-user visibility for extra OpenRouter model rows
+-- that should not appear globally in every OpenRouter picker.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS openrouter_model_registrations (
+  openrouter_model_registration_id SERIAL PRIMARY KEY,
+  server_id INT NULL,
+  user_id INT NULL,
+  llm_id INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+  FOREIGN KEY (llm_id) REFERENCES llms(llm_id) ON DELETE CASCADE,
+  CHECK ((server_id IS NULL) <> (user_id IS NULL))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_model_registrations_server_llm
+  ON openrouter_model_registrations(server_id, llm_id)
+  WHERE user_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_openrouter_model_registrations_user_llm
+  ON openrouter_model_registrations(user_id, llm_id)
+  WHERE server_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_openrouter_model_registrations_server ON openrouter_model_registrations(server_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_model_registrations_user ON openrouter_model_registrations(user_id);
+CREATE INDEX IF NOT EXISTS idx_openrouter_model_registrations_llm ON openrouter_model_registrations(llm_id);
+
+DROP TRIGGER IF EXISTS update_openrouter_model_registrations_timestamp ON openrouter_model_registrations;
+CREATE TRIGGER update_openrouter_model_registrations_timestamp
+  BEFORE UPDATE ON openrouter_model_registrations
   FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
 -- ============================================================

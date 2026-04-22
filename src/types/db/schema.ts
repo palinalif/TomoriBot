@@ -102,6 +102,7 @@ export const llmSchema = z.object({
   llm_id: z.number().optional(),
   llm_provider: z.string(),
   llm_codename: z.string(),
+  is_scoped_registration: z.boolean().default(false), // Scoped OpenRouter registration; exclude from global provider pickers unless explicitly joined for the owner
   is_smartest: z.boolean().default(false),
   is_default: z.boolean().default(false),
   is_reasoning: z.boolean().default(false),
@@ -200,6 +201,16 @@ export const customEndpointSchema = z.object({
   updated_at: z.coerce.date().optional(),
 });
 export type CustomEndpointRow = z.infer<typeof customEndpointSchema>;
+
+export const openRouterModelRegistrationSchema = z.object({
+  openrouter_model_registration_id: z.number().optional(),
+  server_id: z.number().nullable().optional(),
+  user_id: z.number().nullable().optional(),
+  llm_id: z.number().int(),
+  created_at: z.coerce.date().optional(),
+  updated_at: z.coerce.date().optional(),
+});
+export type OpenRouterModelRegistrationRow = z.infer<typeof openRouterModelRegistrationSchema>;
 
 /**
  * Normalizes a JSONB array value from the database driver.

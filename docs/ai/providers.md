@@ -109,6 +109,9 @@ Rule:
 
 - Startup cache fetch from `https://openrouter.ai/api/v1/models`
 - cache module: `src/utils/cache/openrouterCapabilityCache.ts`
+- arbitrary OpenRouter text model codenames can now be registered per server via `/openrouter models add` or per user via `/personal openrouter-models add`
+- those registrations stay under the normal `openrouter` provider; they are not `custom_endpoints`
+- legacy picker selection of `other-model` is now only a migration notice path pointing users at the new registration commands, while already-configured legacy `other-model` selections still keep runtime compatibility during rollout
 - OpenRouter provider can override stale DB capability flags with API capabilities at runtime.
 - OpenRouter Gemini-family chat models (`google/gemini-*`) also force-enable Tomori's YouTube tool exposure at runtime, so stale `sees_youtube` DB flags do not hide `process_youtube_video`.
 - Tool support primarily follows the OpenRouter `tools` parameter, with a fallback for models whose OpenRouter description explicitly advertises native function/tool calling even when `supported_parameters` is incomplete.

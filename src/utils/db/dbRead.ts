@@ -29,6 +29,8 @@ import {
   customEndpointSchema,
   type CustomEndpointCapability,
   type CustomEndpointRow,
+  openRouterModelRegistrationSchema,
+  type OpenRouterModelRegistrationRow,
   type TomoriPresetRow,
   type SystemPromptPresetRow,
   type ApiKeyRotationRow,
@@ -1043,9 +1045,93 @@ export async function loadAvailableLlms(includeDeprecated = false): Promise<LlmR
  * @param includeDeprecated - Whether to include deprecated models (default: false).
  * @returns An array of validated LlmRow objects for the provider, or null if none found.
  */
+type OpenRouterModelScope =
+  | {
+      kind: "server";
+      ownerId: number;
+    }
+  | {
+      kind: "personal";
+      ownerId: number;
+    };
+
+async function loadScopedOpenRouterModelRows(
+  scope: OpenRouterModelScope,
+  includeDeprecated: boolean,
+): Promise<unknown[]> {
+  if (scope.kind === "server") {
+    return includeDeprecated
+      ? await sql`
+          SELECT DISTINCT l.*
+          FROM llms l
+          LEFT JOIN openrouter_model_registrations omr ON omr.llm_id = l.llm_id
+          WHERE l.llm_provider = 'openrouter'
+            AND (
+              COALESCE(l.is_scoped_registration, false) = false
+              OR (
+                COALESCE(l.is_scoped_registration, false) = true
+                AND omr.server_id = ${scope.ownerId}
+                AND omr.user_id IS NULL
+              )
+            )
+          ORDER BY COALESCE(l.is_scoped_registration, false) ASC, l.llm_id ASC
+        `
+      : await sql`
+          SELECT DISTINCT l.*
+          FROM llms l
+          LEFT JOIN openrouter_model_registrations omr ON omr.llm_id = l.llm_id
+          WHERE l.llm_provider = 'openrouter'
+            AND l.is_deprecated = false
+            AND (
+              COALESCE(l.is_scoped_registration, false) = false
+              OR (
+                COALESCE(l.is_scoped_registration, false) = true
+                AND omr.server_id = ${scope.ownerId}
+                AND omr.user_id IS NULL
+              )
+            )
+          ORDER BY COALESCE(l.is_scoped_registration, false) ASC, l.llm_id ASC
+        `;
+  }
+
+  return includeDeprecated
+    ? await sql`
+        SELECT DISTINCT l.*
+        FROM llms l
+        LEFT JOIN openrouter_model_registrations omr ON omr.llm_id = l.llm_id
+        WHERE l.llm_provider = 'openrouter'
+          AND (
+            COALESCE(l.is_scoped_registration, false) = false
+            OR (
+              COALESCE(l.is_scoped_registration, false) = true
+              AND omr.user_id = ${scope.ownerId}
+              AND omr.server_id IS NULL
+            )
+          )
+        ORDER BY COALESCE(l.is_scoped_registration, false) ASC, l.llm_id ASC
+      `
+    : await sql`
+        SELECT DISTINCT l.*
+        FROM llms l
+        LEFT JOIN openrouter_model_registrations omr ON omr.llm_id = l.llm_id
+        WHERE l.llm_provider = 'openrouter'
+          AND l.is_deprecated = false
+          AND (
+            COALESCE(l.is_scoped_registration, false) = false
+            OR (
+              COALESCE(l.is_scoped_registration, false) = true
+              AND omr.user_id = ${scope.ownerId}
+              AND omr.server_id IS NULL
+            )
+          )
+        ORDER BY COALESCE(l.is_scoped_registration, false) ASC, l.llm_id ASC
+      `;
+}
+
 export async function loadAvailableModelsForProvider(
   providerName: string,
   includeDeprecated = false,
+  scope?: OpenRouterModelScope,
 ): Promise<LlmRow[] | null> {
   // Input validation
   if (!providerName || providerName.trim().length === 0) {
@@ -1065,16 +1151,23 @@ export async function loadAvailableModelsForProvider(
   try {
     // 1. Query for models for the specific provider, filtering deprecated unless explicitly included
     const modelRows = includeDeprecated
-      ? await sql`
-				SELECT * FROM llms
-				WHERE llm_provider = ${normalizedProviderName}
-				ORDER BY llm_id ASC
-			`
-      : await sql`
-				SELECT * FROM llms
-				WHERE llm_provider = ${normalizedProviderName} AND is_deprecated = false
-				ORDER BY llm_id ASC
-			`;
+      ? normalizedProviderName === "openrouter" && scope
+        ? await loadScopedOpenRouterModelRows(scope, true)
+        : await sql`
+				    SELECT * FROM llms
+				    WHERE llm_provider = ${normalizedProviderName}
+              AND COALESCE(is_scoped_registration, false) = false
+				    ORDER BY llm_id ASC
+			    `
+      : normalizedProviderName === "openrouter" && scope
+        ? await loadScopedOpenRouterModelRows(scope, false)
+        : await sql`
+				    SELECT * FROM llms
+				    WHERE llm_provider = ${normalizedProviderName}
+              AND is_deprecated = false
+              AND COALESCE(is_scoped_registration, false) = false
+				    ORDER BY llm_id ASC
+			    `;
 
     // 2. Check if any rows were returned
     if (!modelRows || modelRows.length === 0) {
@@ -1138,6 +1231,51 @@ export async function loadLlmById(llmId: number): Promise<LlmRow | null> {
     return parsed.data;
   } catch (error) {
     log.error(`Error loading LLM for llm_id ${llmId}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Loads a single LLM row by provider + codename.
+ * @param providerName - Provider name (stored lowercase)
+ * @param modelCodename - Exact model codename
+ * @returns Validated LlmRow, or null if not found/invalid
+ */
+export async function loadLlmByProviderAndCodename(
+  providerName: string,
+  modelCodename: string,
+): Promise<LlmRow | null> {
+  const normalizedProviderName = providerName.trim().toLowerCase();
+  const normalizedCodename = modelCodename.trim();
+
+  if (!normalizedProviderName || !normalizedCodename) {
+    return null;
+  }
+
+  try {
+    const llmRows = await sql`
+			SELECT * FROM llms
+			WHERE llm_provider = ${normalizedProviderName}
+			  AND llm_codename = ${normalizedCodename}
+			LIMIT 1
+		`;
+
+    if (!llmRows.length) {
+      return null;
+    }
+
+    const parsed = llmSchema.safeParse(llmRows[0]);
+    if (!parsed.success) {
+      log.error(
+        `Failed to validate model data for ${normalizedProviderName}/${normalizedCodename}:`,
+        parsed.error.flatten(),
+      );
+      return null;
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(`Error loading LLM for ${normalizedProviderName}/${normalizedCodename}:`, error);
     return null;
   }
 }
@@ -2777,6 +2915,70 @@ export async function loadUserSavedProviderConfig(
   } catch (error) {
     log.error(`Error loading user saved provider config for user ${userId}, provider ${provider}:`, error);
     return null;
+  }
+}
+
+export async function loadOpenRouterModelRegistrationsForServer(
+  serverId: number,
+): Promise<OpenRouterModelRegistrationRow[]> {
+  try {
+    const rows = await sql<unknown[]>`
+			SELECT *
+			FROM openrouter_model_registrations
+			WHERE server_id = ${serverId}
+			  AND user_id IS NULL
+			ORDER BY llm_id ASC
+		`;
+
+    return rows
+      .map((row: unknown) => openRouterModelRegistrationSchema.safeParse(row))
+      .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
+  } catch (error) {
+    log.error(`Error loading OpenRouter model registrations for server ${serverId}:`, error);
+    return [];
+  }
+}
+
+export async function loadOpenRouterModelRegistrationsForUser(
+  userId: number,
+): Promise<OpenRouterModelRegistrationRow[]> {
+  try {
+    const rows = await sql<unknown[]>`
+			SELECT *
+			FROM openrouter_model_registrations
+			WHERE user_id = ${userId}
+			  AND server_id IS NULL
+			ORDER BY llm_id ASC
+		`;
+
+    return rows
+      .map((row: unknown) => openRouterModelRegistrationSchema.safeParse(row))
+      .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
+  } catch (error) {
+    log.error(`Error loading OpenRouter model registrations for user ${userId}:`, error);
+    return [];
+  }
+}
+
+export async function loadScopedOpenRouterModels(
+  scope: OpenRouterModelScope,
+  includeDeprecated = false,
+): Promise<LlmRow[]> {
+  try {
+    const rows = await loadScopedOpenRouterModelRows(scope, includeDeprecated);
+    const parsed = llmSchema.array().safeParse(rows);
+    if (!parsed.success) {
+      log.error(
+        `Failed to validate scoped OpenRouter model data for ${scope.kind} ${scope.ownerId}:`,
+        parsed.error.flatten(),
+      );
+      return [];
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(`Error loading scoped OpenRouter models for ${scope.kind} ${scope.ownerId}:`, error);
+    return [];
   }
 }
 

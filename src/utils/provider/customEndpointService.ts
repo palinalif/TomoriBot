@@ -160,7 +160,7 @@ async function upsertSyntheticEmbeddingModel(
 			true,
 			false
 		)
-		ON CONFLICT (codename) DO UPDATE SET
+		ON CONFLICT (provider, codename) DO UPDATE SET
 			provider = EXCLUDED.provider,
 			model_family = EXCLUDED.model_family,
 			model_description = EXCLUDED.model_description,
@@ -196,7 +196,7 @@ async function upsertSyntheticImageModel(provider: string, endpoint: CustomEndpo
 			true,
 			true
 		)
-		ON CONFLICT (codename) DO UPDATE SET
+		ON CONFLICT (provider, codename) DO UPDATE SET
 			provider = EXCLUDED.provider,
 			model_description = EXCLUDED.model_description,
 			ja_description = EXCLUDED.ja_description,
@@ -231,7 +231,7 @@ async function upsertSyntheticVideoModel(provider: string, endpoint: CustomEndpo
 			false,
 			true
 		)
-		ON CONFLICT (codename) DO UPDATE SET
+		ON CONFLICT (provider, codename) DO UPDATE SET
 			provider = EXCLUDED.provider,
 			model_description = EXCLUDED.model_description,
 			ja_description = EXCLUDED.ja_description,
@@ -277,19 +277,22 @@ async function deleteSyntheticCapabilityModel(provider: string, capability: Cust
     case "embedding":
       await sql`
 				DELETE FROM embedding_models
-				WHERE codename = ${codename}
+				WHERE provider = ${provider}
+				  AND codename = ${codename}
 			`;
       return;
     case "image":
       await sql`
 				DELETE FROM image_diffusion_models
-				WHERE codename = ${codename}
+				WHERE provider = ${provider}
+				  AND codename = ${codename}
 			`;
       return;
     case "video":
       await sql`
 				DELETE FROM video_generation_models
-				WHERE codename = ${codename}
+				WHERE provider = ${provider}
+				  AND codename = ${codename}
 			`;
       return;
   }

@@ -19,6 +19,8 @@ import {
   type CustomEndpointApiStyle,
   type CustomEndpointCapability,
   type CustomEndpointRow,
+  openRouterModelRegistrationSchema,
+  type OpenRouterModelRegistrationRow,
   savedProviderConfigSchema,
   type SavedProviderConfigUpsert,
   userSavedProviderConfigSchema,
@@ -2188,6 +2190,98 @@ export async function deleteCustomEndpoint(params: {
   } catch (error) {
     log.error(
       `Error deleting custom endpoint ${label}/${capability} for ${serverId !== null ? `server ${serverId}` : `user ${userId}`}:`,
+      error,
+    );
+    return false;
+  }
+}
+
+export async function upsertOpenRouterModelRegistration(params: {
+  serverId?: number | null;
+  userId?: number | null;
+  llmId: number;
+}): Promise<OpenRouterModelRegistrationRow | null> {
+  const { serverId = null, userId = null, llmId } = params;
+
+  try {
+    const rows =
+      serverId !== null
+        ? await sql`
+            INSERT INTO openrouter_model_registrations (
+              server_id,
+              user_id,
+              llm_id
+            ) VALUES (
+              ${serverId},
+              NULL,
+              ${llmId}
+            )
+            ON CONFLICT (server_id, llm_id) WHERE user_id IS NULL DO UPDATE SET
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING *
+          `
+        : await sql`
+            INSERT INTO openrouter_model_registrations (
+              server_id,
+              user_id,
+              llm_id
+            ) VALUES (
+              NULL,
+              ${userId},
+              ${llmId}
+            )
+            ON CONFLICT (user_id, llm_id) WHERE server_id IS NULL DO UPDATE SET
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING *
+          `;
+
+    if (!rows.length) {
+      return null;
+    }
+
+    const parsed = openRouterModelRegistrationSchema.safeParse(rows[0]);
+    if (!parsed.success) {
+      log.warn(`Failed to validate OpenRouter model registration for llm_id ${llmId}: ${parsed.error.message}`);
+      return null;
+    }
+
+    return parsed.data;
+  } catch (error) {
+    log.error(
+      `Error upserting OpenRouter model registration for llm_id ${llmId} on ${serverId !== null ? `server ${serverId}` : `user ${userId}`}:`,
+      error,
+    );
+    return null;
+  }
+}
+
+export async function deleteOpenRouterModelRegistration(params: {
+  serverId?: number | null;
+  userId?: number | null;
+  llmId: number;
+}): Promise<boolean> {
+  const { serverId = null, userId = null, llmId } = params;
+
+  try {
+    const result =
+      serverId !== null
+        ? await sql`
+            DELETE FROM openrouter_model_registrations
+            WHERE server_id = ${serverId}
+              AND user_id IS NULL
+              AND llm_id = ${llmId}
+          `
+        : await sql`
+            DELETE FROM openrouter_model_registrations
+            WHERE user_id = ${userId}
+              AND server_id IS NULL
+              AND llm_id = ${llmId}
+          `;
+
+    return result.count > 0;
+  } catch (error) {
+    log.error(
+      `Error deleting OpenRouter model registration for llm_id ${llmId} on ${serverId !== null ? `server ${serverId}` : `user ${userId}`}:`,
       error,
     );
     return false;

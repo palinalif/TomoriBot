@@ -10,6 +10,7 @@ import type { SelectOption } from "@/types/discord/modal";
 import { loadUserSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { assignPersonalCapabilityToProvider } from "@/utils/provider/personalProviderHelpers";
+import { replyLegacyOpenRouterOtherModelMoved } from "@/utils/discord/openrouterModelMigrationNotice";
 
 const MODEL_SELECT_ID = "model_select";
 
@@ -69,7 +70,12 @@ export async function execute(
     if (!providerSelection) return;
 
     const availableModels =
-      (await loadAvailableModelsForProvider(providerSelection.provider))?.filter((model) => model.sees_images) ?? [];
+      (
+        await loadAvailableModelsForProvider(providerSelection.provider, false, {
+          kind: "personal",
+          ownerId: userData.user_id,
+        })
+      )?.filter((model) => model.sees_images) ?? [];
     if (availableModels.length === 0) {
       await replyInfoEmbed(providerSelection.interaction, locale, {
         titleKey: "commands.config.model.vision.no_models_title",
@@ -116,6 +122,11 @@ export async function execute(
         descriptionKey: "commands.config.model.vision.invalid_model_description",
         color: ColorCode.ERROR,
       });
+      return;
+    }
+
+    if (selectedModel.llm_codename === "other-model") {
+      await replyLegacyOpenRouterOtherModelMoved(modalResult.interaction, locale, "personal");
       return;
     }
 

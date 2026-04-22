@@ -9,6 +9,7 @@ import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../
 import { createStandardEmbed } from "../../../utils/discord/embedHelper";
 import type { LlmRow, UserRow } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
+import { replyLegacyOpenRouterOtherModelMoved } from "@/utils/discord/openrouterModelMigrationNotice";
 
 // Modal field identifiers
 // Note: MODAL_CUSTOM_ID is generated per-invocation (see execute()) to prevent stale
@@ -58,6 +59,42 @@ function getLocalizedDescription(model: LlmRow, locale: string): string {
 
   const flagPrefix = flags.length > 0 ? `(${flags.join("+")}) ` : "";
   return `${flagPrefix}${baseDescription}`;
+}
+
+function truncatePlaceholderValue(value: string): string {
+  return value.length > 90 ? `${value.slice(0, 87)}...` : value;
+}
+
+function getCurrentFallbackModelLabel(
+  locale: string,
+  model: LlmRow | null,
+  rawLlmId: number | null,
+  otherModelCodename?: string | null,
+): string {
+  if (!model) {
+    if (rawLlmId !== null) {
+      return `${localizer(locale, "general.unknown")} (#${rawLlmId})`;
+    }
+
+    return localizer(locale, "general.none");
+  }
+
+  if (model.llm_codename === "other-model" && otherModelCodename) {
+    return `other-model -> ${otherModelCodename}`;
+  }
+
+  return model.llm_codename;
+}
+
+function buildCurrentFallbackPlaceholder(
+  locale: string,
+  model: LlmRow | null,
+  rawLlmId: number | null,
+  otherModelCodename?: string | null,
+): string {
+  return localizer(locale, "commands.config.model.fallback.current_placeholder", {
+    model: truncatePlaceholderValue(getCurrentFallbackModelLabel(locale, model, rawLlmId, otherModelCodename)),
+  });
 }
 
 // Configure the subcommand
@@ -124,7 +161,10 @@ export async function execute(
   }
 
   // 4. Load available models for the current provider
-  const availableModels = await loadAvailableModelsForProvider(currentProvider);
+  const availableModels = await loadAvailableModelsForProvider(currentProvider, false, {
+    kind: "server",
+    ownerId: tomoriState.server_id,
+  });
   if (!availableModels || availableModels.length === 0) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.config.model.fallback.no_models_title",
@@ -134,6 +174,16 @@ export async function execute(
     });
     return;
   }
+
+  const currentFallbackIds = tomoriState.config.fallback_llm_ids ?? [];
+  const currentFallbackPlaceholders = SLOT_IDS.map((_, index) =>
+    buildCurrentFallbackPlaceholder(
+      locale,
+      tomoriState.fallback_llms?.[index] ?? null,
+      currentFallbackIds[index] ?? null,
+      tomoriState.config.other_model_codename,
+    ),
+  );
 
   // 5. Build select options from available models
   const allModelOptions: SelectOption[] = availableModels.map((m) => ({
@@ -208,7 +258,7 @@ export async function execute(
       components: SLOT_IDS.map((customId, index) => ({
         customId,
         labelKey: SLOT_LABEL_KEYS[index],
-        placeholder: localizer(locale, "commands.config.model.fallback.select_placeholder"),
+        placeholder: currentFallbackPlaceholders[index],
         required: index === 0, // Only slot 1 is required
         options: optionsForModal,
       })),
@@ -245,6 +295,11 @@ export async function execute(
       seen.add(codename);
       deduplicatedCodenames.push(codename);
     }
+  }
+
+  if (currentProvider === "openrouter" && deduplicatedCodenames.includes("other-model")) {
+    await replyLegacyOpenRouterOtherModelMoved(modalSubmitInteraction, locale, "server");
+    return;
   }
 
   // 10. Validate: no fallback can duplicate the primary model
