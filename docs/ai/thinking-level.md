@@ -82,7 +82,7 @@ These are Tomori defaults, not vendor defaults.
 
 This section describes the mapping implemented in `src/utils/provider/thinkingControl.ts`.
 
-### Google / Vertex
+### Google / Vertex / Vertex Express
 
 Tomori splits Gemini behavior by model family:
 
@@ -242,7 +242,7 @@ See also:
 
 These are the vendor docs used for the current mapping:
 
-- Google / Vertex thinking: <https://docs.cloud.google.com/vertex-ai/generative-ai/docs/thinking>
+- Google / Vertex / Vertex Express thinking: <https://docs.cloud.google.com/vertex-ai/generative-ai/docs/thinking>
 - Anthropic adaptive thinking: <https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking>
 - Anthropic effort: <https://platform.claude.com/docs/en/build-with-claude/effort>
 - Anthropic extended thinking: <https://platform.claude.com/docs/en/build-with-claude/extended-thinking>

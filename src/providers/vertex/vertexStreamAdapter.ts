@@ -39,7 +39,7 @@ import type {
   StreamProvider,
 } from "../../types/stream/interfaces";
 import { fetchAndOptimizeImage } from "../../utils/image/imageProcessor";
-import { parseVertexCompositeKey, createVertexClient, type VertexConfig } from "./vertexClient";
+import { parseVertexCompositeKey, createVertexClient } from "./vertexClient";
 
 /**
  * Vertex-specific stream configuration extending the base StreamConfig
@@ -49,6 +49,11 @@ export interface VertexStreamConfig extends StreamConfig {
   generationConfig?: Record<string, unknown>;
   systemInstruction?: string;
   thinkingConfig?: ThinkingConfig;
+}
+
+export interface VertexStreamAdapterOptions {
+  providerName?: string;
+  clientFactory?: (apiKey: string) => GoogleGenAI;
 }
 
 /**
@@ -92,6 +97,18 @@ export class VertexStreamAdapter implements StreamProvider {
   private speakerGuardEnabled = false;
   private activePersonaNameLower = "";
   private knownSpeakerNamesLower = new Set<string>();
+  protected readonly providerName: string;
+  private readonly clientFactory: (apiKey: string) => GoogleGenAI;
+
+  constructor(options: VertexStreamAdapterOptions = {}) {
+    this.providerName = options.providerName ?? "vertex";
+    this.clientFactory =
+      options.clientFactory ??
+      ((apiKey: string) => {
+        const vertexConfig = parseVertexCompositeKey(apiKey);
+        return createVertexClient(vertexConfig);
+      });
+  }
 
   /**
    * Build a Gemini payload for token counting (or other non-stream requests)
@@ -134,20 +151,18 @@ export class VertexStreamAdapter implements StreamProvider {
    * Start streaming from Vertex AI
    */
   async *startStream(config: StreamConfig, context: StreamContext): AsyncGenerator<RawStreamChunk, void, unknown> {
-    log.info("VertexStreamAdapter: Initializing Vertex AI streaming");
+    log.info(`VertexStreamAdapter: Initializing ${this.providerName} streaming`);
 
-    // 1. Parse the composite key and create a Vertex client via ADC
-    let vertexConfig: VertexConfig;
+    // 1. Build the provider client (ADC for Vertex, API key for Vertex Express)
     let genAI: GoogleGenAI;
     try {
-      vertexConfig = parseVertexCompositeKey(config.apiKey);
-      genAI = createVertexClient(vertexConfig);
+      genAI = this.clientFactory(config.apiKey);
     } catch (parseError) {
-      // Surface composite-key format errors immediately
+      // Surface provider-specific configuration/auth errors immediately
       const providerError = this.handleProviderError(parseError);
       yield {
         data: { error: providerError },
-        provider: "vertex",
+        provider: this.providerName,
         metadata: { timestamp: Date.now(), error: true },
       };
       return;
@@ -172,7 +187,7 @@ export class VertexStreamAdapter implements StreamProvider {
     }
     const mergedStopSequences = buildProviderStopStrings({
       existingStops: requestConfig.stopSequences,
-      providerName: "vertex",
+      providerName: this.providerName,
       model: config.model,
       personaName: context.tomoriState.tomori_nickname,
     });
@@ -313,7 +328,7 @@ export class VertexStreamAdapter implements StreamProvider {
                 data: {
                   text: tailText,
                 } satisfies VertexStreamChunk,
-                provider: "vertex",
+                provider: this.providerName,
                 metadata: {
                   timestamp: Date.now(),
                   model: config.model,
@@ -324,7 +339,7 @@ export class VertexStreamAdapter implements StreamProvider {
 
           yield {
             data: guardResult.chunk,
-            provider: "vertex",
+            provider: this.providerName,
             metadata: {
               timestamp: Date.now(),
               model: config.model,
@@ -345,7 +360,7 @@ export class VertexStreamAdapter implements StreamProvider {
         if (tailText) {
           yield {
             data: { text: tailText } satisfies VertexStreamChunk,
-            provider: "vertex",
+            provider: this.providerName,
             metadata: {
               timestamp: Date.now(),
               model: config.model,
@@ -359,7 +374,7 @@ export class VertexStreamAdapter implements StreamProvider {
         if (tailText) {
           yield {
             data: { text: tailText } satisfies VertexStreamChunk,
-            provider: "vertex",
+            provider: this.providerName,
             metadata: {
               timestamp: Date.now(),
               model: config.model,
@@ -372,7 +387,7 @@ export class VertexStreamAdapter implements StreamProvider {
       const providerError = this.handleProviderError(error);
       yield {
         data: { error: providerError },
-        provider: "vertex",
+        provider: this.providerName,
         metadata: {
           timestamp: Date.now(),
           error: true,
@@ -1039,7 +1054,7 @@ export class VertexStreamAdapter implements StreamProvider {
    */
   getProviderInfo() {
     return {
-      name: "vertex",
+      name: this.providerName,
       version: "1.0",
       supportsStreaming: true,
       supportsFunctionCalling: true,

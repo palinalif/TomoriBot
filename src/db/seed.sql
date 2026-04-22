@@ -224,6 +224,16 @@ VALUES
   ('vertex', 'gemini-3.1-pro-preview', false, false, true, false, false, true, true, true, true, false, true, 'Latest Gemini 3.1 Pro preview model focused on advanced reasoning and analysis via Vertex AI', 'Vertex AI経由の高度な推論と分析に特化した最新のGemini 3.1 Proプレビューモデル'),
   ('vertex', 'gemma-4-31b-it', false, false, false, false, false, true, true, false, false, false, true, 'Vision-capable Vertex-hosted Gemma 4.31B IT model with tool use and structured output (video disabled)', '動画非対応ながらツール利用と構造化出力をサポートするVertex AI向けGemma 4.31B ITモデル'),
   ('vertex', 'gemma-3-27b-it', false, false, false, true, false, false, true, false, false, false, false, 'Instruction-tuned Gemma model with image understanding via Vertex AI', 'Vertex AI経由の画像理解に対応した指示調整済みGemmaモデル'),
+  -- Vertex AI Express Models (Gemini-only Express Mode subset; no video, YouTube, or embeddings)
+  ('vertexexpress', 'gemini-2.0-flash-001', false, false, false, false, false, true, true, false, false, false, true, 'Gemini 2.0 Flash model available through Vertex AI Express', 'Vertex AI Expressで利用できるGemini 2.0 Flashモデル'),
+  ('vertexexpress', 'gemini-2.0-flash-lite-001', false, false, false, false, false, true, true, false, false, false, true, 'Gemini 2.0 Flash Lite model available through Vertex AI Express', 'Vertex AI Expressで利用できるGemini 2.0 Flash Liteモデル'),
+  ('vertexexpress', 'gemini-2.5-flash-lite-preview-09-2025', false, false, false, false, false, true, true, false, false, false, true, 'Preview Gemini 2.5 Flash Lite model available through Vertex AI Express', 'Vertex AI Expressで利用できるGemini 2.5 Flash Liteプレビューモデル'),
+  ('vertexexpress', 'gemini-2.5-flash-lite', false, false, false, false, false, true, true, false, false, false, true, 'Lightweight Gemini 2.5 Flash Lite model via Vertex AI Express', 'Vertex AI Express経由の軽量Gemini 2.5 Flash Liteモデル'),
+  ('vertexexpress', 'gemini-2.5-flash', false, true, false, false, false, true, true, false, false, false, true, 'Balanced Gemini 2.5 Flash model via Vertex AI Express', 'Vertex AI Express経由のバランス型Gemini 2.5 Flashモデル'),
+  ('vertexexpress', 'gemini-2.5-pro', true, false, true, false, false, true, true, false, false, false, true, 'Most capable Gemini 2.5 Pro model via Vertex AI Express', 'Vertex AI Express経由で利用できる最も高性能なGemini 2.5 Proモデル'),
+  ('vertexexpress', 'gemini-3-flash-preview', false, false, false, false, false, true, true, false, false, false, true, 'Preview Gemini 3 Flash model via Vertex AI Express', 'Vertex AI Express経由で利用できるGemini 3 Flashプレビューモデル'),
+  ('vertexexpress', 'gemini-3-pro-preview', false, false, true, false, false, true, true, false, false, false, true, 'Preview Gemini 3 Pro model focused on reasoning via Vertex AI Express', 'Vertex AI Express経由の推論特化Gemini 3 Proプレビューモデル'),
+  ('vertexexpress', 'gemini-3.1-pro-preview', false, false, true, false, false, true, true, false, false, false, true, 'Latest Gemini 3.1 Pro preview model via Vertex AI Express', 'Vertex AI Express経由の最新Gemini 3.1 Proプレビューモデル'),
   -- NovelAI Models (text-only, no vision or structured output capabilities)
   ('novelai', 'glm-4-6', true, true, false, false, false, true, false, false, false, false, false, 'Latest NovelAI roleplay model with enhanced creativity and character consistency', '創造性とキャラクター一貫性を強化した最新のNovelAIロールプレイモデル'),
   ('novelai', 'kayra-v1', false, false, false, false, false, false, false, false, false, false, false, 'Legacy Kayra model for storytelling and roleplay', 'ストーリーテリングとロールプレイ向けのレガシーKayraモデル'),
@@ -820,6 +830,16 @@ VALUES
   ('openrouter', 'google/gemini-3-pro-image-preview', false, false, false, false,
    'Advanced image generation via OpenRouter with enhanced quality and resolution options',
    'OpenRouter経由の強化された品質と解像度オプションを備えた高度な画像生成'),
+  -- Vertex AI Express Gemini Image Generation Models
+  ('vertexexpress', 'gemini-2.5-flash-image', true, false, false, false,
+   'Fast and efficient Gemini image generation via Vertex AI Express with balanced quality and speed',
+   'Vertex AI Express経由で利用する、品質と速度のバランスが取れた高速Gemini画像生成モデル'),
+  ('vertexexpress', 'gemini-3.1-flash-image-preview', false, false, false, false,
+   'Latest fast image generation via Vertex AI Express with Gemini 3.1 Flash Image Preview',
+   'Gemini 3.1 Flash Image PreviewによるVertex AI Express経由の最新高速画像生成'),
+  ('vertexexpress', 'gemini-3-pro-image-preview', false, false, false, false,
+   'Advanced image generation via Vertex AI Express with enhanced quality and resolution options',
+   'Vertex AI Express経由の強化された品質と解像度オプションを備えた高度な画像生成'),
   ('openrouter', 'openai/gpt-5-image-mini', false, false, false, false,
    'Lightweight OpenAI image generation model via OpenRouter',
    'OpenRouter経由の軽量なOpenAI画像生成モデル'),
@@ -844,7 +864,7 @@ VALUES
   ('novelai', 'nai-diffusion-4-5-curated', false, false, false, true,
    'NovelAI Diffusion 4.5 curated model with refined outputs',
    'NovelAI Diffusion 4.5 キュレーションモデル（洗練された出力）')
-ON CONFLICT (codename) DO UPDATE SET
+ON CONFLICT (provider, codename) DO UPDATE SET
   model_description = EXCLUDED.model_description,
   ja_description = EXCLUDED.ja_description,
   is_default = EXCLUDED.is_default,
@@ -920,7 +940,7 @@ VALUES
   ('zai', 'cogvideox-3', true, false, false,
    'CogVideoX-3 — Z.ai video generation with up to 4K resolution and audio support',
    'CogVideoX-3 — 最大4K解像度とオーディオ対応のZ.ai動画生成')
-ON CONFLICT (codename) DO UPDATE SET
+ON CONFLICT (provider, codename) DO UPDATE SET
   model_description = EXCLUDED.model_description,
   ja_description = EXCLUDED.ja_description,
   is_default = EXCLUDED.is_default,
@@ -983,7 +1003,7 @@ VALUES
   ('nvidia', 'nv-embed-v1', 'nv-embed-v1', true, false,
    'Default NVIDIA NIM embedding model for retrieval and document indexing',
    '検索と文書インデックス向けのNVIDIA NIMデフォルト埋め込みモデル')
-ON CONFLICT (codename) DO UPDATE SET
+ON CONFLICT (provider, codename) DO UPDATE SET
   model_family = EXCLUDED.model_family,
   model_description = EXCLUDED.model_description,
   ja_description = EXCLUDED.ja_description,

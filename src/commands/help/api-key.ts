@@ -59,6 +59,10 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
             value: "vertex",
           },
           {
+            name: localizer("en-US", "commands.help.api-key.provider_choice_vertexexpress"),
+            value: "vertexexpress",
+          },
+          {
             name: localizer("en-US", "commands.help.api-key.provider_choice_elevenlabs"),
             value: "elevenlabs",
           },
@@ -308,6 +312,33 @@ export async function execute(
             },
           ],
           footerKey: "commands.help.api-key.vertex_footer",
+          footerVars: {
+            configModel: configModelMention,
+          },
+        };
+        break;
+
+      case "vertexexpress":
+        embedOptions = {
+          titleKey: "commands.help.api-key.vertexexpress_title",
+          descriptionKey: "commands.help.api-key.vertexexpress_description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.help.api-key.vertexexpress_getting_key_title",
+              value: localizer(locale, "commands.help.api-key.vertexexpress_getting_key_description", {
+                configSetup: configSetupMention,
+                configApikeySet: configApikeySetMention,
+              }),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.api-key.vertexexpress_important_title",
+              value: localizer(locale, "commands.help.api-key.vertexexpress_important_description"),
+              inline: false,
+            },
+          ],
+          footerKey: "commands.help.api-key.vertexexpress_footer",
           footerVars: {
             configModel: configModelMention,
           },

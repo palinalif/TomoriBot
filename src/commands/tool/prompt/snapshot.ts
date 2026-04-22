@@ -22,6 +22,8 @@ import { ContextItemTag, type StructuredContextItem } from "@/types/misc/context
 import { GoogleStreamAdapter } from "@/providers/google/googleStreamAdapter";
 import { OpenrouterStreamAdapter } from "@/providers/openrouter/openrouterStreamAdapter";
 import { AnthropicStreamAdapter } from "@/providers/anthropic/anthropicStreamAdapter";
+import { VertexStreamAdapter } from "@/providers/vertex/vertexStreamAdapter";
+import { VertexexpressStreamAdapter } from "@/providers/vertexexpress/vertexexpressStreamAdapter";
 import { type ToolStateForContext, getAvailableToolsWithMCP } from "@/tools/toolRegistry";
 import { getGoogleToolAdapter } from "@/providers/google/googleToolAdapter";
 import { getAnthropicToolAdapter } from "@/providers/anthropic/anthropicToolAdapter";
@@ -32,6 +34,7 @@ import { getNvidiaToolAdapter } from "@/providers/nvidia/nvidiaToolAdapter";
 import { getZaiToolAdapter } from "@/providers/zai/zaiToolAdapter";
 import { getZaicodingToolAdapter } from "@/providers/zaicoding/zaicodingToolAdapter";
 import { getVertexToolAdapter } from "@/providers/vertex/vertexToolAdapter";
+import { getVertexexpressToolAdapter } from "@/providers/vertexexpress/vertexexpressToolAdapter";
 import { getNovelaiToolAdapter } from "@/providers/novelai/novelaiToolAdapter";
 import type { MCPCapableToolAdapter } from "@/types/tool/interfaces";
 import { buildActiveSamplingParams, selectAnthropicSamplingParams } from "@/utils/provider/samplingControl";
@@ -850,7 +853,9 @@ function buildTextSnapshot(contextItems: StructuredContextItem[]): string {
  * to keep file sizes manageable, matching the terminal log sanitization.
  *
  * Supported providers with full native fidelity:
- *   - google / vertex   → GoogleStreamAdapter.buildTokenCountPayload
+ *   - google            → GoogleStreamAdapter.buildTokenCountPayload
+ *   - vertex            → VertexStreamAdapter.buildTokenCountPayload
+ *   - vertexexpress     → VertexexpressStreamAdapter.buildTokenCountPayload
  *   - openrouter-family → OpenrouterStreamAdapter.buildProbeMessages
  *   - anthropic         → AnthropicStreamAdapter.buildProbeMessages
  *
@@ -878,9 +883,14 @@ async function buildJsonSnapshot(
 
   let requestData: Record<string, unknown>;
 
-  if (providerName === "google" || providerName === "vertex") {
-    // 1. Assemble context into Google Content[] format
-    const adapter = new GoogleStreamAdapter();
+  if (providerName === "google" || providerName === "vertex" || providerName === "vertexexpress") {
+    // 1. Assemble context into Google/Vertex Content[] format
+    const adapter =
+      providerName === "google"
+        ? new GoogleStreamAdapter()
+        : providerName === "vertex"
+          ? new VertexStreamAdapter()
+          : new VertexexpressStreamAdapter();
     const payload = await adapter.buildTokenCountPayload(contextItems, modelName);
 
     // 2. Sanitize — replace inlineData.data (base64) with placeholder (mirrors logSanitizedRequest)
@@ -1036,7 +1046,7 @@ async function buildJsonSnapshot(
 
 /**
  * Resolves the tool adapter matching the given provider. Non-OpenAI providers
- * (google/vertex/anthropic) have dedicated adapters; OpenAI-compatible providers
+ * (google/vertex/vertexexpress/anthropic) have dedicated adapters; OpenAI-compatible providers
  * share the openrouter-style adapter via subclasses. NovelAI keeps its own.
  * Unknown providers fall back to the OpenRouter adapter for OpenAI-compat shape.
  */
@@ -1046,6 +1056,8 @@ function selectToolAdapter(providerName: string): MCPCapableToolAdapter {
       return getGoogleToolAdapter();
     case "vertex":
       return getVertexToolAdapter();
+    case "vertexexpress":
+      return getVertexexpressToolAdapter();
     case "anthropic":
       return getAnthropicToolAdapter();
     case "openrouter":
@@ -1119,7 +1131,8 @@ async function fetchProviderTools(persona: TomoriState, providerName: string): P
  * for `supportedParameters`, so params the model may reject are still shown.
  *
  * Provider shapes:
- *   - google / vertex  : `{temperature, top_k, top_p, frequency_penalty, presence_penalty, max_output_tokens, stop_sequences, safety_settings, thinking_config?}`
+ *   - google           : `{temperature, top_k, top_p, frequency_penalty, presence_penalty, max_output_tokens, stop_sequences, safety_settings, thinking_config?}`
+ *   - vertex / vertexexpress: `{temperature, top_k, top_p, max_output_tokens, stop_sequences, safety_settings, thinking_config?}`
  *   - anthropic        : `{temperature?, top_p?, top_k?, max_tokens, stop_sequences}` (Anthropic rejects sending both temp+top_p — uses `selectAnthropicSamplingParams`)
  *   - openai-compat    : `{temperature?, top_p?, top_k?, frequency_penalty?, presence_penalty?, min_p?, max_tokens, stop}`
  *
@@ -1132,7 +1145,7 @@ function buildRequestConfig(persona: TomoriState, providerName: string, modelNam
   const config = persona.config;
   const disabledParams = config.llm_disabled_params ?? [];
 
-  if (providerName === "google" || providerName === "vertex") {
+  if (providerName === "google") {
     // 1. Google: show raw configured values (unfiltered, mirrors GoogleProviderConfig)
     const maxOutputTokens = Number.parseInt(process.env.GOOGLE_MAX_OUTPUT_TOKENS || "8192", 10);
     const out: Record<string, unknown> = {
@@ -1158,8 +1171,32 @@ function buildRequestConfig(persona: TomoriState, providerName: string, modelNam
     return out;
   }
 
+  if (providerName === "vertex" || providerName === "vertexexpress") {
+    // 2. Vertex family: mirrors VertexProvider/VertexexpressProvider request config
+    const maxOutputTokens = Number.parseInt(process.env.GOOGLE_MAX_OUTPUT_TOKENS || "8192", 10);
+    const out: Record<string, unknown> = {
+      generation_config: {
+        temperature: config.llm_temperature,
+        top_k: config.llm_top_k,
+        top_p: config.llm_top_p,
+        max_output_tokens: maxOutputTokens,
+        stop_sequences: [],
+      },
+      safety_settings: [
+        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
+      ],
+    };
+    const thinkingConfig = serializeGoogleThinkingConfig(buildGoogleThinkingConfig(modelName, config.thinking_level));
+    if (thinkingConfig) out.thinking_config = thinkingConfig;
+    if (disabledParams.length > 0) out.disabled_params = disabledParams;
+    return out;
+  }
+
   if (providerName === "anthropic") {
-    // 2. Anthropic: uses selectAnthropicSamplingParams to coalesce temp+top_p
+    // 3. Anthropic: uses selectAnthropicSamplingParams to coalesce temp+top_p
     const selection = selectAnthropicSamplingParams({
       temperature: config.llm_temperature,
       topP: config.llm_top_p,
@@ -1186,7 +1223,7 @@ function buildRequestConfig(persona: TomoriState, providerName: string, modelNam
     return out;
   }
 
-  // 3. OpenAI-compatible (openrouter, deepseek, zai, zaicoding, nvidia, custom, novelai):
+  // 4. OpenAI-compatible (openrouter, deepseek, zai, zaicoding, nvidia, custom, novelai):
   //    translate active sampling params to snake_case and include stop + max_tokens.
   const active = buildActiveSamplingParams(config);
   const maxTokensRaw = process.env.OPENROUTER_MAX_OUTPUT_TOKENS || "8192";

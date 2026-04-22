@@ -25,6 +25,7 @@ import { replyInfoEmbed, promptWithRawModal } from "../../utils/discord/interact
 import type { UserRow } from "../../types/db/schema";
 import { checkImageQuota, incrementImageQuota } from "../../utils/quota/imageQuotaManager";
 import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
+import { resolveNativeImageGenerationCapability } from "@/utils/provider/providerCapabilityResolver";
 import { ZAI_CODING_IMAGES_GENERATIONS_URL, ZAI_GENERAL_IMAGES_GENERATIONS_URL } from "@/providers/zai/zaiShared";
 
 // Modal configuration constants
@@ -503,8 +504,20 @@ export async function execute(
     let generatedImageData: string | null = null;
     let generatedImageMimeType: string | null = null;
     const imageGenerationImplementation = resolveProviderFeatureImplementation(provider, "imageGeneration");
+    const nativeImageProvider =
+      provider === "vertexexpress" ? await resolveNativeImageGenerationCapability(provider) : null;
 
-    if (imageGenerationImplementation === "openrouter") {
+    if (nativeImageProvider) {
+      const result = await nativeImageProvider.generateNativeImage({
+        apiKey,
+        model: modelCodename,
+        prompt,
+        aspectRatio,
+        ...(referenceImages.length > 0 ? { referenceImages } : {}),
+      });
+      generatedImageData = result.imageData;
+      generatedImageMimeType = result.mimeType;
+    } else if (imageGenerationImplementation === "openrouter") {
       // Use OpenRouter API
       const result = await generateImageWithOpenRouter(
         apiKey,

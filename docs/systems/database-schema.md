@@ -110,7 +110,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `tomori_configs.nai_sampler`, `nai_steps`, `nai_scale`, `nai_noise_schedule`, and `nai_cfg_rescale` store optional server overrides for NovelAI image generation params; `NULL` means use the env fallback.
 - `tomori_configs.vision_llm_id` stores the dedicated vision model for non-vision chat models; `NULL` means no vision tool is available. When set, the `analyze_image` tool is exposed so non-vision models can delegate image analysis to this model.
 - `tomori_configs.llm_logit_biases` stores server-wide logit-bias entries as raw text/token-ID input plus tokenizer-specific cached resolutions. Raw text stays canonical so entries can be refreshed when `llm_id` changes.
-- `tomori_configs.videogen_enabled` gates both slash-command and tool-driven video generation exposure.
+- `tomori_configs.videogen_enabled` gates both slash-command and tool-driven video generation exposure. The DB default is `false`, so video generation starts disabled until explicitly enabled.
 - `tomori_configs.video_model_id` stores the active server-scoped video generation model selection.
 - `tomori_configs.context_note` stores the server-wide author's note injected into conversation history at inference time. Acts as a fallback when the active persona has no persona-specific note.
 - `tomori_configs.context_note_depth` stores the injection depth for the global note: `0` = bottom of fetched history (most recent), `N` = N messages from the bottom, clamped to top if it exceeds the actual count.

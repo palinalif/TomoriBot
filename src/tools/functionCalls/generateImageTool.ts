@@ -19,6 +19,7 @@ import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema }
 import { sql } from "../../utils/db/client";
 import { checkImageQuota, incrementImageQuota } from "../../utils/quota/imageQuotaManager";
 import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
+import { resolveNativeImageGenerationCapability } from "@/utils/provider/providerCapabilityResolver";
 import { generateCustomImageViaEndpoint } from "@/providers/custom/customEndpointDispatcher";
 import { ZAI_CODING_IMAGES_GENERATIONS_URL, ZAI_GENERAL_IMAGES_GENERATIONS_URL } from "@/providers/zai/zaiShared";
 import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
@@ -678,6 +679,8 @@ export class GenerateImageTool extends BaseTool {
       let referenceImagesUsed = referenceImages.length > 0;
       let referenceImagesIgnoredReason = "";
       const imageGenerationImplementation = resolveProviderFeatureImplementation(executionProvider, "imageGeneration");
+      const nativeImageProvider =
+        executionProvider === "vertexexpress" ? await resolveNativeImageGenerationCapability(executionProvider) : null;
 
       if (creds.customEndpoint) {
         const result = await generateCustomImageViaEndpoint({
@@ -686,6 +689,15 @@ export class GenerateImageTool extends BaseTool {
           prompt,
           aspectRatio,
           referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+        });
+        generatedImageData = result.imageData;
+      } else if (nativeImageProvider) {
+        const result = await nativeImageProvider.generateNativeImage({
+          apiKey,
+          model: modelCodename,
+          prompt,
+          aspectRatio,
+          ...(referenceImages.length > 0 ? { referenceImages } : {}),
         });
         generatedImageData = result.imageData;
       } else if (imageGenerationImplementation === "openrouter") {

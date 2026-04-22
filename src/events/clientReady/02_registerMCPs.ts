@@ -13,6 +13,7 @@ import { getNvidiaToolAdapter } from "../../providers/nvidia/nvidiaToolAdapter";
 import { getZaiToolAdapter } from "../../providers/zai/zaiToolAdapter";
 import { getZaicodingToolAdapter } from "../../providers/zaicoding/zaicodingToolAdapter";
 import { getVertexToolAdapter } from "../../providers/vertex/vertexToolAdapter";
+import { getVertexexpressToolAdapter } from "../../providers/vertexexpress/vertexexpressToolAdapter";
 import { getAnthropicToolAdapter } from "../../providers/anthropic/anthropicToolAdapter";
 
 /**
@@ -60,6 +61,10 @@ export default async (): Promise<void> => {
     const vertexAdapter = getVertexToolAdapter();
     registerMCPAdapter(vertexAdapter);
     log.info("Registered Vertex tool adapter with MCP capabilities");
+
+    const vertexexpressAdapter = getVertexexpressToolAdapter();
+    registerMCPAdapter(vertexexpressAdapter);
+    log.info("Registered Vertex AI Express tool adapter with MCP capabilities");
 
     const anthropicAdapter = getAnthropicToolAdapter();
     registerMCPAdapter(anthropicAdapter);

@@ -13,6 +13,7 @@ import { novelaiProviderInfo } from "@/providers/novelai/providerInfo";
 import { nvidiaProviderInfo } from "@/providers/nvidia/providerInfo";
 import { openrouterProviderInfo } from "@/providers/openrouter/providerInfo";
 import { vertexProviderInfo } from "@/providers/vertex/providerInfo";
+import { vertexexpressProviderInfo } from "@/providers/vertexexpress/providerInfo";
 import { anthropicProviderInfo } from "@/providers/anthropic/providerInfo";
 import { getCustomProviderDisplayName, isCustomProvider } from "@/utils/provider/customProviderUtils";
 
@@ -26,6 +27,7 @@ const providerInfos: readonly ProviderInfo[] = [
   zaiProviderInfo,
   zaicodingProviderInfo,
   vertexProviderInfo,
+  vertexexpressProviderInfo,
   anthropicProviderInfo,
 ] as const;
 

@@ -274,7 +274,7 @@ DROP TRIGGER IF EXISTS update_llms_timestamp ON llms;
 CREATE TABLE IF NOT EXISTS image_diffusion_models (
   diffusion_model_id SERIAL PRIMARY KEY,
   provider TEXT NOT NULL,
-  codename TEXT NOT NULL UNIQUE,
+  codename TEXT NOT NULL,
   model_description TEXT,
   ja_description TEXT,
   is_default BOOLEAN DEFAULT false,
@@ -291,12 +291,14 @@ DROP TRIGGER IF EXISTS update_image_diffusion_models_timestamp ON image_diffusio
 -- Create indexes for faster lookups
 CREATE INDEX IF NOT EXISTS idx_image_diffusion_models_provider ON image_diffusion_models(provider);
 CREATE INDEX IF NOT EXISTS idx_image_diffusion_models_default ON image_diffusion_models(is_default, is_deprecated);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_image_diffusion_models_provider_codename
+  ON image_diffusion_models(provider, codename);
 
 -- Video Generation Models table for video generation models
 CREATE TABLE IF NOT EXISTS video_generation_models (
   video_model_id SERIAL PRIMARY KEY,
   provider TEXT NOT NULL,
-  codename TEXT NOT NULL UNIQUE,
+  codename TEXT NOT NULL,
   model_description TEXT,
   ja_description TEXT,
   is_default BOOLEAN DEFAULT false,
@@ -312,12 +314,14 @@ DROP TRIGGER IF EXISTS update_video_generation_models_timestamp ON video_generat
 -- Create indexes for faster lookups
 CREATE INDEX IF NOT EXISTS idx_video_generation_models_provider ON video_generation_models(provider);
 CREATE INDEX IF NOT EXISTS idx_video_generation_models_default ON video_generation_models(is_default, is_deprecated);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_video_generation_models_provider_codename
+  ON video_generation_models(provider, codename);
 
 -- Embedding Models table for document embedding/search
 CREATE TABLE IF NOT EXISTS embedding_models (
   embedding_model_id SERIAL PRIMARY KEY,
   provider TEXT NOT NULL,
-  codename TEXT NOT NULL UNIQUE,
+  codename TEXT NOT NULL,
   model_family TEXT NOT NULL,
   model_description TEXT,
   ja_description TEXT,
@@ -334,6 +338,24 @@ DROP TRIGGER IF EXISTS update_embedding_models_timestamp ON embedding_models;
 CREATE INDEX IF NOT EXISTS idx_embedding_models_provider ON embedding_models(provider);
 CREATE INDEX IF NOT EXISTS idx_embedding_models_default ON embedding_models(is_default, is_deprecated);
 CREATE INDEX IF NOT EXISTS idx_embedding_models_family ON embedding_models(model_family);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_embedding_models_provider_codename
+  ON embedding_models(provider, codename);
+
+-- Allow the same codename to exist under different providers for model metadata tables.
+DO $$
+BEGIN
+  ALTER TABLE image_diffusion_models DROP CONSTRAINT IF EXISTS image_diffusion_models_codename_key;
+  DROP INDEX IF EXISTS image_diffusion_models_codename_key;
+
+  ALTER TABLE video_generation_models DROP CONSTRAINT IF EXISTS video_generation_models_codename_key;
+  DROP INDEX IF EXISTS video_generation_models_codename_key;
+
+  ALTER TABLE embedding_models DROP CONSTRAINT IF EXISTS embedding_models_codename_key;
+  DROP INDEX IF EXISTS embedding_models_codename_key;
+EXCEPTION
+  WHEN undefined_table THEN
+    RAISE NOTICE 'Model metadata table missing while relaxing codename uniqueness; skipping';
+END $$;
 
 CREATE TABLE IF NOT EXISTS tomori_configs (
   tomori_config_id SERIAL PRIMARY KEY,
@@ -355,7 +377,7 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   self_teaching_enabled BOOLEAN DEFAULT true,
   personal_memories_enabled BOOLEAN DEFAULT true,
   imagegen_enabled BOOLEAN DEFAULT true,
-  videogen_enabled BOOLEAN DEFAULT true,
+  videogen_enabled BOOLEAN DEFAULT false,
   tool_notice_hidden_keys TEXT[] DEFAULT '{}',
   llm_disabled_params TEXT[] DEFAULT '{}', -- DEPRECATED Phase 1.5 Pass B: mirror of saved_provider_configs
   humanizer_degree INT DEFAULT 1,
@@ -536,7 +558,8 @@ SELECT add_column_if_not_exists('tomori_configs', 'uncensor_unicode_space_enable
 SELECT add_column_if_not_exists('tomori_configs', 'uncensor_sanitize_enabled', 'BOOLEAN', 'false');
 
 -- Add video generation permission
-SELECT add_column_if_not_exists('tomori_configs', 'videogen_enabled', 'BOOLEAN', 'true');
+SELECT add_column_if_not_exists('tomori_configs', 'videogen_enabled', 'BOOLEAN', 'false');
+ALTER TABLE tomori_configs ALTER COLUMN videogen_enabled SET DEFAULT false;
 
 -- Add video model reference for video generation
 SELECT add_column_if_not_exists('tomori_configs', 'video_model_id', 'INTEGER');
@@ -561,7 +584,8 @@ SELECT add_column_if_not_exists('tomori_configs', 'cooldown_length', 'INTEGER', 
 -- Renamed from self_reply_limit to cascade_limit
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tomori_configs' AND column_name = 'self_reply_limit') THEN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tomori_configs' AND column_name = 'self_reply_limit')
+    AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tomori_configs' AND column_name = 'cascade_limit') THEN
     ALTER TABLE tomori_configs RENAME COLUMN self_reply_limit TO cascade_limit;
   END IF;
 END $$;
@@ -572,7 +596,8 @@ SELECT add_column_if_not_exists('tomori_configs', 'cascade_limit', 'INTEGER', '3
 -- Renamed from triggered_persona_limit to match_limit
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tomori_configs' AND column_name = 'triggered_persona_limit') THEN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tomori_configs' AND column_name = 'triggered_persona_limit')
+    AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tomori_configs' AND column_name = 'match_limit') THEN
     ALTER TABLE tomori_configs RENAME COLUMN triggered_persona_limit TO match_limit;
   END IF;
 END $$;

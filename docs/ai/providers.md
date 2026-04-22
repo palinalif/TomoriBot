@@ -31,6 +31,8 @@ Provider folders under `src/providers/`:
 - `nvidia` (`NvidiaProvider`)
 - `zai` (`ZaiProvider`)
 - `zaicoding` (`ZaicodingProvider`)
+- `vertex` (`VertexProvider`)
+- `vertexexpress` (`VertexexpressProvider`)
 - `anthropic` (`AnthropicProvider`)
 
 ## Provider Factory
@@ -57,6 +59,8 @@ Static provider metadata is defined in each provider folder:
 - `src/providers/nvidia/providerInfo.ts`
 - `src/providers/zai/providerInfo.ts`
 - `src/providers/zaicoding/providerInfo.ts`
+- `src/providers/vertex/providerInfo.ts`
+- `src/providers/vertexexpress/providerInfo.ts`
 - `src/providers/anthropic/providerInfo.ts`
 
 OpenAI-compatible family internals shared by `custom`, `deepseek`, `nvidia`, `zai`, and `zaicoding` live in:
@@ -160,6 +164,25 @@ Phase 3 promotes custom endpoints into labeled provider entries instead of a sin
 - `top_k` remains independent and can still be sent with either of the above
 - `/tool estimate cost` uses Anthropic's dedicated `/v1/messages/count_tokens` endpoint
 
+## Vertex AI Provider Notes
+
+`vertex` uses Vertex AI with host-side Application Default Credentials plus a saved `{project_id}::{location}` config value.
+
+- broader Google Cloud / Vertex AI model surface than Express Mode
+- supports chat streaming, tool calling, structured output, compaction, embeddings, and preset generation
+- seeded Vertex rows include multimodal/video-capable Gemini and selected Vertex-hosted Gemma rows
+- best fit for local/self-hosted deployments or a single deployment-level Google identity
+
+## Vertex AI Express Provider Notes
+
+`vertexexpress` uses Vertex AI Express Mode with a per-user API key.
+
+- BYOK-friendly for deployed TomoriBot instances where each user brings their own Google key
+- limited to the Express Mode Gemini subset seeded in `llms` / `image_diffusion_models`
+- supports chat streaming, tool calling, structured output, compaction, preset generation, and native image generation
+- does not support embeddings, video input/output, or YouTube handling
+- uses the same Google GenAI SDK family, but authenticates with `vertexai: true` plus `apiKey`
+
 ## DeepSeek Provider Notes
 
 `deepseek` uses the shared OpenAI-compatible family layer for bounded text/chat support.
@@ -232,6 +255,8 @@ Tools are provider-agnostic at registry level, then adapted per provider by each
 - NVIDIA NIM: `nvidiaToolAdapter.ts`
 - Z.ai: `zaiToolAdapter.ts`
 - Z.ai (Coding): `zaicodingToolAdapter.ts`
+- Vertex AI: `vertexToolAdapter.ts`
+- Vertex AI Express: `vertexexpressToolAdapter.ts`
 
 All providers rely on centralized tool filtering via `getAvailableToolsWithMCP()`.
 
