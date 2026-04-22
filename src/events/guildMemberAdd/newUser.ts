@@ -18,6 +18,7 @@ import { resolvePreferredDiscordDisplayName } from "@/utils/discord/displayName"
 import { downloadImage } from "@/utils/image/avatarHelper";
 import { log } from "@/utils/misc/logger";
 import { decryptApiKey } from "@/utils/security/crypto";
+import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 import {
   toZaiApiModelName,
   ZAI_CODING_CHAT_COMPLETIONS_URL,
@@ -96,7 +97,7 @@ async function callOpenAICompatibleVisionForAvatar(
     ],
     max_tokens: 1024,
   };
-  const response = await fetch(endpointUrl, {
+  const response = await fetchUserRemoteUrl(endpointUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

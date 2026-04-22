@@ -3,6 +3,7 @@ import { logSanitizedOpenAICompatibleRequest } from "@/providers/openaiCompatibl
 import type { ProviderImageInput } from "@/types/provider/featureInterfaces";
 import { fetchAndOptimizeImage } from "@/utils/image/imageProcessor";
 import { log } from "@/utils/misc/logger";
+import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 
 export type CustomContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 
@@ -116,7 +117,7 @@ export async function callCustomChatCompletions(params: {
   }
 
   try {
-    const response = await fetch(normalizeCustomApiUrl(params.endpointUrl), {
+    const response = await fetchUserRemoteUrl(normalizeCustomApiUrl(params.endpointUrl), {
       method: "POST",
       headers: buildCustomHeaders(params.apiKey),
       body: JSON.stringify(params.body),

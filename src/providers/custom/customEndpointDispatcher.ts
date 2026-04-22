@@ -6,6 +6,7 @@ import type {
   ProviderNativeVideoGenerationResult,
 } from "@/types/provider/featureInterfaces";
 import { buildCustomHeaders } from "@/providers/custom/customOpenAICompatibleUtils";
+import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 
 function getComfyUiTimeoutMs(): number {
   const parsed = Number.parseInt(process.env.COMFYUI_POLL_TIMEOUT_MS ?? "300000", 10);
@@ -21,7 +22,7 @@ async function generateWithComfyUi(
     throw new Error("ComfyUI workflow JSON is missing.");
   }
 
-  const promptResponse = await fetch(`${endpoint.endpoint_url.replace(/\/+$/, "")}/prompt`, {
+  const promptResponse = await fetchUserRemoteUrl(`${endpoint.endpoint_url.replace(/\/+$/, "")}/prompt`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -48,7 +49,7 @@ async function generateWithComfyUi(
 
   const timeoutAt = Date.now() + getComfyUiTimeoutMs();
   while (Date.now() < timeoutAt) {
-    const historyResponse = await fetch(
+    const historyResponse = await fetchUserRemoteUrl(
       `${endpoint.endpoint_url.replace(/\/+$/, "")}/history/${encodeURIComponent(promptPayload.prompt_id)}`,
     );
 
@@ -98,7 +99,7 @@ async function downloadComfyUiAsset(
     url.searchParams.set("type", asset.type);
   }
 
-  const response = await fetch(url.toString());
+  const response = await fetchUserRemoteUrl(url.toString());
   if (!response.ok) {
     throw new Error(`ComfyUI asset download failed: ${response.status} ${response.statusText}`);
   }
@@ -125,7 +126,7 @@ export async function generateCustomImageViaEndpoint(params: {
     };
   }
 
-  const response = await fetch(`${endpoint.endpoint_url.replace(/\/+$/, "")}/images/generations`, {
+  const response = await fetchUserRemoteUrl(`${endpoint.endpoint_url.replace(/\/+$/, "")}/images/generations`, {
     method: "POST",
     headers: buildCustomHeaders(apiKey),
     body: JSON.stringify({
@@ -171,7 +172,7 @@ export async function generateCustomVideoViaEndpoint(params: {
     };
   }
 
-  const response = await fetch(`${endpoint.endpoint_url.replace(/\/+$/, "")}/videos/generations`, {
+  const response = await fetchUserRemoteUrl(`${endpoint.endpoint_url.replace(/\/+$/, "")}/videos/generations`, {
     method: "POST",
     headers: buildCustomHeaders(apiKey),
     body: JSON.stringify({

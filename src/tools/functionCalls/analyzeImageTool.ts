@@ -18,6 +18,7 @@ import {
   ZAI_GENERAL_CHAT_COMPLETIONS_URL,
 } from "@/providers/zai/zaiShared";
 import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
+import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 
 /**
  * Provider-to-chat-completions-URL mapping for OpenAI-compatible providers.
@@ -259,7 +260,7 @@ export class AnalyzeImageTool extends BaseTool {
       max_tokens: 1024,
     };
 
-    const response = await fetch(endpointUrl, {
+    const response = await fetchUserRemoteUrl(endpointUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

@@ -34,6 +34,7 @@ import { isBraveSearchAvailable } from "@/tools/restAPIs/brave/braveSearchServic
 import { getMCPManager } from "@/utils/mcp/mcpManager";
 import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
 import { buildActiveSamplingParams, getActiveTemperature } from "@/utils/provider/samplingControl";
+import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
 import { CustomStreamAdapter, type CustomStreamConfig } from "./customStreamAdapter";
 import type { ProviderError, StreamContext } from "../../types/stream/interfaces";
@@ -162,7 +163,7 @@ export class CustomProvider
       throw new Error("Custom embedding endpoint is not configured.");
     }
 
-    const response = await fetch(`${endpointUrl.replace(/\/+$/, "")}/embeddings`, {
+    const response = await fetchUserRemoteUrl(`${endpointUrl.replace(/\/+$/, "")}/embeddings`, {
       method: "POST",
       headers: buildCustomHeaders(request.apiKey),
       body: JSON.stringify({

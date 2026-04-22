@@ -36,6 +36,7 @@ import {
   parseCustomProvider,
 } from "@/utils/provider/customProviderUtils";
 import { encryptApiKey } from "@/utils/security/crypto";
+import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 
 type RegistrationScope =
   | {
@@ -553,11 +554,11 @@ export async function validateCustomEndpointReachability(params: {
 
   try {
     if (params.apiStyle === "comfyui") {
-      const response = await fetch(`${params.endpointUrl.replace(/\/+$/, "")}/system_stats`, { headers });
+      const response = await fetchUserRemoteUrl(`${params.endpointUrl.replace(/\/+$/, "")}/system_stats`, { headers });
       return response.ok ? { ok: true } : { ok: false, reason: `HTTP ${response.status} ${response.statusText}` };
     }
 
-    const response = await fetch(`${params.endpointUrl.replace(/\/+$/, "")}/models`, { headers });
+    const response = await fetchUserRemoteUrl(`${params.endpointUrl.replace(/\/+$/, "")}/models`, { headers });
     return response.ok ? { ok: true } : { ok: false, reason: `HTTP ${response.status} ${response.statusText}` };
   } catch (error) {
     return {

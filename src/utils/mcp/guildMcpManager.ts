@@ -30,6 +30,7 @@ import { decryptGuildMcpAuthToken } from "@/utils/db/guildMcpDb";
 import { sendToolNotice } from "@/utils/discord/toolProgressNotice";
 import { sendFetchProgressNotice } from "@/utils/mcp/mcpExecutor";
 import { validateRemoteMcpUrl } from "@/utils/mcp/mcpUrlSecurity";
+import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 import { localizer } from "@/utils/text/localizer";
 
 /**
@@ -611,6 +612,7 @@ class GuildMcpManager {
     // 2. Try StreamableHTTP (modern MCP transport)
     try {
       const streamableTransport = new StreamableHTTPClientTransport(parsedUrl, {
+        fetch: fetchUserRemoteUrl,
         requestInit,
       });
       await Promise.race([
@@ -629,7 +631,13 @@ class GuildMcpManager {
     }
 
     // 3. Fall back to SSE transport
-    const sseTransport = new SSEClientTransport(parsedUrl, { requestInit });
+    const sseTransport = new SSEClientTransport(parsedUrl, {
+      fetch: fetchUserRemoteUrl,
+      requestInit,
+      eventSourceInit: {
+        fetch: fetchUserRemoteUrl,
+      },
+    });
     await Promise.race([
       client.connect(sseTransport),
       new Promise<never>((_, reject) =>

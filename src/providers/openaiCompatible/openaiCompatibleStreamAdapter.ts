@@ -27,6 +27,7 @@ import type {
 import type { StructuredContextItem } from "@/types/misc/context";
 import { log } from "@/utils/misc/logger";
 import { isParamDisabled } from "@/utils/provider/samplingControl";
+import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 import { localizer } from "@/utils/text/localizer";
 import { isRegisteredOrReservedSpeakerLabel } from "@/utils/text/stringHelper";
 import { buildPersonaSpeakerStopString, buildProviderStopStrings } from "@/providers/utils/stopStrings";
@@ -209,7 +210,9 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
         }
       }
 
-      let response = await fetch(apiUrl, {
+      const fetchImpl = this.options.providerName === "custom" ? fetchUserRemoteUrl : fetch;
+
+      let response = await fetchImpl(apiUrl, {
         method: "POST",
         headers,
         body: JSON.stringify(requestBody),
@@ -226,7 +229,7 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
           const retryBody = { ...requestBody };
           delete retryBody.stop;
 
-          response = await fetch(apiUrl, {
+          response = await fetchImpl(apiUrl, {
             method: "POST",
             headers,
             body: JSON.stringify(retryBody),

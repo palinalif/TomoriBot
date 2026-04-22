@@ -20,6 +20,7 @@ import { ContextItemTag, type StructuredContextItem } from "../../types/misc/con
 import { ColorCode } from "@/utils/misc/logger";
 import { loadLlmById } from "@/utils/db/dbRead";
 import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
+import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 
 /**
  * Provider-to-chat-completions-URL mapping for OpenAI-compatible providers.
@@ -539,7 +540,7 @@ export class PeekProfilePictureTool extends BaseTool {
       max_tokens: 1024,
     };
 
-    const response = await fetch(endpointUrl, {
+    const response = await fetchUserRemoteUrl(endpointUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

@@ -157,6 +157,24 @@ Protections in place:
 - Parameterized Bun SQL template queries are used for values.
 - Dynamic UPDATE field names are validated against explicit allowlists (`validateUserFields`, `validateTomoriFields`, `validateTomoriConfigFields`).
 
+## User-Supplied Remote URL Protections
+
+Primary files:
+- `src/utils/mcp/mcpUrlSecurity.ts`
+- `src/utils/security/userRemoteFetch.ts`
+- `src/utils/mcp/guildMcpManager.ts`
+- `src/utils/provider/customEndpointService.ts`
+- `src/providers/custom/`
+
+Current runtime protections for guild MCP servers and custom endpoints:
+- URL preflight validation still enforces the existing protocol/host policy from `validateRemoteMcpUrl()`.
+- Actual HTTP requests no longer trust that preflight alone; each request revalidates the target URL immediately before sending.
+- The real connection is pinned to the just-validated DNS result via a per-request dispatcher, so the request does not perform a second untrusted DNS lookup.
+- Custom endpoint redirects are handled hop-by-hop with revalidation on every `Location` target and a bounded redirect depth (`USER_REMOTE_FETCH_MAX_REDIRECTS`, default `3`).
+- Guild MCP HTTP transports continue to reject redirects (`redirect: "error"`), but now use the same pinned-DNS fetch path for the underlying network call.
+
+Key takeaway: TomoriBot no longer relies on a validation-only DNS check for user-supplied remote endpoints; the validated address is now the address actually used for the request.
+
 ## Runtime Guardrails and Anti-Abuse Controls
 
 Primary files:
