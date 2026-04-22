@@ -1,7 +1,7 @@
 import type { Attachment, ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { CustomEndpointApiStyle, CustomEndpointCapability, ErrorContext, UserRow } from "@/types/db/schema";
-import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { validateRemoteMcpUrl } from "@/utils/mcp/mcpUrlSecurity";
@@ -25,17 +25,17 @@ async function loadWorkflowJson(attachment: Attachment | null): Promise<Record<s
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("add")
-    .setDescription(localizer("en-US", "commands.personal.custom_models.add.description"))
+    .setDescription(localizer("en-US", "commands.config.custom_models.add.description"))
     .addStringOption((option) =>
       option
         .setName("endpoint_label")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.label_description"))
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.label_description"))
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("capability")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.capability_description"))
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.capability_description"))
         .setRequired(true)
         .addChoices(
           { name: "Text", value: "text" },
@@ -47,7 +47,7 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     .addStringOption((option) =>
       option
         .setName("api_style")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.api_style_description"))
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.api_style_description"))
         .setRequired(true)
         .addChoices(
           { name: localizer("en-US", "general.api_styles.openai_compatible"), value: "openai-compatible" },
@@ -58,55 +58,55 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     .addStringOption((option) =>
       option
         .setName("endpoint_url")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.endpoint_url_description"))
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.endpoint_url_description"))
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("model_name")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.model_name_description"))
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.model_name_description"))
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("display_name")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.display_name_description"))
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.display_name_description"))
         .setRequired(false),
     )
     .addStringOption((option) =>
       option
         .setName("auth_token")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.auth_token_description"))
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.auth_token_description"))
         .setRequired(false),
     )
     .addIntegerOption((option) =>
       option
         .setName("num_ctx")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.num_ctx_description"))
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.num_ctx_description"))
         .setRequired(false),
     )
     .addBooleanOption((option) =>
       option
         .setName("has_tools")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.has_tools_description"))
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.has_tools_description"))
         .setRequired(false),
     )
     .addBooleanOption((option) =>
       option
         .setName("sees_images")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.sees_images_description"))
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.sees_images_description"))
         .setRequired(false),
     )
     .addBooleanOption((option) =>
       option
         .setName("supports_structoutput")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.supports_structoutput_description"))
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.supports_structoutput_description"))
         .setRequired(false),
     )
     .addAttachmentOption((option) =>
       option
         .setName("workflow_json")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.workflow_description"))
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.workflow_description"))
         .setRequired(false),
     );
 
@@ -116,7 +116,7 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
-  if (!interaction.channel || !userData.user_id) {
+  if (!interaction.channel) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.channel_only_title",
       descriptionKey: "general.errors.channel_only_description",
@@ -138,7 +138,8 @@ export async function execute(
   }
 
   try {
-    const label = normalizeCustomEndpointLabel(interaction.options.getString("endpoint_label", true));
+    const rawLabel = interaction.options.getString("endpoint_label", true);
+    const label = normalizeCustomEndpointLabel(rawLabel);
     const capability = interaction.options.getString("capability", true) as CustomEndpointCapability;
     const apiStyle = interaction.options.getString("api_style", true) as CustomEndpointApiStyle;
     const endpointUrl = interaction.options.getString("endpoint_url", true).trim();
@@ -161,7 +162,7 @@ export async function execute(
       return;
     }
 
-    const urlValidation = await validateRemoteMcpUrl(endpointUrl, { strict: true });
+    const urlValidation = await validateRemoteMcpUrl(endpointUrl);
     if (!urlValidation.valid) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.custom_endpoint_unreachable_title",
@@ -169,6 +170,16 @@ export async function execute(
         descriptionVars: {
           reason: urlValidation.failureCode ?? "invalid_url",
         },
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if ((capability === "image" || capability === "video") && apiStyle === "comfyui" && !workflowAttachment) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.invalid_option_title",
+        descriptionKey: "commands.config.custom_models.validation.workflow_required",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -189,11 +200,11 @@ export async function execute(
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+    const extraConfig = workflowAttachment ? { workflow: await loadWorkflowJson(workflowAttachment) } : {};
     const reachability = await validateCustomEndpointReachability({
       apiStyle,
       endpointUrl,
       apiKey: authToken,
-      strict: true,
     });
     if (!reachability.ok) {
       await replyInfoEmbed(interaction, locale, {
@@ -209,8 +220,8 @@ export async function execute(
 
     const registered = await registerCustomEndpoint({
       scope: {
-        kind: "personal",
-        ownerId: userData.user_id,
+        kind: "server",
+        ownerId: tomoriState.server_id,
         baseConfig: tomoriState.config,
       },
       label,
@@ -224,7 +235,7 @@ export async function execute(
       hasTools,
       seesImages,
       supportsStructOutput,
-      extraConfig: workflowAttachment ? { workflow: await loadWorkflowJson(workflowAttachment) } : {},
+      extraConfig,
     });
 
     if (!registered) {
@@ -236,9 +247,10 @@ export async function execute(
       return;
     }
 
+    invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.personal.custom_models.add.success_title",
-      descriptionKey: "commands.personal.custom_models.add.success_description",
+      titleKey: "commands.config.custom_models.add.success_title",
+      descriptionKey: "commands.config.custom_models.add.success_description",
       descriptionVars: {
         display_name: displayName,
         label,
@@ -253,12 +265,12 @@ export async function execute(
       tomoriId: tomoriState.tomori_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "personal custom-models add",
+        command: "config custom-endpoint add",
         guildId: interaction.guild?.id,
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error("Error executing /personal custom-models add", error as Error, context);
+    await log.error("Error executing /config custom-endpoint add", error as Error, context);
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",

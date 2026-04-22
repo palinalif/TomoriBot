@@ -179,7 +179,7 @@ Additional behavior:
 - when Z.ai thinking is active, Tomori removes `temperature`, `top_p`, `frequency_penalty`, and `presence_penalty`
 - Tomori does not currently send a numeric Z.ai thinking budget
 
-### Custom Provider
+### Custom Endpoint
 
 Tomori only auto-maps `thinking_level` for **Ollama-style OpenAI endpoints** in the custom provider path.
 

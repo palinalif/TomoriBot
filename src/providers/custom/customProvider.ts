@@ -379,7 +379,7 @@ export class CustomProvider
     const endpointUrl = request.tomoriState.config.custom_endpoint_url;
     if (!endpointUrl) {
       return {
-        error: "Custom endpoint URL is not configured. Please configure the custom provider again.",
+        error: "Custom endpoint URL is not configured. Please register the custom endpoint again.",
         errorType: "MODEL_ERROR",
       };
     }
@@ -416,7 +416,7 @@ export class CustomProvider
 
     if (!endpointUrl) {
       throw new Error(
-        "Custom endpoint URL not configured. Please run /config setup or /config provider add to configure your custom endpoint.",
+        "Custom endpoint URL not configured. Register it with /config custom-endpoint add or /personal custom-endpoint add, then select it again.",
       );
     }
 

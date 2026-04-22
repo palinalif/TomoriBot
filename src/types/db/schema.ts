@@ -1057,7 +1057,7 @@ export const setupConfigSchema = z
     serverId: z.string(),
     encryptedApiKey: z.instanceof(Buffer).nullable(),
     keyVersion: z.number().int().default(1), // Encryption key version
-    provider: z.string().nullable(), // Null when bootstrapping BYOK-only setup with no server provider
+    provider: z.string().nullable(), // Null when bootstrapping without an immediate server text provider
     presetId: z.number(),
     humanizer: z.number().default(1),
     tomoriName: z.string(),
@@ -1065,9 +1065,10 @@ export const setupConfigSchema = z
     locale: z.string(),
     registrationLocale: z.string().nullable(), // Analytics-only locale captured at setup; not used for functionality
     userByokMode: z.boolean().default(false),
+    deferredCustomEndpointSetup: z.boolean().default(false),
   })
   .superRefine((value, ctx) => {
-    if (!value.userByokMode && (!value.provider || !value.encryptedApiKey)) {
+    if (!value.userByokMode && !value.deferredCustomEndpointSetup && (!value.provider || !value.encryptedApiKey)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Standard setup requires both provider and encrypted API key.",

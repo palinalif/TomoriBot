@@ -7,7 +7,7 @@ export default {
     confirm: `確認`,
     none: `なし`,
     unknown: `不明`,
-    scoped_openrouter_model_description: `/openrouter models から追加`,
+    scoped_openrouter_model_description: `/openrouter model から追加`,
     openrouter_model_moved_title: `機能の場所が変わりました`,
     openrouter_model_moved_description: `\`other-model\` の直接選択は OpenRouter モデル登録に移動しました。まず {add_command} で正確なモデルコードネームを登録し、不要な登録は {remove_command} で削除してください。その後、通常の OpenRouter モデル一覧から登録済みモデルを選択してください。`,
     defaults: {
@@ -1277,9 +1277,9 @@ export default {
         footer: `個人プロバイダー設定は、TomoriBot を使うすべてのサーバーで共通です。`,
       },
       custom_models: {
-        description: `カスタムモデルの使い方を確認します。`,
-        title: `カスタムモデル`,
-        description_body: `カスタムモデルを使うと、Ollama、LM Studio、LiteLLM、ComfyUI などの自己ホスト/プロキシ型エンドポイントをラベル付きプロバイダーとして登録できます。`,
+        description: `カスタムエンドポイントの使い方を確認します。`,
+        title: `カスタムエンドポイント`,
+        description_body: `カスタムエンドポイントを使うと、Ollama、LM Studio、LiteLLM、ComfyUI などの自己ホスト/プロキシ型エンドポイントをラベル付きプロバイダーとして登録できます。`,
         server_field: `サーバー登録`,
         server_value: `{add_command} でサーバー共通のエンドポイントを登録し、{remove_command} でそのラベルの機能を削除できます。`,
         personal_field: `個人登録`,
@@ -1287,8 +1287,8 @@ export default {
         selection_field: `使い方`,
         selection_value: `登録後は {text_command}、{image_command}、{video_command} からラベルを選択してください。画像理解対応のテキストエンドポイントは \`/config model vision\` にも表示されます。`,
       },
-      "custom-models": {
-        description: `カスタムモデルの使い方を確認します。`,
+      "custom-endpoint": {
+        description: `カスタムエンドポイントの使い方を確認します。`,
       },
       features: {
         description: `TomoriBotができることを表示`,
@@ -1534,7 +1534,7 @@ IDの形式は \`!abc:matrix.org\` のようになります。
         provider_choice_brave: `Brave Search`,
         provider_choice_google: `Google Gemini`,
         provider_choice_deepseek: `DeepSeek`,
-        provider_choice_custom: `カスタムプロバイダー`,
+        provider_choice_custom: `カスタムエンドポイント`,
         provider_choice_nvidia: `NVIDIA NIM`,
         provider_choice_novelai: `NovelAI`,
         provider_choice_openrouter: `OpenRouter`,
@@ -1574,23 +1574,14 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 4. 必要に応じて、使用前にDeepSeekプラットフォームアカウントへ残高を追加
 5. このAPIキーを{configSetup}または{configApikeySet}にコピー`,
         deepseek_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
-        custom_title: `カスタムプロバイダーのセットアップ`,
-        custom_description: `Ollama・vLLM・LiteLLM・OneAPI・KoboldCPPなど、任意のOpenAI互換エンドポイントに接続できます。
+        custom_title: `カスタムエンドポイントのセットアップ`,
+        custom_description: `旧来のインラインなカスタムプロバイダーフローは移動しました。
 
-**エンドポイントURL**
-カスタムプロバイダーを選択する際に、APIキーフィールドにベースURLを入力してください。
-例: \`https://my-server.com/v1\`
-\`/chat/completions\` は自動で付加されます。自分で追加しないでください。
-本番環境では**HTTPS**かつ公開アクセス可能なURLが必要です（localhostやプライベートIPは不可）。
+サーバー単位のエンドポイントは、{configSetup} で **カスタムエンドポイント（セットアップ後に完了）** を選び、その後 {configCustomModelsAdd} を実行してから {configModel} で有効化してください。
 
-**モデル名**
-URL入力後に表示される機能設定プロンプトで設定します。エンドポイントが期待する正確な名前を入力してください。例: Ollamaなら \`gemma3:latest\`、プロキシならそのモデルID。
-リクエストの \`model\` フィールドとして送信されます。
+個人用エンドポイントは {personalCustomModelsAdd} を使用してください。
 
-**APIキー / Bearerトークン**
-オプションです。セットアップ後に \`/config provider add\` でBearerトークンを保存できます。
-設定した場合、各リクエストで \`Authorization: Bearer {token}\` として送信されます。
-認証不要なエンドポイント（ローカルのOllamaなど）では設定不要です。`,
+対応エンドポイント種類や手順の詳細は {helpCustomModels} を参照してください。`,
         nvidia_title: `NVIDIA NIM APIキーの設定`,
         nvidia_description: `NVIDIA NIMは、NVIDIA Build経由でホスト型のテキスト・埋め込み・画像APIを提供します。`,
         nvidia_getting_key_title: `APIキーの取得：`,
@@ -2668,6 +2659,15 @@ Prompt Guidance Rescale: {cfg_rescale}
           already_available_description: `OpenRouter モデル \`{model_name}\` は組み込みモデルなので、このコマンドでは削除できません。`,
         },
       },
+      model: {
+        description: `保存済みOpenRouterモデル登録を管理します。`,
+        add: {
+          description: `このサーバー用にOpenRouterモデルコードネームを登録します。`,
+        },
+        remove: {
+          description: `このサーバーから登録済みのOpenRouterモデルコードネームを削除します。`,
+        },
+      },
     },
     config: {
       options: {
@@ -2786,12 +2786,32 @@ Prompt Guidance Rescale: {cfg_rescale}
           success_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。\`/config model\` から選択できます。`,
         },
         remove: {
-          description: `ラベル付きカスタムエンドポイントから1つの機能を削除します。`,
+          description: `このサーバーから登録済みのカスタムエンドポイントを削除します。`,
           label_description: `削除対象のラベル。`,
           capability_description: `削除する機能。`,
+          none_title: `登録済みカスタムエンドポイントがありません`,
+          none_description: `このサーバーにはまだラベル付きカスタムエンドポイントの登録がありません。`,
+          too_many_title: `登録済みカスタムエンドポイントが多すぎます`,
+          too_many_description: `1つのモーダルで編集するには登録済みカスタムエンドポイントが多すぎます。先に数を減らしてから再試行してください。最大グループ数: {max_groups}。`,
+          modal_title: `カスタムエンドポイントを削除`,
+          checkbox_description: `登録を残すエンドポイントはチェックしたままにし、削除したいエンドポイントだけチェックを外してください。`,
+          checkbox_text_label: `登録済みテキストエンドポイント`,
+          checkbox_text_label_continued: `登録済みテキストエンドポイント（続き）`,
+          checkbox_embedding_label: `登録済み埋め込みエンドポイント`,
+          checkbox_embedding_label_continued: `登録済み埋め込みエンドポイント（続き）`,
+          checkbox_image_label: `登録済み画像エンドポイント`,
+          checkbox_image_label_continued: `登録済み画像エンドポイント（続き）`,
+          checkbox_video_label: `登録済み動画エンドポイント`,
+          checkbox_video_label_continued: `登録済み動画エンドポイント（続き）`,
+          capability_text: `テキスト`,
+          capability_embedding: `埋め込み`,
+          capability_image: `画像`,
+          capability_video: `動画`,
+          no_removals_title: `削除はありません`,
+          no_removals_description: `カスタムエンドポイント登録は何も削除されませんでした。`,
           not_found: `そのラベルと機能に一致するカスタムエンドポイントはありません。`,
           success_title: `カスタムエンドポイントを削除しました`,
-          success_description: `カスタムラベル **{label}** から **{capability}** を削除しました。`,
+          success_description: `このサーバーから次のカスタムエンドポイント登録を削除しました: {models_removed}。`,
         },
         validation: {
           invalid_label: `ラベルは英小文字・数字・アンダースコア・ハイフンのみ使用でき、長さは1〜40文字です。`,
@@ -2853,7 +2873,7 @@ Prompt Guidance Rescale: {cfg_rescale}
           description: `このサーバーから登録済みのOpenRouterモデルコードネームを削除します。`,
         },
       },
-      "custom-models": {
+      "custom-endpoint": {
         description: `ラベル付きカスタムエンドポイントを管理します。`,
         add: {
           description: `ラベル付きカスタムエンドポイントを登録します。`,
@@ -2870,13 +2890,16 @@ Prompt Guidance Rescale: {cfg_rescale}
           success_title: `プロバイダーを保存しました`,
           success: `**{provider}** の認証情報を保存しました。\`/config model text\`でテキストモデルに選択するか、\`/config model embedding|image|video|vision\`でその他の機能に設定できます。`,
           updated_existing: `**{provider}** の保存済み認証情報を更新しました。`,
+          custom_moved_title: `カスタムエンドポイントは移動しました`,
+          custom_moved_description: `旧来のカスタムエンドポイント用プロバイダーフローは非推奨です。{custom_models_add_command} でエンドポイントを登録し、{model_text_command} で有効化してください。更新後の案内は {help_custom_models_command} を参照してください。`,
           provider_label: `対象プロバイダー`,
           provider_description: `認証情報を追加またはローテーションするプロバイダーを選択してください。`,
           provider_placeholder: `プロバイダーを選択...`,
           already_existing_suffix: `Already Existing`,
           already_existing_description: `このプロバイダーは既に設定済みです。送信すると認証情報が更新されます。`,
-          api_key_description: `このキーは安全に保存されます。取得方法については、'/help api-key'コマンドを使用してください。`,
-          api_key_label: `APIキーまたはエンドポイントURL`,
+          custom_deprecated_description: `/config custom-endpoint add に移動しました。リダイレクト案内を見るときだけ選択してください。`,
+          api_key_description: `このキーは安全に保存されます。カスタムエンドポイントを選んでリダイレクト案内だけ確認したい場合は空欄で構いません。`,
+          api_key_label: `APIキー`,
           api_key_description_with_custom: `APIキー、またはCustomの場合はOpenAIエンドポイントURL（例：http://localhost:11434/v1）`,
           api_key_placeholder: `このキーは誰とも共有しないでください`,
           bearer_token_label: `Bearerトークン（任意）`,
@@ -3305,10 +3328,12 @@ Prompt Guidance Rescale: {cfg_rescale}
         api_provider_label: `APIプロバイダー`,
         api_provider_description: `お好みのLLMのプロバイダーを選択してください`,
         api_provider_placeholder: `選択してください...`,
+        api_provider_custom_endpoint_label: `カスタムエンドポイント（セットアップ後に完了）`,
+        api_provider_custom_endpoint_description: `先にセットアップだけを完了し、その後 /config custom-endpoint add と /config model text に進みます。`,
         api_provider_user_byok_label: `なし（ユーザーBYOK）`,
         api_provider_user_byok_description: `サーバー側のテキストプロバイダーなしで初期化します。メンバーは個人プロバイダーを使う必要があります。`,
-        api_key_label: `APIキーまたはエンドポイントURL`,
-        api_key_description: `選択したLLMプロバイダーのAPIキーを入力してください。このキーは安全に保存されます。取得方法が不明な場合は、\`/help api-key\`コマンドを使用してください。`,
+        api_key_label: `APIキー`,
+        api_key_description: `このキーは安全に保存されます。ユーザーBYOK または カスタムエンドポイント（セットアップ後に完了）を選んだ場合は空欄で構いません。取得方法が不明な場合は \`/help api-key\` を使用してください。`,
         api_key_description_with_custom: `APIキーまたはCustomエンドポイントURL。Bearerトークンはセットアップ後に追加可能。`,
         api_key_placeholder: `このキーは誰とも共有しないでください`,
         preset_label: `人格プリセット`,
@@ -3344,6 +3369,7 @@ Prompt Guidance Rescale: {cfg_rescale}
         success_desc: `このサーバー用に設定が完了しました。私の設定を変更するには、\`/config\`、\`/server\`、\`/persona\`、\`/memory\`コマンドを使用してください。任意ですが推奨：\`/server initialize\` コマンドで絵文字・スタンプのメタデータを最適化できます。データのエクスポートやリセットは\`/memory personal export\`、\`/memory server export\`、\`/personal config\`、\`/server config\`でいつでも可能です。概要は以下の通りです:`,
         success_desc_with_model: `このサーバー用に設定が完了しました。使用モデルは \`{model_name}\`（このプロバイダーのデフォルト）です。私の設定を変更するには、\`/config\`、\`/server\`、\`/persona\`、\`/memory\`コマンドを使用してください。任意ですが推奨：\`/server initialize\` コマンドで絵文字・スタンプのメタデータを最適化できます。データのエクスポートやリセットは\`/memory personal export\`、\`/memory server export\`、\`/personal config\`、\`/server config\`でいつでも可能です。概要は以下の通りです:`,
         success_desc_byok: `このサーバーはユーザーBYOKモードで設定されました。ユーザー発言に対する応答では、このモードを無効にするまで各メンバーの個人プロバイダーが必要になります。任意ですが推奨：\`/server initialize\` コマンドで絵文字・スタンプのメタデータを最適化できます。概要は以下の通りです:`,
+        success_desc_custom_endpoint: `このサーバーのセットアップは完了しましたが、まだサーバー側のテキストプロバイダーは有効化されていません。次にカスタムエンドポイントの登録を完了すると、そのエンドポイントで応答できるようになります。概要は以下の通りです:`,
         success_desc_dm: `このダイレクトメッセージ用に設定が完了しました。データのエクスポートやリセットは\`/memory personal export\`と\`/personal config\`でいつでも可能です。概要は以下の通りです:`,
         success_desc_dm_with_model: `このダイレクトメッセージ用に設定が完了しました。使用モデルは \`{model_name}\`（このプロバイダーのデフォルト）です。データのエクスポートやリセットは\`/memory personal export\`と\`/personal config\`でいつでも可能です。概要は以下の通りです:`,
         next_steps_title: `🟢 私に何ができる？`,
@@ -3358,6 +3384,8 @@ Prompt Guidance Rescale: {cfg_rescale}
         name_field: `私の名前`,
         byok_bootstrap_field: `ユーザーBYOK`,
         byok_bootstrap_value: `セットアップ中に有効化されました。今後、ユーザー発言に対する応答ではメンバーごとの個人プロバイダーが必要です。後で無効にするには {toggle_command} を使い、メンバー向けの設定手順は {help_personal_provider} を確認してください。`,
+        custom_endpoint_bootstrap_field: `カスタムエンドポイント`,
+        custom_endpoint_bootstrap_value: `次に {custom_models_add_command} でエンドポイントを登録し、{model_text_command} で有効化してください。詳しい手順は {help_custom_models_command} を確認してください。`,
         dm_context_explanation_title: `ダイレクトメッセージについて`,
         dm_context_explanation: `このダイレクトメッセージでも「サーバー」として参照します。つまり、すべての「サーバー」機能が同じように動作しますが、私たちだけのプライベートな空間です！このダイレクトメッセージを私との1対1サーバーと考えてください。「サーバーメモリー」はここでのみの私の記憶です。`,
         already_setup_title: `既に設定済みです`,
@@ -4530,11 +4558,31 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
           success_description: `**{display_name}** を個人ラベル **{label}** の **{capability}** として追加しました。`,
         },
         remove: {
-          description: `個人用カスタムエンドポイントから1つの機能を削除します。`,
+          description: `個人用プロバイダー一覧から登録済みのカスタムエンドポイントを削除します。`,
           label_description: `削除対象のラベル。`,
           capability_description: `削除する機能。`,
+          none_title: `登録済みカスタムエンドポイントがありません`,
+          none_description: `まだ個人用カスタムエンドポイントの登録はありません。`,
+          too_many_title: `登録済みカスタムエンドポイントが多すぎます`,
+          too_many_description: `1つのモーダルで編集するには登録済みカスタムエンドポイントが多すぎます。先に数を減らしてから再試行してください。最大グループ数: {max_groups}。`,
+          modal_title: `個人用カスタムエンドポイントを削除`,
+          checkbox_description: `登録を残すエンドポイントはチェックしたままにし、削除したいエンドポイントだけチェックを外してください。`,
+          checkbox_text_label: `登録済みテキストエンドポイント`,
+          checkbox_text_label_continued: `登録済みテキストエンドポイント（続き）`,
+          checkbox_embedding_label: `登録済み埋め込みエンドポイント`,
+          checkbox_embedding_label_continued: `登録済み埋め込みエンドポイント（続き）`,
+          checkbox_image_label: `登録済み画像エンドポイント`,
+          checkbox_image_label_continued: `登録済み画像エンドポイント（続き）`,
+          checkbox_video_label: `登録済み動画エンドポイント`,
+          checkbox_video_label_continued: `登録済み動画エンドポイント（続き）`,
+          capability_text: `テキスト`,
+          capability_embedding: `埋め込み`,
+          capability_image: `画像`,
+          capability_video: `動画`,
+          no_removals_title: `削除はありません`,
+          no_removals_description: `個人用カスタムエンドポイント登録は何も削除されませんでした。`,
           success_title: `個人用カスタムエンドポイントを削除しました`,
-          success_description: `個人ラベル **{label}** から **{capability}** を削除しました。`,
+          success_description: `個人用プロバイダー一覧から次のカスタムエンドポイント登録を削除しました: {models_removed}。`,
         },
       },
       openrouter_models: {
@@ -4568,7 +4616,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
           already_available_description: `OpenRouter モデル \`{model_name}\` は組み込みモデルなので、このコマンドでは削除できません。`,
         },
       },
-      "openrouter-models": {
+      "openrouter-model": {
         description: `自分用の保存済みOpenRouterモデル登録を管理します。`,
         add: {
           description: `個人用プロバイダー一覧にOpenRouterモデルコードネームを登録します。`,
@@ -4577,7 +4625,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
           description: `個人用プロバイダー一覧から登録済みOpenRouterモデルコードネームを削除します。`,
         },
       },
-      "custom-models": {
+      "custom-endpoint": {
         description: `自分用のラベル付きカスタムエンドポイントを管理します。`,
         add: {
           description: `個人用カスタムエンドポイントを登録します。`,

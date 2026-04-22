@@ -7,7 +7,7 @@ import { log, ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("custom-models").setDescription(localizer("en-US", "commands.help.custom_models.description"));
+  subcommand.setName("custom-endpoint").setDescription(localizer("en-US", "commands.help.custom_models.description"));
 
 export async function execute(
   _client: Client,
@@ -24,16 +24,16 @@ export async function execute(
         {
           nameKey: "commands.help.custom_models.server_field",
           value: localizer(locale, "commands.help.custom_models.server_value", {
-            add_command: commandRegistry.getCommandMention("config", "custom-models", "add"),
-            remove_command: commandRegistry.getCommandMention("config", "custom-models", "remove"),
+            add_command: commandRegistry.getCommandMention("config", "custom-endpoint", "add"),
+            remove_command: commandRegistry.getCommandMention("config", "custom-endpoint", "remove"),
           }),
           inline: false,
         },
         {
           nameKey: "commands.help.custom_models.personal_field",
           value: localizer(locale, "commands.help.custom_models.personal_value", {
-            add_command: commandRegistry.getCommandMention("personal", "custom-models", "add"),
-            remove_command: commandRegistry.getCommandMention("personal", "custom-models", "remove"),
+            add_command: commandRegistry.getCommandMention("personal", "custom-endpoint", "add"),
+            remove_command: commandRegistry.getCommandMention("personal", "custom-endpoint", "remove"),
           }),
           inline: false,
         },
@@ -54,12 +54,12 @@ export async function execute(
       userId: userData.user_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "help custom-models",
+        command: "help custom-endpoint",
         guildId: interaction.guild?.id,
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error("Error executing /help custom-models", error as Error, context);
+    await log.error("Error executing /help custom-endpoint", error as Error, context);
     await interaction.reply({
       content: localizer(locale, "general.errors.unknown_error_description"),
       flags: MessageFlags.Ephemeral,

@@ -79,6 +79,13 @@ Run in your test server:
 
 If you are testing a server that should start in member-funded mode, `/config setup` also exposes a `None (User BYOK)` option. That bootstraps the server with no server-side text provider and immediately enables member BYOK, so users must configure their own personal providers.
 
+If you want to use only a self-hosted or proxy-backed custom endpoint, `/config setup` now also exposes `Custom Endpoint (finish after setup)`. That bootstraps the server without enabling BYOK, then you finish the provider setup with:
+
+```text
+/config custom-endpoint add
+/config model text
+```
+
 If you want to save an additional provider afterward:
 
 ```text
@@ -92,7 +99,7 @@ Common saved providers:
 - `provider:openrouter`
 - `provider:novelai`
 
-`custom` provider (self-hosted endpoint) is intended for non-production environments.
+The old inline `custom` provider path is deprecated. Use `/config custom-endpoint add` instead.
 
 ## Common Development Commands
 

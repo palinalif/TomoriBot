@@ -872,7 +872,7 @@ export async function loadRegisteredOpenRouterModelsForScope(
 }
 
 export function formatScopedOpenRouterCommand(scope: OpenRouterModelRegistryScope, action: "add" | "remove"): string {
-  return scope.kind === "server" ? `/openrouter models ${action}` : `/personal openrouter-models ${action}`;
+  return scope.kind === "server" ? `/openrouter model ${action}` : `/personal openrouter-model ${action}`;
 }
 
 export async function logOpenRouterRegistryError(context: string, error: unknown): Promise<void> {

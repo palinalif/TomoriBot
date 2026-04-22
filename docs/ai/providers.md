@@ -109,7 +109,7 @@ Rule:
 
 - Startup cache fetch from `https://openrouter.ai/api/v1/models`
 - cache module: `src/utils/cache/openrouterCapabilityCache.ts`
-- arbitrary OpenRouter text, embedding, image, and video model codenames can now be registered per server via `/openrouter models add` or per user via `/personal openrouter-models add`
+- arbitrary OpenRouter text, embedding, image, and video model codenames can now be registered per server via `/openrouter model add` or per user via `/personal openrouter-model add`
 - those registrations stay under the normal `openrouter` provider; they are not `custom_endpoints`
 - legacy picker selection of `other-model` is now only a migration notice path pointing users at the new registration commands, while already-configured legacy `other-model` selections still keep runtime compatibility during rollout
 - OpenRouter provider can override stale DB capability flags with API capabilities at runtime.
@@ -135,11 +135,11 @@ Rule:
 - `MEDIA_IMAGE_MESSAGE_LIMIT` further limits how many of those recent messages may include non-emoji, non-sticker image payloads.
 - Messages outside those limits still keep text and system hints, so the model knows media exists without loading every image into provider payloads.
 
-## Custom Provider Notes
+## Custom Endpoint Notes
 
 Phase 3 promotes custom endpoints into labeled provider entries instead of a single anonymous `custom` slot.
 
-- registration happens through `/config custom-models add` and `/personal custom-models add`
+- registration happens through `/config custom-endpoint add` and `/personal custom-endpoint add`
 - endpoints are stored in `custom_endpoints`, keyed by `(server_id | user_id, label, capability)`
 - the saved credential row is namespaced per label as an internal provider ID such as `custom:s42:ollama-local` or `custom:u7:lmstudio`
 - custom endpoints can now be registered independently for `text`, `embedding`, `image`, and `video`
@@ -431,7 +431,10 @@ Why this matters:
 
 - `/config setup` for first-time setup
 - `/config provider add` to save additional provider credentials without switching
+- `/config custom-endpoint add` to register labeled custom endpoints
 - `/config provider switch` to activate a saved provider or validate credentials for a first-time switch
+
+`/config provider add` no longer configures custom endpoints directly. The legacy `Custom Endpoint` choice is only a redirect shim to `/config custom-endpoint add`.
 
 Provider choice/model selection commands:
 

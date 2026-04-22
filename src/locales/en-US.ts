@@ -7,7 +7,7 @@ export default {
     confirm: `Confirm`,
     none: `None`,
     unknown: `Unknown`,
-    scoped_openrouter_model_description: `Added via /openrouter models`,
+    scoped_openrouter_model_description: `Added via /openrouter model`,
     openrouter_model_moved_title: `Functionality Moved`,
     openrouter_model_moved_description: `Direct \`other-model\` selection moved to the OpenRouter model registry. Add the exact model codename with {add_command}, remove old registrations with {remove_command}, then pick that registered model from the normal OpenRouter model list.`,
     defaults: {
@@ -1277,9 +1277,9 @@ Please try again with different inputs or check your API key.`,
         footer: `Your personal providers apply across every server you use TomoriBot in.`,
       },
       custom_models: {
-        description: `Learn how custom models work.`,
-        title: `Custom Models`,
-        description_body: `Custom models let you register self-hosted or proxy-backed endpoints such as Ollama, LM Studio, LiteLLM, or ComfyUI as labeled providers.`,
+        description: `Learn how custom endpoints work.`,
+        title: `Custom Endpoints`,
+        description_body: `Custom endpoints let you register self-hosted or proxy-backed endpoints such as Ollama, LM Studio, LiteLLM, or ComfyUI as labeled providers.`,
         server_field: `Server Scope`,
         server_value: `Use {add_command} to register a server-wide endpoint and {remove_command} to remove one capability from that label.`,
         personal_field: `Personal Scope`,
@@ -1287,8 +1287,8 @@ Please try again with different inputs or check your API key.`,
         selection_field: `Selecting Them`,
         selection_value: `After registration, choose the label from {text_command}, {image_command}, or {video_command}. Vision-capable text endpoints also appear in \`/config model vision\`.`,
       },
-      "custom-models": {
-        description: `Learn how custom models work.`,
+      "custom-endpoint": {
+        description: `Learn how custom endpoints work.`,
       },
       features: {
         description: `Shows what TomoriBot can do`,
@@ -1533,7 +1533,7 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
         provider_choice_brave: `Brave Search`,
         provider_choice_google: `Google Gemini`,
         provider_choice_deepseek: `DeepSeek`,
-        provider_choice_custom: `Custom Provider`,
+        provider_choice_custom: `Custom Endpoint`,
         provider_choice_nvidia: `NVIDIA NIM`,
         provider_choice_novelai: `NovelAI`,
         provider_choice_openrouter: `OpenRouter`,
@@ -1576,23 +1576,14 @@ You may opt out of my Memory features by using the {personalPrivacy} command, as
 4. If needed, add credits in your DeepSeek platform account before use
 5. Copy this API key into {configSetup} or {configApikeySet}`,
         deepseek_footer: `After setting up this provider, you may change its default model with {configModel}`,
-        custom_title: `Custom Provider Setup`,
-        custom_description: `Connect to any OpenAI-compatible endpoint: Ollama, vLLM, LiteLLM, OneAPI, KoboldCPP, and more.
+        custom_title: `Custom Endpoint Setup`,
+        custom_description: `The legacy inline Custom Provider flow has moved.
 
-**Endpoint URL**
-Enter your base URL in the API Key field when selecting the Custom provider.
-Example: \`https://my-server.com/v1\`
-\`/chat/completions\` is appended automatically. Do not add it yourself.
-In production the URL must be **HTTPS** and publicly reachable (no localhost or private IPs).
+For server-scoped endpoints, use {configSetup} and choose **Custom Endpoint (finish after setup)**, then run {configCustomModelsAdd} and select it with {configModel}.
 
-**Model Name**
-Set during the capabilities prompt after entering the URL. Enter the exact name your endpoint expects, e.g. \`gemma3:latest\` for Ollama or the model ID your proxy uses.
-Sent as the \`model\` field in every request.
+For personal endpoints, use {personalCustomModelsAdd}.
 
-**API Key / Bearer Token**
-Optional. After setup, use \`/config provider add\` to store a Bearer token.
-If set, it is sent as \`Authorization: Bearer {token}\` with every request.
-Leave unset for endpoints that require no authentication (e.g. local Ollama).`,
+Use {helpCustomModels} for the full command guide, supported endpoint types, and capability notes.`,
         nvidia_title: `Setting Up NVIDIA NIM API Key`,
         nvidia_description: `NVIDIA NIM provides hosted text, embedding, and image APIs through NVIDIA Build.`,
         nvidia_getting_key_title: `Getting Your API Key:`,
@@ -2647,6 +2638,15 @@ Your donations help:
           already_available_description: `OpenRouter model \`{model_name}\` is a built-in model and cannot be removed with this command.`,
         },
       },
+      model: {
+        description: `Manage saved OpenRouter model registrations.`,
+        add: {
+          description: `Register an OpenRouter model codename for this server.`,
+        },
+        remove: {
+          description: `Remove a registered OpenRouter model codename from this server.`,
+        },
+      },
     },
     config: {
       options: {
@@ -2765,12 +2765,32 @@ Your donations help:
           success_description: `Added **{display_name}** under label **{label}** for **{capability}**. Select it with \`/config model\`.`,
         },
         remove: {
-          description: `Remove one capability from a labeled custom endpoint.`,
+          description: `Remove registered custom endpoints from this server.`,
           label_description: `Label to remove from.`,
           capability_description: `Capability to remove.`,
+          none_title: `No Registered Custom Endpoints`,
+          none_description: `This server does not have any labeled custom endpoints registered yet.`,
+          too_many_title: `Too Many Registered Custom Endpoints`,
+          too_many_description: `There are too many registered custom endpoints to edit in one modal. Reduce the list first, then try again. Max groups: {max_groups}.`,
+          modal_title: `Remove Custom Endpoints`,
+          checkbox_description: `Leave endpoints checked to keep them registered. Uncheck any endpoints you want to remove.`,
+          checkbox_text_label: `Registered Text Endpoints`,
+          checkbox_text_label_continued: `Registered Text Endpoints (Continued)`,
+          checkbox_embedding_label: `Registered Embedding Endpoints`,
+          checkbox_embedding_label_continued: `Registered Embedding Endpoints (Continued)`,
+          checkbox_image_label: `Registered Image Endpoints`,
+          checkbox_image_label_continued: `Registered Image Endpoints (Continued)`,
+          checkbox_video_label: `Registered Video Endpoints`,
+          checkbox_video_label_continued: `Registered Video Endpoints (Continued)`,
+          capability_text: `Text`,
+          capability_embedding: `Embedding`,
+          capability_image: `Image`,
+          capability_video: `Video`,
+          no_removals_title: `Nothing Removed`,
+          no_removals_description: `No custom endpoint registrations were removed.`,
           not_found: `No custom endpoint exists for that label and capability.`,
           success_title: `Custom Endpoint Removed`,
-          success_description: `Removed **{capability}** from custom label **{label}**.`,
+          success_description: `Removed these custom endpoint registrations from this server: {models_removed}.`,
         },
         validation: {
           invalid_label: `Labels must use only lowercase letters, numbers, underscores, or hyphens, and be 1-40 characters long.`,
@@ -2832,7 +2852,7 @@ Your donations help:
           description: `Remove a registered OpenRouter model codename from this server.`,
         },
       },
-      "custom-models": {
+      "custom-endpoint": {
         description: `Manage labeled custom endpoints.`,
         add: {
           description: `Register a labeled custom endpoint.`,
@@ -2849,13 +2869,16 @@ Your donations help:
           success_title: `Provider Saved`,
           success: `Saved credentials for **{provider}**. Select it as your text model with \`/config model text\`, or use \`/config model embedding|image|video|vision\` for other capabilities.`,
           updated_existing: `Updated the saved credentials for **{provider}**.`,
+          custom_moved_title: `Custom Endpoint Moved`,
+          custom_moved_description: `The legacy Custom Endpoint provider flow is deprecated. Register the endpoint with {custom_models_add_command}, then activate it with {model_text_command}. Use {help_custom_models_command} for the updated help page.`,
           provider_label: `Target Provider`,
           provider_description: `Choose the provider to add or rotate credentials for.`,
           provider_placeholder: `Select a provider...`,
           already_existing_suffix: `Already Existing`,
           already_existing_description: `This provider is already configured. Submit again to update credentials.`,
-          api_key_description: `This key will be securely stored. Use the '/help api-key' command for instructions in getting one.`,
-          api_key_label: `API Key or Endpoint URL`,
+          custom_deprecated_description: `Moved to /config custom-endpoint add. Select this only if you need the redirect notice.`,
+          api_key_description: `This key will be securely stored. Leave it blank if you selected Custom Endpoint and only need the redirect.`,
+          api_key_label: `API Key`,
           api_key_description_with_custom: `API Key, or OpenAI endpoint URL if using Custom (e.g., http://localhost:11434/v1)`,
           api_key_placeholder: `Do NOT share this key with anyone`,
           bearer_token_label: `Bearer Token (Optional)`,
@@ -3284,10 +3307,12 @@ Click the button below and enter your OpenRouter model codename (e.g., \`xai/gro
         api_provider_label: `API Provider`,
         api_provider_description: `Please choose the provider of the LLM of your choice`,
         api_provider_placeholder: `Choose a provider...`,
+        api_provider_custom_endpoint_label: `Custom Endpoint (finish after setup)`,
+        api_provider_custom_endpoint_description: `Bootstraps the server first, then points you to /config custom-endpoint add and /config model text.`,
         api_provider_user_byok_label: `None (User BYOK)`,
         api_provider_user_byok_description: `Bootstraps the server with no server-side text provider. Members must use personal providers.`,
-        api_key_label: `API Key or Endpoint URL`,
-        api_key_description: `This key will be securely stored. Use the '/help api-key' command for instructions in getting one`,
+        api_key_label: `API Key`,
+        api_key_description: `This key will be securely stored. Leave it blank if you chose User BYOK or Custom Endpoint (finish after setup). Use '/help api-key' for setup instructions.`,
         api_key_description_with_custom: `API Key or Custom endpoint URL. Bearer token can be added after setup.`,
         api_key_placeholder: `Do NOT share this key with anyone`,
         preset_label: `Personality Preset`,
@@ -3323,6 +3348,7 @@ Click the button below and enter your OpenRouter model codename (e.g., \`xai/gro
         success_desc: `I am now configured for this server! To modify my configuration, use my \`/config\`, \`/server\`, \`/persona\`, and \`/memory\` commands. Optional but recommended: run the \`/server initialize\` commands to optimize emoji and sticker metadata. You can also export or reset data anytime with \`/memory personal export\`, \`/memory server export\`, \`/personal config\`, or \`/server config\`. Here's a summary:`,
         success_desc_with_model: `I am now configured for this server! I will use the \`{model_name}\` model (the default for this provider). To modify my configuration, use my \`/config\`, \`/server\`, \`/persona\`, and \`/memory\` commands. Optional but recommended: run the \`/server initialize\` commands to optimize emoji and sticker metadata. You can also export or reset data anytime with \`/memory personal export\`, \`/memory server export\`, \`/personal config\`, or \`/server config\`. Here's a summary:`,
         success_desc_byok: `I am now configured for this server in User BYOK mode. User-triggered messages will require each member's personal provider until you disable that mode. Optional but recommended: run the \`/server initialize\` commands to optimize emoji and sticker metadata. Here's a summary:`,
+        success_desc_custom_endpoint: `I am now configured for this server, but no server text provider is active yet. Finish the Custom Endpoint flow next so I can answer with that endpoint. Here's a summary:`,
         success_desc_dm: `I am now configured for this Direct Message. You can export or reset your data anytime with \`/memory personal export\` and \`/personal config\`. Here's a summary:`,
         success_desc_dm_with_model: `I am now configured for this Direct Message. I will use the \`{model_name}\` model (the default for this provider). You can export or reset your data anytime with \`/memory personal export\` and \`/personal config\`. Here's a summary:`,
         next_steps_title: `🟢 What Can I Do?`,
@@ -3337,6 +3363,8 @@ Click the button below and enter your OpenRouter model codename (e.g., \`xai/gro
         name_field: `My Name`,
         byok_bootstrap_field: `User BYOK`,
         byok_bootstrap_value: `Enabled during setup. Members now need personal providers for user-triggered messages. Use {toggle_command} to disable this later, and {help_personal_provider} for the member setup flow.`,
+        custom_endpoint_bootstrap_field: `Custom Endpoint`,
+        custom_endpoint_bootstrap_value: `Next: register the endpoint with {custom_models_add_command}, then activate it with {model_text_command}. Use {help_custom_models_command} if you want the full setup guide.`,
         dm_context_explanation_title: `About Direct Messages`,
         dm_context_explanation: `I will still refer to this Direct Message as a "server". Meaning all "server" features work the same way, just privately here between us! Think of this Direct Message as a 1-on-1 server with me, therefore its server memories are my memories within here only.`,
         already_setup_title: `Already Set Up`,
@@ -4511,11 +4539,31 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
           success_description: `Added **{display_name}** under your personal custom label **{label}** for **{capability}**.`,
         },
         remove: {
-          description: `Remove one capability from a personal custom endpoint.`,
+          description: `Remove registered custom endpoints from your personal provider list.`,
           label_description: `Label to remove from.`,
           capability_description: `Capability to remove.`,
+          none_title: `No Registered Custom Endpoints`,
+          none_description: `You do not have any personal custom endpoints registered yet.`,
+          too_many_title: `Too Many Registered Custom Endpoints`,
+          too_many_description: `You have too many registered custom endpoints to edit in one modal. Reduce the list first, then try again. Max groups: {max_groups}.`,
+          modal_title: `Remove Personal Custom Endpoints`,
+          checkbox_description: `Leave endpoints checked to keep them registered. Uncheck any endpoints you want to remove.`,
+          checkbox_text_label: `Registered Text Endpoints`,
+          checkbox_text_label_continued: `Registered Text Endpoints (Continued)`,
+          checkbox_embedding_label: `Registered Embedding Endpoints`,
+          checkbox_embedding_label_continued: `Registered Embedding Endpoints (Continued)`,
+          checkbox_image_label: `Registered Image Endpoints`,
+          checkbox_image_label_continued: `Registered Image Endpoints (Continued)`,
+          checkbox_video_label: `Registered Video Endpoints`,
+          checkbox_video_label_continued: `Registered Video Endpoints (Continued)`,
+          capability_text: `Text`,
+          capability_embedding: `Embedding`,
+          capability_image: `Image`,
+          capability_video: `Video`,
+          no_removals_title: `Nothing Removed`,
+          no_removals_description: `No personal custom endpoint registrations were removed.`,
           success_title: `Personal Custom Endpoint Removed`,
-          success_description: `Removed **{capability}** from your personal custom label **{label}**.`,
+          success_description: `Removed these custom endpoint registrations from your personal provider list: {models_removed}.`,
         },
       },
       openrouter_models: {
@@ -4549,7 +4597,7 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
           already_available_description: `OpenRouter model \`{model_name}\` is a built-in model and cannot be removed with this command.`,
         },
       },
-      "openrouter-models": {
+      "openrouter-model": {
         description: `Manage your personal saved OpenRouter model registrations.`,
         add: {
           description: `Register an OpenRouter model codename for your personal provider list.`,
@@ -4558,7 +4606,7 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
           description: `Remove a registered OpenRouter model codename from your personal provider list.`,
         },
       },
-      "custom-models": {
+      "custom-endpoint": {
         description: `Manage your personal labeled custom endpoints.`,
         add: {
           description: `Register a personal custom endpoint.`,

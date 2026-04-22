@@ -22,15 +22,6 @@ import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { getCachedPresetAvatar } from "@/utils/image/avatarHelper";
 import { lazySyncGuildEmojis } from "@/utils/cache/emojiLazySync";
 import { lazySyncGuildStickers } from "@/utils/cache/stickerLazySync";
-import {
-  isCustomProvider,
-  promptCustomCapabilities,
-  saveCustomEndpointConfig,
-  getCustomEndpointValidationMessage,
-  CUSTOM_ENDPOINT_PLACEHOLDER_KEY,
-  type CustomCapabilitiesResult,
-} from "@/utils/discord/customProviderModal";
-import { validateRemoteMcpUrl } from "@/utils/mcp/mcpUrlSecurity";
 import { formatLlmDisplayLabel } from "@/utils/provider/modelDisplay";
 
 import type { HumanizerDegree } from "@/types/db/schema";
@@ -38,6 +29,7 @@ import type { HumanizerDegree } from "@/types/db/schema";
 // Define constants at the top (Rule #20)
 const SETUP_API_KEY_MAX_LENGTH = 500;
 const SETUP_TIMEZONE_MAX_LENGTH = 6;
+const SETUP_CUSTOM_ENDPOINT_PROVIDER = "__custom_endpoint__";
 const SETUP_USER_BYOK_PROVIDER = "__user_byok__";
 
 // Configure the subcommand
@@ -212,12 +204,17 @@ export async function execute(
 
     // Create provider options for the select menu
     const providerSelectOptions: SelectOption[] = uniqueProviders
-      .filter((provider) => !isCustomProvider(provider))
+      .filter((provider) => provider.toLowerCase() !== "custom")
       .map((provider) => ({
         label: getProviderDisplayName(provider),
         value: provider,
         description: undefined,
       }));
+    providerSelectOptions.push({
+      label: localizer(locale, "commands.config.setup.api_provider_custom_endpoint_label"),
+      value: SETUP_CUSTOM_ENDPOINT_PROVIDER,
+      description: localizer(locale, "commands.config.setup.api_provider_custom_endpoint_description"),
+    });
     if (!isDMChannel) {
       providerSelectOptions.push({
         label: localizer(locale, "commands.config.setup.api_provider_user_byok_label"),
@@ -353,12 +350,14 @@ export async function execute(
       // Validate and transform inputs
 
       // 1. Validate API Provider (case-insensitive)
+      const isCustomEndpointSetup = apiProvider === SETUP_CUSTOM_ENDPOINT_PROVIDER;
       const isUserByokSetup = !isDMChannel && apiProvider === SETUP_USER_BYOK_PROVIDER;
-      const normalizedProvider = isUserByokSetup
-        ? null
-        : (uniqueProviders.find((provider) => provider.toLowerCase() === apiProvider.toLowerCase()) ?? null);
+      const normalizedProvider =
+        isUserByokSetup || isCustomEndpointSetup
+          ? null
+          : (uniqueProviders.find((provider) => provider.toLowerCase() === apiProvider.toLowerCase()) ?? null);
 
-      if (!apiProvider || (!isUserByokSetup && !normalizedProvider)) {
+      if (!apiProvider || (!isUserByokSetup && !isCustomEndpointSetup && !normalizedProvider)) {
         await replyInfoEmbed(modalSubmitInteraction, locale, {
           titleKey: "general.errors.operation_failed_title",
           descriptionKey: "commands.config.setup.provider_invalid",
@@ -367,59 +366,14 @@ export async function execute(
         return;
       }
 
-      // 2. Handle Custom Provider vs Regular Providers differently
+      // 2. Handle bootstrap modes vs regular provider setup
       let encryptedKey: Buffer | null = null;
       let keyVersion = 1;
-      let customCapabilitiesResult: CustomCapabilitiesResult | null = null;
-      let customEndpointUrl: string | null = null;
 
       if (isUserByokSetup) {
         log.info("User BYOK bootstrap selected - skipping server provider credential setup");
-      } else if (normalizedProvider && isCustomProvider(normalizedProvider)) {
-        // Custom Provider Flow: apiKey field contains the endpoint URL
-        log.info(`Custom provider selected - treating api_key as endpoint URL`);
-
-        // Validate the endpoint URL format and security (blocks private IPs, localhost in prod, etc.)
-        const urlValidation = await validateRemoteMcpUrl(apiKey ?? "");
-        if (!apiKey || !urlValidation.valid) {
-          const validationMessage = apiKey
-            ? getCustomEndpointValidationMessage(urlValidation)
-            : {
-                descriptionKey: "commands.config.custom.endpoint_url_invalid_description",
-              };
-          await replyInfoEmbed(modalSubmitInteraction, locale, {
-            titleKey: "commands.config.custom.endpoint_url_invalid_title",
-            descriptionKey: validationMessage.descriptionKey,
-            descriptionVars: validationMessage.descriptionVars,
-            color: ColorCode.ERROR,
-          });
-          return;
-        }
-
-        customEndpointUrl = apiKey;
-        log.info(`Custom endpoint URL validated: ${customEndpointUrl}`);
-
-        // Show capabilities selection for custom model
-        customCapabilitiesResult = await promptCustomCapabilities(modalSubmitInteraction, locale, serverId);
-
-        if (!customCapabilitiesResult.success) {
-          await replyInfoEmbed(modalSubmitInteraction, locale, {
-            titleKey: "general.errors.operation_failed_title",
-            description:
-              customCapabilitiesResult.error || localizer(locale, "commands.config.custom.capabilities_timeout"),
-            color: ColorCode.ERROR,
-          });
-          return;
-        }
-
-        log.info(
-          `Custom model capabilities configured: tools=${customCapabilitiesResult.hasTools}, images=${customCapabilitiesResult.seesImages}, videos=${customCapabilitiesResult.seesVideos}, structOutput=${customCapabilitiesResult.supportsStructOutput}`,
-        );
-
-        // Use placeholder API key for custom provider (the endpoint URL is stored separately)
-        const placeholderResult = await encryptApiKey(CUSTOM_ENDPOINT_PLACEHOLDER_KEY);
-        encryptedKey = placeholderResult.encrypted;
-        keyVersion = placeholderResult.version;
+      } else if (isCustomEndpointSetup) {
+        log.info("Deferred custom-endpoint bootstrap selected - skipping immediate server provider credential setup");
       } else {
         // Regular Provider Flow: Validate API Key
         if (!apiKey || apiKey.length < 10) {
@@ -593,6 +547,7 @@ export async function execute(
         locale: serverLocale, // Persist guild locale for server analytics/triggers; DM falls back to user locale
         registrationLocale, // Analytics-only locale for servers
         userByokMode: isUserByokSetup,
+        deferredCustomEndpointSetup: isCustomEndpointSetup,
       };
 
       // Validate config using zod schema
@@ -639,38 +594,6 @@ export async function execute(
         } catch (disableError) {
           // Non-critical — log but don't fail setup
           log.warn(`[Setup] Failed to auto-disable emoji/sticker for NovelAI: ${disableError}`);
-        }
-      }
-
-      // Custom provider post-processing: update config with endpoint URL and LLM ID
-      if (
-        normalizedProvider &&
-        isCustomProvider(normalizedProvider) &&
-        customCapabilitiesResult?.llmId &&
-        customEndpointUrl
-      ) {
-        // Non-null assertion is safe here - we've verified llmId is truthy in the if condition
-        const customLlmId = customCapabilitiesResult.llmId as number;
-        try {
-          // Load the newly created TomoriState to get server_id
-          const newTomoriState = await loadTomoriState(serverId);
-          if (newTomoriState?.server_id) {
-            await saveCustomEndpointConfig(
-              newTomoriState.server_id,
-              customEndpointUrl,
-              customLlmId,
-              customCapabilitiesResult.modelName || undefined,
-              customCapabilitiesResult.numCtx,
-            );
-            log.success(
-              `[Setup] Saved custom endpoint config for server ${serverId}: endpoint=${customEndpointUrl}, llmId=${customLlmId}, modelName=${customCapabilitiesResult.modelName || "default"}`,
-            );
-          } else {
-            log.error(`[Setup] Failed to load TomoriState after setup for custom provider config update`);
-          }
-        } catch (customConfigError) {
-          log.error(`[Setup] Failed to save custom endpoint config: ${customConfigError}`);
-          // Don't fail setup, the server was created successfully
         }
       }
 
@@ -749,7 +672,7 @@ export async function execute(
         localizer(locale, "commands.config.setup.humanizer_option_heavy_label"),
       ];
       const humanizerLabel = humanizerLabels[humanizerDegree] || "Unknown";
-      let configuredModelName = customCapabilitiesResult?.modelName || null;
+      let configuredModelName: string | null = null;
       if (!configuredModelName && normalizedProvider) {
         const defaultModel = await loadDefaultModelForProvider(normalizedProvider);
         if (defaultModel) {
@@ -791,19 +714,6 @@ export async function execute(
         });
       }
 
-      // Add Bearer token hint for custom providers
-      if (normalizedProvider && isCustomProvider(normalizedProvider)) {
-        const apiKeySetMention = commandRegistry.getCommandMention("config", "provider", "add");
-        const providerSwitchMention = commandRegistry.getCommandMention("config", "provider", "switch");
-        successFields.push({
-          nameKey: "commands.config.setup.custom_bearer_hint_field",
-          value: localizer(locale, "commands.config.setup.custom_bearer_hint_value", {
-            apiKeySet: apiKeySetMention,
-            providerSwitch: providerSwitchMention,
-          }),
-        });
-      }
-
       if (isUserByokSetup) {
         const userByokToggleMention = commandRegistry.getCommandMention("server", "user-byok", "toggle");
         const helpPersonalProviderMention = commandRegistry.getCommandMention("help", "personal-provider");
@@ -812,6 +722,20 @@ export async function execute(
           value: localizer(locale, "commands.config.setup.byok_bootstrap_value", {
             toggle_command: userByokToggleMention,
             help_personal_provider: helpPersonalProviderMention,
+          }),
+        });
+      }
+
+      if (isCustomEndpointSetup) {
+        const customModelsAddMention = commandRegistry.getCommandMention("config", "custom-endpoint", "add");
+        const modelTextMention = commandRegistry.getCommandMention("config", "model", "text");
+        const helpCustomModelsMention = commandRegistry.getCommandMention("help", "custom-endpoint");
+        successFields.push({
+          nameKey: "commands.config.setup.custom_endpoint_bootstrap_field",
+          value: localizer(locale, "commands.config.setup.custom_endpoint_bootstrap_value", {
+            custom_models_add_command: customModelsAddMention,
+            model_text_command: modelTextMention,
+            help_custom_models_command: helpCustomModelsMention,
           }),
         });
       }
@@ -838,13 +762,15 @@ export async function execute(
         ? isDMChannel
           ? "commands.config.setup.success_desc_dm"
           : "commands.config.setup.success_desc_byok"
-        : configuredModelName
-          ? isDMChannel
-            ? "commands.config.setup.success_desc_dm_with_model"
-            : "commands.config.setup.success_desc_with_model"
-          : isDMChannel
-            ? "commands.config.setup.success_desc_dm"
-            : "commands.config.setup.success_desc";
+        : isCustomEndpointSetup
+          ? "commands.config.setup.success_desc_custom_endpoint"
+          : configuredModelName
+            ? isDMChannel
+              ? "commands.config.setup.success_desc_dm_with_model"
+              : "commands.config.setup.success_desc_with_model"
+            : isDMChannel
+              ? "commands.config.setup.success_desc_dm"
+              : "commands.config.setup.success_desc";
 
       await replySummaryEmbed(modalSubmitInteraction, locale, {
         titleKey: "commands.config.setup.success_title",

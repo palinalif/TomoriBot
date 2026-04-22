@@ -13,12 +13,12 @@ export async function replyLegacyOpenRouterOtherModelMoved(
 ): Promise<void> {
   const addCommand =
     scopeKind === "server"
-      ? commandRegistry.getCommandMention("openrouter", "models", "add")
-      : commandRegistry.getCommandMention("personal", "openrouter-models", "add");
+      ? commandRegistry.getCommandMention("openrouter", "model", "add")
+      : commandRegistry.getCommandMention("personal", "openrouter-model", "add");
   const removeCommand =
     scopeKind === "server"
-      ? commandRegistry.getCommandMention("openrouter", "models", "remove")
-      : commandRegistry.getCommandMention("personal", "openrouter-models", "remove");
+      ? commandRegistry.getCommandMention("openrouter", "model", "remove")
+      : commandRegistry.getCommandMention("personal", "openrouter-model", "remove");
 
   await replyInfoEmbed(interaction, locale, {
     titleKey: "general.openrouter_model_moved_title",

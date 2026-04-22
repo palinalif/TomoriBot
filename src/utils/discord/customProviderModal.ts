@@ -1,15 +1,10 @@
 /**
- * Custom Provider Modal Utilities
+ * Legacy Custom Provider Modal Utilities
  *
- * Shared utilities for handling the custom provider's two-step modal flow.
- * Used by /config setup and /config provider add commands.
+ * Shared utilities for the retired inline custom-provider setup flow.
+ * Phase 3 moved user-facing setup to /config custom-endpoint and /personal custom-endpoint.
  *
- * Flow:
- * 1. User selects "custom" provider in the first modal
- * 2. The api_key field is used to input the endpoint URL
- * 3. After first modal submission, show capabilities selection (message components)
- * 4. Create new llms row with user-declared capabilities
- * 5. Save endpoint URL to tomori_configs.custom_endpoint_url
+ * These helpers remain for compatibility with legacy data and shared constants.
  */
 
 import {

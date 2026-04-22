@@ -93,6 +93,9 @@ export async function execute(
     const configModelMention = commandRegistry.getCommandMention("config", "model", "text");
     const configModelEmbeddingMention = commandRegistry.getCommandMention("config", "model", "embedding");
     const configModelImageMention = commandRegistry.getCommandMention("config", "model", "image");
+    const configCustomModelsAddMention = commandRegistry.getCommandMention("config", "custom-endpoint", "add");
+    const personalCustomModelsAddMention = commandRegistry.getCommandMention("personal", "custom-endpoint", "add");
+    const helpCustomModelsMention = commandRegistry.getCommandMention("help", "custom-endpoint");
     const supportServerMention = commandRegistry.getCommandMention("support", "discord");
     const helpPersonalProviderMention = commandRegistry.getCommandMention("help", "personal-provider");
     const serverUserByokToggleMention = commandRegistry.getCommandMention("server", "user-byok", "toggle");
@@ -179,6 +182,13 @@ export async function execute(
         embedOptions = {
           titleKey: "commands.help.api-key.custom_title",
           descriptionKey: "commands.help.api-key.custom_description",
+          descriptionVars: {
+            configSetup: configSetupMention,
+            configCustomModelsAdd: configCustomModelsAddMention,
+            personalCustomModelsAdd: personalCustomModelsAddMention,
+            configModel: configModelMention,
+            helpCustomModels: helpCustomModelsMention,
+          },
           color: ColorCode.INFO,
           fields: [],
         };

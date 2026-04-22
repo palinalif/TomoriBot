@@ -474,10 +474,16 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
           log.info(`Using default embedding model for ${validConfig.provider}: ${selectedEmbeddingModel.codename}`);
         }
       } else {
-        log.info("Setup is bootstrapping BYOK-only mode with no server text provider");
+        if (validConfig.userByokMode) {
+          log.info("Setup is bootstrapping BYOK-only mode with no server text provider");
+        } else if (validConfig.deferredCustomEndpointSetup) {
+          log.info("Setup is bootstrapping deferred custom-endpoint mode with no server text provider");
+        } else {
+          log.info("Setup is bootstrapping with no immediate server text provider");
+        }
       }
 
-      // Extract IDs (null when BYOK-only setup intentionally skips server-provider defaults)
+      // Extract IDs (null when setup intentionally skips immediate server-provider defaults)
       const selectedLlmId = selectedLlm ? selectedLlm.llm_id : null;
       const selectedDiffusionModelId = selectedDiffusionModel ? selectedDiffusionModel.diffusion_model_id : null;
       const selectedEmbeddingModelId = selectedEmbeddingModel ? selectedEmbeddingModel.embedding_model_id : null;
