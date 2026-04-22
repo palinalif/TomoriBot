@@ -58,10 +58,10 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
 /**
  * Configures the humanizer degree setting for Tomori.
  * Has 4 levels, each stacking upon each other:
- * 0 = No humanization
- * 1 = Added prompt to make Tomori more 'human'
- * 2 = Added typing simulation and chunking of messages
- * 3 = Lowercase all words and remove punctuations
+ * 0 = Active system prompt + aggregated visible delivery per tool-free phase
+ * 1 = Active system prompt + live discrete streaming
+ * 2 = 1 + typing simulation and pauses between messages
+ * 3 = 2 + sentence-level chunking and casual text humanization
  * @param _client - Discord client instance
  * @param interaction - Command interaction
  * @param userData - User data from database

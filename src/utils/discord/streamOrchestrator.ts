@@ -69,7 +69,9 @@ import {
   type TypingSimulationConfig,
   createDefaultStreamMetrics,
   createDefaultStreamState,
+  getVisibleDeliveryMode,
   createTypingSimulationConfig,
+  VisibleDeliveryMode,
 } from "../../types/stream/types";
 
 // Empty response handling is now done at the tomoriChat level for fresh context
@@ -82,6 +84,8 @@ type StreamSendPayload = {
     repliedUser?: boolean;
   };
 };
+
+type BufferedDeliveryBoundary = ChunkProcessingResult["breakType"] | "attachment" | "final" | "tool_call";
 
 function isInvalidWebhookError(error: unknown): boolean {
   const code = (error as { code?: number | string })?.code;
@@ -442,13 +446,19 @@ export class StreamOrchestrator implements IStreamOrchestrator {
           // 3. Only flush buffer if this is NOT a flush limit stop
           // Flush limit stops shouldn't try to send more messages as they'd just hit the limit again
           // This prevents the duplicate "Response Length Limit Reached" embed
-          if (state.buffer.length > 0 && !shouldSkipBufferFlush) {
+          if ((state.buffer.length > 0 || this.hasPendingAggregatedText(state)) && !shouldSkipBufferFlush) {
             await this.flushPendingBuffer(
               state,
               this.createTextProcessingConfig(config, context),
               createTypingSimulationConfig(config.humanizerDegree),
               context,
             );
+          } else if (
+            stopRequest?.requesterId === "speaker_guard" &&
+            this.hasPendingAggregatedText(state) &&
+            textConfig.visibleDeliveryMode === VisibleDeliveryMode.AGGREGATED_PHASE
+          ) {
+            await this.flushAggregatedTextBuffer(textConfig, context, state);
           } else if (shouldSkipBufferFlush) {
             log.info("Stream: Skipping buffer flush due to internal no-flush stop");
           }
@@ -613,8 +623,11 @@ export class StreamOrchestrator implements IStreamOrchestrator {
           // Flush any pending buffer before handling error
           // This preserves text the model generated before encountering the error
           // (e.g., text generated before a malformed tool call)
-          if (state.buffer.length > 0) {
-            log.info(`Stream: Flushing ${state.buffer.length} chars of buffered text before error handling`);
+          if (state.buffer.length > 0 || this.hasPendingAggregatedText(state)) {
+            log.info(
+              `Stream: Flushing ${state.buffer.length} chars of buffered text before error handling` +
+                `${this.hasPendingAggregatedText(state) ? ` (queued aggregate: ${state.pendingAggregatedText.length})` : ""}`,
+            );
             await this.flushPendingBuffer(state, textConfig, typingConfig, context);
             if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
               return {
@@ -637,7 +650,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       case "function_call":
         if (chunk.functionCall) {
           // Flush any pending buffer before function call
-          if (state.buffer.length > 0) {
+          if (state.buffer.length > 0 || this.hasPendingAggregatedText(state)) {
             await this.flushPendingBuffer(state, textConfig, typingConfig, context, true);
             if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
               return {
@@ -747,7 +760,14 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       const processingResult = this.processBufferContent(state, config);
 
       if (processingResult.shouldFlush && processingResult.segmentToFlush) {
-        await this.sendBufferSegment(processingResult.segmentToFlush, textConfig, typingConfig, context, state);
+        await this.sendBufferSegment(
+          processingResult.segmentToFlush,
+          processingResult.breakType,
+          textConfig,
+          typingConfig,
+          context,
+          state,
+        );
 
         state.buffer = processingResult.updatedBuffer;
         if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
@@ -789,7 +809,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         `Stream Seg: Flushing oversized regular buffer at safe breakpoint (total: ${state.buffer.length}, flush: ${segmentToFlush.length}, retain: ${updatedBuffer.length})`,
       );
 
-      await this.sendBufferSegment(segmentToFlush, textConfig, typingConfig, context, state);
+      await this.sendBufferSegment(segmentToFlush, "overflow", textConfig, typingConfig, context, state);
       state.buffer = updatedBuffer;
       if (StreamOrchestrator.hasStopRequest(context.channel.id)) {
         return;
@@ -822,7 +842,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
   }
 
   private getRecentStreamTextTail(state: StreamState): string {
-    const combined = `${state.accumulatedText}${state.buffer}`;
+    const combined = `${state.accumulatedText}${state.pendingAggregatedText}${state.buffer}`;
     if (!combined) {
       return "";
     }
@@ -1376,6 +1396,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
    */
   private async sendBufferSegment(
     segment: string,
+    boundary: BufferedDeliveryBoundary | undefined,
     textConfig: TextProcessingConfig,
     typingConfig: TypingSimulationConfig,
     context: StreamContext,
@@ -1483,16 +1504,26 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     const hasRenderedTable = segmentedParts.some((part) => part.type === "table");
 
     if (!hasRenderedTable) {
-      await this.sendSegment(segmentToSend, textConfig, typingConfig, context, state);
+      await this.sendSegment(segmentToSend, boundary, textConfig, typingConfig, context, state);
     } else {
+      let isFirstTextPart = true;
       for (const part of segmentedParts) {
         if (part.type === "text") {
           if (!part.content.trim()) continue;
-          await this.sendSegment(part.content, textConfig, typingConfig, context, state);
+          await this.sendSegment(
+            part.content,
+            isFirstTextPart ? boundary : undefined,
+            textConfig,
+            typingConfig,
+            context,
+            state,
+          );
+          isFirstTextPart = false;
           continue;
         }
 
-        await this.sendRenderedMarkdownTable(part.content, part.table.source, context, state);
+        await this.sendRenderedMarkdownTable(part.content, part.table.source, textConfig, typingConfig, context, state);
+        isFirstTextPart = false;
       }
     }
 
@@ -1711,12 +1742,18 @@ export class StreamOrchestrator implements IStreamOrchestrator {
    */
   private async sendSegment(
     segment: string,
+    boundary: BufferedDeliveryBoundary | undefined,
     textConfig: TextProcessingConfig,
     typingConfig: TypingSimulationConfig,
     context: StreamContext,
     state: StreamState,
   ): Promise<void> {
     if (!segment.trim()) return;
+
+    if (textConfig.visibleDeliveryMode === VisibleDeliveryMode.AGGREGATED_PHASE) {
+      this.queueAggregatedSegment(segment, boundary, state);
+      return;
+    }
 
     // Chunk the message
     const rawMessageChunks = chunkMessage(segment, textConfig.humanizerDegree, textConfig.maxMessageLength).map(
@@ -1748,23 +1785,100 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     }
   }
 
+  private hasPendingAggregatedText(state: StreamState): boolean {
+    return Boolean(state.pendingAggregatedText.trim());
+  }
+
+  private queueAggregatedSegment(
+    segment: string,
+    boundary: BufferedDeliveryBoundary | undefined,
+    state: StreamState,
+  ): void {
+    const joinWithBlankLine = state.pendingAggregateJoinNextWithBlankLine && state.pendingAggregatedText.length > 0;
+    if (joinWithBlankLine) {
+      const trimmedExisting = state.pendingAggregatedText.replace(/\n+$/u, "");
+      const trimmedIncoming = segment.replace(/^\n+/u, "");
+      state.pendingAggregatedText = `${trimmedExisting}\n\n${trimmedIncoming}`;
+    } else {
+      state.pendingAggregatedText += segment;
+    }
+
+    state.pendingAggregateJoinNextWithBlankLine = boundary === "newline";
+    log.info(
+      `Stream Aggregate: Queued ${segment.length} chars (boundary=${boundary ?? "none"}, total=${state.pendingAggregatedText.length})`,
+    );
+  }
+
+  private async flushAggregatedTextBuffer(
+    textConfig: TextProcessingConfig,
+    context: StreamContext,
+    state: StreamState,
+  ): Promise<void> {
+    if (!this.hasPendingAggregatedText(state)) {
+      state.pendingAggregatedText = "";
+      state.pendingAggregateJoinNextWithBlankLine = false;
+      return;
+    }
+
+    const aggregatedText = state.pendingAggregatedText;
+    state.pendingAggregatedText = "";
+    state.pendingAggregateJoinNextWithBlankLine = false;
+
+    const messageChunks = chunkMessage(aggregatedText, HumanizerDegree.NONE, textConfig.maxMessageLength).map((chunk) =>
+      chunk.replaceAll(StreamOrchestrator.PREFILL_WHITESPACE_SENTINEL, ""),
+    );
+    const finalMessageChunks = messageChunks.filter((chunk) => chunk.trim());
+    if (!finalMessageChunks.length) {
+      return;
+    }
+
+    log.info(
+      `Stream Aggregate: Flushing ${aggregatedText.length} chars as ${finalMessageChunks.length} Discord message(s)`,
+    );
+    await this.sendChunksImmediate(finalMessageChunks, context, state);
+  }
+
+  private async flushHeldOrphanPunctuation(
+    boundary: BufferedDeliveryBoundary,
+    textConfig: TextProcessingConfig,
+    typingConfig: TypingSimulationConfig,
+    context: StreamContext,
+    state: StreamState,
+  ): Promise<void> {
+    if (!state.pendingOrphanPunctuation) {
+      return;
+    }
+
+    const orphan = state.pendingOrphanPunctuation;
+    state.pendingOrphanPunctuation = undefined;
+    log.info(`Stream Orphan: Releasing held "${orphan}" at ${boundary} boundary.`);
+    await this.sendSegment(orphan, boundary, textConfig, typingConfig, context, state);
+  }
+
   private async sendRenderedMarkdownTable(
     tableMarkdown: string,
     fallbackText: string,
+    textConfig: TextProcessingConfig,
+    typingConfig: TypingSimulationConfig,
     context: StreamContext,
     state: StreamState,
   ): Promise<void> {
     const tableSegments = extractMarkdownTableSegments(tableMarkdown);
     const firstTableSegment = tableSegments.find((segment) => segment.type === "table");
     if (!firstTableSegment || firstTableSegment.type !== "table") {
-      await this.sendSingleMessage(fallbackText, context, state);
+      await this.sendSegment(fallbackText, undefined, textConfig, typingConfig, context, state);
       return;
     }
 
     const renderedBuffer = await renderMarkdownTableToPng(firstTableSegment.table);
     if (!renderedBuffer) {
-      await this.sendSingleMessage(fallbackText, context, state);
+      await this.sendSegment(fallbackText, undefined, textConfig, typingConfig, context, state);
       return;
+    }
+
+    await this.flushHeldOrphanPunctuation("attachment", textConfig, typingConfig, context, state);
+    if (textConfig.visibleDeliveryMode === VisibleDeliveryMode.AGGREGATED_PHASE) {
+      await this.flushAggregatedTextBuffer(textConfig, context, state);
     }
 
     const attachment = new AttachmentBuilder(renderedBuffer, {
@@ -2277,20 +2391,17 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         state.buffer = this.autoCloseIncompleteMarkers(state.buffer);
       }
 
-      await this.sendBufferSegment(state.buffer, textConfig, typingConfig, context, state);
+      await this.sendBufferSegment(state.buffer, "final", textConfig, typingConfig, context, state);
       state.buffer = "";
       state.isInsideCodeBlock = false;
       state.hasSemanticMarkers = false;
     }
 
     // Release any held orphan punctuation that never found a following segment to
-    // attach to (e.g. stream ended on a lone "..."). Better to ship it standalone
-    // than to silently drop content the model deliberately produced.
-    if (state.pendingOrphanPunctuation) {
-      const orphan = state.pendingOrphanPunctuation;
-      state.pendingOrphanPunctuation = undefined;
-      log.info(`Stream Orphan: Releasing held "${orphan}" as standalone on final flush (no following segment).`);
-      await this.sendSegment(orphan, textConfig, typingConfig, context, state);
+    // attach to before final delivery.
+    await this.flushHeldOrphanPunctuation("final", textConfig, typingConfig, context, state);
+    if (textConfig.visibleDeliveryMode === VisibleDeliveryMode.AGGREGATED_PHASE) {
+      await this.flushAggregatedTextBuffer(textConfig, context, state);
     }
 
     // Route any think block content that was still accumulating when the stream ended.
@@ -2376,7 +2487,11 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     }
     log.info(`Stream Seg: Flushing buffer for function call: "${segmentToProcess}"`);
 
-    await this.sendBufferSegment(segmentToProcess, textConfig, typingConfig, context, state);
+    await this.sendBufferSegment(segmentToProcess, "tool_call", textConfig, typingConfig, context, state);
+    await this.flushHeldOrphanPunctuation("tool_call", textConfig, typingConfig, context, state);
+    if (textConfig.visibleDeliveryMode === VisibleDeliveryMode.AGGREGATED_PHASE) {
+      await this.flushAggregatedTextBuffer(textConfig, context, state);
+    }
     state.buffer = "";
   }
 
@@ -2598,6 +2713,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
 
     return {
       humanizerDegree: config.humanizerDegree,
+      visibleDeliveryMode: getVisibleDeliveryMode(config.humanizerDegree),
       emojiUsageEnabled: config.emojiUsageEnabled,
       emojiStrings: context.emojiStrings || [],
       mentionMap,

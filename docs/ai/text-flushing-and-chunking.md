@@ -28,8 +28,9 @@ For each incoming provider text chunk:
 3. If a segment is flushed, `sendBufferSegment(...)` runs text preprocessing.
 4. Registered-speaker guard truncates any known non-active `Name:` line before send, and also blocks reserved `Assistant:` lines, but ignores lines inside fenced or inline backtick code.
 5. Complete markdown tables are split out and rendered to PNG attachments when possible.
-6. Remaining text goes through `sendSegment(...)` and is chunked into Discord-sized messages.
-7. Chunks are optionally humanized (D3) and sent.
+6. Remaining text goes through `sendSegment(...)`.
+7. Degree `0` queues the cleaned text into a pending visible buffer; degrees `1/2/3` chunk it into Discord-sized messages immediately.
+8. Degree `0` only flushes that visible buffer at tool/attachment/final boundaries; degree `3` chunks are optionally humanized before send.
 
 Execution order for a flushed segment:
 
@@ -106,7 +107,8 @@ Key behavior:
 - Treats code blocks, URLs, and custom Discord emoji tags as atomic blocks.
 - Attempts semantic-aware splitting for quoted/parenthesized/markdown segments.
 - For text blocks:
-  - Degree `< HEAVY` (0/1/2): split by newlines (`\n+`)
+  - Degree `NONE` (0): preserve internal newlines and only split when Discord length limits require it
+  - Degrees `LIGHT/MEDIUM` (1/2): split by newlines (`\n+`)
   - Degree `HEAVY` (3): split by newlines + sentence boundaries
 - Consecutive emoji blocks are grouped into one emoji run.
 - Final normalization merges punctuation-only chunks into adjacent chunks when possible.
@@ -157,13 +159,18 @@ Useful log lines:
 
 ## Typing and Send Mode
 
+Degree `0` uses aggregated visible delivery:
+- internal flushes still happen for coherence/tool boundaries
+- newline-triggered joins between queued segments are normalized to exactly one blank line (`\n\n`)
+- queued text is only sent when a phase ends or an attachment must be emitted separately
+
 Typing simulation is enabled for degree `>= MEDIUM`:
 - Config built by `createTypingSimulationConfig(...)`
 - Sends first chunk immediately, then simulates typing for subsequent chunks.
 
 Successful Discord sends count as stream progress for the outer SDK watchdog, so long generations that are still visibly flushing to Discord no longer hit the top-level timeout just because the overall turn exceeds the original wall-clock budget.
 
-Immediate send mode is used when typing simulation is disabled.
+Immediate send mode is used for degree `1`, and for the final flushed chunks of degree `0`.
 
 ## Message Flood Guard
 

@@ -651,8 +651,15 @@ export function chunkMessage(inputText: string, humanizerDegree: number, chunkLe
         prevBlockWasEmoji = false;
         if (!textToAdd) continue; // Skip empty text
 
-        if (humanizerDegree < HumanizerDegree.HEAVY) {
-          // 3c-i. Break at newlines, keep punctuation
+        if (humanizerDegree === HumanizerDegree.NONE) {
+          // 3c-i. Degree 0 preserves internal newlines and only splits when Discord limits require it.
+          const newlineAwareChunks = splitByNewlines(textToAdd, chunkLength);
+          for (const chunk of newlineAwareChunks) {
+            if (!chunk.trim()) continue;
+            chunkedMessages.push(chunk);
+          }
+        } else if (humanizerDegree < HumanizerDegree.HEAVY) {
+          // 3c-ii. Degrees 1-2 break at newlines for live discrete sends.
           const paragraphs = textToAdd.split(/\n+/);
 
           for (const paragraph of paragraphs) {
@@ -660,7 +667,7 @@ export function chunkMessage(inputText: string, humanizerDegree: number, chunkLe
             chunkedMessages.push(paragraph);
           }
         } else if (humanizerDegree >= HumanizerDegree.HEAVY) {
-          // 3c-ii. Humanizer Degree 3+: Break at newlines AND sentence endings
+          // 3c-iii. Humanizer Degree 3+: Break at newlines AND sentence endings
           const paragraphs = textToAdd.split(/\n+/);
 
           for (const paragraph of paragraphs) {
@@ -726,7 +733,7 @@ export function chunkMessage(inputText: string, humanizerDegree: number, chunkLe
             }
           }
         } else {
-          // 3c-iii. Low or no humanization, use normal text chunking
+          // 3c-iv. Fallback
           currentChunk = addTextSegment(textToAdd, currentChunk, chunkedMessages, chunkLength);
         }
         break;

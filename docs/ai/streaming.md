@@ -73,14 +73,16 @@ Each flushed segment goes through:
 4. prefix strip/prefill handling
 5. registered-speaker guard truncation (`Name:` lines for known non-active speakers, plus reserved `Assistant:` lines, excluding fenced and inline backtick code)
 6. complete markdown tables are split out and rendered to PNG attachments when possible
-7. remaining text goes through `sendSegment(...)`
+7. remaining text goes through `sendSegment(...)` for either live delivery or degree-0 phase aggregation
 
 ### 6) Message chunking and sending
 
 `sendSegment(...)`:
-- splits text with `chunkMessage(...)` (Discord-safe lengths)
-- applies `humanizeString(...)` only for degree 3 (`HEAVY`)
-- sends chunks with typing simulation (`>= MEDIUM`) or immediate mode
+- degree `0` queues cleaned text into a pending visible buffer instead of sending immediately
+- degree `0` flushes that queue at tool-call, attachment, error-preservation, and final boundaries
+- degrees `1/2/3` split text with `chunkMessage(...)` (Discord-safe lengths)
+- applies `humanizeString(...)` only for degree `3` (`HEAVY`)
+- degree `1` sends immediately; degrees `2/3` use typing simulation
 
 ### 7) Completion
 
@@ -132,6 +134,7 @@ Overflow fallback:
 - if regular buffer becomes too large, orchestrator flushes at a **safe breakpoint**
 - prefers nearby sentence/newline boundaries, then whitespace, then hard fallback
 - loops until oversized buffer is drained
+- degree `0` still uses the same internal flush logic; it only delays visible Discord sends until a phase boundary
 
 ## Message Sending Behavior
 
@@ -162,10 +165,16 @@ Humanizer degree controls both pacing and text treatment:
 
 | Degree | Behavior |
 |---|---|
-| `0` (`NONE`) | No humanization |
-| `1` (`LIGHT`) | Light processing |
-| `2` (`MEDIUM`) | Typing simulation enabled |
-| `3` (`HEAVY`) | Period flush boundary + post-chunk humanization |
+| `0` (`NONE`) | Uses the active system prompt source, but buffers visible text into one reply per tool-free phase |
+| `1` (`LIGHT`) | Uses the active system prompt source and streams discrete messages immediately |
+| `2` (`MEDIUM`) | Degree `1` + typing simulation and random pauses |
+| `3` (`HEAVY`) | Degree `2` + period flush boundary + post-chunk humanization |
+
+System prompt behavior:
+- degrees `0-3` all use the same active system prompt source
+- that means custom `/config system-prompt` when set, otherwise `DEFAULT_SYSTEM_PROMPT`
+- when a SillyTavern preset owns the system prompt path, that preset behavior still wins
+- user impersonation still skips bot-owned system prompt injection
 
 Key order for degree 3:
 1. Flush boundary decision
@@ -176,7 +185,8 @@ Key order for degree 3:
 ## Tool Call Integration
 
 When model emits `function_call`:
-- orchestrator flushes pending buffer first
+- orchestrator flushes pending visible text first
+- degree `0` finalizes its queued phase buffer before returning `function_call`
 - returns status `function_call`
 - caller executes tool and continues next stream iteration with updated context
 

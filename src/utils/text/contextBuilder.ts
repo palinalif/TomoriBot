@@ -1176,7 +1176,7 @@ async function buildContextNative({
 
   // 1. System prompt + Humanizer rules (comes FIRST for prompt optimization)
   // Skip system prompt for user impersonation (bot-specific personality should not leak)
-  if (!isUserImpersonation && tomoriConfig.humanizer_degree >= HumanizerDegree.LIGHT) {
+  if (!isUserImpersonation) {
     // When a SillyTavern preset is active and no custom /sysprompt is set,
     // skip the DEFAULT_SYSTEM_PROMPT fallback — the preset fully owns the system prompt.
     const systemPrompt =

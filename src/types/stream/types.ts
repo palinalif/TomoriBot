@@ -34,6 +34,11 @@ export const DISCORD_STREAMING_CONSTANTS = {
   INACTIVITY_TIMEOUT_MS: 120000, // 2 minutes
 } as const;
 
+export enum VisibleDeliveryMode {
+  AGGREGATED_PHASE = "aggregated_phase",
+  STREAMING = "streaming",
+}
+
 /**
  * Stream state tracking for buffer management and code block and think block detection
  */
@@ -68,6 +73,13 @@ export interface StreamState {
    * instead of being sent as standalone Discord messages. Released on final flush.
    */
   pendingOrphanPunctuation?: string;
+  /** Degree-0 delivery buffer: visible text queued until a tool/final/attachment boundary. */
+  pendingAggregatedText: string;
+  /**
+   * When true, the next queued degree-0 segment should replace the prior newline
+   * flush boundary with exactly one blank line.
+   */
+  pendingAggregateJoinNextWithBlankLine: boolean;
 }
 
 /**
@@ -85,6 +97,7 @@ export interface ProcessedSegment {
  */
 export interface TextProcessingConfig {
   humanizerDegree: HumanizerDegree;
+  visibleDeliveryMode: VisibleDeliveryMode;
   emojiUsageEnabled: boolean;
   emojiStrings: string[];
   mentionMap?: Map<string, string[]>;
@@ -240,6 +253,8 @@ export function createDefaultStreamState(): StreamState {
     thoughtRawSegments: [],
     firstReplyUrl: undefined,
     pendingOrphanPunctuation: undefined,
+    pendingAggregatedText: "",
+    pendingAggregateJoinNextWithBlankLine: false,
   };
 }
 
@@ -288,4 +303,10 @@ export function createTypingSimulationConfig(
     thinkingPauseChance: DISCORD_STREAMING_CONSTANTS.THINKING_PAUSE_CHANCE,
     ...customConfig,
   };
+}
+
+export function getVisibleDeliveryMode(humanizerDegree: HumanizerDegree): VisibleDeliveryMode {
+  return humanizerDegree === HumanizerDegree.NONE
+    ? VisibleDeliveryMode.AGGREGATED_PHASE
+    : VisibleDeliveryMode.STREAMING;
 }
