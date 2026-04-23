@@ -427,7 +427,7 @@ function buildMediaAttributionText(msg: SimplifiedMessageForContext, authorName:
   }
 
   const mediaDescription = mediaParts.join(" and ") || "this media";
-  return `${authorName} sent ${mediaDescription}`;
+  return `[System: ${authorName} sent ${mediaDescription}]`;
 }
 
 function isStickerImageAttachment(attachment: SimplifiedMessageForContext["imageAttachments"][number]): boolean {

@@ -35,7 +35,7 @@ function getCapabilityLabelKey(
 
 function buildCheckboxOptions(endpoints: CustomEndpointRow[]): CheckboxGroupOption[] {
   return endpoints.map((endpoint) => ({
-    value: `${endpoint.capability}:${endpoint.label}`,
+    value: endpoint.custom_endpoint_id?.toString() ?? `${endpoint.capability}:${endpoint.label}`,
     label: truncateModalText(endpoint.label, 100),
     description: truncateModalText(endpoint.display_name || endpoint.endpoint_url, 100),
     default: true,

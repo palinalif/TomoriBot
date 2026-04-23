@@ -2099,58 +2099,118 @@ export async function upsertCustomEndpoint(params: {
   } = params;
 
   try {
-    const rows = await sql`
-			INSERT INTO custom_endpoints (
-				server_id,
-				user_id,
-				label,
-				capability,
-				api_style,
-				endpoint_url,
-				model_name,
-				display_name,
-				num_ctx,
-				requires_auth,
-				extra_config,
-				has_tools,
-				sees_images,
-				sees_videos,
-				supports_structoutput,
-				is_default
-			) VALUES (
-				${serverId},
-				${userId},
-				${label},
-				${capability},
-				${apiStyle},
-				${endpointUrl},
-				${modelName},
-				${displayName},
-				${numCtx},
-				${requiresAuth},
-				${JSON.stringify(extraConfig)}::jsonb,
-				${hasTools},
-				${seesImages},
-				${seesVideos},
-				${supportsStructOutput},
-				${isDefault}
-			)
-			ON CONFLICT (server_id, user_id, label, capability) DO UPDATE SET
-				api_style = EXCLUDED.api_style,
-				endpoint_url = EXCLUDED.endpoint_url,
-				model_name = EXCLUDED.model_name,
-				display_name = EXCLUDED.display_name,
-				num_ctx = EXCLUDED.num_ctx,
-				requires_auth = EXCLUDED.requires_auth,
-				extra_config = EXCLUDED.extra_config,
-				has_tools = EXCLUDED.has_tools,
-				sees_images = EXCLUDED.sees_images,
-				sees_videos = EXCLUDED.sees_videos,
-				supports_structoutput = EXCLUDED.supports_structoutput,
-				is_default = EXCLUDED.is_default,
-				updated_at = CURRENT_TIMESTAMP
-			RETURNING *
-		`;
+    const rows =
+      serverId !== null
+        ? await sql`
+            INSERT INTO custom_endpoints (
+              server_id,
+              user_id,
+              label,
+              capability,
+              api_style,
+              endpoint_url,
+              model_name,
+              display_name,
+              num_ctx,
+              requires_auth,
+              extra_config,
+              has_tools,
+              sees_images,
+              sees_videos,
+              supports_structoutput,
+              is_default
+            ) VALUES (
+              ${serverId},
+              NULL,
+              ${label},
+              ${capability},
+              ${apiStyle},
+              ${endpointUrl},
+              ${modelName},
+              ${displayName},
+              ${numCtx},
+              ${requiresAuth},
+              ${JSON.stringify(extraConfig)}::jsonb,
+              ${hasTools},
+              ${seesImages},
+              ${seesVideos},
+              ${supportsStructOutput},
+              ${isDefault}
+            )
+            ON CONFLICT (server_id, label, capability)
+              WHERE user_id IS NULL
+            DO UPDATE SET
+              api_style = EXCLUDED.api_style,
+              endpoint_url = EXCLUDED.endpoint_url,
+              model_name = EXCLUDED.model_name,
+              display_name = EXCLUDED.display_name,
+              num_ctx = EXCLUDED.num_ctx,
+              requires_auth = EXCLUDED.requires_auth,
+              extra_config = EXCLUDED.extra_config,
+              has_tools = EXCLUDED.has_tools,
+              sees_images = EXCLUDED.sees_images,
+              sees_videos = EXCLUDED.sees_videos,
+              supports_structoutput = EXCLUDED.supports_structoutput,
+              is_default = EXCLUDED.is_default,
+              updated_at = CURRENT_TIMESTAMP
+            RETURNING *
+          `
+        : userId !== null
+          ? await sql`
+              INSERT INTO custom_endpoints (
+                server_id,
+                user_id,
+                label,
+                capability,
+                api_style,
+                endpoint_url,
+                model_name,
+                display_name,
+                num_ctx,
+                requires_auth,
+                extra_config,
+                has_tools,
+                sees_images,
+                sees_videos,
+                supports_structoutput,
+                is_default
+              ) VALUES (
+                NULL,
+                ${userId},
+                ${label},
+                ${capability},
+                ${apiStyle},
+                ${endpointUrl},
+                ${modelName},
+                ${displayName},
+                ${numCtx},
+                ${requiresAuth},
+                ${JSON.stringify(extraConfig)}::jsonb,
+                ${hasTools},
+                ${seesImages},
+                ${seesVideos},
+                ${supportsStructOutput},
+                ${isDefault}
+              )
+              ON CONFLICT (user_id, label, capability)
+                WHERE server_id IS NULL
+              DO UPDATE SET
+                api_style = EXCLUDED.api_style,
+                endpoint_url = EXCLUDED.endpoint_url,
+                model_name = EXCLUDED.model_name,
+                display_name = EXCLUDED.display_name,
+                num_ctx = EXCLUDED.num_ctx,
+                requires_auth = EXCLUDED.requires_auth,
+                extra_config = EXCLUDED.extra_config,
+                has_tools = EXCLUDED.has_tools,
+                sees_images = EXCLUDED.sees_images,
+                sees_videos = EXCLUDED.sees_videos,
+                supports_structoutput = EXCLUDED.supports_structoutput,
+                is_default = EXCLUDED.is_default,
+                updated_at = CURRENT_TIMESTAMP
+              RETURNING *
+            `
+          : [];
 
     if (!rows.length) {
       return null;

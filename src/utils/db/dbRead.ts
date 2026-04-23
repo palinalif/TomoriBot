@@ -3607,11 +3607,11 @@ export async function loadScopedOpenRouterVideoGenerationModels(
 export async function loadCustomEndpointsForServer(serverId: number): Promise<CustomEndpointRow[]> {
   try {
     const rows = await sql<unknown[]>`
-			SELECT *
+			SELECT DISTINCT ON (label, capability) *
 			FROM custom_endpoints
 			WHERE server_id = ${serverId}
 			  AND user_id IS NULL
-			ORDER BY label ASC, capability ASC
+			ORDER BY label ASC, capability ASC, updated_at DESC, custom_endpoint_id DESC
 		`;
 
     return rows
@@ -3626,11 +3626,11 @@ export async function loadCustomEndpointsForServer(serverId: number): Promise<Cu
 export async function loadCustomEndpointsForUser(userId: number): Promise<CustomEndpointRow[]> {
   try {
     const rows = await sql<unknown[]>`
-			SELECT *
+			SELECT DISTINCT ON (label, capability) *
 			FROM custom_endpoints
 			WHERE user_id = ${userId}
 			  AND server_id IS NULL
-			ORDER BY label ASC, capability ASC
+			ORDER BY label ASC, capability ASC, updated_at DESC, custom_endpoint_id DESC
 		`;
 
     return rows
@@ -3660,6 +3660,7 @@ export async function loadCustomEndpoint(params: {
               AND user_id IS NULL
               AND label = ${label}
               AND capability = ${capability}
+            ORDER BY updated_at DESC, custom_endpoint_id DESC
             LIMIT 1
           `
         : await sql`
@@ -3669,6 +3670,7 @@ export async function loadCustomEndpoint(params: {
               AND server_id IS NULL
               AND label = ${label}
               AND capability = ${capability}
+            ORDER BY updated_at DESC, custom_endpoint_id DESC
             LIMIT 1
           `;
 

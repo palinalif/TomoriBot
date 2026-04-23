@@ -2311,14 +2311,38 @@ CREATE TABLE IF NOT EXISTS custom_endpoints (
   is_default BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (server_id, user_id, label, capability),
   FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE,
   FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+ALTER TABLE custom_endpoints
+  DROP CONSTRAINT IF EXISTS custom_endpoints_server_id_user_id_label_capability_key;
+
+WITH ranked_custom_endpoints AS (
+  SELECT
+    custom_endpoint_id,
+    ROW_NUMBER() OVER (
+      PARTITION BY server_id, user_id, label, capability
+      ORDER BY updated_at DESC, custom_endpoint_id DESC
+    ) AS row_num
+  FROM custom_endpoints
+)
+DELETE FROM custom_endpoints
+WHERE custom_endpoint_id IN (
+  SELECT custom_endpoint_id
+  FROM ranked_custom_endpoints
+  WHERE row_num > 1
 );
 
 CREATE INDEX IF NOT EXISTS idx_custom_endpoints_server ON custom_endpoints(server_id);
 CREATE INDEX IF NOT EXISTS idx_custom_endpoints_user ON custom_endpoints(user_id);
 CREATE INDEX IF NOT EXISTS idx_custom_endpoints_label ON custom_endpoints(label);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_endpoints_server_label_capability_unique
+  ON custom_endpoints(server_id, label, capability)
+  WHERE user_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_custom_endpoints_user_label_capability_unique
+  ON custom_endpoints(user_id, label, capability)
+  WHERE server_id IS NULL;
 
 DROP TRIGGER IF EXISTS update_custom_endpoints_timestamp ON custom_endpoints;
 CREATE TRIGGER update_custom_endpoints_timestamp

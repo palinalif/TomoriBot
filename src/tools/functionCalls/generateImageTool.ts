@@ -23,6 +23,7 @@ import { resolveNativeImageGenerationCapability } from "@/utils/provider/provide
 import { generateCustomImageViaEndpoint } from "@/providers/custom/customEndpointDispatcher";
 import { ZAI_CODING_IMAGES_GENERATIONS_URL, ZAI_GENERAL_IMAGES_GENERATIONS_URL } from "@/providers/zai/zaiShared";
 import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
+import { formatCustomEndpointModelDisplay } from "@/utils/provider/customProviderUtils";
 
 /**
  * Tool for generating images using the active provider's native image API
@@ -588,6 +589,9 @@ export class GenerateImageTool extends BaseTool {
       }
 
       const modelCodename = await this.getDiffusionModelCodename(diffusionModelId);
+      const displayModelName = creds.customEndpoint
+        ? formatCustomEndpointModelDisplay(creds.customEndpoint)
+        : modelCodename;
 
       log.info(`Using diffusion model: ${modelCodename} for image generation`);
 
@@ -630,7 +634,7 @@ export class GenerateImageTool extends BaseTool {
             description: buildImageToolNoticeDescription(
               context.locale,
               baseNoticeDescription,
-              modelCodename,
+              displayModelName,
               prompt,
               localizer(context.locale, "genai.image.generating_footer"),
               extraNoticeLines,
@@ -679,7 +683,7 @@ export class GenerateImageTool extends BaseTool {
 
       // Call appropriate provider API
       log.info(
-        `Generating image with ${executionProvider} via ${modelCodename}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio})`,
+        `Generating image with ${executionProvider} via ${displayModelName}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio})`,
       );
 
       let generatedImageData: string | null = null;

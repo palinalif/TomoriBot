@@ -31,6 +31,7 @@ import {
   resolveCapabilityCredentials,
 } from "@/utils/provider/credentialResolver";
 import { applyPersonalProviderSelectionsToTomoriState } from "@/utils/provider/personalProviderRuntime";
+import { formatCustomEndpointModelDisplay } from "@/utils/provider/customProviderUtils";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "generate_video_modal";
@@ -332,9 +333,12 @@ export async function execute(
 
     // 11. Get model codename
     const modelCodename = await getVideoModelCodename(videoModelId);
+    const displayModelName = videoCreds.customEndpoint
+      ? formatCustomEndpointModelDisplay(videoCreds.customEndpoint)
+      : modelCodename;
 
     log.info(
-      `Generating video with ${executionProvider} via ${modelCodename}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio}, reference: ${referenceImages ? "yes" : "no"})`,
+      `Generating video with ${executionProvider} via ${displayModelName}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio}, reference: ${referenceImages ? "yes" : "no"})`,
     );
 
     // 12. Show "generating" embed while we poll for completion
@@ -451,7 +455,7 @@ export async function execute(
           .setTitle(localizer(locale, "commands.generate.video.success_title"))
           .setDescription(
             localizer(locale, "commands.generate.video.success_description", {
-              model: modelCodename,
+              model: displayModelName,
               elapsed: elapsedSec,
               prompt: prompt.length > 200 ? `${prompt.substring(0, 200)}...` : prompt,
             }),
@@ -463,7 +467,7 @@ export async function execute(
 
     // 17. Increment quota
     await incrementVideoQuota(tomoriState.server_id, interaction.user.id);
-    log.success(`Video generated in ${elapsedSec}s via ${modelCodename}`);
+    log.success(`Video generated in ${elapsedSec}s via ${displayModelName}`);
   } catch (error) {
     log.error("Video generation command failed:", error as Error);
 

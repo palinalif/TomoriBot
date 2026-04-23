@@ -34,6 +34,7 @@ import {
   resolveCapabilityCredentials,
 } from "@/utils/provider/credentialResolver";
 import { applyPersonalProviderSelectionsToTomoriState } from "@/utils/provider/personalProviderRuntime";
+import { formatCustomEndpointModelDisplay } from "@/utils/provider/customProviderUtils";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "generate_image_modal";
@@ -511,9 +512,12 @@ export async function execute(
 
     // 14. Get model codename from database
     const modelCodename = await getDiffusionModelCodename(diffusionModelId);
+    const displayModelName = imageCreds.customEndpoint
+      ? formatCustomEndpointModelDisplay(imageCreds.customEndpoint)
+      : modelCodename;
 
     log.info(
-      `Generating image with ${executionProvider} via ${modelCodename}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio}, references: ${referenceImages.length})`,
+      `Generating image with ${executionProvider} via ${displayModelName}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio}, references: ${referenceImages.length})`,
     );
 
     // 15. Start timer for generation time tracking
@@ -685,7 +689,7 @@ export async function execute(
         },
         {
           name: localizer(locale, "commands.generate.image.field_model"),
-          value: modelCodename,
+          value: displayModelName,
           inline: true,
         },
         {

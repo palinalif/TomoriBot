@@ -21,6 +21,7 @@ import { sql } from "../../utils/db/client";
 import { checkVideoQuota, incrementVideoQuota } from "../../utils/quota/videoQuotaManager";
 import { resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
 import { generateCustomVideoViaEndpoint } from "@/providers/custom/customEndpointDispatcher";
+import { formatCustomEndpointModelDisplay } from "@/utils/provider/customProviderUtils";
 import type { ProviderNativeVideoResolution } from "@/types/provider/featureInterfaces";
 import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 
@@ -347,6 +348,9 @@ export class GenerateVideoTool extends BaseTool {
       }
 
       const modelCodename = await this.getVideoModelCodename(videoModelId);
+      const displayModelName = creds.customEndpoint
+        ? formatCustomEndpointModelDisplay(creds.customEndpoint)
+        : modelCodename;
       log.info(`Using video model: ${modelCodename} for video generation`);
 
       const apiKey = creds.apiKey;
@@ -378,7 +382,7 @@ export class GenerateVideoTool extends BaseTool {
             description: buildVideoToolNoticeDescription(
               context.locale,
               baseNoticeDescription,
-              modelCodename,
+              displayModelName,
               prompt,
               localizer(context.locale, "genai.video.generating_footer"),
               extraNoticeLines,
@@ -405,7 +409,7 @@ export class GenerateVideoTool extends BaseTool {
 
       // 9. Route to appropriate provider implementation
       log.info(
-        `Generating video with ${executionProvider} via ${modelCodename}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio}, duration: ${durationSeconds}s, resolution: ${resolution})`,
+        `Generating video with ${executionProvider} via ${displayModelName}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio}, duration: ${durationSeconds}s, resolution: ${resolution})`,
       );
 
       let videoData: Buffer | null = null;

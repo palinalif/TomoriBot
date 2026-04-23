@@ -1,4 +1,4 @@
-import type { CustomEndpointCapability } from "@/types/db/schema";
+import type { CustomEndpointCapability, CustomEndpointRow } from "@/types/db/schema";
 
 const CUSTOM_PROVIDER_PREFIX = "custom:";
 const SERVER_PROVIDER_SEGMENT = "s";
@@ -90,4 +90,17 @@ export function buildSyntheticCustomModelCodename(provider: string, capability: 
     .replace(/^-+|-+$/g, "");
 
   return `${slug}-${capability}`;
+}
+
+export function formatCustomEndpointModelDisplay(
+  endpoint: Pick<CustomEndpointRow, "label" | "model_name" | "display_name">,
+): string {
+  const label = normalizeCustomEndpointLabel(endpoint.label);
+  const primaryName = endpoint.model_name?.trim() || endpoint.display_name.trim();
+
+  if (!primaryName) {
+    return `custom-${label}`;
+  }
+
+  return primaryName.toLowerCase() === label ? `custom-${label}` : `custom-${label}-${primaryName}`;
 }

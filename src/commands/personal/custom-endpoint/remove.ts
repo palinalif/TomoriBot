@@ -108,7 +108,8 @@ export async function execute(
 
     const checkedValues = collectCheckedCustomEndpointValues(modalResult.multiValues, checkboxGroups.length);
     const endpointsToRemove = registeredEndpoints.filter(
-      (endpoint) => !checkedValues.has(`${endpoint.capability}:${endpoint.label}`),
+      (endpoint) =>
+        !checkedValues.has(endpoint.custom_endpoint_id?.toString() ?? `${endpoint.capability}:${endpoint.label}`),
     );
     if (endpointsToRemove.length === 0) {
       await replyInfoEmbed(modalResult.interaction, locale, {
