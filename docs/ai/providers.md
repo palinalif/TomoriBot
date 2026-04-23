@@ -139,7 +139,7 @@ Rule:
 
 Phase 3 promotes custom endpoints into labeled provider entries instead of a single anonymous `custom` slot.
 
-- registration happens through `/config custom-endpoint add` and `/personal custom-endpoint add`
+- registration and in-place updates happen through `/config custom-endpoint add|edit` and `/personal custom-endpoint add|edit`
 - endpoints are stored in `custom_endpoints`, keyed by `(server_id | user_id, label, capability)`
 - the saved credential row is namespaced per label as an internal provider ID such as `custom:s42:ollama-local` or `custom:u7:lmstudio`
 - custom endpoints can now be registered independently for `text`, `embedding`, `image`, and `video`
@@ -147,6 +147,7 @@ Phase 3 promotes custom endpoints into labeled provider entries instead of a sin
 - ComfyUI workflow dispatch now supports placeholder replacement inside uploaded API-format JSON before queueing, including prompt/model/aspect placeholders, derived width/height, video duration/resolution/audio flags, and indexed reference-image payload placeholders such as `{TOMORI_PROMPT}` and `{TOMORI_REFERENCE_IMAGE_1_DATA_URL}`
 - text-capability custom endpoints can declare `has_tools`, `sees_images`, `sees_videos`, and `supports_structoutput`, which drive picker visibility and request shaping
 - `/config model text|embedding|image|video|vision` shows each registered custom label as its own provider choice when that capability is available
+- `/config custom-endpoint edit` and `/personal custom-endpoint edit` first ask which registered endpoint row to replace, then merge any provided slash-command fields over that row while keeping omitted fields unchanged
 - legacy inline fields on `tomori_configs` and saved-provider rows (`custom_endpoint_url`, `custom_model_name`, `custom_num_ctx`) remain for backward compatibility during rollout, but new registrations write through the labeled `custom_endpoints` table
 - conversation compaction, history extraction, persona preset generation, and image-analysis helpers all resolve through the effective custom endpoint metadata when a custom label is active
 - `/config logit-bias` entries are still stored in config snapshots, but Tomori does not auto-tokenize plain-text entries for custom endpoints

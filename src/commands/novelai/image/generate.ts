@@ -125,6 +125,16 @@ export async function execute(
     }
 
     resolvedModel = await resolveNaiDiffusionModel(tomoriState.config);
+    if (!resolvedModel) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.novelai.image.generate.no_model_title",
+        descriptionKey: "commands.novelai.image.generate.no_model_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
     const apiKey = await resolveNovelAiApiKey(tomoriState);
     if (!apiKey) {
       await replyInfoEmbed(interaction, locale, {

@@ -41,7 +41,11 @@ import {
 } from "@/utils/image/naiImageGeneration";
 import { loadCharRefAsBase64 } from "@/utils/storage/charrefStorage";
 import { loadSavedProviderConfig } from "@/utils/db/dbRead";
-import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
+import {
+  CredentialUnavailableError,
+  getResolvedCapabilityModelId,
+  resolveCapabilityCredentials,
+} from "@/utils/provider/credentialResolver";
 
 // Disabled by default because the suggest-tags endpoint is currently unstable and
 // can hurt generation reliability; enable again once the API is consistently healthy.
@@ -953,9 +957,14 @@ export class GenerateImageNaiTool extends BaseTool {
           getResolvedCapabilityModelId(creds, "image-nai") ?? context.tomoriState.config.nai_diffusion_model_id,
       };
 
-      // 3. Resolve the NovelAI diffusion model from dedicated override, shared
-      // config compatibility, or the seeded NovelAI default model.
+      // 3. Resolve the dedicated NovelAI diffusion model slot.
       const resolvedModel = await resolveNaiDiffusionModel(resolvedConfig);
+      if (!resolvedModel) {
+        return {
+          success: false,
+          error: localizer(context.locale, "tools.generate_image_nai.model_not_configured"),
+        };
+      }
       const baseModelCodename = resolvedModel.codename;
 
       log.info(
@@ -1272,6 +1281,13 @@ export class GenerateImageNaiTool extends BaseTool {
         return {
           success: false,
           error: localizer(context.locale, "tools.generate_image_nai.provider_quota_exceeded"),
+        };
+      }
+
+      if (error instanceof CredentialUnavailableError && error.reason === "missing_model_id") {
+        return {
+          success: false,
+          error: localizer(context.locale, "tools.generate_image_nai.model_not_configured"),
         };
       }
 

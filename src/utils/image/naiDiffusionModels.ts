@@ -103,7 +103,9 @@ export function getLocalizedDiffusionModelDescription(model: DiffusionModelField
   return `${flagPrefix}${baseDescription}`;
 }
 
-export async function resolveNaiDiffusionModel(config: NaiDiffusionModelConfig): Promise<ResolvedNaiDiffusionModel> {
+export async function resolveNaiDiffusionModel(
+  config: NaiDiffusionModelConfig,
+): Promise<ResolvedNaiDiffusionModel | null> {
   if (config.nai_diffusion_model_id != null) {
     const overrideModel = await getDiffusionModelById(config.nai_diffusion_model_id);
     if (overrideModel?.provider === "novelai") {
@@ -121,31 +123,5 @@ export async function resolveNaiDiffusionModel(config: NaiDiffusionModelConfig):
     );
   }
 
-  if (config.diffusion_model_id != null) {
-    const sharedModel = await getDiffusionModelById(config.diffusion_model_id);
-    if (sharedModel?.provider === "novelai") {
-      return {
-        diffusionModelId: sharedModel.diffusion_model_id,
-        codename: sharedModel.codename,
-        source: "shared",
-      };
-    }
-
-    if (sharedModel) {
-      log.warn(
-        `[NAI] Shared diffusion model "${sharedModel.codename}" (provider: ${sharedModel.provider}) is not a NovelAI model. Falling back to default NovelAI model.`,
-      );
-    } else {
-      log.warn(
-        `[NAI] Shared diffusion_model_id ${config.diffusion_model_id} was not found. Falling back to default NovelAI model.`,
-      );
-    }
-  }
-
-  const defaultModel = await getDefaultNovelAiDiffusionModel();
-  return {
-    diffusionModelId: defaultModel.diffusion_model_id,
-    codename: defaultModel.codename,
-    source: "default",
-  };
+  return null;
 }

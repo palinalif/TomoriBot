@@ -392,9 +392,16 @@ async function buildSavedConfigForCustomEndpoint(
   endpoint: CustomEndpointRegistrationInput,
   modelId: number | null,
 ) {
-  const encryptionResult = endpoint.authToken?.trim()
-    ? await encryptApiKey(endpoint.authToken.trim())
-    : await encryptApiKey(CUSTOM_ENDPOINT_PLACEHOLDER_KEY);
+  const trimmedAuthToken = endpoint.authToken?.trim();
+  const encryptionResult =
+    trimmedAuthToken && trimmedAuthToken.length > 0
+      ? await encryptApiKey(trimmedAuthToken)
+      : existingConfig?.api_key
+        ? {
+            encrypted: existingConfig.api_key,
+            version: existingConfig.key_version || 1,
+          }
+        : await encryptApiKey(CUSTOM_ENDPOINT_PLACEHOLDER_KEY);
 
   const textModelId = endpoint.capability === "text" ? modelId : undefined;
 
@@ -453,7 +460,22 @@ export async function registerCustomEndpoint(
 ): Promise<CustomEndpointRegistrationResult | null> {
   const provider = getInternalProviderName(input.scope, input.label);
   const existingConfig = await getExistingSavedConfig(input.scope, provider);
+  const existingEndpoint =
+    input.scope.kind === "server"
+      ? await loadCustomEndpoint({
+          serverId: input.scope.ownerId,
+          label: input.label,
+          capability: input.capability,
+        })
+      : await loadCustomEndpoint({
+          userId: input.scope.ownerId,
+          label: input.label,
+          capability: input.capability,
+        });
   const modelId = await upsertSyntheticCapabilityModel(provider, input);
+  const trimmedAuthToken = input.authToken?.trim();
+  const requiresAuth =
+    trimmedAuthToken && trimmedAuthToken.length > 0 ? true : (existingEndpoint?.requires_auth ?? false);
 
   const customEndpoint = await upsertCustomEndpoint({
     serverId: input.scope.kind === "server" ? input.scope.ownerId : null,
@@ -465,7 +487,7 @@ export async function registerCustomEndpoint(
     modelName: input.modelName ?? null,
     displayName: input.displayName,
     numCtx: input.numCtx ?? null,
-    requiresAuth: Boolean(input.authToken?.trim()),
+    requiresAuth,
     extraConfig: input.extraConfig ?? {},
     hasTools: input.hasTools ?? false,
     seesImages: input.seesImages ?? false,

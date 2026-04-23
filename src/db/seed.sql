@@ -717,16 +717,6 @@ BEGIN
         RAISE NOTICE 'Phase 1 backfill inserted % NovelAI saved config row(s) from opt_api_keys', inserted_count;
     END IF;
 
-    IF novelai_default_diffusion_id IS NOT NULL THEN
-        UPDATE tomori_configs
-        SET nai_diffusion_model_id = novelai_default_diffusion_id
-        WHERE server_id IN (
-            SELECT oak.server_id
-            FROM opt_api_keys oak
-            WHERE oak.service_name = 'novelai'
-        )
-          AND nai_diffusion_model_id IS NULL;
-    END IF;
 EXCEPTION
     WHEN undefined_table THEN
         RAISE NOTICE 'Phase 1 NovelAI opt-key backfill skipped: required table missing';
@@ -1027,16 +1017,6 @@ EXCEPTION
         RAISE NOTICE 'Column not found during FK creation, skipping';
 END $$;
 
--- Backfill NULL diffusion_model_id with the provider's default diffusion model.
--- This ensures existing servers (created before image generation was added) automatically
--- get a default image model without requiring manual configuration.
-UPDATE tomori_configs tc
-SET diffusion_model_id = dm.diffusion_model_id
-FROM llms l
-JOIN image_diffusion_models dm ON dm.provider = l.llm_provider AND dm.is_default = true
-WHERE tc.llm_id = l.llm_id
-  AND tc.diffusion_model_id IS NULL;
-
 -- ============================================================================
 -- VIDEO GENERATION MODELS (April 2026)
 -- ============================================================================
@@ -1080,15 +1060,6 @@ ON CONFLICT (provider, codename) DO UPDATE SET
   is_scoped_registration = false,
   provider = EXCLUDED.provider,
   updated_at = CURRENT_TIMESTAMP;
-
--- Backfill NULL video_model_id with the provider's default video model.
--- This ensures existing servers automatically get a default video model.
-UPDATE tomori_configs tc
-SET video_model_id = vm.video_model_id
-FROM llms l
-JOIN video_generation_models vm ON vm.provider = l.llm_provider AND vm.is_default = true
-WHERE tc.llm_id = l.llm_id
-  AND tc.video_model_id IS NULL;
 
 -- Ensure all required columns exist in embedding_models table
 SELECT add_column_if_not_exists('embedding_models', 'is_scoped_registration', 'BOOLEAN', 'false');

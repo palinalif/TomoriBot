@@ -7,8 +7,7 @@ import {
 } from "discord.js";
 import { loadSavedProviderConfig, loadSavedProviderConfigs, loadUniqueProviders } from "@/utils/db/dbRead";
 import { upsertSavedProviderConfig } from "@/utils/db/dbWrite";
-import { sql } from "@/utils/db/client";
-import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
@@ -17,7 +16,7 @@ import type { ErrorContext, UserRow } from "@/types/db/schema";
 import type { ModalComponent, SelectOption } from "@/types/discord/modal";
 import { ProviderFactory } from "@/utils/provider/providerFactory";
 import { isCustomProvider } from "@/utils/provider/customProviderUtils";
-import { getProviderDisplayName, getStaticProviderInfo } from "@/utils/provider/providerInfoRegistry";
+import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { encryptApiKey } from "@/utils/security/crypto";
 import { buildSavedProviderConfigFromExistingOrDefaults } from "@/utils/provider/savedProviderConfig";
 
@@ -243,22 +242,6 @@ export async function execute(
         color: ColorCode.ERROR,
       });
       return;
-    }
-
-    // 1. Auto-fill the active NovelAI image slot if this is a new NovelAI provider
-    //    and the server hasn't configured one yet
-    const imageGenerationStyle = getStaticProviderInfo(selectedProvider)?.featureSupport.imageGeneration ?? "none";
-    if (
-      imageGenerationStyle === "nai-pipeline" &&
-      savedConfig.nai_diffusion_model_id != null &&
-      tomoriState.config.nai_diffusion_model_id == null
-    ) {
-      await sql`
-        UPDATE tomori_configs
-        SET nai_diffusion_model_id = ${savedConfig.nai_diffusion_model_id}
-        WHERE server_id = ${tomoriState.server_id}
-      `;
-      invalidateTomoriStateCache(serverId);
     }
 
     await replyInfoEmbed(modalSubmitInteraction, locale, {
