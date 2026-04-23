@@ -691,7 +691,9 @@ export class GenerateImageTool extends BaseTool {
       let referenceImagesIgnoredReason = "";
       const imageGenerationImplementation = resolveProviderFeatureImplementation(executionProvider, "imageGeneration");
       const nativeImageProvider =
-        executionProvider === "vertexexpress" ? await resolveNativeImageGenerationCapability(executionProvider) : null;
+        executionProvider === "vertex" || executionProvider === "vertexexpress"
+          ? await resolveNativeImageGenerationCapability(executionProvider)
+          : null;
 
       if (creds.customEndpoint) {
         const result = await generateCustomImageViaEndpoint({

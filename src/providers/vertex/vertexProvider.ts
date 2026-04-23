@@ -9,6 +9,7 @@
  * - Preset generation (via Google helpers with injected Vertex client)
  * - Conversation compaction (via Google helpers with injected Vertex client)
  * - Embeddings (direct Vertex client call)
+ * - Native image generation (via Vertex chat responses with IMAGE modality)
  * - Chat streaming + tool calling (via VertexStreamAdapter)
  */
 
@@ -47,11 +48,14 @@ import type {
   EmbeddingRequest,
   PresetGenerationResult,
   ProviderCompactSummaryRequest,
+  ProviderNativeImageGenerationRequest,
+  ProviderNativeImageGenerationResult,
   ProviderPresetGenerationRequest,
   ProviderStructuredJsonRequest,
   StructuredOutputResult,
   SupportsConversationCompaction,
   SupportsEmbeddings,
+  SupportsNativeImageGeneration,
   SupportsPresetGeneration,
   SupportsStructuredOutput,
 } from "../../types/provider/featureInterfaces";
@@ -142,7 +146,8 @@ export class VertexProvider
     SupportsEmbeddings,
     SupportsStructuredOutput,
     SupportsPresetGeneration,
-    SupportsConversationCompaction
+    SupportsConversationCompaction,
+    SupportsNativeImageGeneration
 {
   /**
    * Get provider information and capabilities
@@ -307,6 +312,52 @@ export class VertexProvider
   async generateRoleplaySummary(request: ProviderCompactSummaryRequest): Promise<CompactRoleplayResult> {
     const client = this.buildClient(request.apiKey);
     return await generateRoleplaySummaryGoogle(request, client);
+  }
+
+  async generateNativeImage(
+    request: ProviderNativeImageGenerationRequest,
+  ): Promise<ProviderNativeImageGenerationResult> {
+    const genAI = this.buildClient(request.apiKey);
+    const chat = genAI.chats.create({
+      model: request.model,
+    });
+
+    const messagePayload: {
+      message: string;
+      media?: Array<{ mimeType: string; data: string }>;
+      config: {
+        responseModalities: string[];
+        imageConfig: {
+          aspectRatio: string;
+        };
+      };
+    } = {
+      message: request.prompt,
+      config: {
+        responseModalities: ["IMAGE"],
+        imageConfig: {
+          aspectRatio: request.aspectRatio,
+        },
+      },
+    };
+
+    if (request.referenceImages && request.referenceImages.length > 0) {
+      messagePayload.media = request.referenceImages;
+    }
+
+    const response = await chat.sendMessage(messagePayload);
+    if (response?.candidates && response.candidates.length > 0 && response.candidates[0]?.content?.parts) {
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData?.data) {
+          return {
+            imageData: part.inlineData.data,
+            mimeType: part.inlineData.mimeType ?? null,
+          };
+        }
+      }
+    }
+
+    throw new Error("Vertex image generation response did not contain inline image data");
   }
 
   // ─── Tools ──────────────────────────────────────────────────────────

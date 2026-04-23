@@ -64,8 +64,13 @@ function getLocalizedDescription(model: VideoGenerationModelRow, locale: string)
 function getVideoModelDisplayName(
   model: Pick<VideoGenerationModelRow, "model_description" | "codename"> | null | undefined,
 ): string | null {
+  const codename = model?.codename?.trim();
+  if (codename && codename.length > 0) {
+    return codename;
+  }
+
   const description = model?.model_description?.trim();
-  return description && description.length > 0 ? description : (model?.codename ?? null);
+  return description && description.length > 0 ? description : null;
 }
 
 async function loadVideoModelById(
@@ -353,14 +358,17 @@ export async function execute(
     invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
     // 14. Success message with previous model name
-    const previousModel = availableModels.find((model) => model.video_model_id === tomoriState.config.video_model_id);
+    const previousModel = tomoriState.config.video_model_id
+      ? await loadVideoModelById(tomoriState.config.video_model_id)
+      : null;
 
     const successOptions = {
       titleKey: "commands.config.model.video.success_title",
       descriptionKey: "commands.config.model.video.success_description",
       descriptionVars: {
         model_name: selectedModel.codename,
-        previous_model: previousModel?.codename || localizer(locale, "commands.config.model.video.current_none"),
+        previous_model:
+          getVideoModelDisplayName(previousModel) ?? localizer(locale, "commands.config.model.video.current_none"),
         provider: getProviderDisplayName(selectedProvider),
       },
       color: ColorCode.SUCCESS,

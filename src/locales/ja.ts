@@ -1397,7 +1397,7 @@ export default {
 - Text2ImageとImage2Imageをカスタマイズタブルなアスペクト比で対応
 - \`/generate image\`を使うか、画像を生成してほしいと頼むだけで動作します
 - 参照画像としてメッセージの添付ファイル、ステッカー、絵文字、ユーザーアバターを使えます
- - Google、OpenRouter、Z.ai、NVIDIA NIM、Vertex AI Expressプロバイダーで利用可能（\`/config model image\`で設定）`,
+ - Google、Vertex AI、Vertex AI Express、OpenRouter、Z.ai、NVIDIA NIMプロバイダーで利用可能（\`/config model image\`で設定）`,
         videogen_title: `動画生成`,
         videogen_description: `- テキストプロンプトから短い動画を生成し、参照画像をアニメーション化することもできます
 - Text2VideoとImage2Videoをカスタマイズ可能なアスペクト比で対応

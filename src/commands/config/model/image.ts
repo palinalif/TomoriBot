@@ -75,8 +75,13 @@ function getClearTargetLabel(locale: string, target: string): string {
 function getImageModelDisplayName(
   model: Pick<ImageDiffusionModelRow, "model_description" | "codename"> | null | undefined,
 ): string | null {
+  const codename = model?.codename?.trim();
+  if (codename && codename.length > 0) {
+    return codename;
+  }
+
   const description = model?.model_description?.trim();
-  return description && description.length > 0 ? description : (model?.codename ?? null);
+  return description && description.length > 0 ? description : null;
 }
 
 // Configure the subcommand
@@ -213,8 +218,8 @@ export async function execute(
         currentSelectedId ? getDiffusionModelById(currentSelectedId) : Promise.resolve(null),
       ]);
       const selectedModelName =
-        getImageModelDisplayName(selectedConfiguredModel) ??
         selectedSavedConfig?.custom_model_name ??
+        getImageModelDisplayName(selectedConfiguredModel) ??
         getProviderDisplayName(selectedProvider);
 
       if (selectedModelId === currentSelectedId) {
@@ -425,15 +430,15 @@ export async function execute(
     invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
     // 13. Success message
-    // Find previous model name
-    const previousModel = availableModels.find((model) => model.diffusion_model_id === currentSelectedId);
+    const previousModel = currentSelectedId ? await getDiffusionModelById(currentSelectedId) : null;
 
     const successOptions = {
       titleKey: "commands.config.model.image.success_title",
       descriptionKey: "commands.config.model.image.success_description",
       descriptionVars: {
         model_name: selectedModel.codename,
-        previous_model: previousModel?.codename || localizer(locale, "commands.config.model.image.current_none"),
+        previous_model:
+          getImageModelDisplayName(previousModel) ?? localizer(locale, "commands.config.model.image.current_none"),
         provider: getProviderDisplayName(selectedProvider),
       },
       color: ColorCode.SUCCESS,

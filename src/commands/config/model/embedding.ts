@@ -37,8 +37,13 @@ function getLocalizedDescription(model: EmbeddingModelRow, locale: string): stri
 function getEmbeddingModelDisplayName(
   model: Pick<EmbeddingModelRow, "model_description" | "codename"> | null | undefined,
 ): string | null {
+  const codename = model?.codename?.trim();
+  if (codename && codename.length > 0) {
+    return codename;
+  }
+
   const description = model?.model_description?.trim();
-  return description && description.length > 0 ? description : (model?.codename ?? null);
+  return description && description.length > 0 ? description : null;
 }
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>

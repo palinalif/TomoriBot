@@ -974,6 +974,16 @@ VALUES
   ('openrouter', 'google/gemini-3-pro-image-preview', false, false, false, false,
    'Advanced image generation via OpenRouter with enhanced quality and resolution options',
    'OpenRouter経由の強化された品質と解像度オプションを備えた高度な画像生成'),
+  -- Vertex AI Gemini Image Generation Models
+  ('vertex', 'gemini-2.5-flash-image', true, false, false, false,
+   'Fast and efficient Gemini image generation via Vertex AI with balanced quality and speed',
+   'Vertex AI経由で利用する、品質と速度のバランスが取れた高速Gemini画像生成モデル'),
+  ('vertex', 'gemini-3.1-flash-image-preview', false, false, false, false,
+   'Latest fast image generation via Vertex AI with Gemini 3.1 Flash Image Preview',
+   'Gemini 3.1 Flash Image PreviewによるVertex AI経由の最新高速画像生成'),
+  ('vertex', 'gemini-3-pro-image-preview', false, false, false, false,
+   'Advanced image generation via Vertex AI with enhanced quality and resolution options',
+   'Vertex AI経由の強化された品質と解像度オプションを備えた高度な画像生成'),
   -- Vertex AI Express Gemini Image Generation Models
   ('vertexexpress', 'gemini-2.5-flash-image', true, false, false, false,
    'Fast and efficient Gemini image generation via Vertex AI Express with balanced quality and speed',

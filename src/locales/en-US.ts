@@ -1397,7 +1397,7 @@ Please try again with different inputs or check your API key.`,
 - Supports Text2Image and Image2Image with customizable aspect ratios
 - Use \`/generate image\` or just ask me to generate an image
 - Reference images can come from message attachments, stickers, emojis, or user avatars
- - Available on Google, OpenRouter, Z.ai, NVIDIA NIM, and Vertex AI Express providers (configure with \`/config model image\`)`,
+ - Available on Google, Vertex AI, Vertex AI Express, OpenRouter, Z.ai, and NVIDIA NIM providers (configure with \`/config model image\`)`,
         videogen_title: `Video Generation`,
         videogen_description: `- I can generate short videos from text prompts or by animating reference images
 - Supports Text2Video and Image2Video with customizable aspect ratios

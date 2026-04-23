@@ -179,7 +179,8 @@ Maintenance:
 `vertex` uses Vertex AI with host-side Application Default Credentials plus a saved `{project_id}::{location}` config value.
 
 - broader Google Cloud / Vertex AI model surface than Express Mode
-- supports chat streaming, tool calling, structured output, compaction, embeddings, and preset generation
+- supports chat streaming, tool calling, structured output, compaction, embeddings, preset generation, and native image generation
+- seeded Vertex image rows mirror the Gemini image catalog used by the Google provider
 - seeded Vertex rows include multimodal/video-capable Gemini and selected Vertex-hosted Gemma rows
 - best fit for local/self-hosted deployments or a single deployment-level Google identity
 

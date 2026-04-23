@@ -1,6 +1,6 @@
 /**
  * Image Generation Command
- * Allows users to generate AI images using Google Gemini or OpenRouter
+ * Allows users to generate AI images using the configured provider
  * Supports text-to-image and image-to-image generation with up to 3 reference images
  * (Discord modal limit: 5 components total)
  */
@@ -528,7 +528,9 @@ export async function execute(
     let generatedImageMimeType: string | null = null;
     const imageGenerationImplementation = resolveProviderFeatureImplementation(executionProvider, "imageGeneration");
     const nativeImageProvider =
-      executionProvider === "vertexexpress" ? await resolveNativeImageGenerationCapability(executionProvider) : null;
+      executionProvider === "vertex" || executionProvider === "vertexexpress"
+        ? await resolveNativeImageGenerationCapability(executionProvider)
+        : null;
 
     if (imageCreds.customEndpoint) {
       const result = await generateCustomImageViaEndpoint({

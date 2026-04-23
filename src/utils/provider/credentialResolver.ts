@@ -97,9 +97,12 @@ function getCapabilityModelId(
 }
 
 export function getResolvedCapabilityModelId(
-  resolved: Pick<ResolvedCredentials, "savedConfig">,
+  resolved: Pick<ResolvedCredentials, "savedConfig" | "source">,
   capability: Capability,
 ): number | null {
+  if (resolved.source === "server") {
+    return null;
+  }
   return getCapabilityModelId(resolved.savedConfig, capability);
 }
 
@@ -351,7 +354,7 @@ export async function resolveCapabilityCredentials(
   const provider = await resolveProviderForCapability(serverId, capability);
   const savedConfig = await loadSavedProviderConfig(serverId, provider);
 
-  if (!savedConfig || getCapabilityModelId(savedConfig, capability) === null) {
+  if (!savedConfig) {
     throw new CredentialUnavailableError(provider, capability, "no_saved_config", "server");
   }
 
