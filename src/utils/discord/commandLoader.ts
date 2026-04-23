@@ -99,7 +99,6 @@ function getCommandLocalizationAliases(key: string): string[] {
     "commands.server.quota.image-generation.description": "commands.server.quota.imagegen.description",
     "commands.server.quota.text-generation.description": "commands.server.quota.textgen.description",
     "commands.server.quota.video-generation.description": "commands.server.quota.videogen.description",
-    "commands.config.model-fallback.remove.description": "commands.config.remove.modelfallback.description",
     "commands.config.model-override.remove.description": "commands.config.remove.modeloverride.description",
   };
   const configAlias = configDescriptionAliases[key];

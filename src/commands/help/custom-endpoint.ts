@@ -1,8 +1,9 @@
 import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { ErrorContext, UserRow } from "@/types/db/schema";
+import type { SummaryEmbedOptions } from "@/types/discord/embed";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
-import { replySummaryEmbed } from "@/utils/discord/interactionHelper";
+import { replyPaginatedStatusPages, replySummaryEmbed } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
@@ -84,45 +85,108 @@ export async function execute(
     }
 
     if (endpoint === "comfyui") {
-      await replySummaryEmbed(interaction, locale, {
-        titleKey: "commands.help.custom_models.comfyui_title",
-        descriptionKey: "commands.help.custom_models.comfyui_description",
-        color: ColorCode.INFO,
-        fields: [
-          {
-            nameKey: "commands.help.custom_models.comfyui_minimum_field",
-            value: localizer(locale, "commands.help.custom_models.comfyui_minimum_value"),
-            inline: false,
-          },
-          {
-            nameKey: "commands.help.custom_models.comfyui_export_field",
-            value: localizer(locale, "commands.help.custom_models.comfyui_export_value"),
-            inline: false,
-          },
-          {
-            nameKey: "commands.help.custom_models.comfyui_register_field",
-            value: localizer(locale, "commands.help.custom_models.comfyui_register_value", {
-              server_add_command: commandRegistry.getCommandMention("config", "custom-endpoint", "add"),
-              personal_add_command: commandRegistry.getCommandMention("personal", "custom-endpoint", "add"),
-            }),
-            inline: false,
-          },
-          {
-            nameKey: "commands.help.custom_models.comfyui_activate_field",
-            value: localizer(locale, "commands.help.custom_models.comfyui_activate_value", {
-              image_command: commandRegistry.getCommandMention("config", "model", "image"),
-              video_command: commandRegistry.getCommandMention("config", "model", "video"),
-            }),
-            inline: false,
-          },
-          {
-            nameKey: "commands.help.custom_models.comfyui_limitations_field",
-            value: localizer(locale, "commands.help.custom_models.comfyui_limitations_value"),
-            inline: false,
-          },
-        ],
-        flags: MessageFlags.Ephemeral,
-      });
+      const pages: SummaryEmbedOptions[] = [
+        {
+          titleKey: "commands.help.custom_models.comfyui_page1_title",
+          descriptionKey: "commands.help.custom_models.comfyui_page1_description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.help.custom_models.comfyui_page1_workflow_field",
+              value: localizer(locale, "commands.help.custom_models.comfyui_page1_workflow_value"),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.custom_models.comfyui_page1_placeholders_field",
+              value: localizer(locale, "commands.help.custom_models.comfyui_page1_placeholders_value"),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.custom_models.comfyui_page1_export_field",
+              value: localizer(locale, "commands.help.custom_models.comfyui_page1_export_value"),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.custom_models.comfyui_page1_register_field",
+              value: localizer(locale, "commands.help.custom_models.comfyui_page1_register_value", {
+                server_add_command: commandRegistry.getCommandMention("config", "custom-endpoint", "add"),
+                personal_add_command: commandRegistry.getCommandMention("personal", "custom-endpoint", "add"),
+                image_command: commandRegistry.getCommandMention("config", "model", "image"),
+                video_command: commandRegistry.getCommandMention("config", "model", "video"),
+              }),
+              inline: false,
+            },
+          ],
+        },
+        {
+          titleKey: "commands.help.custom_models.comfyui_page2_title",
+          descriptionKey: "commands.help.custom_models.comfyui_page2_description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.help.custom_models.comfyui_page2_core_field",
+              value: localizer(locale, "commands.help.custom_models.comfyui_page2_core_value"),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.custom_models.comfyui_page2_numeric_field",
+              value: localizer(locale, "commands.help.custom_models.comfyui_page2_numeric_value"),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.custom_models.comfyui_page2_video_field",
+              value: localizer(locale, "commands.help.custom_models.comfyui_page2_video_value"),
+              inline: false,
+            },
+          ],
+        },
+        {
+          titleKey: "commands.help.custom_models.comfyui_page3_title",
+          descriptionKey: "commands.help.custom_models.comfyui_page3_description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.help.custom_models.comfyui_page3_image_refs_field",
+              value: localizer(locale, "commands.help.custom_models.comfyui_page3_image_refs_value"),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.custom_models.comfyui_page3_reference_tokens_field",
+              value: localizer(locale, "commands.help.custom_models.comfyui_page3_reference_tokens_value"),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.custom_models.comfyui_page3_reference_note_field",
+              value: localizer(locale, "commands.help.custom_models.comfyui_page3_reference_note_value"),
+              inline: false,
+            },
+          ],
+        },
+        {
+          titleKey: "commands.help.custom_models.comfyui_page4_title",
+          descriptionKey: "commands.help.custom_models.comfyui_page4_description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.help.custom_models.comfyui_page4_video_field",
+              value: localizer(locale, "commands.help.custom_models.comfyui_page4_video_value"),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.custom_models.comfyui_page4_output_field",
+              value: localizer(locale, "commands.help.custom_models.comfyui_page4_output_value"),
+              inline: false,
+            },
+            {
+              nameKey: "commands.help.custom_models.comfyui_page4_metadata_field",
+              value: localizer(locale, "commands.help.custom_models.comfyui_page4_metadata_value"),
+              inline: false,
+            },
+          ],
+        },
+      ];
+
+      await replyPaginatedStatusPages(interaction, locale, pages, MessageFlags.Ephemeral);
       return;
     }
 

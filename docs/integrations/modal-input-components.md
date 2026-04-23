@@ -371,7 +371,7 @@ Implemented examples:
 - `/config notice-embeds visibility` manages visible notice embed types in one modal.
 - `/config remove modeloverride` manages channel and persona overrides together in one modal.
 - `/config mcp remove` manages registered MCP servers in one modal.
-- `/config remove modelfallback` manages the fallback chain in one modal while preserving remaining order.
+- `/config model fallback` manages the fallback chain in one modal, and each slot can be cleared directly with the built-in `None` option.
 - `/config random-trigger remove` manages random triggers in one modal when the set fits, with paginated fallback beyond modal limits.
 - `/server trigger remove` manages trigger words for the selected persona in one modal when the set fits, with paginated fallback beyond modal limits.
 

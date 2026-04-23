@@ -26,7 +26,9 @@ const SLOT_LABEL_KEYS = [
   "commands.config.model.fallback.slot_4_label",
   "commands.config.model.fallback.slot_5_label",
 ] as const;
-const ITEMS_PER_PAGE = 25;
+// One select option is reserved for the explicit "None" / clear choice.
+const ITEMS_PER_PAGE = 24;
+const CLEAR_SLOT_VALUE = "__none__";
 
 function getLocalizedDescription(model: LlmRow, locale: string): string {
   const normalizedLocale = locale.toLowerCase().split("-")[0];
@@ -120,6 +122,11 @@ export async function execute(
       value: safeSelectOptionText(model.llm_codename),
       description: safeSelectOptionText(getLocalizedDescription(model, userData.language_pref)),
     }));
+    const clearOption: SelectOption = {
+      label: safeSelectOptionText(localizer(locale, "commands.config.model.fallback.clear_option_label")),
+      value: CLEAR_SLOT_VALUE,
+      description: safeSelectOptionText(localizer(locale, "commands.config.model.fallback.clear_option_description")),
+    };
 
     let optionsForModal = allModelOptions;
     let modalInteraction: ChatInputCommandInteraction | ButtonInteraction = interaction;
@@ -158,12 +165,16 @@ export async function execute(
         });
         const selectedPage = Number.parseInt(pageButtonInteraction.customId.replace("personal_fallback_page_", ""), 10);
         const startIndex = (selectedPage - 1) * ITEMS_PER_PAGE;
-        optionsForModal = allModelOptions.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+        optionsForModal = [clearOption, ...allModelOptions.slice(startIndex, startIndex + ITEMS_PER_PAGE)];
         modalInteraction = pageButtonInteraction as ButtonInteraction;
       } catch {
         await interaction.editReply({ embeds: [], components: [] }).catch(() => {});
         return;
       }
+    }
+
+    if (allModelOptions.length <= ITEMS_PER_PAGE) {
+      optionsForModal = [clearOption, ...allModelOptions];
     }
 
     const currentFallbackPlaceholders = SLOT_IDS.map((_, index) => {
@@ -182,7 +193,7 @@ export async function execute(
           customId,
           labelKey: SLOT_LABEL_KEYS[index],
           placeholder: currentFallbackPlaceholders[index],
-          required: index === 0,
+          required: false,
           options: optionsForModal,
         })),
       },
@@ -193,7 +204,10 @@ export async function execute(
       return;
     }
 
-    const rawSlots = SLOT_IDS.map((id) => (modalResult.values?.[id] ?? "").trim()).filter((value) => value !== "");
+    const rawSlots = SLOT_IDS.map((id) => {
+      const value = (modalResult.values?.[id] ?? "").trim();
+      return value === CLEAR_SLOT_VALUE ? "" : value;
+    }).filter((value) => value !== "");
     const deduplicatedCodenames = Array.from(new Set(rawSlots));
 
     if (activeProvider.provider === "openrouter" && deduplicatedCodenames.includes("other-model")) {

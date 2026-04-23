@@ -29,8 +29,10 @@ const SLOT_LABEL_KEYS = [
   "commands.config.model.fallback.slot_4_label",
   "commands.config.model.fallback.slot_5_label",
 ] as const;
+const CLEAR_SLOT_VALUE = "__none__";
 
-const ITEMS_PER_PAGE = 25;
+// One select option is reserved for the explicit "None" / clear choice.
+const ITEMS_PER_PAGE = 24;
 const FALLBACK_DEBUG_ENABLED = new Set(["1", "true", "yes", "on"]).has(
   (process.env.FALLBACK_DEBUG_ENABLED ?? "").trim().toLowerCase(),
 );
@@ -191,6 +193,11 @@ export async function execute(
     value: safeSelectOptionText(m.llm_codename),
     description: safeSelectOptionText(getLocalizedDescription(m, userData.language_pref)),
   }));
+  const clearOption: SelectOption = {
+    label: safeSelectOptionText(localizer(locale, "commands.config.model.fallback.clear_option_label")),
+    value: CLEAR_SLOT_VALUE,
+    description: safeSelectOptionText(localizer(locale, "commands.config.model.fallback.clear_option_description")),
+  };
 
   // 6. Handle pagination when models exceed Discord's 25-option limit per select
   let optionsForModal = allModelOptions;
@@ -238,13 +245,17 @@ export async function execute(
       const selectedPage = Number.parseInt(pageButtonInteraction.customId.replace("fallback_page_", ""), 10);
       const startIndex = (selectedPage - 1) * ITEMS_PER_PAGE;
       const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, allModelOptions.length);
-      optionsForModal = allModelOptions.slice(startIndex, endIndex);
+      optionsForModal = [clearOption, ...allModelOptions.slice(startIndex, endIndex)];
       modalInteraction = pageButtonInteraction as ButtonInteraction;
     } catch {
       // Timeout — user did not select a page; clean up and exit
       await interaction.editReply({ embeds: [], components: [] }).catch(() => {});
       return;
     }
+  }
+
+  if (allModelOptions.length <= ITEMS_PER_PAGE) {
+    optionsForModal = [clearOption, ...allModelOptions];
   }
 
   // 7. Show modal with 5 select fields (one per fallback slot)
@@ -259,7 +270,7 @@ export async function execute(
         customId,
         labelKey: SLOT_LABEL_KEYS[index],
         placeholder: currentFallbackPlaceholders[index],
-        required: index === 0, // Only slot 1 is required
+        required: false,
         options: optionsForModal,
       })),
     },
@@ -285,7 +296,10 @@ export async function execute(
   const values = modalResult.values;
 
   // 8. Collect non-empty slot values in order
-  const rawSlots = SLOT_IDS.map((id) => (values[id] ?? "").trim()).filter((v) => v !== "");
+  const rawSlots = SLOT_IDS.map((id) => {
+    const value = (values[id] ?? "").trim();
+    return value === CLEAR_SLOT_VALUE ? "" : value;
+  }).filter((v) => v !== "");
 
   // 9. Deduplicate while preserving order (silently drop later duplicates)
   const seen = new Set<string>();

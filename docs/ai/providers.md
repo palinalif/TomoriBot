@@ -144,6 +144,7 @@ Phase 3 promotes custom endpoints into labeled provider entries instead of a sin
 - the saved credential row is namespaced per label as an internal provider ID such as `custom:s42:ollama-local` or `custom:u7:lmstudio`
 - custom endpoints can now be registered independently for `text`, `embedding`, `image`, and `video`
 - text and embedding use the OpenAI-compatible path; image and video currently route through either OpenAI-compatible image/video endpoints or ComfyUI workflow dispatch
+- ComfyUI workflow dispatch now supports placeholder replacement inside uploaded API-format JSON before queueing, including prompt/model/aspect placeholders, derived width/height, video duration/resolution/audio flags, and indexed reference-image payload placeholders such as `{TOMORI_PROMPT}` and `{TOMORI_REFERENCE_IMAGE_1_DATA_URL}`
 - text-capability custom endpoints can declare `has_tools`, `sees_images`, `sees_videos`, and `supports_structoutput`, which drive picker visibility and request shaping
 - `/config model text|embedding|image|video|vision` shows each registered custom label as its own provider choice when that capability is available
 - legacy inline fields on `tomori_configs` and saved-provider rows (`custom_endpoint_url`, `custom_model_name`, `custom_num_ctx`) remain for backward compatibility during rollout, but new registrations write through the labeled `custom_endpoints` table

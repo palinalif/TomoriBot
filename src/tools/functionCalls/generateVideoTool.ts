@@ -413,6 +413,7 @@ export class GenerateVideoTool extends BaseTool {
           durationSeconds,
           resolution,
           referenceImages,
+          generateAudio,
         });
         videoData = result.videoData;
       } else if (videoImplementation === "google") {
