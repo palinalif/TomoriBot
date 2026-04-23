@@ -32,6 +32,9 @@ export interface ToolStateForContext {
   server_id: string;
   activePersonaHasElevenlabsVoice: boolean;
   llm: ToolAvailabilityLlmState;
+  diffusion_model_id?: number | null;
+  nai_diffusion_model_id?: number | null;
+  video_model_id?: number | null;
   config: {
     sticker_usage_enabled: boolean;
     web_search_enabled: boolean;
@@ -400,9 +403,9 @@ class ToolRegistryImpl implements ToolRegistryInterface {
       if (serverIdNumber) {
         const hasElevenLabsOptKey = await hasOptApiKey(serverIdNumber, ELEVENLABS_SERVICE_NAME);
         const [toolConfigRow] = await sql<
-          [{ diffusion_model_id: number | null; nai_diffusion_model_id: number | null }]
+          [{ diffusion_model_id: number | null; nai_diffusion_model_id: number | null; video_model_id: number | null }]
         >`
-            SELECT diffusion_model_id, nai_diffusion_model_id
+            SELECT diffusion_model_id, nai_diffusion_model_id, video_model_id
             FROM tomori_configs
             WHERE server_id = ${serverIdNumber}
             LIMIT 1
@@ -414,8 +417,11 @@ class ToolRegistryImpl implements ToolRegistryInterface {
               AND provider = 'google'
             LIMIT 1
           `;
-        const hasStandardImageSlot = toolConfigRow?.diffusion_model_id != null;
-        const hasNaiImageSlot = toolConfigRow?.nai_diffusion_model_id != null;
+        const hasStandardImageSlot =
+          stateForContext.diffusion_model_id != null || toolConfigRow?.diffusion_model_id != null;
+        const hasNaiImageSlot =
+          stateForContext.nai_diffusion_model_id != null || toolConfigRow?.nai_diffusion_model_id != null;
+        const hasVideoSlot = stateForContext.video_model_id != null || toolConfigRow?.video_model_id != null;
         const hasGeminiAccess = !!googleSavedProviderRow?.api_key;
 
         if (!hasNaiImageSlot) {
@@ -431,6 +437,14 @@ class ToolRegistryImpl implements ToolRegistryInterface {
           builtInTools = builtInTools.filter((tool) => tool.name !== "generate_image");
           if (builtInTools.length < beforeCount) {
             log.info("Excluded generate_image (no standard image slot configured)");
+          }
+        }
+
+        if (!hasVideoSlot) {
+          const beforeCount = builtInTools.length;
+          builtInTools = builtInTools.filter((tool) => tool.name !== "generate_video");
+          if (builtInTools.length < beforeCount) {
+            log.info("Excluded generate_video (no video slot configured)");
           }
         }
 

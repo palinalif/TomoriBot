@@ -1035,6 +1035,9 @@ export async function buildContext(params: BuildContextParams): Promise<BuildCon
                   server_id: tomoriStateForPreset.server_id.toString(),
                   activePersonaHasElevenlabsVoice: false,
                   llm: tomoriStateForPreset.llm,
+                  diffusion_model_id: tomoriStateForPreset.config.diffusion_model_id,
+                  nai_diffusion_model_id: tomoriStateForPreset.config.nai_diffusion_model_id,
+                  video_model_id: tomoriStateForPreset.config.video_model_id,
                   config: {
                     sticker_usage_enabled: params.tomoriConfig.sticker_usage_enabled,
                     web_search_enabled: params.tomoriConfig.web_search_enabled,
@@ -1155,6 +1158,9 @@ async function buildContextNative({
             server_id: tomoriState.server_id.toString(),
             activePersonaHasElevenlabsVoice: false,
             llm: tomoriState.llm,
+            diffusion_model_id: tomoriState.config.diffusion_model_id,
+            nai_diffusion_model_id: tomoriState.config.nai_diffusion_model_id,
+            video_model_id: tomoriState.config.video_model_id,
             config: {
               sticker_usage_enabled: tomoriConfig.sticker_usage_enabled,
               web_search_enabled: tomoriConfig.web_search_enabled,

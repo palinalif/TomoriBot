@@ -1103,6 +1103,9 @@ async function fetchProviderTools(persona: TomoriState, providerName: string): P
       sees_youtube: activeLlm.sees_youtube,
       supports_structoutput: activeLlm.supports_structoutput,
     },
+    diffusion_model_id: persona.config.diffusion_model_id,
+    nai_diffusion_model_id: persona.config.nai_diffusion_model_id,
+    video_model_id: persona.config.video_model_id,
     config: {
       sticker_usage_enabled: persona.config.sticker_usage_enabled,
       web_search_enabled: persona.config.web_search_enabled,

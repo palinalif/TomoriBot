@@ -19,11 +19,18 @@ import { log, ColorCode } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import { sql } from "../../utils/db/client";
-import { decryptApiKey } from "../../utils/security/crypto";
 import { replyInfoEmbed, promptWithRawModal } from "../../utils/discord/interactionHelper";
 import type { UserRow } from "../../types/db/schema";
 import { checkVideoQuota, incrementVideoQuota } from "../../utils/quota/videoQuotaManager";
-import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
+import { resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
+import { generateCustomVideoViaEndpoint } from "@/providers/custom/customEndpointDispatcher";
+import {
+  CredentialUnavailableError,
+  PersonalProviderRequiredError,
+  getResolvedCapabilityModelId,
+  resolveCapabilityCredentials,
+} from "@/utils/provider/credentialResolver";
+import { applyPersonalProviderSelectionsToTomoriState } from "@/utils/provider/personalProviderRuntime";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "generate_video_modal";
@@ -96,7 +103,7 @@ async function convertAttachmentToBase64(attachment: APIAttachment): Promise<{ m
 export async function execute(
   _client: Client,
   interaction: ChatInputCommandInteraction,
-  _userData: UserRow,
+  userData: UserRow,
   locale: string,
 ): Promise<void> {
   // 1. Ensure command is run in a channel context
@@ -112,9 +119,9 @@ export async function execute(
 
   // 2. Load TomoriState
   const serverId = interaction.guild?.id ?? interaction.user.id;
-  const tomoriState = await loadTomoriState(serverId);
+  const baseTomoriState = await loadTomoriState(serverId);
 
-  if (!tomoriState) {
+  if (!baseTomoriState) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.tomori_not_setup_title",
       descriptionKey: "general.errors.tomori_not_setup_description",
@@ -123,6 +130,8 @@ export async function execute(
     });
     return;
   }
+
+  const { tomoriState } = await applyPersonalProviderSelectionsToTomoriState(baseTomoriState, userData.user_id ?? null);
 
   // 3. Check if video generation is enabled
   if (!tomoriState.config.videogen_enabled) {
@@ -135,46 +144,57 @@ export async function execute(
     return;
   }
 
-  // 4. Validate provider supports video generation
-  const provider = tomoriState.llm.llm_provider.toLowerCase();
-  if (!providerSupportsFeature(provider, "videoGeneration")) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.generate.video.wrong_provider_title",
-      descriptionKey: "commands.generate.video.wrong_provider_description",
-      descriptionVars: { current_provider: tomoriState.llm.llm_provider },
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
+  // 4. Resolve active video capability credentials and model selection
+  let videoCreds: Awaited<ReturnType<typeof resolveCapabilityCredentials>>;
+  try {
+    videoCreds = await resolveCapabilityCredentials(tomoriState.server_id, "video", {
+      userId: userData.user_id ?? null,
     });
-    return;
+  } catch (error) {
+    if (error instanceof PersonalProviderRequiredError) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.personal_provider_required_title",
+        descriptionKey: "general.errors.personal_provider_required_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (error instanceof CredentialUnavailableError) {
+      if (error.source === "personal") {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "general.errors.personal_provider_credentials_error_title",
+          descriptionKey: "general.errors.personal_provider_credentials_error_description",
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      if (error.reason === "missing_model_id") {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "commands.generate.video.no_video_model_title",
+          descriptionKey: "commands.generate.video.no_video_model_description",
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.generate.video.no_api_key_title",
+        descriptionKey: "commands.generate.video.no_api_key_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    throw error;
   }
 
-  // 5. Validate API key
-  const encryptedApiKey = tomoriState.config.api_key;
-  const keyVersion = tomoriState.config.key_version || 1;
-
-  if (!encryptedApiKey) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.generate.video.no_api_key_title",
-      descriptionKey: "commands.generate.video.no_api_key_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const apiKey = await decryptApiKey(encryptedApiKey, keyVersion);
-  if (!apiKey) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.generate.video.api_key_decrypt_failed_title",
-      descriptionKey: "commands.generate.video.api_key_decrypt_failed_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  // 6. Validate video model is configured
-  const videoModelId = tomoriState.config.video_model_id;
+  const videoModelId = getResolvedCapabilityModelId(videoCreds, "video") ?? tomoriState.config.video_model_id;
   if (!videoModelId) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.generate.video.no_video_model_title",
@@ -184,6 +204,9 @@ export async function execute(
     });
     return;
   }
+
+  const apiKey = videoCreds.apiKey;
+  const executionProvider = videoCreds.provider;
 
   // 7. Check video quota before showing modal
   const quotaCheck = await checkVideoQuota(tomoriState.server_id, interaction.user.id);
@@ -311,7 +334,7 @@ export async function execute(
     const modelCodename = await getVideoModelCodename(videoModelId);
 
     log.info(
-      `Generating video with ${provider} via ${modelCodename}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio}, reference: ${referenceImages ? "yes" : "no"})`,
+      `Generating video with ${executionProvider} via ${modelCodename}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio}, reference: ${referenceImages ? "yes" : "no"})`,
     );
 
     // 12. Show "generating" embed while we poll for completion
@@ -328,9 +351,18 @@ export async function execute(
 
     // 13. Route to provider and generate video
     let videoData: Buffer | null = null;
-    const videoImplementation = resolveProviderFeatureImplementation(provider, "videoGeneration");
+    const videoImplementation = resolveProviderFeatureImplementation(executionProvider, "videoGeneration");
 
-    if (videoImplementation === "google") {
+    if (videoCreds.customEndpoint) {
+      const result = await generateCustomVideoViaEndpoint({
+        endpoint: videoCreds.customEndpoint,
+        apiKey,
+        prompt,
+        aspectRatio,
+        referenceImages,
+      });
+      videoData = result.videoData;
+    } else if (videoImplementation === "google") {
       const { generateGoogleNativeVideo } = await import("@/providers/google/googleVideoGeneration");
       const result = await generateGoogleNativeVideo({
         apiKey,
@@ -367,7 +399,7 @@ export async function execute(
             .setTitle(localizer(locale, "commands.generate.video.error_title"))
             .setDescription(
               localizer(locale, "commands.generate.video.unsupported_provider_description", {
-                provider: tomoriState.llm.llm_provider,
+                provider: executionProvider,
               }),
             )
             .setColor(ColorCode.ERROR),

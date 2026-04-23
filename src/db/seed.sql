@@ -1116,24 +1116,83 @@ EXCEPTION
         RAISE NOTICE 'Column not found during cleanup, skipping';
 END $$;
 
+-- Migration: rename Gemini embedding preview codenames to stable names in place when possible.
+-- This preserves existing embedding_model_id references on older installs.
+UPDATE embedding_models
+SET
+  codename = 'gemini-embedding-2',
+  model_family = 'gemini-embedding-2',
+  is_default = true,
+  is_deprecated = false,
+  model_description = 'Default Gemini embedding model for document retrieval',
+  ja_description = '文書検索向けのGeminiデフォルト埋め込みモデル',
+  updated_at = CURRENT_TIMESTAMP
+WHERE provider = 'google'
+  AND codename = 'gemini-embedding-2-preview'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM embedding_models replacement
+    WHERE replacement.provider = 'google'
+      AND replacement.codename = 'gemini-embedding-2'
+  );
+
+UPDATE embedding_models
+SET
+  codename = 'gemini-embedding-2',
+  model_family = 'gemini-embedding-2',
+  is_default = true,
+  is_deprecated = false,
+  model_description = 'Default Gemini embedding model for document retrieval via Vertex AI',
+  ja_description = 'Vertex AI経由の文書検索向けGeminiデフォルト埋め込みモデル',
+  updated_at = CURRENT_TIMESTAMP
+WHERE provider = 'vertex'
+  AND codename = 'gemini-embedding-2-preview'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM embedding_models replacement
+    WHERE replacement.provider = 'vertex'
+      AND replacement.codename = 'gemini-embedding-2'
+  );
+
+UPDATE embedding_models
+SET
+  codename = 'google/gemini-embedding-2',
+  model_family = 'gemini-embedding-2',
+  is_default = false,
+  is_deprecated = false,
+  model_description = 'Gemini embedding model via OpenRouter (same family as Google)',
+  ja_description = 'OpenRouter経由のGemini埋め込みモデル（Googleと同一ファミリー）',
+  updated_at = CURRENT_TIMESTAMP
+WHERE provider = 'openrouter'
+  AND codename = 'google/gemini-embedding-2-preview'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM embedding_models replacement
+    WHERE replacement.provider = 'openrouter'
+      AND replacement.codename = 'google/gemini-embedding-2'
+  );
+
 -- Insert Embedding Models with conflict resolution
 INSERT INTO embedding_models (provider, codename, model_family, is_default, is_deprecated, model_description, ja_description)
 VALUES
   -- Google Gemini Embedding Models
-  ('google', 'gemini-embedding-001', 'gemini-embedding-001', false, true,
-   'Legacy Gemini embedding model for document retrieval',
-   '文書検索向けのレガシーGemini埋め込みモデル'),
-  ('google', 'gemini-embedding-2-preview', 'gemini-embedding-2-preview', true, false,
+  ('google', 'gemini-embedding-001', 'gemini-embedding-001', false, false,
+   'Gemini embedding model for document retrieval',
+   '文書検索向けのGemini埋め込みモデル'),
+  ('google', 'gemini-embedding-2', 'gemini-embedding-2', true, false,
    'Default Gemini embedding model for document retrieval',
    '文書検索向けのGeminiデフォルト埋め込みモデル'),
-  ('vertex', 'gemini-embedding-2-preview', 'gemini-embedding-2-preview', true, false,
+  ('vertex', 'gemini-embedding-001', 'gemini-embedding-001', false, false,
+   'Gemini embedding model for document retrieval via Vertex AI',
+   'Vertex AI経由の文書検索向けGemini埋め込みモデル'),
+  ('vertex', 'gemini-embedding-2', 'gemini-embedding-2', true, false,
    'Default Gemini embedding model for document retrieval via Vertex AI',
    'Vertex AI経由の文書検索向けGeminiデフォルト埋め込みモデル'),
   -- OpenRouter Embedding Models (via OpenRouter API)
-  ('openrouter', 'google/gemini-embedding-001', 'gemini-embedding-001', false, true,
-   'Legacy Gemini embedding model via OpenRouter (same family as Google)',
+  ('openrouter', 'google/gemini-embedding-001', 'gemini-embedding-001', false, false,
+   'Gemini embedding model via OpenRouter (same family as Google)',
    'OpenRouter経由のGemini埋め込みモデル（Googleと同一ファミリー）'),
-  ('openrouter', 'google/gemini-embedding-2-preview', 'gemini-embedding-2-preview', false, false,
+  ('openrouter', 'google/gemini-embedding-2', 'gemini-embedding-2', false, false,
    'Gemini embedding model via OpenRouter (same family as Google)',
    'OpenRouter経由のGemini埋め込みモデル（Googleと同一ファミリー）'),
   ('openrouter', 'intfloat/multilingual-e5-large', 'multilingual-e5-large', true, false,
@@ -1160,6 +1219,105 @@ ON CONFLICT (provider, codename) DO UPDATE SET
   is_scoped_registration = false,
   provider = EXCLUDED.provider,
   updated_at = CURRENT_TIMESTAMP;
+
+-- Migration cleanup: if preview rows and stable rows both exist, repoint references to the stable row and remove the preview row.
+DO $$
+DECLARE
+  migration_pair RECORD;
+BEGIN
+  FOR migration_pair IN
+    SELECT *
+    FROM (
+      VALUES
+        ('google', 'gemini-embedding-2-preview', 'gemini-embedding-2'),
+        ('vertex', 'gemini-embedding-2-preview', 'gemini-embedding-2'),
+        ('openrouter', 'google/gemini-embedding-2-preview', 'google/gemini-embedding-2')
+    ) AS pairs(provider_name, old_codename, new_codename)
+  LOOP
+    IF EXISTS (
+      SELECT 1
+      FROM embedding_models old_model
+      JOIN embedding_models new_model
+        ON new_model.provider = migration_pair.provider_name
+       AND new_model.codename = migration_pair.new_codename
+      WHERE old_model.provider = migration_pair.provider_name
+        AND old_model.codename = migration_pair.old_codename
+    ) THEN
+      DELETE FROM openrouter_embedding_model_registrations reg
+      USING embedding_models old_model, embedding_models new_model
+      WHERE old_model.provider = migration_pair.provider_name
+        AND old_model.codename = migration_pair.old_codename
+        AND new_model.provider = migration_pair.provider_name
+        AND new_model.codename = migration_pair.new_codename
+        AND reg.embedding_model_id = old_model.embedding_model_id
+        AND EXISTS (
+          SELECT 1
+          FROM openrouter_embedding_model_registrations existing_reg
+          WHERE existing_reg.embedding_model_id = new_model.embedding_model_id
+            AND existing_reg.server_id IS NOT DISTINCT FROM reg.server_id
+            AND existing_reg.user_id IS NOT DISTINCT FROM reg.user_id
+        );
+
+      UPDATE tomori_configs tc
+      SET embedding_model_id = new_model.embedding_model_id
+      FROM embedding_models old_model, embedding_models new_model
+      WHERE old_model.provider = migration_pair.provider_name
+        AND old_model.codename = migration_pair.old_codename
+        AND new_model.provider = migration_pair.provider_name
+        AND new_model.codename = migration_pair.new_codename
+        AND tc.embedding_model_id = old_model.embedding_model_id;
+
+      UPDATE saved_provider_configs spc
+      SET embedding_model_id = new_model.embedding_model_id
+      FROM embedding_models old_model, embedding_models new_model
+      WHERE old_model.provider = migration_pair.provider_name
+        AND old_model.codename = migration_pair.old_codename
+        AND new_model.provider = migration_pair.provider_name
+        AND new_model.codename = migration_pair.new_codename
+        AND spc.embedding_model_id = old_model.embedding_model_id;
+
+      UPDATE user_saved_provider_configs uspc
+      SET embedding_model_id = new_model.embedding_model_id
+      FROM embedding_models old_model, embedding_models new_model
+      WHERE old_model.provider = migration_pair.provider_name
+        AND old_model.codename = migration_pair.old_codename
+        AND new_model.provider = migration_pair.provider_name
+        AND new_model.codename = migration_pair.new_codename
+        AND uspc.embedding_model_id = old_model.embedding_model_id;
+
+      UPDATE document_chunks dc
+      SET embedding_model_id = new_model.embedding_model_id
+      FROM embedding_models old_model, embedding_models new_model
+      WHERE old_model.provider = migration_pair.provider_name
+        AND old_model.codename = migration_pair.old_codename
+        AND new_model.provider = migration_pair.provider_name
+        AND new_model.codename = migration_pair.new_codename
+        AND dc.embedding_model_id = old_model.embedding_model_id;
+
+      UPDATE openrouter_embedding_model_registrations reg
+      SET embedding_model_id = new_model.embedding_model_id,
+          updated_at = CURRENT_TIMESTAMP
+      FROM embedding_models old_model, embedding_models new_model
+      WHERE old_model.provider = migration_pair.provider_name
+        AND old_model.codename = migration_pair.old_codename
+        AND new_model.provider = migration_pair.provider_name
+        AND new_model.codename = migration_pair.new_codename
+        AND reg.embedding_model_id = old_model.embedding_model_id;
+
+      DELETE FROM embedding_models old_model
+      USING embedding_models new_model
+      WHERE old_model.provider = migration_pair.provider_name
+        AND old_model.codename = migration_pair.old_codename
+        AND new_model.provider = migration_pair.provider_name
+        AND new_model.codename = migration_pair.new_codename;
+    END IF;
+  END LOOP;
+EXCEPTION
+  WHEN undefined_table THEN
+    RAISE NOTICE 'Table not found during embedding model migration, skipping';
+  WHEN undefined_column THEN
+    RAISE NOTICE 'Column not found during embedding model migration, skipping';
+END $$;
 
 -- PART 2: Recreate FK constraint AFTER embedding models are inserted
 DO $$

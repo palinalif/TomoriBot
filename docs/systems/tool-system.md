@@ -54,7 +54,7 @@ Current `generate_image_nai` runtime notes:
 
 - server-wide style tags come from `/novelai image-tags style` via `tomori_configs.nai_style_tags`
 - server-wide negative tags come from `/novelai image-tags negative` via `tomori_configs.nai_negative_tags`
-- the dedicated `generate_image_nai` model override comes from `/novelai image model` via `tomori_configs.nai_diffusion_model_id`, with fallback to the shared image model only when that shared model is already NovelAI
+- selecting a NovelAI provider in `/config model image` writes to `tomori_configs.nai_diffusion_model_id`, which drives the dedicated `generate_image_nai` tool
 - `characters[]` now drives V4 multi-character prompting for `generate_image_nai`; coordinate mode is enabled when two or more characters are present
 - persona and user appearance tags are resolved from `tomoris.nai_tags` and `users.nai_char_tags`
 - tool guidance for `generate_image_nai` now uses a simpler inline-tag model: each `characters[]` item is one visible character instance, and `characters[].tags` must contain that character's full appearance plus their role in the scene. For erotic scenes, clothing tags can be omitted and the intended nude state can be stated directly in `tags`. The active schema/runtime no longer advertises `id`-driven appearance autofill or `remove_tags`; if saved appearance tags are available for a known persona/user, they are shown inline in context and the model is expected to copy them into `tags`

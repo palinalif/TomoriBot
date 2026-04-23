@@ -20,13 +20,20 @@ import { log, ColorCode } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { loadTomoriState } from "../../utils/db/dbRead";
 import { sql } from "../../utils/db/client";
-import { decryptApiKey } from "../../utils/security/crypto";
 import { replyInfoEmbed, promptWithRawModal } from "../../utils/discord/interactionHelper";
 import type { UserRow } from "../../types/db/schema";
 import { checkImageQuota, incrementImageQuota } from "../../utils/quota/imageQuotaManager";
-import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
+import { resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
 import { resolveNativeImageGenerationCapability } from "@/utils/provider/providerCapabilityResolver";
 import { ZAI_CODING_IMAGES_GENERATIONS_URL, ZAI_GENERAL_IMAGES_GENERATIONS_URL } from "@/providers/zai/zaiShared";
+import { generateCustomImageViaEndpoint } from "@/providers/custom/customEndpointDispatcher";
+import {
+  CredentialUnavailableError,
+  PersonalProviderRequiredError,
+  getResolvedCapabilityModelId,
+  resolveCapabilityCredentials,
+} from "@/utils/provider/credentialResolver";
+import { applyPersonalProviderSelectionsToTomoriState } from "@/utils/provider/personalProviderRuntime";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "generate_image_modal";
@@ -229,7 +236,7 @@ async function generateImageWithOpenRouter(
 export async function execute(
   _client: Client,
   interaction: ChatInputCommandInteraction,
-  _userData: UserRow,
+  userData: UserRow,
   locale: string,
 ): Promise<void> {
   // 1. Ensure command is run in a channel context
@@ -245,10 +252,10 @@ export async function execute(
 
   // 2. Load TomoriState for this server/user
   const serverId = interaction.guild?.id ?? interaction.user.id;
-  const tomoriState = await loadTomoriState(serverId);
+  const baseTomoriState = await loadTomoriState(serverId);
 
   // 3. Validate TomoriState exists
-  if (!tomoriState) {
+  if (!baseTomoriState) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.tomori_not_setup_title",
       descriptionKey: "general.errors.tomori_not_setup_description",
@@ -257,6 +264,8 @@ export async function execute(
     });
     return;
   }
+
+  const { tomoriState } = await applyPersonalProviderSelectionsToTomoriState(baseTomoriState, userData.user_id ?? null);
 
   // 4. Check if image generation is enabled for this server
   if (!tomoriState.config.imagegen_enabled) {
@@ -269,51 +278,58 @@ export async function execute(
     return;
   }
 
-  // 5. Validate provider supports image generation
-  const provider = tomoriState.llm.llm_provider.toLowerCase();
-  if (!providerSupportsFeature(provider, "imageGeneration")) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.generate.image.wrong_provider_title",
-      descriptionKey: "commands.generate.image.wrong_provider_description",
-      descriptionVars: {
-        current_provider: tomoriState.llm.llm_provider,
-      },
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
+  // 5. Resolve active image capability credentials and model selection
+  let imageCreds: Awaited<ReturnType<typeof resolveCapabilityCredentials>>;
+  try {
+    imageCreds = await resolveCapabilityCredentials(tomoriState.server_id, "image-standard", {
+      userId: userData.user_id ?? null,
     });
-    return;
+  } catch (error) {
+    if (error instanceof PersonalProviderRequiredError) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.personal_provider_required_title",
+        descriptionKey: "general.errors.personal_provider_required_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (error instanceof CredentialUnavailableError) {
+      if (error.source === "personal") {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "general.errors.personal_provider_credentials_error_title",
+          descriptionKey: "general.errors.personal_provider_credentials_error_description",
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      if (error.reason === "missing_model_id") {
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "commands.generate.image.no_diffusion_model_title",
+          descriptionKey: "commands.generate.image.no_diffusion_model_description",
+          color: ColorCode.ERROR,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
+      }
+
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.generate.image.no_api_key_title",
+        descriptionKey: "commands.generate.image.no_api_key_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    throw error;
   }
 
-  // 6. Validate API key exists
-  const encryptedApiKey = tomoriState.config.api_key;
-  const keyVersion = tomoriState.config.key_version || 1;
-
-  if (!encryptedApiKey) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.generate.image.no_api_key_title",
-      descriptionKey: "commands.generate.image.no_api_key_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  // 7. Decrypt API key
-  const apiKey = await decryptApiKey(encryptedApiKey, keyVersion);
-
-  if (!apiKey) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.generate.image.api_key_decrypt_failed_title",
-      descriptionKey: "commands.generate.image.api_key_decrypt_failed_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  // 8. Validate diffusion model is configured
-  const diffusionModelId = tomoriState.config.diffusion_model_id;
-
+  const diffusionModelId =
+    getResolvedCapabilityModelId(imageCreds, "image-standard") ?? tomoriState.config.diffusion_model_id;
   if (!diffusionModelId) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.generate.image.no_diffusion_model_title",
@@ -323,6 +339,9 @@ export async function execute(
     });
     return;
   }
+
+  const apiKey = imageCreds.apiKey;
+  const executionProvider = imageCreds.provider;
 
   // 9. Check image generation quota BEFORE showing modal (prevent user frustration)
   const quotaCheck = await checkImageQuota(tomoriState.server_id, interaction.user.id);
@@ -494,7 +513,7 @@ export async function execute(
     const modelCodename = await getDiffusionModelCodename(diffusionModelId);
 
     log.info(
-      `Generating image with ${provider} via ${modelCodename}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio}, references: ${referenceImages.length})`,
+      `Generating image with ${executionProvider} via ${modelCodename}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio}, references: ${referenceImages.length})`,
     );
 
     // 15. Start timer for generation time tracking
@@ -503,11 +522,21 @@ export async function execute(
     // 16. Call provider API to generate image
     let generatedImageData: string | null = null;
     let generatedImageMimeType: string | null = null;
-    const imageGenerationImplementation = resolveProviderFeatureImplementation(provider, "imageGeneration");
+    const imageGenerationImplementation = resolveProviderFeatureImplementation(executionProvider, "imageGeneration");
     const nativeImageProvider =
-      provider === "vertexexpress" ? await resolveNativeImageGenerationCapability(provider) : null;
+      executionProvider === "vertexexpress" ? await resolveNativeImageGenerationCapability(executionProvider) : null;
 
-    if (nativeImageProvider) {
+    if (imageCreds.customEndpoint) {
+      const result = await generateCustomImageViaEndpoint({
+        endpoint: imageCreds.customEndpoint,
+        apiKey,
+        prompt,
+        aspectRatio,
+        referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+      });
+      generatedImageData = result.imageData;
+      generatedImageMimeType = result.mimeType;
+    } else if (nativeImageProvider) {
       const result = await nativeImageProvider.generateNativeImage({
         apiKey,
         model: modelCodename,
@@ -583,7 +612,8 @@ export async function execute(
         model: modelCodename,
         prompt,
         aspectRatio,
-        endpointUrl: provider === "zaicoding" ? ZAI_CODING_IMAGES_GENERATIONS_URL : ZAI_GENERAL_IMAGES_GENERATIONS_URL,
+        endpointUrl:
+          executionProvider === "zaicoding" ? ZAI_CODING_IMAGES_GENERATIONS_URL : ZAI_GENERAL_IMAGES_GENERATIONS_URL,
       });
       generatedImageData = result.imageData;
       generatedImageMimeType = result.mimeType;
@@ -605,7 +635,7 @@ export async function execute(
       generatedImageData = result.imageData;
       generatedImageMimeType = result.mimeType;
     } else {
-      throw new Error(`Image generation is not implemented for provider ${tomoriState.llm.llm_provider}`);
+      throw new Error(`Image generation is not implemented for provider ${executionProvider}`);
     }
 
     // 17. Calculate generation time

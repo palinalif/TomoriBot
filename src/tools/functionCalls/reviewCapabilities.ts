@@ -12,7 +12,6 @@ import { localizer } from "../../utils/text/localizer";
 import type { SlashCommandSubcommandBuilder } from "discord.js";
 import { ToolRegistry } from "../toolRegistry";
 import { getBraveApiKeyStatus } from "../../utils/db/dbRead";
-import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
 import { getLlmDisplayName } from "@/utils/provider/modelDisplay";
 import { getCachedActivePreset } from "@/utils/cache/stPresetCache";
 
@@ -123,8 +122,8 @@ export class ReviewCapabilitiesTool extends BaseTool {
       const hasTools = llm.has_tools ?? false;
       const isReasoning = llm.is_reasoning ?? false;
       const isUncensored = llm.is_uncensored ?? false;
-      const supportsImageGen = providerSupportsFeature(provider, "imageGeneration");
-      const supportsVideoGen = providerSupportsFeature(provider, "videoGeneration");
+      const hasStandardImageSlot = config.diffusion_model_id != null;
+      const hasVideoSlot = config.video_model_id != null;
 
       // 2. Build dynamic capabilities markdown with model information
       let capabilitiesContent = "# Your Chat Capabilities\n\n";
@@ -201,7 +200,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
 
       // 5c. Image Generation section (conditional on provider and configuration)
       capabilitiesContent += "## Image Generation\n\n";
-      if (supportsImageGen && config.imagegen_enabled && config.diffusion_model_id) {
+      if (config.imagegen_enabled && hasStandardImageSlot) {
         capabilitiesContent += "You CAN generate images:\n";
         capabilitiesContent += "- **Text-to-Image**: Generate images from detailed text prompts\n";
         capabilitiesContent += "- **Image-to-Image**: Edit or transform reference images using a prompt\n";
@@ -212,33 +211,27 @@ export class ReviewCapabilitiesTool extends BaseTool {
           "- Users can ask you to generate an image (triggers the generate_image tool), or use `/generate image` directly\n";
         capabilitiesContent +=
           "- When generating, describe in detail: style, composition, colors, mood, and important details\n\n";
-      } else if (supportsImageGen && config.imagegen_enabled && !config.diffusion_model_id) {
+      } else if (config.imagegen_enabled && !hasStandardImageSlot) {
         capabilitiesContent +=
           "Image generation is enabled but no diffusion model is configured. An admin needs to set one with `/config model image`.\n\n";
-      } else if (supportsImageGen && !config.imagegen_enabled) {
-        capabilitiesContent +=
-          "Image generation is available for this provider but **disabled** by server configuration.\n\n";
       } else {
-        capabilitiesContent += "Image generation is not available with the current provider.\n\n";
+        capabilitiesContent += "Image generation is **disabled** by server configuration.\n\n";
       }
 
       // 5c-2. Video Generation section (conditional on provider and configuration)
       capabilitiesContent += "## Video Generation\n\n";
-      if (supportsVideoGen && config.videogen_enabled && config.video_model_id) {
+      if (config.videogen_enabled && hasVideoSlot) {
         capabilitiesContent += "You CAN generate short videos:\n";
         capabilitiesContent += "- **Text-to-Video**: Generate short videos from detailed text prompts\n";
         capabilitiesContent += "- **Image-to-Video**: Animate or extend reference images into short videos\n";
         capabilitiesContent +=
           "- Users can ask you to generate a video (triggers the generate_video tool), or use `/generate video` directly\n";
         capabilitiesContent += "- When generating, describe in detail: scene, motion, camera movement, and mood\n\n";
-      } else if (supportsVideoGen && config.videogen_enabled && !config.video_model_id) {
+      } else if (config.videogen_enabled && !hasVideoSlot) {
         capabilitiesContent +=
           "Video generation is enabled but no video model is configured. An admin needs to set one with `/config model video`.\n\n";
-      } else if (supportsVideoGen && !config.videogen_enabled) {
-        capabilitiesContent +=
-          "Video generation is available for this provider but **disabled** by server configuration.\n\n";
       } else {
-        capabilitiesContent += "Video generation is not available with the current provider.\n\n";
+        capabilitiesContent += "Video generation is **disabled** by server configuration.\n\n";
       }
 
       // 5d. Voice System section (conditional on ElevenLabs voice assignment + server permission)
@@ -328,17 +321,17 @@ export class ReviewCapabilitiesTool extends BaseTool {
         capabilitiesContent += "- **review_capabilities** (check your own capabilities - this function!)\n";
         capabilitiesContent += "- **brave_web_search/image_search/video_search/news_search** (search the web)\n";
         capabilitiesContent += "- **fetch** (retrieve content from URLs)\n";
-        const imageGenNote = supportsImageGen
-          ? config.imagegen_enabled
+        const imageGenNote = config.imagegen_enabled
+          ? hasStandardImageSlot
             ? "create AI images from text prompts"
-            : "disabled by server configuration"
-          : "unavailable with current provider";
+            : "no standard image model configured"
+          : "disabled by server configuration";
         capabilitiesContent += `- **generate_image** (${imageGenNote})\n`;
-        const videoGenNote = supportsVideoGen
-          ? config.videogen_enabled
+        const videoGenNote = config.videogen_enabled
+          ? hasVideoSlot
             ? "generate short videos from text prompts"
-            : "disabled by server configuration"
-          : "unavailable with current provider";
+            : "no video model configured"
+          : "disabled by server configuration";
         capabilitiesContent += `- **generate_video** (${videoGenNote})\n`;
         if (seesYouTube) {
           capabilitiesContent += "- **process_youtube_video** (analyze YouTube videos)\n";

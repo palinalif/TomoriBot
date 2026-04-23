@@ -11,6 +11,7 @@ import { type UserRow, type ErrorContext, tomoriConfigSchema } from "../../../ty
 import type { SelectOption } from "../../../types/discord/modal";
 import { promptForSavedProvider, replaceProviderPickerWithInfo } from "@/commands/config/model/providerPicker";
 import { loadAvailableDiffusionModelsForProvider } from "@/utils/db/dbRead";
+import { getDiffusionModelById } from "@/utils/image/naiDiffusionModels";
 import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { getProviderDisplayName, getStaticProviderInfo } from "@/utils/provider/providerInfoRegistry";
 import { isCustomProvider } from "@/utils/provider/customProviderUtils";
@@ -69,6 +70,13 @@ function getClearTargetLabel(locale: string, target: string): string {
     default:
       return target;
   }
+}
+
+function getImageModelDisplayName(
+  model: Pick<ImageDiffusionModelRow, "model_description" | "codename"> | null | undefined,
+): string | null {
+  const description = model?.model_description?.trim();
+  return description && description.length > 0 ? description : (model?.codename ?? null);
 }
 
 // Configure the subcommand
@@ -167,32 +175,11 @@ export async function execute(
   try {
     const savedProviders = await loadSavedProvidersForCapability(tomoriState.server_id, "image");
 
-    // 3. Separate NovelAI (nai-pipeline) providers — they use /novelai image model instead
-    const nonNaiProviders = savedProviders.filter(
-      (p) => getStaticProviderInfo(p.provider)?.featureSupport.imageGeneration !== "nai-pipeline",
+    const hasNaiProviders = savedProviders.some(
+      (provider) => getStaticProviderInfo(provider.provider)?.featureSupport.imageGeneration === "nai-pipeline",
     );
-    const naiProviders = savedProviders.filter(
-      (p) => getStaticProviderInfo(p.provider)?.featureSupport.imageGeneration === "nai-pipeline",
-    );
-    const hasNaiProviders = naiProviders.length > 0;
-
-    // 4. If all image providers are NAI, show guidance pointing to the dedicated command
-    if (nonNaiProviders.length === 0) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.model.image.nai_only_title",
-        descriptionKey: hasNaiProviders
-          ? "commands.config.model.image.nai_only_description"
-          : "commands.config.model.image.no_models_title",
-        color: ColorCode.INFO,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
-    // 5. Show provider picker with NAI providers as disabled buttons + footnote
     const pickerOptions = hasNaiProviders
       ? {
-          disabledProviders: naiProviders.map((p) => p.provider.toLowerCase()),
           additionalDescription: localizer(locale, "commands.config.model.image.nai_picker_note"),
         }
       : undefined;
@@ -220,6 +207,28 @@ export async function execute(
         return;
       }
 
+      const currentSelectedId = tomoriState.config.diffusion_model_id ?? null;
+      const [selectedConfiguredModel, previousModel] = await Promise.all([
+        getDiffusionModelById(selectedModelId),
+        currentSelectedId ? getDiffusionModelById(currentSelectedId) : Promise.resolve(null),
+      ]);
+      const selectedModelName =
+        getImageModelDisplayName(selectedConfiguredModel) ??
+        selectedSavedConfig?.custom_model_name ??
+        getProviderDisplayName(selectedProvider);
+
+      if (selectedModelId === currentSelectedId) {
+        await replyInfoEmbed(responseInteraction, locale, {
+          titleKey: "commands.config.model.image.already_selected_title",
+          descriptionKey: "commands.config.model.image.already_selected_description",
+          descriptionVars: {
+            model_name: selectedModelName,
+          },
+          color: ColorCode.WARN,
+        });
+        return;
+      }
+
       const [updatedRow] = await sql`
         UPDATE tomori_configs
         SET diffusion_model_id = ${selectedModelId}
@@ -242,8 +251,9 @@ export async function execute(
         titleKey: "commands.config.model.image.success_title",
         descriptionKey: "commands.config.model.image.success_description",
         descriptionVars: {
-          model_name: selectedSavedConfig?.custom_model_name ?? getProviderDisplayName(selectedProvider),
-          previous_model: localizer(locale, "commands.config.model.image.current_none"),
+          model_name: selectedModelName,
+          previous_model:
+            getImageModelDisplayName(previousModel) ?? localizer(locale, "commands.config.model.image.current_none"),
           provider: getProviderDisplayName(selectedProvider),
         },
         color: ColorCode.SUCCESS,

@@ -2236,32 +2236,6 @@ If a command is restricted and the channel isn't marked NSFW, you won't be able 
 {error}
 \`\`\``,
         },
-        model: {
-          description: `Choose which NovelAI diffusion model the NovelAI image tool should use for this server.`,
-          modal_title: `NovelAI Image Generation Model`,
-          select_label: `Image Model`,
-          select_description: `Choose a dedicated NovelAI model, or Automatic to use shared/default behavior.`,
-          select_placeholder_current_override: `Current override: {model}`,
-          select_placeholder_current_automatic: `Automatic mode; currently using {model}`,
-          automatic_label: `Automatic`,
-          automatic_description: `Follow /config model image when it is NovelAI; otherwise use the NovelAI default model.`,
-          no_models_title: `No NovelAI Models Available`,
-          no_models_description: `No NovelAI image models are available on this bot instance.`,
-          invalid_model_title: `Invalid Model`,
-          invalid_model_description: `Select a valid NovelAI image model option.`,
-          already_selected_title: `Model Already Selected`,
-          already_selected_description: `NovelAI image model mode is already **{mode}**.`,
-          success_title: `NovelAI Image Model Updated`,
-          success_description: `NovelAI image model behavior for this server:
-\`\`\`
-Mode: {mode}
-Effective model: {effective_model}
-Source: {source}
-\`\`\``,
-          source_override: `NovelAI model override`,
-          source_shared: `Shared image model (/config model image)`,
-          source_default: `NovelAI default model`,
-        },
         params: {
           description: `Override NovelAI image generation sampler and quality settings for this server.`,
           modal_title: `NovelAI Image Generation Params`,
@@ -3281,8 +3255,8 @@ Click the button below and enter your OpenRouter model codename (e.g., \`xai/gro
           slot_cleared_description: `Cleared the **{target}** image model slot.`,
           current_none: `None`,
           nai_only_title: `NovelAI Image Models`,
-          nai_only_description: `Your saved image providers only include NovelAI. NovelAI image models are configured separately — use \`/novelai image model\` to select a model.`,
-          nai_picker_note: `NovelAI image models are different from your main image model and are configured via \`/novelai image model\` instead. Use \`/config model image clear\` to remove either the standard image model or the NovelAI image model, or both.`,
+          nai_only_description: `Your saved image providers only include NovelAI. Configure the model here and it will be stored in the dedicated NovelAI image slot for \`generate_image_nai\`.`,
+          nai_picker_note: `Setting a NovelAI image model here stores it in the dedicated NovelAI slot used by \`generate_image_nai\`. If you only want one image generation tool available, use \`/config model image clear\`.`,
         },
         video: {
           description: `Change the video generation model for this server.`,

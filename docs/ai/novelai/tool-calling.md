@@ -9,7 +9,7 @@ The implementation lives primarily in `src/providers/novelai/novelaiStreamAdapte
 ## Image Generation State
 
  - `generate_image_nai` now resolves its diffusion model from `tomori_configs.nai_diffusion_model_id` first, then from the shared `diffusion_model_id` only when that shared image model already belongs to provider `novelai`, otherwise from the seeded default NovelAI diffusion model.
- - `/novelai image model` is the admin-facing command for that dedicated model override.
+- `/config model image` now also handles the dedicated NovelAI image slot when the selected provider is NovelAI.
  - `generate_image_nai` now resolves its sampler, steps, scale, noise schedule, and `cfg_rescale` from `tomori_configs` first, falling back to the `NAI_IMAGE_*` / `NAI_CFG_RESCALE` env values when the server override is `NULL`.
  - `/novelai image params` is the admin-facing command for those parameter overrides.
  - `/novelai image generate` is the slash-command image generation entrypoint for direct tag-based NAI image creation, and now opens a modal for prompt, extra negative tags, optional character reference, and orientation selection.

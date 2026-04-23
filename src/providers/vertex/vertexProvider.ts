@@ -319,6 +319,9 @@ export class VertexProvider
       const toolStateForContext: ToolStateForContext = {
         server_id: tomoriState.server_id.toString(),
         activePersonaHasElevenlabsVoice: Boolean(tomoriState.elevenlabs_voice_id?.trim()),
+        diffusion_model_id: tomoriState.config.diffusion_model_id,
+        nai_diffusion_model_id: tomoriState.config.nai_diffusion_model_id,
+        video_model_id: tomoriState.config.video_model_id,
         llm: {
           llm_codename: tomoriState.llm.llm_codename,
           has_tools: tomoriState.llm.has_tools,

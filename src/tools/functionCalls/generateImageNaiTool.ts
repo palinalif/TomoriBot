@@ -213,6 +213,13 @@ export class GenerateImageNaiTool extends BaseTool {
   }
 
   /**
+   * Hide the tool unless a NovelAI image slot is configured for the active state.
+   */
+  isAvailableForContext(_provider: string, context?: ToolContext): boolean {
+    return (context?.tomoriState.config.nai_diffusion_model_id ?? null) !== null;
+  }
+
+  /**
    * Check if image generation is enabled in Tomori config
    * @param context - Tool execution context
    * @returns True if image generation feature flag is enabled

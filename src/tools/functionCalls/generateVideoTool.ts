@@ -19,7 +19,7 @@ import {
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { sql } from "../../utils/db/client";
 import { checkVideoQuota, incrementVideoQuota } from "../../utils/quota/videoQuotaManager";
-import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
+import { resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
 import { generateCustomVideoViaEndpoint } from "@/providers/custom/customEndpointDispatcher";
 import type { ProviderNativeVideoResolution } from "@/types/provider/featureInterfaces";
 import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
@@ -102,13 +102,20 @@ export class GenerateVideoTool extends BaseTool {
   }
 
   /**
-   * Check if video generation is available for the given provider.
-   * Uses provider capability metadata.
-   * @param provider - LLM provider name
-   * @returns True if provider supports native video generation
+   * Standard video generation is available for any tool-capable chat model.
+   * The actual execution provider is resolved from the configured video slot.
+   * @param _provider - LLM provider name
+   * @returns Always true — actual availability is gated by config + credential resolution
    */
-  isAvailableFor(provider: string): boolean {
-    return providerSupportsFeature(provider, "videoGeneration");
+  isAvailableFor(_provider: string): boolean {
+    return true;
+  }
+
+  /**
+   * Hide the tool unless a video slot is configured for the active state.
+   */
+  isAvailableForContext(_provider: string, context?: ToolContext): boolean {
+    return (context?.tomoriState.config.video_model_id ?? null) !== null;
   }
 
   /**

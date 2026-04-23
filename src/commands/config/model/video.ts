@@ -61,6 +61,26 @@ function getLocalizedDescription(model: VideoGenerationModelRow, locale: string)
   return `${flagPrefix}${baseDescription}`;
 }
 
+function getVideoModelDisplayName(
+  model: Pick<VideoGenerationModelRow, "model_description" | "codename"> | null | undefined,
+): string | null {
+  const description = model?.model_description?.trim();
+  return description && description.length > 0 ? description : (model?.codename ?? null);
+}
+
+async function loadVideoModelById(
+  videoModelId: number,
+): Promise<Pick<VideoGenerationModelRow, "video_model_id" | "codename" | "model_description"> | null> {
+  const [row] = await sql<Array<Pick<VideoGenerationModelRow, "video_model_id" | "codename" | "model_description">>>`
+    SELECT video_model_id, codename, model_description
+    FROM video_generation_models
+    WHERE video_model_id = ${videoModelId}
+    LIMIT 1
+  `;
+
+  return row ?? null;
+}
+
 // Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand.setName("video").setDescription(localizer("en-US", "commands.config.model.video.description"));
@@ -131,6 +151,28 @@ export async function execute(
         return;
       }
 
+      const currentSelectedId = tomoriState.config.video_model_id ?? null;
+      const [selectedConfiguredModel, previousModel] = await Promise.all([
+        loadVideoModelById(selectedSavedConfig.video_model_id),
+        currentSelectedId ? loadVideoModelById(currentSelectedId) : Promise.resolve(null),
+      ]);
+      const selectedModelName =
+        selectedSavedConfig.custom_model_name ??
+        getVideoModelDisplayName(selectedConfiguredModel) ??
+        getProviderDisplayName(selectedProvider);
+
+      if (selectedSavedConfig.video_model_id === currentSelectedId) {
+        await replyInfoEmbed(responseInteraction, locale, {
+          titleKey: "commands.config.model.video.already_selected_title",
+          descriptionKey: "commands.config.model.video.already_selected_description",
+          descriptionVars: {
+            model_name: selectedModelName,
+          },
+          color: ColorCode.WARN,
+        });
+        return;
+      }
+
       const [updatedRow] = await sql`
         UPDATE tomori_configs
         SET video_model_id = ${selectedSavedConfig.video_model_id}
@@ -153,8 +195,9 @@ export async function execute(
         titleKey: "commands.config.model.video.success_title",
         descriptionKey: "commands.config.model.video.success_description",
         descriptionVars: {
-          model_name: selectedSavedConfig.custom_model_name ?? getProviderDisplayName(selectedProvider),
-          previous_model: localizer(locale, "commands.config.model.video.current_none"),
+          model_name: selectedModelName,
+          previous_model:
+            getVideoModelDisplayName(previousModel) ?? localizer(locale, "commands.config.model.video.current_none"),
           provider: getProviderDisplayName(selectedProvider),
         },
         color: ColorCode.SUCCESS,

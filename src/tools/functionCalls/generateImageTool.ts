@@ -18,7 +18,7 @@ import {
 import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema } from "../../types/tool/interfaces";
 import { sql } from "../../utils/db/client";
 import { checkImageQuota, incrementImageQuota } from "../../utils/quota/imageQuotaManager";
-import { providerSupportsFeature, resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
+import { resolveProviderFeatureImplementation } from "@/utils/provider/providerInfoRegistry";
 import { resolveNativeImageGenerationCapability } from "@/utils/provider/providerCapabilityResolver";
 import { generateCustomImageViaEndpoint } from "@/providers/custom/customEndpointDispatcher";
 import { ZAI_CODING_IMAGES_GENERATIONS_URL, ZAI_GENERAL_IMAGES_GENERATIONS_URL } from "@/providers/zai/zaiShared";
@@ -62,13 +62,20 @@ export class GenerateImageTool extends BaseTool {
   };
 
   /**
-   * Check if image generation is available for the given provider
-   * Uses provider capability metadata instead of hardcoded provider checks.
-   * @param provider - LLM provider name
-   * @returns True if provider supports native image generation
+   * Standard image generation is available for any tool-capable chat model.
+   * The actual execution provider is resolved from the configured image slot.
+   * @param _provider - LLM provider name
+   * @returns Always true — actual availability is gated by config + credential resolution
    */
-  isAvailableFor(provider: string): boolean {
-    return providerSupportsFeature(provider, "imageGeneration");
+  isAvailableFor(_provider: string): boolean {
+    return true;
+  }
+
+  /**
+   * Hide the tool unless a standard image slot is configured for the active state.
+   */
+  isAvailableForContext(_provider: string, context?: ToolContext): boolean {
+    return (context?.tomoriState.config.diffusion_model_id ?? null) !== null;
   }
 
   /**

@@ -23,7 +23,6 @@ import { hasOptApiKey } from "@/utils/security/crypto";
 import { CooldownType, type TomoriState, type UserRow } from "@/types/db/schema";
 import { localizer } from "@/utils/text/localizer";
 import { log, ColorCode } from "@/utils/misc/logger";
-import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
 import { runHiddenImageTurn } from "@/utils/provider/hiddenImageTurn";
 import { applyPersonalProviderSelectionsToTomoriState } from "@/utils/provider/personalProviderRuntime";
 import { getCachedWhitelistStatus } from "@/utils/cache/channelWhitelistCache";
@@ -207,12 +206,12 @@ async function resolveSceneImageBackendAvailability(params: {
 }): Promise<SceneImageBackendAvailability> {
   const serverIdNumber = Number.parseInt(params.serverId, 10);
   const hasNovelAiOptKey = Number.isNaN(serverIdNumber) ? false : await hasOptApiKey(serverIdNumber, "novelai");
+  const hasNaiImageSlot = Boolean(params.tomoriState.config.nai_diffusion_model_id);
   const novelAiAvailable =
-    hasNovelAiOptKey || (params.provider === "novelai" && Boolean(params.tomoriState.config.api_key));
+    hasNaiImageSlot &&
+    (hasNovelAiOptKey || (params.provider === "novelai" && Boolean(params.tomoriState.config.api_key)));
   const currentProviderAvailable =
     params.provider !== "novelai" &&
-    providerSupportsFeature(params.provider, "imageGeneration") &&
-    Boolean(params.tomoriState.config.api_key) &&
     Boolean(params.tomoriState.config.diffusion_model_id) &&
     !(hasNovelAiOptKey && params.tomoriState.config.nai_exclusive_imggen);
   const defaultBackend = currentProviderAvailable ? "current_provider" : novelAiAvailable ? "novelai" : null;

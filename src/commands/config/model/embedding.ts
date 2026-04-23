@@ -34,6 +34,13 @@ function getLocalizedDescription(model: EmbeddingModelRow, locale: string): stri
   return `${flagPrefix}${baseDescription}`;
 }
 
+function getEmbeddingModelDisplayName(
+  model: Pick<EmbeddingModelRow, "model_description" | "codename"> | null | undefined,
+): string | null {
+  const description = model?.model_description?.trim();
+  return description && description.length > 0 ? description : (model?.codename ?? null);
+}
+
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand.setName("embedding").setDescription(localizer("en-US", "commands.config.model.embedding.description"));
 
@@ -93,6 +100,28 @@ export async function execute(
         return;
       }
 
+      const currentSelectedId = tomoriState.config.embedding_model_id ?? null;
+      const [selectedConfiguredModel, previousModel] = await Promise.all([
+        loadEmbeddingModelById(selectedSavedConfig.embedding_model_id),
+        currentSelectedId ? loadEmbeddingModelById(currentSelectedId) : Promise.resolve(null),
+      ]);
+      const selectedModelName =
+        selectedSavedConfig.custom_model_name ??
+        getEmbeddingModelDisplayName(selectedConfiguredModel) ??
+        getProviderDisplayName(selectedProvider);
+
+      if (selectedSavedConfig.embedding_model_id === currentSelectedId) {
+        await replyInfoEmbed(responseInteraction, locale, {
+          titleKey: "commands.config.model.embedding.already_selected_title",
+          descriptionKey: "commands.config.model.embedding.already_selected_description",
+          descriptionVars: {
+            model_name: selectedModelName,
+          },
+          color: ColorCode.WARN,
+        });
+        return;
+      }
+
       const [updatedRow] = await sql`
 				UPDATE tomori_configs
 				SET embedding_model_id = ${selectedSavedConfig.embedding_model_id}
@@ -114,8 +143,10 @@ export async function execute(
         titleKey: "commands.config.model.embedding.success_title",
         descriptionKey: "commands.config.model.embedding.success_description",
         descriptionVars: {
-          model_name: selectedSavedConfig.custom_model_name ?? getProviderDisplayName(selectedProvider),
-          previous_model: localizer(locale, "commands.config.model.embedding.current_none"),
+          model_name: selectedModelName,
+          previous_model:
+            getEmbeddingModelDisplayName(previousModel) ??
+            localizer(locale, "commands.config.model.embedding.current_none"),
           provider: getProviderDisplayName(selectedProvider),
         },
         color: ColorCode.SUCCESS,
