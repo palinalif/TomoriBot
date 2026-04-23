@@ -16,6 +16,7 @@ import { replyInfoEmbed, promptWithRawModal } from "@/utils/discord/interactionH
 import type { ErrorContext, UserRow } from "@/types/db/schema";
 import type { ModalComponent, SelectOption } from "@/types/discord/modal";
 import { ProviderFactory } from "@/utils/provider/providerFactory";
+import { isCustomProvider } from "@/utils/provider/customProviderUtils";
 import { getProviderDisplayName, getStaticProviderInfo } from "@/utils/provider/providerInfoRegistry";
 import { encryptApiKey } from "@/utils/security/crypto";
 import { buildSavedProviderConfigFromExistingOrDefaults } from "@/utils/provider/savedProviderConfig";
@@ -56,7 +57,7 @@ export async function execute(
   }
 
   const uniqueProviders = ((await loadUniqueProviders()) ?? []).filter(
-    (provider) => provider.toLowerCase() !== "custom",
+    (provider) => provider.toLowerCase() !== "custom" && !isCustomProvider(provider),
   );
   if (!uniqueProviders.length) {
     await replyInfoEmbed(interaction, locale, {

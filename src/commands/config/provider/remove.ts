@@ -14,7 +14,8 @@ import type { UserRow, ErrorContext } from "@/types/db/schema";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { isCustomProvider, deleteCustomLLMEntry } from "@/utils/discord/customProviderModal";
 import { sql } from "@/utils/db/client";
-import { loadProviderDefaultSelectionIds } from "@/utils/provider/savedProviderConfig";
+import { hasRegisteredCustomProvider, loadProviderDefaultSelectionIds } from "@/utils/provider/savedProviderConfig";
+import { cleanupCustomProviderArtifacts } from "@/utils/provider/customEndpointService";
 import { promptForSavedProvider } from "../model/providerPicker";
 
 async function resolveLlmProvider(llmId: number | null | undefined): Promise<string | null> {
@@ -108,11 +109,22 @@ export async function execute(
 
   try {
     // 3. Load all saved provider configs
-    const allSavedConfigs = await loadSavedProviderConfigs(tomoriState.server_id);
+    const rawSavedConfigs = await loadSavedProviderConfigs(tomoriState.server_id);
+    const visibleSavedConfigs = (
+      await Promise.all(
+        rawSavedConfigs.map(async (config) => {
+          if (!isCustomProvider(config.provider) || (await hasRegisteredCustomProvider(config.provider))) {
+            return config;
+          }
+
+          return null;
+        }),
+      )
+    ).flatMap((config) => (config ? [config] : []));
     const currentProvider = tomoriState.llm.llm_provider.toLowerCase();
     const removableConfigs = tomoriState.config.user_byok_mode
-      ? allSavedConfigs
-      : allSavedConfigs.filter((c) => c.provider.toLowerCase() !== currentProvider);
+      ? visibleSavedConfigs
+      : visibleSavedConfigs.filter((c) => c.provider.toLowerCase() !== currentProvider);
 
     // 4. If no removable configs exist, show error
     if (removableConfigs.length === 0) {
@@ -126,7 +138,8 @@ export async function execute(
     }
 
     // 5. Show provider picker — active provider shown as disabled button with explanation
-    const pickerResult = await promptForSavedProvider(interaction, locale, allSavedConfigs, {
+    const pickerResult = await promptForSavedProvider(interaction, locale, visibleSavedConfigs, {
+      alwaysShowPicker: true,
       disabledProviders: tomoriState.config.user_byok_mode ? [] : [currentProvider],
       titleKey: "commands.config.provider.remove.picker_title",
       descriptionKey: "commands.config.provider.remove.picker_description",
@@ -140,12 +153,7 @@ export async function execute(
     const selectedProvider = pickerResult.provider;
     resultTarget = pickerResult.pickerInteraction ?? pickerResult.interaction;
 
-    // 6. If auto-selected (single provider, no picker shown), defer for follow-up edits
-    if (!pickerResult.pickerInteraction && !pickerResult.interaction.replied) {
-      await pickerResult.interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    }
-
-    // 7. Delete the saved config and reassign dependent model selections
+    // 6. Delete the saved config and reassign dependent model selections
     const activeProvider = tomoriState.llm.llm_provider.toLowerCase();
     const deletingActiveProvider = selectedProvider.toLowerCase() === activeProvider;
     const activeDefaults =
@@ -287,9 +295,14 @@ export async function execute(
     }
 
     // 9. If removing custom provider's saved config, clean up the custom LLM entry
-    if (isCustomProvider(selectedProvider)) {
-      log.info(`Removing saved custom provider config — cleaning up custom LLM entry`);
+    if (selectedProvider.toLowerCase() === "custom") {
+      log.info("Removing saved legacy custom provider config - cleaning up legacy custom LLM entry");
       await deleteCustomLLMEntry(serverId);
+    } else if (isCustomProvider(selectedProvider)) {
+      log.info(
+        `Removing saved labeled custom provider config - cleaning up provider artifacts for ${selectedProvider}`,
+      );
+      await cleanupCustomProviderArtifacts(selectedProvider);
     }
 
     invalidateTomoriStateCache(serverId);

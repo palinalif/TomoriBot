@@ -273,6 +273,9 @@ export default {
       content_blocked_default_message: `Your content was blocked by safety filters`,
       unknown_default_message: `An unexpected error occurred`,
     },
+    vertexexpress: {
+      "403_predict_permission_message": `This key can't call Vertex AI Express models. Use an Express-mode key, or use the separate \`vertex\` provider for full Google Cloud projects.`,
+    },
     novelai: {
       "400_default_message": `Invalid request format or parameters`,
       "400_trial_message": `Your trial account requires recaptcha verification for generations. API access requires a paid NovelAI subscription. Please upgrade your account at https://novelai.net/`,
@@ -1278,14 +1281,31 @@ Please try again with different inputs or check your API key.`,
       },
       custom_models: {
         description: `Learn how custom endpoints work.`,
+        endpoint_description: `Choose which custom endpoint guide to view.`,
+        choice_overview: `Overview`,
+        choice_comfyui: `ComfyUI`,
         title: `Custom Endpoints`,
-        description_body: `Custom endpoints let you register self-hosted or proxy-backed endpoints such as Ollama, LM Studio, LiteLLM, or ComfyUI as labeled providers.`,
+        description_body: `Custom endpoints let you register self-hosted or proxy-backed endpoints such as Ollama, LM Studio, LiteLLM, or ComfyUI as labeled provider bundles.`,
         server_field: `Server Scope`,
-        server_value: `Use {add_command} to register a server-wide endpoint and {remove_command} to remove one capability from that label.`,
+        server_value: `Use {add_command} to register a server-wide endpoint and {remove_command} to remove selected capabilities from that label.`,
         personal_field: `Personal Scope`,
-        personal_value: `Use {add_command} to register your own labeled endpoint and {remove_command} to delete it again.`,
+        personal_value: `Use {add_command} to register your own labeled endpoint and {remove_command} to remove selected capabilities from it.`,
         selection_field: `Selecting Them`,
         selection_value: `After registration, choose the label from {text_command}, {image_command}, or {video_command}. Vision-capable text endpoints also appear in \`/config model vision\`.`,
+        labels_field: `Labels And Removal`,
+        labels_value: `A label groups every capability under one custom provider bundle. {server_remove_command} and {personal_remove_command} remove only the capabilities you uncheck. {server_provider_remove_command} and {personal_provider_remove_command} delete the whole labeled bundle.`,
+        comfyui_title: `ComfyUI Setup`,
+        comfyui_description: `This guide assumes ComfyUI is already installed and running. The goal is to register a working image or video endpoint with an uploaded API-format workflow JSON.`,
+        comfyui_minimum_field: `1. Build The Workflow`,
+        comfyui_minimum_value: `Create and test the workflow inside ComfyUI first. For images, the MVP should end in \`SaveImage\` so TomoriBot can download the finished file. A minimal image graph is usually: \`CheckpointLoaderSimple\` -> positive/negative \`CLIPTextEncode\` -> \`EmptyLatentImage\` -> \`KSampler\` -> \`VAEDecode\` -> \`SaveImage\`.`,
+        comfyui_export_field: `2. Export The JSON`,
+        comfyui_export_value: `When the workflow works in ComfyUI, use Save (API Format) and keep the downloaded JSON file. TomoriBot stores that file as the workflow it will queue through ComfyUI's HTTP API later.`,
+        comfyui_register_field: `3. Register It In TomoriBot`,
+        comfyui_register_value: `Run {server_add_command} for a server-wide endpoint or {personal_add_command} for your own. Use your ComfyUI server URL for \`endpoint_url\` (for example \`http://127.0.0.1:8188\`), pick \`ComfyUI\` as \`api_style\`, choose \`Image\` or \`Video\` as the capability, enter any label you want, and attach the exported JSON as \`workflow_json\`. The \`model_name\` field is just TomoriBot's display label for this endpoint.`,
+        comfyui_activate_field: `4. Activate And Use It`,
+        comfyui_activate_value: `After registration, choose the label from {image_command} or {video_command}. TomoriBot will POST the saved workflow to ComfyUI, poll for completion, download the first saved output, and send it back to Discord.`,
+        comfyui_limitations_field: `Important MVP Limitation`,
+        comfyui_limitations_value: `TomoriBot currently sends the Discord prompt to ComfyUI as \`extra_pnginfo.tomori_prompt\`. Vanilla nodes do not automatically consume that as a text input, so a plain workflow still needs either fixed prompt text or a custom node that reads that value. Also make sure the workflow saves a real output file; preview-only nodes are not enough.`,
       },
       "custom-endpoint": {
         description: `Learn how custom endpoints work.`,
@@ -1677,21 +1697,20 @@ Enter \`{project_id}::{location}\` using {configSetup} or {configApikeySet}
 - Best for deployed TomoriBot BYOK setups where each user stores their own key
 - Preview feature with a smaller Gemini-only model catalog
 - [Vertex AI Express Mode Overview](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode/overview)`,
-        vertexexpress_getting_key_title: `Getting Your API Key:`,
-        vertexexpress_getting_key_description: `1. Open [Vertex AI Express Mode](https://console.cloud.google.com/expressmode) and complete the signup flow
-2. In Google Cloud console, open **APIs & Services > Credentials**
-3. Copy a **Generative Language API Key**
-4. Add this API key with {configSetup} or {configApikeySet}
+        vertexexpress_getting_key_title: `Setup Steps:`,
+        vertexexpress_getting_key_description: `1. Open [Vertex AI Express Mode](https://console.cloud.google.com/expressmode)
+2. If Google redirects you to standard Google Cloud, use the separate \`vertex\` provider instead
+3. In the Express console, open **APIs & Services > Credentials** and copy the Express API key
+4. Add that raw API key with {configSetup} or {configApikeySet}
 5. Choose a Vertex AI Express model with {configModel}`,
         vertexexpress_important_title: `Important Notes:`,
-        vertexexpress_important_description: `- This provider stores a real API key secret, not \`{project_id}::{location}\`
+        vertexexpress_important_description: `- Store the raw API key, not \`{project_id}::{location}\`
+- No location setting is needed here; \`global\` is only for the separate \`vertex\` provider
+- Full Google Cloud Vertex projects should use \`vertex\`, not \`vertexexpress\`
 - Model availability is limited to the Vertex AI Express Gemini catalog
 - Image generation is available, but video and embeddings are not
-- Express Mode is currently a Google Preview feature
-- Full Vertex ADC workflows still belong under the separate \`vertex\` provider`,
+- Express Mode is currently a Google Preview feature`,
         vertexexpress_footer: `After setting up this provider, you may change its default model with {configModel}`,
-        personal_provider_title: `Personal Providers`,
-        personal_provider_description: `If a server enables member BYOK mode with {serverUserByokToggle}, each user may need their own provider. See {helpPersonalProvider} for the personal-provider flow.`,
       },
       elevenlabs: {
         description: `Learn how to set up ElevenLabs text-to-speech`,
@@ -2748,8 +2767,8 @@ Your donations help:
       custom_models: {
         description: `Manage labeled custom endpoints.`,
         add: {
-          description: `Register a labeled custom endpoint.`,
-          label_description: `Saved nickname for this endpoint, e.g. KoboldCPP.`,
+          description: `Register one capability under a labeled custom endpoint.`,
+          label_description: `Bundle label shared by matching capabilities, e.g. ComfyUI.`,
           capability_description: `Which capability this endpoint provides.`,
           api_style_description: `Which API format this endpoint speaks.`,
           endpoint_url_description: `Base URL for the endpoint, e.g. http://localhost:5001.`,
@@ -2765,8 +2784,8 @@ Your donations help:
           success_description: `Added **{display_name}** under label **{label}** for **{capability}**. Select it with \`/config model\`.`,
         },
         remove: {
-          description: `Remove registered custom endpoints from this server.`,
-          label_description: `Label to remove from.`,
+          description: `Remove selected capabilities from labeled custom endpoints.`,
+          label_description: `Bundle label; only unchecked capabilities are removed.`,
           capability_description: `Capability to remove.`,
           none_title: `No Registered Custom Endpoints`,
           none_description: `This server does not have any labeled custom endpoints registered yet.`,
@@ -2855,10 +2874,10 @@ Your donations help:
       "custom-endpoint": {
         description: `Manage labeled custom endpoints.`,
         add: {
-          description: `Register a labeled custom endpoint.`,
+          description: `Register one capability under a labeled custom endpoint.`,
         },
         remove: {
-          description: `Remove one capability from a labeled custom endpoint.`,
+          description: `Remove selected capabilities from a labeled custom endpoint.`,
         },
       },
       provider: {
@@ -2876,8 +2895,8 @@ Your donations help:
           provider_placeholder: `Select a provider...`,
           already_existing_suffix: `Already Existing`,
           already_existing_description: `This provider is already configured. Submit again to update credentials.`,
-          custom_deprecated_description: `Moved to /config custom-endpoint add. Select this only if you need the redirect notice.`,
-          api_key_description: `This key will be securely stored. Leave it blank if you selected Custom Endpoint and only need the redirect.`,
+          custom_deprecated_description: `Moved to /config custom-endpoint add.`,
+          api_key_description: `This key will be securely stored. Leave it blank if you selected Custom Endpoint.`,
           api_key_label: `API Key`,
           api_key_description_with_custom: `API Key, or OpenAI endpoint URL if using Custom (e.g., http://localhost:11434/v1)`,
           api_key_placeholder: `Do NOT share this key with anyone`,
@@ -2954,14 +2973,14 @@ Restored now ({restored_count}): {restored_list}`,
         modal_title: `Set Humanizer Degree`,
         select_label: `Humanizer Level`,
         select_description: `Choose response style (default: 1 Light).`,
-        choice_none: `0: None (Single-Phase Delivery)`,
+        choice_none: `0: None (Non-Streaming Mode)`,
         choice_light: `1: Light (Default, Live Streaming)`,
         choice_medium: `2: Medium (Typing Simulation)`,
         choice_heavy: `3: Heavy (Sentence Chunking & Lowercase)`,
-        desc_none: `Uses your active system prompt, but buffers visible text into one reply per tool-free phase. No live streaming or typing simulation.`,
-        desc_light: `Uses your active system prompt and streams discrete messages immediately. No typing simulation.`,
+        desc_none: `Buffers visible text into one reply. No live streaming or typing simulation.`,
+        desc_light: `Streams messages immediately. No typing simulation.`,
         desc_medium: `Light features + typing indicators and random thinking pauses between messages.`,
-        desc_heavy: `Medium features + sentence-level message splitting and casual text style (lowercase, reduced punctuation).`,
+        desc_heavy: `Medium features + sentence-level splitting and casual text (lowercase, reduced punctuation).`,
         invalid_value_description: `Humanizer degree must be between {min} and {max}.`,
         already_set_title: `Humanizer Already Set`,
         already_set_description: `The humanizer degree is already set to \`{value}\`.`,
@@ -4522,8 +4541,8 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
       custom_models: {
         description: `Manage your personal labeled custom endpoints.`,
         add: {
-          description: `Register a personal custom endpoint.`,
-          label_description: `Saved nickname for this endpoint, e.g. KoboldCPP.`,
+          description: `Register one capability under a personal custom endpoint.`,
+          label_description: `Bundle label shared by matching capabilities, e.g. ComfyUI.`,
           capability_description: `Which capability this endpoint provides.`,
           api_style_description: `Which API format this endpoint speaks.`,
           endpoint_url_description: `Base URL for the endpoint e.g. http://localhost:5001/v1.`,
@@ -4539,8 +4558,8 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
           success_description: `Added **{display_name}** under your personal custom label **{label}** for **{capability}**.`,
         },
         remove: {
-          description: `Remove registered custom endpoints from your personal provider list.`,
-          label_description: `Label to remove from.`,
+          description: `Remove selected capabilities from personal custom endpoints.`,
+          label_description: `Bundle label; only unchecked capabilities are removed.`,
           capability_description: `Capability to remove.`,
           none_title: `No Registered Custom Endpoints`,
           none_description: `You do not have any personal custom endpoints registered yet.`,
@@ -4609,10 +4628,10 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
       "custom-endpoint": {
         description: `Manage your personal labeled custom endpoints.`,
         add: {
-          description: `Register a personal custom endpoint.`,
+          description: `Register one capability under a personal custom endpoint.`,
         },
         remove: {
-          description: `Remove one capability from a personal custom endpoint.`,
+          description: `Remove selected capabilities from a personal custom endpoint.`,
         },
       },
       provider: {
@@ -4682,7 +4701,7 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
           description: `Enable or disable which personal capabilities override the server.`,
           modal_title: `Toggle Personal Provider Capabilities`,
           group_label: `Capabilities`,
-          group_description: `Unchecked capabilities will use a server's default instead. Check to use your assigned personal provider.`,
+          group_description: `Unchecked capabilities will use a server's default instead. Check to use your own provider.`,
           provider_description: `Assigned provider: {provider}`,
           none_set_description: `None set, pick a model first using \`/personal provider model-\``,
           missing_model_title: `Model Required`,

@@ -7,7 +7,25 @@ import { log, ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("custom-endpoint").setDescription(localizer("en-US", "commands.help.custom_models.description"));
+  subcommand
+    .setName("custom-endpoint")
+    .setDescription(localizer("en-US", "commands.help.custom_models.description"))
+    .addStringOption((option) =>
+      option
+        .setName("endpoint")
+        .setDescription(localizer("en-US", "commands.help.custom_models.endpoint_description"))
+        .setRequired(true)
+        .addChoices(
+          {
+            name: localizer("en-US", "commands.help.custom_models.choice_overview"),
+            value: "overview",
+          },
+          {
+            name: localizer("en-US", "commands.help.custom_models.choice_comfyui"),
+            value: "comfyui",
+          },
+        ),
+    );
 
 export async function execute(
   _client: Client,
@@ -16,39 +34,99 @@ export async function execute(
   locale: string,
 ): Promise<void> {
   try {
-    await replySummaryEmbed(interaction, locale, {
-      titleKey: "commands.help.custom_models.title",
-      descriptionKey: "commands.help.custom_models.description_body",
-      color: ColorCode.INFO,
-      fields: [
-        {
-          nameKey: "commands.help.custom_models.server_field",
-          value: localizer(locale, "commands.help.custom_models.server_value", {
-            add_command: commandRegistry.getCommandMention("config", "custom-endpoint", "add"),
-            remove_command: commandRegistry.getCommandMention("config", "custom-endpoint", "remove"),
-          }),
-          inline: false,
-        },
-        {
-          nameKey: "commands.help.custom_models.personal_field",
-          value: localizer(locale, "commands.help.custom_models.personal_value", {
-            add_command: commandRegistry.getCommandMention("personal", "custom-endpoint", "add"),
-            remove_command: commandRegistry.getCommandMention("personal", "custom-endpoint", "remove"),
-          }),
-          inline: false,
-        },
-        {
-          nameKey: "commands.help.custom_models.selection_field",
-          value: localizer(locale, "commands.help.custom_models.selection_value", {
-            text_command: commandRegistry.getCommandMention("config", "model", "text"),
-            image_command: commandRegistry.getCommandMention("config", "model", "image"),
-            video_command: commandRegistry.getCommandMention("config", "model", "video"),
-          }),
-          inline: false,
-        },
-      ],
-      flags: MessageFlags.Ephemeral,
-    });
+    const endpoint = interaction.options.getString("endpoint", true);
+
+    if (endpoint === "overview") {
+      await replySummaryEmbed(interaction, locale, {
+        titleKey: "commands.help.custom_models.title",
+        descriptionKey: "commands.help.custom_models.description_body",
+        color: ColorCode.INFO,
+        fields: [
+          {
+            nameKey: "commands.help.custom_models.server_field",
+            value: localizer(locale, "commands.help.custom_models.server_value", {
+              add_command: commandRegistry.getCommandMention("config", "custom-endpoint", "add"),
+              remove_command: commandRegistry.getCommandMention("config", "custom-endpoint", "remove"),
+            }),
+            inline: false,
+          },
+          {
+            nameKey: "commands.help.custom_models.personal_field",
+            value: localizer(locale, "commands.help.custom_models.personal_value", {
+              add_command: commandRegistry.getCommandMention("personal", "custom-endpoint", "add"),
+              remove_command: commandRegistry.getCommandMention("personal", "custom-endpoint", "remove"),
+            }),
+            inline: false,
+          },
+          {
+            nameKey: "commands.help.custom_models.selection_field",
+            value: localizer(locale, "commands.help.custom_models.selection_value", {
+              text_command: commandRegistry.getCommandMention("config", "model", "text"),
+              image_command: commandRegistry.getCommandMention("config", "model", "image"),
+              video_command: commandRegistry.getCommandMention("config", "model", "video"),
+            }),
+            inline: false,
+          },
+          {
+            nameKey: "commands.help.custom_models.labels_field",
+            value: localizer(locale, "commands.help.custom_models.labels_value", {
+              server_remove_command: commandRegistry.getCommandMention("config", "custom-endpoint", "remove"),
+              server_provider_remove_command: commandRegistry.getCommandMention("config", "provider", "remove"),
+              personal_remove_command: commandRegistry.getCommandMention("personal", "custom-endpoint", "remove"),
+              personal_provider_remove_command: commandRegistry.getCommandMention("personal", "provider", "remove"),
+            }),
+            inline: false,
+          },
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (endpoint === "comfyui") {
+      await replySummaryEmbed(interaction, locale, {
+        titleKey: "commands.help.custom_models.comfyui_title",
+        descriptionKey: "commands.help.custom_models.comfyui_description",
+        color: ColorCode.INFO,
+        fields: [
+          {
+            nameKey: "commands.help.custom_models.comfyui_minimum_field",
+            value: localizer(locale, "commands.help.custom_models.comfyui_minimum_value"),
+            inline: false,
+          },
+          {
+            nameKey: "commands.help.custom_models.comfyui_export_field",
+            value: localizer(locale, "commands.help.custom_models.comfyui_export_value"),
+            inline: false,
+          },
+          {
+            nameKey: "commands.help.custom_models.comfyui_register_field",
+            value: localizer(locale, "commands.help.custom_models.comfyui_register_value", {
+              server_add_command: commandRegistry.getCommandMention("config", "custom-endpoint", "add"),
+              personal_add_command: commandRegistry.getCommandMention("personal", "custom-endpoint", "add"),
+            }),
+            inline: false,
+          },
+          {
+            nameKey: "commands.help.custom_models.comfyui_activate_field",
+            value: localizer(locale, "commands.help.custom_models.comfyui_activate_value", {
+              image_command: commandRegistry.getCommandMention("config", "model", "image"),
+              video_command: commandRegistry.getCommandMention("config", "model", "video"),
+            }),
+            inline: false,
+          },
+          {
+            nameKey: "commands.help.custom_models.comfyui_limitations_field",
+            value: localizer(locale, "commands.help.custom_models.comfyui_limitations_value"),
+            inline: false,
+          },
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    throw new Error(`Unknown custom endpoint help target: ${endpoint}`);
   } catch (error) {
     const context: ErrorContext = {
       userId: userData.user_id,

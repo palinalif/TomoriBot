@@ -23,6 +23,8 @@
     "find-stale-translations": "bun run scripts/findStaleTranslations.ts",
     "check-limits": "bun run scripts/checkDiscordLimits.ts",
     "audit-keys": "bun run scripts/auditKeyVersions.ts",
+    "audit-legacy-provider-paths": "bun run scripts/cleanupLegacyProviderArtifacts.ts",
+    "cleanup-legacy-provider-paths": "bun run scripts/cleanupLegacyProviderArtifacts.ts --apply",
     "rotate-keys": "bun run scripts/rotateAllKeys.ts",
     "check-keys": "bun run scripts/checkKeys.ts",
     "setup:tokenizers": "bun run scripts/downloadTokenizers.ts",

@@ -79,7 +79,7 @@ export function getCustomProviderLabel(provider: string): string | null {
 
 export function getCustomProviderDisplayName(provider: string): string {
   const label = getCustomProviderLabel(provider);
-  return label ? `Custom:${label}` : "Custom";
+  return label ? `Custom Endpoint: ${label}` : "Custom Endpoint";
 }
 
 export function buildSyntheticCustomModelCodename(provider: string, capability: CustomEndpointCapability): string {

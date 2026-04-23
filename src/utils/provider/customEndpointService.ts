@@ -299,6 +299,92 @@ async function deleteSyntheticCapabilityModel(provider: string, capability: Cust
   }
 }
 
+function getCapabilityModelId(
+  config: SavedProviderConfigRow | UserSavedProviderConfigRow,
+  capability: CustomEndpointCapability,
+): number | null {
+  switch (capability) {
+    case "text":
+      return config.llm_id ?? null;
+    case "embedding":
+      return config.embedding_model_id ?? null;
+    case "image":
+      return config.diffusion_model_id ?? null;
+    case "video":
+      return config.video_model_id ?? null;
+  }
+}
+
+async function clearServerScopedLiveReferences(
+  serverId: number,
+  capability: CustomEndpointCapability,
+  modelId: number | null,
+): Promise<void> {
+  if (!modelId) {
+    return;
+  }
+
+  switch (capability) {
+    case "text":
+      await sql`
+				UPDATE tomori_configs
+				SET llm_id = CASE WHEN llm_id = ${modelId} THEN NULL ELSE llm_id END,
+				    custom_endpoint_url = CASE WHEN llm_id = ${modelId} THEN NULL ELSE custom_endpoint_url END,
+				    custom_model_name = CASE WHEN llm_id = ${modelId} THEN NULL ELSE custom_model_name END,
+				    custom_num_ctx = CASE WHEN llm_id = ${modelId} THEN NULL ELSE custom_num_ctx END,
+				    vision_llm_id = CASE WHEN vision_llm_id = ${modelId} THEN NULL ELSE vision_llm_id END,
+				    updated_at = CURRENT_TIMESTAMP
+				WHERE server_id = ${serverId}
+				  AND (llm_id = ${modelId} OR vision_llm_id = ${modelId})
+			`;
+      await sql`
+				DELETE FROM channel_llm_overrides
+				WHERE server_id = ${serverId}
+				  AND llm_id = ${modelId}
+			`;
+      await sql`
+				UPDATE persona_configs
+				SET llm_id = NULL,
+				    updated_at = CURRENT_TIMESTAMP
+				WHERE llm_id = ${modelId}
+				  AND tomori_id IN (
+				    SELECT tomori_id
+				    FROM tomoris
+				    WHERE server_id = ${serverId}
+				  )
+			`;
+      return;
+    case "embedding":
+      await sql`
+				UPDATE tomori_configs
+				SET embedding_model_id = NULL,
+				    updated_at = CURRENT_TIMESTAMP
+				WHERE server_id = ${serverId}
+				  AND embedding_model_id = ${modelId}
+			`;
+      return;
+    case "image":
+      await sql`
+				UPDATE tomori_configs
+				SET diffusion_model_id = CASE WHEN diffusion_model_id = ${modelId} THEN NULL ELSE diffusion_model_id END,
+				    nai_diffusion_model_id = CASE WHEN nai_diffusion_model_id = ${modelId} THEN NULL ELSE nai_diffusion_model_id END,
+				    updated_at = CURRENT_TIMESTAMP
+				WHERE server_id = ${serverId}
+				  AND (diffusion_model_id = ${modelId} OR nai_diffusion_model_id = ${modelId})
+			`;
+      return;
+    case "video":
+      await sql`
+				UPDATE tomori_configs
+				SET video_model_id = NULL,
+				    updated_at = CURRENT_TIMESTAMP
+				WHERE server_id = ${serverId}
+				  AND video_model_id = ${modelId}
+			`;
+      return;
+  }
+}
+
 async function buildSavedConfigForCustomEndpoint(
   scope: RegistrationScope,
   provider: string,
@@ -474,6 +560,8 @@ export async function removeCustomEndpointRegistration(params: {
     return false;
   }
 
+  const modelId = getCapabilityModelId(existingConfig, params.capability);
+
   const deleted =
     params.scope.kind === "server"
       ? await deleteCustomEndpoint({
@@ -489,6 +577,10 @@ export async function removeCustomEndpointRegistration(params: {
 
   if (!deleted) {
     return false;
+  }
+
+  if (params.scope.kind === "server") {
+    await clearServerScopedLiveReferences(params.scope.ownerId, params.capability, modelId);
   }
 
   await deleteSyntheticCapabilityModel(provider, params.capability);
@@ -540,6 +632,40 @@ export async function removeCustomEndpointRegistration(params: {
   }
 
   return true;
+}
+
+export async function cleanupCustomProviderArtifacts(provider: string): Promise<void> {
+  const parsed = parseCustomProvider(provider);
+  if (!parsed || parsed.ownerId === null) {
+    return;
+  }
+
+  const registeredEndpoints =
+    parsed.scope === "server"
+      ? await loadCustomEndpointsForServer(parsed.ownerId)
+      : await loadCustomEndpointsForUser(parsed.ownerId);
+
+  const matchingEndpoints = registeredEndpoints.filter((endpoint) => endpoint.label === parsed.label);
+
+  for (const endpoint of matchingEndpoints) {
+    await deleteCustomEndpoint(
+      parsed.scope === "server"
+        ? {
+            serverId: parsed.ownerId,
+            label: endpoint.label,
+            capability: endpoint.capability,
+          }
+        : {
+            userId: parsed.ownerId,
+            label: endpoint.label,
+            capability: endpoint.capability,
+          },
+    );
+  }
+
+  for (const capability of ["text", "embedding", "image", "video"] as const) {
+    await deleteSyntheticCapabilityModel(parsed.raw, capability);
+  }
 }
 
 export async function validateCustomEndpointReachability(params: {

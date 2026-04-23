@@ -23,6 +23,7 @@ import { getCachedPresetAvatar } from "@/utils/image/avatarHelper";
 import { lazySyncGuildEmojis } from "@/utils/cache/emojiLazySync";
 import { lazySyncGuildStickers } from "@/utils/cache/stickerLazySync";
 import { formatLlmDisplayLabel } from "@/utils/provider/modelDisplay";
+import { isCustomProvider } from "@/utils/provider/customProviderUtils";
 
 import type { HumanizerDegree } from "@/types/db/schema";
 
@@ -204,7 +205,7 @@ export async function execute(
 
     // Create provider options for the select menu
     const providerSelectOptions: SelectOption[] = uniqueProviders
-      .filter((provider) => provider.toLowerCase() !== "custom")
+      .filter((provider) => provider.toLowerCase() !== "custom" && !isCustomProvider(provider))
       .map((provider) => ({
         label: getProviderDisplayName(provider),
         value: provider,

@@ -1,6 +1,7 @@
 import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { CustomEndpointCapability, CustomEndpointRow, ErrorContext, UserRow } from "@/types/db/schema";
+import { invalidateAllChannelLlmCacheForServer } from "@/utils/cache/channelLlmCache";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { loadCustomEndpointsForServer } from "@/utils/db/dbRead";
 import {
@@ -208,6 +209,10 @@ export async function execute(
     }
 
     await clearCurrentProviderSelections(tomoriState.server_id, capabilitiesToClear);
+
+    if (removedEndpoints.some((endpoint) => endpoint.capability === "text")) {
+      invalidateAllChannelLlmCacheForServer(tomoriState.server_id);
+    }
 
     invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
     await replyInfoEmbed(modalResult.interaction, locale, {

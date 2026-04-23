@@ -35,6 +35,8 @@ export interface PickerOptions {
   additionalDescription?: string;
   /** Providers to render as disabled (greyed-out) buttons. */
   disabledProviders?: string[];
+  /** Force showing the picker UI even when only one provider is available. */
+  alwaysShowPicker?: boolean;
   /** Override the picker embed title locale key. */
   titleKey?: string;
   /** Override the picker embed description locale key. */
@@ -57,7 +59,7 @@ export async function promptForSavedProvider(
     return null;
   }
 
-  if (savedProviders.length === 1) {
+  if (savedProviders.length === 1 && !options?.alwaysShowPicker) {
     return {
       interaction,
       provider: savedProviders[0].provider.toLowerCase(),

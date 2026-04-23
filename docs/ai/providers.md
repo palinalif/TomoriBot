@@ -151,6 +151,11 @@ Phase 3 promotes custom endpoints into labeled provider entries instead of a sin
 - `/config logit-bias` entries are still stored in config snapshots, but Tomori does not auto-tokenize plain-text entries for custom endpoints
 - `thinking_level` still only maps to generic OpenAI-compatible reasoning controls where the target backend accepts them; backend-specific knobs remain adapter-specific
 
+Maintenance:
+
+- `bun run audit-legacy-provider-paths` reports remaining legacy `other-model`, legacy inline `custom`, and fully orphaned labeled custom-provider bundles
+- `bun run cleanup-legacy-provider-paths` deletes only fully orphaned labeled custom-provider bundles after an explicit confirmation prompt
+
 ## Anthropic Provider Notes
 
 `anthropic` uses Anthropic's native Messages API directly for Claude models.
@@ -181,6 +186,9 @@ Phase 3 promotes custom endpoints into labeled provider entries instead of a sin
 `vertexexpress` uses Vertex AI Express Mode with a per-user API key.
 
 - BYOK-friendly for deployed TomoriBot instances where each user brings their own Google key
+- Express Mode requests use the global `aiplatform.googleapis.com` endpoint and do not require a saved `{project_id}::{location}` value
+- the key should come from the Express Mode signup flow, or from a full Google Cloud project's Express-bound service-account key after upgrade
+- a random standard Google Cloud API key can fail with `aiplatform.endpoints.predict` permission errors during validation
 - limited to the Express Mode Gemini subset seeded in `llms` / `image_diffusion_models`
 - supports chat streaming, tool calling, structured output, compaction, preset generation, and native image generation
 - does not support embeddings, video input/output, or YouTube handling

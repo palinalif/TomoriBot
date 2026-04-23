@@ -1,4 +1,5 @@
 import type {
+  CustomEndpointCapability,
   SavedProviderConfigRow,
   SavedProviderConfigUpsert,
   TomoriConfigRow,
@@ -12,10 +13,13 @@ import {
   loadDefaultModelForProvider,
   loadDefaultVideoGenerationModelForProvider,
   loadDefaultVisionModelForProvider,
+  loadCustomEndpoint,
+  loadCustomEndpointsForServer,
+  loadCustomEndpointsForUser,
   loadSavedProviderConfigs,
   loadUserSavedProviderConfigs,
 } from "@/utils/db/dbRead";
-import { isCustomProvider } from "@/utils/provider/customProviderUtils";
+import { isCustomProvider, parseCustomProvider } from "@/utils/provider/customProviderUtils";
 import {
   getStaticProviderInfo,
   supportsEmbeddingCapability,
@@ -198,13 +202,87 @@ export async function buildUserSavedProviderConfigFromExistingOrDefaults(params:
   };
 }
 
+function mapSavedCapabilityToCustomEndpointCapability(
+  capability: SavedProviderCapability,
+): CustomEndpointCapability | null {
+  switch (capability) {
+    case "text":
+    case "embedding":
+    case "image":
+    case "video":
+      return capability;
+    case "vision":
+      return "text";
+    default:
+      return null;
+  }
+}
+
+async function hasRegisteredCustomEndpointCapability(
+  provider: string,
+  capability: SavedProviderCapability,
+): Promise<boolean> {
+  const parsed = parseCustomProvider(provider);
+  const endpointCapability = mapSavedCapabilityToCustomEndpointCapability(capability);
+
+  if (!parsed || !endpointCapability) {
+    return false;
+  }
+
+  const endpoint =
+    parsed.scope === "server"
+      ? await loadCustomEndpoint({
+          serverId: parsed.ownerId,
+          label: parsed.label,
+          capability: endpointCapability,
+        })
+      : await loadCustomEndpoint({
+          userId: parsed.ownerId,
+          label: parsed.label,
+          capability: endpointCapability,
+        });
+
+  if (!endpoint) {
+    return false;
+  }
+
+  return capability === "vision" ? endpoint.sees_images : true;
+}
+
+export async function hasRegisteredCustomProvider(provider: string): Promise<boolean> {
+  const parsed = parseCustomProvider(provider);
+  if (!parsed || parsed.ownerId === null) {
+    return false;
+  }
+
+  const registeredEndpoints =
+    parsed.scope === "server"
+      ? await loadCustomEndpointsForServer(parsed.ownerId)
+      : await loadCustomEndpointsForUser(parsed.ownerId);
+
+  return registeredEndpoints.some((endpoint) => endpoint.label === parsed.label);
+}
+
 export async function loadSavedProvidersForCapability(
   serverId: number,
   capability: SavedProviderCapability,
 ): Promise<SavedProviderConfigRow[]> {
   const savedConfigs = await loadSavedProviderConfigs(serverId);
+  const registeredVisibility = await Promise.all(
+    savedConfigs.map(async (config) => {
+      if (!isCustomProvider(config.provider)) {
+        return true;
+      }
 
-  return savedConfigs.filter((config) => {
+      return await hasRegisteredCustomEndpointCapability(config.provider, capability);
+    }),
+  );
+
+  return savedConfigs.filter((config, index) => {
+    if (!registeredVisibility[index]) {
+      return false;
+    }
+
     if (isCustomProvider(config.provider)) {
       switch (capability) {
         case "text":
@@ -244,8 +322,21 @@ export async function loadUserSavedProvidersForCapability(
   capability: SavedProviderCapability,
 ): Promise<UserSavedProviderConfigRow[]> {
   const savedConfigs = await loadUserSavedProviderConfigs(userId);
+  const registeredVisibility = await Promise.all(
+    savedConfigs.map(async (config) => {
+      if (!isCustomProvider(config.provider)) {
+        return true;
+      }
 
-  return savedConfigs.filter((config) => {
+      return await hasRegisteredCustomEndpointCapability(config.provider, capability);
+    }),
+  );
+
+  return savedConfigs.filter((config, index) => {
+    if (!registeredVisibility[index]) {
+      return false;
+    }
+
     if (isCustomProvider(config.provider)) {
       switch (capability) {
         case "text":

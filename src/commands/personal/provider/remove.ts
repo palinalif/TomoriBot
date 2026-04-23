@@ -11,7 +11,10 @@ import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { localizer } from "@/utils/text/localizer";
+import { isCustomProvider } from "@/utils/provider/customProviderUtils";
+import { cleanupCustomProviderArtifacts } from "@/utils/provider/customEndpointService";
 import { promptForSavedProvider } from "@/commands/config/model/providerPicker";
+import { hasRegisteredCustomProvider } from "@/utils/provider/savedProviderConfig";
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand.setName("remove").setDescription(localizer("en-US", "commands.personal.provider.remove.description"));
@@ -43,7 +46,18 @@ export async function execute(
   }
 
   try {
-    const savedProviders = await loadUserSavedProviderConfigs(userData.user_id);
+    const rawSavedProviders = await loadUserSavedProviderConfigs(userData.user_id);
+    const savedProviders = (
+      await Promise.all(
+        rawSavedProviders.map(async (config) => {
+          if (!isCustomProvider(config.provider) || (await hasRegisteredCustomProvider(config.provider))) {
+            return config;
+          }
+
+          return null;
+        }),
+      )
+    ).flatMap((config) => (config ? [config] : []));
     if (savedProviders.length === 0) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.personal.provider.remove.no_saved_title",
@@ -59,6 +73,7 @@ export async function execute(
       locale,
       savedProviders as unknown as SavedProviderConfigRow[],
       {
+        alwaysShowPicker: true,
         titleKey: "commands.personal.provider.remove.picker_title",
         descriptionKey: "commands.personal.provider.remove.picker_description",
       },
@@ -75,6 +90,10 @@ export async function execute(
         color: ColorCode.ERROR,
       });
       return;
+    }
+
+    if (isCustomProvider(selection.provider)) {
+      await cleanupCustomProviderArtifacts(selection.provider);
     }
 
     await replyInfoEmbed(selection.interaction, locale, {

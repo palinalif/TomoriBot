@@ -28,21 +28,15 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     .setDescription(localizer("en-US", "commands.config.custom_models.add.description"))
     .addStringOption((option) =>
       option
-        .setName("endpoint_label")
-        .setDescription(localizer("en-US", "commands.config.custom_models.add.label_description"))
+        .setName("endpoint_url")
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.endpoint_url_description"))
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
-        .setName("capability")
-        .setDescription(localizer("en-US", "commands.config.custom_models.add.capability_description"))
-        .setRequired(true)
-        .addChoices(
-          { name: "Text", value: "text" },
-          { name: "Embedding", value: "embedding" },
-          { name: "Image", value: "image" },
-          { name: "Video", value: "video" },
-        ),
+        .setName("endpoint_label")
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.label_description"))
+        .setRequired(true),
     )
     .addStringOption((option) =>
       option
@@ -57,15 +51,21 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     )
     .addStringOption((option) =>
       option
-        .setName("endpoint_url")
-        .setDescription(localizer("en-US", "commands.config.custom_models.add.endpoint_url_description"))
+        .setName("model_name")
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.model_name_description"))
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
-        .setName("model_name")
-        .setDescription(localizer("en-US", "commands.config.custom_models.add.model_name_description"))
-        .setRequired(true),
+        .setName("capability")
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.capability_description"))
+        .setRequired(true)
+        .addChoices(
+          { name: "Text", value: "text" },
+          { name: "Embedding", value: "embedding" },
+          { name: "Image", value: "image" },
+          { name: "Video", value: "video" },
+        ),
     )
     .addStringOption((option) =>
       option

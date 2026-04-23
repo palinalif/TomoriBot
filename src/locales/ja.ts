@@ -273,6 +273,9 @@ export default {
       content_blocked_default_message: `あなたのコンテンツは安全フィルターによってブロックされました`,
       unknown_default_message: `予期しないエラーが発生しました`,
     },
+    vertexexpress: {
+      "403_predict_permission_message": `このキーでは Vertex AI Express モデルを呼び出せません。Express Mode のキーを使うか、フル Google Cloud プロジェクトなら別プロバイダーの \`vertex\` を使ってください。`,
+    },
     novelai: {
       "400_default_message": `無効なリクエスト形式またはパラメータ`,
       "400_trial_message": `トライアルアカウントでは生成にrecaptcha認証が必要です。API経由のアクセスには有料のNovelAIサブスクリプションが必要です。https://novelai.net/ でアカウントをアップグレードしてください`,
@@ -1278,14 +1281,31 @@ export default {
       },
       custom_models: {
         description: `カスタムエンドポイントの使い方を確認します。`,
+        endpoint_description: `表示するカスタムエンドポイントのガイドを選びます。`,
+        choice_overview: `概要`,
+        choice_comfyui: `ComfyUI`,
         title: `カスタムエンドポイント`,
-        description_body: `カスタムエンドポイントを使うと、Ollama、LM Studio、LiteLLM、ComfyUI などの自己ホスト/プロキシ型エンドポイントをラベル付きプロバイダーとして登録できます。`,
+        description_body: `カスタムエンドポイントを使うと、Ollama、LM Studio、LiteLLM、ComfyUI などの自己ホスト/プロキシ型エンドポイントをラベル付きプロバイダーバンドルとして登録できます。`,
         server_field: `サーバー登録`,
-        server_value: `{add_command} でサーバー共通のエンドポイントを登録し、{remove_command} でそのラベルの機能を削除できます。`,
+        server_value: `{add_command} でサーバー共通のエンドポイントを登録し、{remove_command} でそのラベルから選んだ機能だけ削除できます。`,
         personal_field: `個人登録`,
-        personal_value: `{add_command} で自分専用のラベル付きエンドポイントを登録し、{remove_command} で削除できます。`,
+        personal_value: `{add_command} で自分専用のラベル付きエンドポイントを登録し、{remove_command} で選んだ機能だけ削除できます。`,
         selection_field: `使い方`,
         selection_value: `登録後は {text_command}、{image_command}、{video_command} からラベルを選択してください。画像理解対応のテキストエンドポイントは \`/config model vision\` にも表示されます。`,
+        labels_field: `ラベルと削除`,
+        labels_value: `1つのラベルは対応する全機能をまとめたカスタムプロバイダーバンドルです。{server_remove_command} と {personal_remove_command} はチェックを外した機能だけ削除します。{server_provider_remove_command} と {personal_provider_remove_command} はそのラベル全体を削除します。`,
+        comfyui_title: `ComfyUI セットアップ`,
+        comfyui_description: `このガイドでは、ComfyUI がすでにインストール済みかつ起動中である前提で進めます。目標は、API 形式のワークフロー JSON を添付して動作する画像または動画エンドポイントを登録することです。`,
+        comfyui_minimum_field: `1. ワークフローを作る`,
+        comfyui_minimum_value: `まず ComfyUI 側でワークフローを作成し、正常に動くことを確認してください。画像用 MVP では、TomoriBot が完成ファイルを取得できるよう最後を \`SaveImage\` で終える必要があります。最小構成の画像グラフは通常、\`CheckpointLoaderSimple\` -> positive/negative \`CLIPTextEncode\` -> \`EmptyLatentImage\` -> \`KSampler\` -> \`VAEDecode\` -> \`SaveImage\` です。`,
+        comfyui_export_field: `2. JSON を書き出す`,
+        comfyui_export_value: `ComfyUI でワークフローが動いたら、Save (API Format) で JSON を保存してください。TomoriBot は後でそのファイルを保存し、ComfyUI の HTTP API にそのまま投入します。`,
+        comfyui_register_field: `3. TomoriBot に登録する`,
+        comfyui_register_value: `サーバー共通なら {server_add_command}、個人用なら {personal_add_command} を使います。\`endpoint_url\` には ComfyUI サーバーの URL（例: \`http://127.0.0.1:8188\`）を入れ、\`api_style\` は \`ComfyUI\`、\`capability\` は \`Image\` か \`Video\` を選び、任意のラベルを付けて、書き出した JSON を \`workflow_json\` に添付してください。\`model_name\` は TomoriBot 側で表示するラベル名です。`,
+        comfyui_activate_field: `4. 有効化して使う`,
+        comfyui_activate_value: `登録後は {image_command} または {video_command} でそのラベルを選択してください。TomoriBot は保存済みワークフローを ComfyUI に POST し、完了をポーリングし、最初に保存された出力をダウンロードして Discord に返します。`,
+        comfyui_limitations_field: `MVP 時点の注意点`,
+        comfyui_limitations_value: `TomoriBot は現在、Discord のプロンプトを \`extra_pnginfo.tomori_prompt\` として ComfyUI に渡しています。標準ノードはこれをそのままテキスト入力として使えないため、素のワークフローでは固定プロンプトを使うか、その値を読むカスタムノードが必要です。また、プレビュー専用ノードではなく、実ファイルを保存する出力ノードが必要です。`,
       },
       "custom-endpoint": {
         description: `カスタムエンドポイントの使い方を確認します。`,
@@ -1680,21 +1700,20 @@ IDの形式は \`!abc:matrix.org\` のようになります。
 - デプロイ済みTomoriBotで各ユーザーが自分のキーを持つBYOK運用に向いています
 - Gemini限定の小さめなモデルカタログを持つPreview機能です
 - [Vertex AI Express Mode概要](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode/overview)`,
-        vertexexpress_getting_key_title: `APIキーの取得：`,
-        vertexexpress_getting_key_description: `1. [Vertex AI Express Mode](https://console.cloud.google.com/expressmode) を開いて登録を完了
-2. Google Cloudコンソールで **APIs & Services > Credentials** を開く
-3. **Generative Language API Key** をコピー
-4. そのAPIキーを {configSetup} または {configApikeySet} で追加
-5. {configModel} でVertex AI Express用モデルを選択`,
+        vertexexpress_getting_key_title: `設定手順：`,
+        vertexexpress_getting_key_description: `1. [Vertex AI Express Mode](https://console.cloud.google.com/expressmode) を開く
+2. 標準の Google Cloud にリダイレクトされる場合は、別プロバイダーの \`vertex\` を使ってください
+3. Express コンソールで **APIs & Services > Credentials** を開き、Express の API キーをコピー
+4. その生の API キーを {configSetup} または {configApikeySet} で追加
+5. {configModel} で Vertex AI Express 用モデルを選択`,
         vertexexpress_important_title: `重要な注意事項：`,
-        vertexexpress_important_description: `- このプロバイダーに保存するのは \`{project_id}::{location}\` ではなく、実際のAPIキーです
-- 利用できるモデルはVertex AI Express対応のGeminiカタログに限定されます
+        vertexexpress_important_description: `- 保存するのは \`{project_id}::{location}\` ではなく、生の API キーです
+- ここではロケーション設定は不要です。\`global\` は別プロバイダーの \`vertex\` 用です
+- フル Google Cloud の Vertex プロジェクトは \`vertexexpress\` ではなく \`vertex\` を使ってください
+- 利用できるモデルは Vertex AI Express 対応の Gemini カタログに限定されます
 - 画像生成には対応しますが、動画と埋め込みには対応しません
-- Express Modeは現在GoogleのPreview機能です
-- ADCを使うフルVertex運用は別プロバイダーの \`vertex\` を使ってください`,
+- Express Mode は現在 Google の Preview 機能です`,
         vertexexpress_footer: `このプロバイダーを設定したら、{configModel}でデフォルトモデルを変更できます`,
-        personal_provider_title: `個人プロバイダー`,
-        personal_provider_description: `サーバーが {serverUserByokToggle} でメンバーBYOKモードを有効にしている場合、各ユーザーに個人プロバイダーが必要になることがあります。個人プロバイダーの流れは {helpPersonalProvider} を確認してください。`,
       },
       elevenlabs: {
         description: `ElevenLabs音声合成の設定方法を学ぶ`,
@@ -2769,8 +2788,8 @@ Prompt Guidance Rescale: {cfg_rescale}
       custom_models: {
         description: `ラベル付きカスタムエンドポイントを管理します。`,
         add: {
-          description: `ラベル付きカスタムエンドポイントを登録します。`,
-          label_description: `Tomori内でこのエンドポイントを識別する保存用ラベル。例: KoboldCPP。`,
+          description: `ラベル付きカスタムエンドポイントに1機能を登録します。`,
+          label_description: `一致する機能で共有するバンドル用ラベル。例: ComfyUI。`,
           capability_description: `このエンドポイントが提供する機能。`,
           api_style_description: `このエンドポイントが使うAPI形式。`,
           endpoint_url_description: `エンドポイントのベースURL。`,
@@ -2786,8 +2805,8 @@ Prompt Guidance Rescale: {cfg_rescale}
           success_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。\`/config model\` から選択できます。`,
         },
         remove: {
-          description: `このサーバーから登録済みのカスタムエンドポイントを削除します。`,
-          label_description: `削除対象のラベル。`,
+          description: `ラベル付きカスタムエンドポイントから選んだ機能を削除します。`,
+          label_description: `バンドル用ラベル。チェックを外した機能だけ削除されます。`,
           capability_description: `削除する機能。`,
           none_title: `登録済みカスタムエンドポイントがありません`,
           none_description: `このサーバーにはまだラベル付きカスタムエンドポイントの登録がありません。`,
@@ -2876,10 +2895,10 @@ Prompt Guidance Rescale: {cfg_rescale}
       "custom-endpoint": {
         description: `ラベル付きカスタムエンドポイントを管理します。`,
         add: {
-          description: `ラベル付きカスタムエンドポイントを登録します。`,
+          description: `ラベル付きカスタムエンドポイントに1機能を登録します。`,
         },
         remove: {
-          description: `ラベル付きカスタムエンドポイントから1つの機能を削除します。`,
+          description: `ラベル付きカスタムエンドポイントから選んだ機能を削除します。`,
         },
       },
       provider: {
@@ -4541,8 +4560,8 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
       custom_models: {
         description: `自分用のラベル付きカスタムエンドポイントを管理します。`,
         add: {
-          description: `個人用カスタムエンドポイントを登録します。`,
-          label_description: `Tomori内でこのエンドポイントを識別する保存用ラベル。例: KoboldCPP。`,
+          description: `個人用カスタムエンドポイントに1機能を登録します。`,
+          label_description: `一致する機能で共有するバンドル用ラベル。例: ComfyUI。`,
           capability_description: `このエンドポイントが提供する機能。`,
           api_style_description: `このエンドポイントが使うAPI形式。`,
           endpoint_url_description: `エンドポイントのベースURL。`,
@@ -4558,8 +4577,8 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
           success_description: `**{display_name}** を個人ラベル **{label}** の **{capability}** として追加しました。`,
         },
         remove: {
-          description: `個人用プロバイダー一覧から登録済みのカスタムエンドポイントを削除します。`,
-          label_description: `削除対象のラベル。`,
+          description: `個人用カスタムエンドポイントから選んだ機能を削除します。`,
+          label_description: `バンドル用ラベル。チェックを外した機能だけ削除されます。`,
           capability_description: `削除する機能。`,
           none_title: `登録済みカスタムエンドポイントがありません`,
           none_description: `まだ個人用カスタムエンドポイントの登録はありません。`,
@@ -4628,10 +4647,10 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
       "custom-endpoint": {
         description: `自分用のラベル付きカスタムエンドポイントを管理します。`,
         add: {
-          description: `個人用カスタムエンドポイントを登録します。`,
+          description: `個人用カスタムエンドポイントに1機能を登録します。`,
         },
         remove: {
-          description: `個人用カスタムエンドポイントから1つの機能を削除します。`,
+          description: `個人用カスタムエンドポイントから選んだ機能を削除します。`,
         },
       },
       provider: {
