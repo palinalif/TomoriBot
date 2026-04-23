@@ -150,6 +150,10 @@ export default {
     tool_error_loop_description: `ツールエラーが続いたため、リクエストを完了できませんでした。言い回しを変えるか、問題が解決しない場合は \`/tool refresh\` を使用してください。`,
     fallback_used_title: `フォールバックモデルを使用しました`,
     fallback_used_description: `{chain} の代わりに \`{success_model}\` が使用されました`,
+    fallback_used_details_description: `次のモデルが先に失敗したため、フォールバック枠 {slot} の \`{success_model}\` で応答しました:\n{failure_list}`,
+    fallback_used_failure_line: `{index}. {model} は {error_code} で失敗しました`,
+    fallback_used_details_button: `Fallback Used`,
+    fallback_used_hide_footer: `\`/config notice-embeds visibility\` でこれを非表示にし、詳細を思考ログへ回せます`,
     no_response_title: `応答なし`,
     no_response_description: `応答がありませんでした - これはAIからの空の応答またはタイムアウトが原因である可能性があります。`,
     thought_log: {
@@ -3008,7 +3012,7 @@ Prompt Guidance Rescale: {cfg_rescale}
           notice_impersonation_notice_label: `なりすまし通知`,
           notice_impersonation_notice_description: `ペルソナ/ユーザーなりすまし通知埋め込みを表示します。`,
           notice_fallback_model_usage_label: `フォールバックモデル使用`,
-          notice_fallback_model_usage_description: `先行モデル失敗後にフォールバックモデルが応答した際の情報埋め込みを表示します。`,
+          notice_fallback_model_usage_description: `先行モデル失敗後にフォールバックモデルが応答した際、Fallback Used ボタンを表示します。`,
         },
       },
       humanizer: {

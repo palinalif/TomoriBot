@@ -117,7 +117,12 @@ export async function execute(
       return;
     }
 
-    const allModelOptions: SelectOption[] = availableModels.map((model) => ({
+    const selectableModels =
+      activeProvider.provider === "openrouter"
+        ? availableModels.filter((model) => model.llm_codename !== "other-model")
+        : availableModels;
+
+    const allModelOptions: SelectOption[] = selectableModels.map((model) => ({
       label: safeSelectOptionText(model.llm_codename),
       value: safeSelectOptionText(model.llm_codename),
       description: safeSelectOptionText(getLocalizedDescription(model, userData.language_pref)),

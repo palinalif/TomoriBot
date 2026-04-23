@@ -251,6 +251,34 @@ export async function sendToolNotice(
   }
 }
 
+export async function routeHiddenToolNotice(
+  context: ToolContext,
+  options: StandardEmbedOptions,
+  logLabel: string,
+): Promise<boolean> {
+  if (context.suppressProgressNotices) return false;
+
+  if (isDMBasedChannel(context.channel)) {
+    return false;
+  }
+
+  const privateChannelIds = context.tomoriState.config.private_channel_ids ?? [];
+  const toolNoticeParentId = context.channel.isThread() ? context.channel.parentId : null;
+  if (
+    privateChannelIds.includes(context.channel.id) ||
+    (toolNoticeParentId !== null && privateChannelIds.includes(toolNoticeParentId))
+  ) {
+    return false;
+  }
+
+  try {
+    return await routeToolNoticeToThoughtLog(context, options, logLabel);
+  } catch (error) {
+    log.warn(`${logLabel}: Failed to route hidden tool notice`, error as Error);
+    return false;
+  }
+}
+
 export async function sendToolProgressNotice(
   context: ToolContext,
   noticeKey: ToolNoticeKey,

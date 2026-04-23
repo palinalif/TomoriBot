@@ -108,7 +108,7 @@ import {
 import { isAudioAttachment, transcribeMessageAudioAttachment } from "@/utils/audio/audioAttachmentTranscription";
 import { getCachedVoiceTranscript, setCachedVoiceTranscript } from "@/utils/audio/voiceTranscriptCache";
 import { getCachedRenderedMarkdownTable } from "@/utils/text/markdownTableCache";
-import { isNoticeEmbedVisible } from "@/utils/discord/toolProgressNotice";
+import { sendFallbackModelUsageNotice } from "@/utils/discord/fallbackModelNotice";
 import {
   CredentialUnavailableError,
   PersonalProviderRequiredError,
@@ -8009,26 +8009,26 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 }
               } // End of switch statement
 
-              // If a fallback model was used successfully, send a blue info embed so
-              // the user knows which model actually responded and what failed before it.
-              if (
-                !isUserImpersonation &&
-                fallbackRunResult.fallbackUsed &&
-                fallbackRunResult.successModel &&
-                isNoticeEmbedVisible(tomoriState.config, "fallback_model_usage")
-              ) {
-                const chain = fallbackRunResult.fallbackUsed
-                  .map((f) => `\`${f.modelCodename}\` (errored ${f.errorCode})`)
-                  .join(" → ");
-                await sendStandardEmbed(channel, locale, {
-                  color: ColorCode.INFO,
-                  titleKey: "genai.fallback_used_title",
-                  descriptionKey: "genai.fallback_used_description",
-                  descriptionVars: {
-                    success_model: fallbackRunResult.successModel.llm_codename,
-                    chain,
+              // If a fallback model was used successfully, post a compact notice with
+              // an on-demand details button, or reroute the full notice to thought logs
+              // when this notice type is hidden.
+              if (!isUserImpersonation && fallbackRunResult.fallbackUsed && fallbackRunResult.successModel) {
+                await sendFallbackModelUsageNotice({
+                  context: {
+                    channel,
+                    client,
+                    message,
+                    tomoriState,
+                    locale,
+                    provider: provider.getInfo().name,
+                    webhook: personaWebhook ?? undefined,
+                    personaUsername,
+                    personaAvatarUrl,
+                    showKillHint: i >= SOFT_WARN_ITERATION_THRESHOLD,
                   },
-                }).catch((e) => log.warn("Failed to send fallback info embed", e));
+                  failures: fallbackRunResult.fallbackUsed,
+                  successModel: fallbackRunResult.successModel,
+                });
               }
 
               // Check if we should exit the loop after switch statement

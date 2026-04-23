@@ -1,0 +1,126 @@
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, MessageFlags } from "discord.js";
+import type { LlmRow } from "@/types/db/schema";
+import type { ToolContext } from "@/types/tool/interfaces";
+import { createStandardEmbed } from "@/utils/discord/embedHelper";
+import { isNoticeEmbedVisible, routeHiddenToolNotice } from "@/utils/discord/toolProgressNotice";
+import { ColorCode, log } from "@/utils/misc/logger";
+import { localizer } from "@/utils/text/localizer";
+
+const FALLBACK_DETAILS_BUTTON_ID = "fallback_notice_details";
+const DEFAULT_FALLBACK_NOTICE_BUTTON_TIMEOUT_MS = 86_400_000;
+const FALLBACK_NOTICE_BUTTON_TIMEOUT_MS = parsePositiveIntegerEnv(
+  process.env.FALLBACK_NOTICE_BUTTON_TIMEOUT_MS,
+  DEFAULT_FALLBACK_NOTICE_BUTTON_TIMEOUT_MS,
+);
+
+export interface FallbackNoticeAttempt {
+  modelCodename: string;
+  errorCode: string;
+}
+
+interface SendFallbackModelUsageNoticeOptions {
+  context: ToolContext;
+  failures: FallbackNoticeAttempt[];
+  successModel: LlmRow;
+}
+
+function parsePositiveIntegerEnv(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function buildFailureList(locale: string, failures: FallbackNoticeAttempt[]): string {
+  return failures
+    .map((failure, index) =>
+      localizer(locale, "genai.fallback_used_failure_line", {
+        index: index + 1,
+        model: `\`${failure.modelCodename}\``,
+        error_code: `\`${failure.errorCode}\``,
+      }),
+    )
+    .join("\n");
+}
+
+function resolveFallbackSlot(context: ToolContext, successModel: LlmRow, failures: FallbackNoticeAttempt[]): number {
+  const configuredFallbackIndex =
+    context.tomoriState.fallback_llms?.findIndex((llm) => llm.llm_id === successModel.llm_id) ?? -1;
+
+  if (configuredFallbackIndex >= 0) {
+    return configuredFallbackIndex + 1;
+  }
+
+  return Math.max(1, failures.length);
+}
+
+function createFallbackDetailsButton(locale: string, disabled = false): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(FALLBACK_DETAILS_BUTTON_ID)
+      .setLabel(localizer(locale, "genai.fallback_used_details_button"))
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled),
+  );
+}
+
+export async function sendFallbackModelUsageNotice({
+  context,
+  failures,
+  successModel,
+}: SendFallbackModelUsageNoticeOptions): Promise<void> {
+  const slot = resolveFallbackSlot(context, successModel, failures);
+  const detailsOptions = {
+    titleKey: "genai.fallback_used_title",
+    descriptionKey: "genai.fallback_used_details_description",
+    descriptionVars: {
+      slot,
+      success_model: successModel.llm_codename,
+      failure_list: buildFailureList(context.locale, failures),
+    },
+    color: ColorCode.INFO,
+  } as const;
+
+  if (!isNoticeEmbedVisible(context.tomoriState.config, "fallback_model_usage")) {
+    await routeHiddenToolNotice(context, detailsOptions, "Fallback model usage notice");
+    return;
+  }
+
+  const detailsEmbed = createStandardEmbed(context.locale, {
+    ...detailsOptions,
+    footerKey: "genai.fallback_used_hide_footer",
+  });
+
+  try {
+    const noticeMessage = await context.channel.send({
+      components: [createFallbackDetailsButton(context.locale)],
+    });
+
+    const collector = noticeMessage.createMessageComponentCollector({
+      componentType: ComponentType.Button,
+      time: FALLBACK_NOTICE_BUTTON_TIMEOUT_MS,
+      filter: (interaction) => interaction.customId === FALLBACK_DETAILS_BUTTON_ID && !interaction.user.bot,
+    });
+
+    collector.on("collect", async (interaction) => {
+      try {
+        await interaction.reply({
+          embeds: [detailsEmbed],
+          flags: MessageFlags.Ephemeral,
+        });
+      } catch (error) {
+        log.warn("Fallback model details button reply failed", error as Error);
+      }
+    });
+
+    collector.on("end", async () => {
+      await noticeMessage
+        .edit({
+          components: [createFallbackDetailsButton(context.locale, true)],
+        })
+        .catch(() => {});
+    });
+  } catch (error) {
+    log.warn("Failed to send compact fallback model notice", error as Error);
+  }
+}

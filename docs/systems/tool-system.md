@@ -264,7 +264,9 @@ Behavior notes:
 - `/config notice-embeds visibility` manages the hidden-key list through checkbox groups
 - visible notices are posted in the source channel as normal
 - hidden tool notices are rerouted to the configured thought-log channel when one exists; non-tool command notices covered by this registry are simply suppressed
+- the `fallback_model_usage` notice is a source-channel `Fallback Used` button without a public embed; when hidden, its full details embed is rerouted to the thought-log channel instead of posting anything publicly
 - hidden notices from private channels are suppressed instead of being rerouted, so private-channel activity never leaks to thoughtlogs
 - hidden notices in DMs are suppressed because DMs have no guild thought-log destination
 - all tool notices include a footer hint pointing users to `/config notice-embeds visibility`
+- `FALLBACK_NOTICE_BUTTON_TIMEOUT_MS` controls how long the fallback-details button stays interactive before it is disabled
 - image-generation, image-editing, and video-generation notices now append the active model codename and a trimmed copy of the raw tool-call prompt, plus lightweight execution hints such as configured style tags, per-character NAI tags, or reference-image usage; server-side style-tag contents, defaults, and other system-added prompt material are not shown
