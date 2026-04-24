@@ -1,0 +1,314 @@
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawn } from "node:child_process";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
+import { MessageFlags } from "discord.js";
+import ffmpegPath from "ffmpeg-static";
+import { parseBuffer } from "music-metadata";
+import { sql } from "@/utils/db/client";
+import { log, ColorCode } from "@/utils/misc/logger";
+import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
+import { safeDownload } from "@/utils/security/safeDownload";
+import type { ErrorContext, UserRow } from "@/types/db/schema";
+import { localizer } from "@/utils/text/localizer";
+
+/** Relative base for voice sample storage (data/voice-samples/{server_id}/). */
+const VOICE_SAMPLES_BASE_DIR = path.resolve(process.cwd(), "data", "voice-samples");
+
+/** Default max upload size in MB (overridden by SPEECH_SAMPLE_MAX_MB env var). */
+const SPEECH_SAMPLE_MAX_MB = Math.max(1, Number.parseInt(process.env.SPEECH_SAMPLE_MAX_MB ?? "10", 10) || 10);
+
+/** Maximum allowed clip duration in seconds. */
+const SPEECH_SAMPLE_MAX_DURATION_SECS = 30;
+
+/** Accepted audio MIME types and file extensions for reference samples. */
+const ACCEPTED_MIME_TYPES = new Set([
+  "audio/wav",
+  "audio/wave",
+  "audio/x-wav",
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/ogg",
+  "audio/opus",
+  "audio/flac",
+  "audio/x-flac",
+  "audio/m4a",
+  "audio/mp4",
+  "audio/aac",
+]);
+const ACCEPTED_EXTENSION_REGEX = /\.(wav|mp3|ogg|opus|flac|m4a|aac)$/i;
+
+/**
+ * Converts an audio buffer to mono WAV at 22050 Hz using the bundled ffmpeg binary.
+ * Throws if ffmpeg-static is unavailable or the conversion fails.
+ */
+async function normalizeToWav(inputBuffer: Buffer): Promise<Buffer> {
+  if (!ffmpegPath) {
+    throw new Error("ffmpeg-static binary not found; WAV normalization unavailable.");
+  }
+  const ffmpegBinary = ffmpegPath;
+
+  const suffix = Date.now();
+  const tmpIn = path.join(os.tmpdir(), `tts-in-${suffix}`);
+  const tmpOut = path.join(os.tmpdir(), `tts-out-${suffix}.wav`);
+
+  await fs.writeFile(tmpIn, inputBuffer);
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(ffmpegBinary, [
+        "-y",
+        "-i",
+        tmpIn,
+        "-ar",
+        "22050", // 22050 Hz — widely compatible with TTS clone engines
+        "-ac",
+        "1", // Mono
+        "-f",
+        "wav",
+        tmpOut,
+      ]);
+      proc.on("close", (code: number | null) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`))));
+      proc.on("error", reject);
+    });
+
+    return await fs.readFile(tmpOut);
+  } finally {
+    await Promise.all([fs.unlink(tmpIn).catch(() => {}), fs.unlink(tmpOut).catch(() => {})]);
+  }
+}
+
+function isAcceptedAudioFile(mimeType: string | null | undefined, filename: string | null | undefined): boolean {
+  const mime = mimeType?.toLowerCase().split(";")[0].trim() ?? "";
+  if (ACCEPTED_MIME_TYPES.has(mime)) return true;
+  return ACCEPTED_EXTENSION_REGEX.test(filename ?? "");
+}
+
+export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
+  subcommand
+    .setName("voice-add")
+    .setDescription(localizer("en-US", "commands.config.speech.voice_add.description"))
+    .addAttachmentOption((option) =>
+      option
+        .setName("audio_file")
+        .setDescription(localizer("en-US", "commands.config.speech.voice_add.audio_file_description"))
+        .setRequired(true),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("name")
+        .setDescription(localizer("en-US", "commands.config.speech.voice_add.name_description"))
+        .setRequired(true)
+        .setMaxLength(80),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("ref_text")
+        .setDescription(localizer("en-US", "commands.config.speech.voice_add.ref_text_description"))
+        .setRequired(false)
+        .setMaxLength(500),
+    );
+
+export async function execute(
+  _client: Client,
+  interaction: ChatInputCommandInteraction,
+  userData: UserRow,
+  locale: string,
+): Promise<void> {
+  if (!interaction.channel) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.errors.channel_only_title",
+      descriptionKey: "general.errors.channel_only_description",
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const attachment = interaction.options.getAttachment("audio_file", true);
+  const sampleName = interaction.options.getString("name", true).trim();
+  const refText = interaction.options.getString("ref_text")?.trim() || null;
+
+  // Pre-flight format check (before deferring, within the 3 s window).
+  if (!isAcceptedAudioFile(attachment.contentType, attachment.name)) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "commands.config.speech.voice_add.format_error_title",
+      descriptionKey: "commands.config.speech.voice_add.format_error_description",
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Pre-flight size check using the reported size.
+  if (attachment.size > SPEECH_SAMPLE_MAX_MB * 1024 * 1024) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "commands.config.speech.voice_add.size_error_title",
+      descriptionKey: "commands.config.speech.voice_add.size_error_description",
+      descriptionVars: { limit_mb: String(SPEECH_SAMPLE_MAX_MB) },
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  // Resolve server context.
+  const [serverRow] = await sql<[{ server_id: number }]>`
+    SELECT server_id FROM servers
+    WHERE server_disc_id = ${interaction.guild?.id ?? interaction.user.id}
+    LIMIT 1
+  `;
+  if (!serverRow) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.errors.tomori_not_setup_title",
+      descriptionKey: "general.errors.tomori_not_setup_description",
+      color: ColorCode.ERROR,
+    });
+    return;
+  }
+  const serverId = serverRow.server_id;
+
+  // Phase 4 limit: one uploaded local sample per server.
+  const [existingRow] = await sql<[{ sample_id: number }]>`
+    SELECT sample_id FROM voice_samples
+    WHERE server_id = ${serverId}
+    LIMIT 1
+  `;
+  if (existingRow) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "commands.config.speech.voice_add.duplicate_error_title",
+      descriptionKey: "commands.config.speech.voice_add.duplicate_error_description",
+      color: ColorCode.ERROR,
+    });
+    return;
+  }
+
+  try {
+    // Download the audio attachment with the configured size limit.
+    const downloadResult = await safeDownload(attachment.url, {
+      maxSizeMB: SPEECH_SAMPLE_MAX_MB,
+      timeoutMs: 30_000,
+      knownSize: attachment.size,
+    });
+    if (!downloadResult.success || !downloadResult.buffer) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.update_failed_title",
+        descriptionKey: "general.errors.update_failed_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const rawBuffer = downloadResult.buffer;
+
+    // Parse duration from audio headers.
+    let durationSecs = 0;
+    try {
+      const metadata = await parseBuffer(rawBuffer, {
+        mimeType: attachment.contentType ?? undefined,
+      });
+      durationSecs = metadata.format.duration ?? 0;
+    } catch {
+      log.warn("[VoiceAdd] music-metadata failed to parse duration; accepting without validation");
+    }
+
+    if (durationSecs > 0 && durationSecs > SPEECH_SAMPLE_MAX_DURATION_SECS) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.config.speech.voice_add.duration_error_title",
+        descriptionKey: "commands.config.speech.voice_add.duration_error_description",
+        descriptionVars: { limit_secs: String(SPEECH_SAMPLE_MAX_DURATION_SECS) },
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    // Normalize to WAV for consistent base64 encoding in the TTS adapter.
+    let wavBuffer: Buffer;
+    try {
+      wavBuffer = await normalizeToWav(rawBuffer);
+    } catch (error) {
+      log.warn("[VoiceAdd] WAV normalization failed; using raw upload", error);
+      wavBuffer = rawBuffer;
+    }
+
+    const durationMs = Math.round(durationSecs * 1000);
+
+    // Insert a placeholder row to reserve a sample_id, then update with the real file_path.
+    const [insertedRow] = await sql<[{ sample_id: number }]>`
+      INSERT INTO voice_samples (server_id, name, file_path, ref_text, duration_ms)
+      VALUES (${serverId}, ${sampleName}, '', ${refText}, ${durationMs})
+      RETURNING sample_id
+    `;
+    if (!insertedRow) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.update_failed_title",
+        descriptionKey: "general.errors.update_failed_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const sampleId = insertedRow.sample_id;
+    const relativeFilePath = `${serverId}/${sampleId}.wav`;
+    const absoluteDir = path.join(VOICE_SAMPLES_BASE_DIR, String(serverId));
+    const absoluteFilePath = path.join(VOICE_SAMPLES_BASE_DIR, relativeFilePath);
+
+    // Ensure the server-specific subdirectory exists.
+    await fs.mkdir(absoluteDir, { recursive: true });
+
+    // Write the WAV file to disk.
+    try {
+      await fs.writeFile(absoluteFilePath, wavBuffer);
+    } catch (writeError) {
+      // Roll back the DB row if the file write fails.
+      await sql`DELETE FROM voice_samples WHERE sample_id = ${sampleId}`.catch(() => {});
+      throw writeError;
+    }
+
+    // Update the row with the resolved file path.
+    await sql`
+      UPDATE voice_samples
+      SET file_path = ${relativeFilePath}
+      WHERE sample_id = ${sampleId}
+    `;
+
+    const durationDisplay = durationSecs > 0 ? `${Math.floor(durationSecs)}s` : localizer(locale, "general.unknown");
+
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "commands.config.speech.voice_add.success_title",
+      descriptionKey: "commands.config.speech.voice_add.success_description",
+      descriptionVars: {
+        name: sampleName,
+        duration: durationDisplay,
+        ref_text_hint: refText
+          ? localizer(locale, "commands.config.speech.voice_add.ref_text_provided")
+          : localizer(locale, "commands.config.speech.voice_add.ref_text_missing"),
+      },
+      color: ColorCode.SUCCESS,
+    });
+
+    log.info(
+      `[VoiceAdd] Uploaded sample "${sampleName}" (id=${sampleId}) for server ${serverId} | ${durationMs}ms | ref_text=${refText ? "yes" : "no"}`,
+    );
+  } catch (error) {
+    const context: ErrorContext = {
+      userId: userData.user_id,
+      serverId,
+      errorType: "CommandExecutionError",
+      metadata: {
+        command: "config speech voice-add",
+        guildId: interaction.guild?.id,
+        executorDiscordId: interaction.user.id,
+      },
+    };
+    await log.error("Error executing /config speech voice-add", error as Error, context);
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.errors.unknown_error_title",
+      descriptionKey: "general.errors.unknown_error_description",
+      color: ColorCode.ERROR,
+    });
+  }
+}

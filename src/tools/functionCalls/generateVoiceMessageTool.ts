@@ -2,6 +2,7 @@ import { AttachmentBuilder, Routes } from "discord.js";
 import type { Webhook } from "discord.js";
 import { BaseTool, type ToolContext, type ToolParameterSchema, type ToolResult } from "@/types/tool/interfaces";
 import { synthesizeSpeechViaElevenLabsAdapter } from "@/providers/custom/styles/elevenLabsAdapter";
+import { synthesizeSpeechViaTtsClone } from "@/providers/custom/styles/ttsCloningAdapter";
 import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
 import { setCachedVoiceTranscript } from "@/utils/audio/voiceTranscriptCache";
 import { generateVoiceMessageMetadata } from "@/utils/audio/voiceMessageMetadata";
@@ -20,7 +21,7 @@ const DISCORD_API_BASE = "https://discord.com/api/v10";
 export class GenerateVoiceMessageTool extends BaseTool {
   name = "generate_voice_message";
   description =
-    "Generate a spoken Discord audio message using the active persona's configured ElevenLabs voice. Use this only when voice delivery materially improves the reply. You may include bracketed expression tags anywhere in the script to shape delivery: both emotional states (e.g. [happy], [sad], [tired], [nervous]) and actions (e.g. [whispers], [laughs], [sighs softly]) are supported. Use them when they naturally fit the character and tone. The tool sends the audio attachment directly to the channel with no text caption.";
+    "Generate a spoken Discord audio message using the active persona's configured voice. Use this only when voice delivery materially improves the reply. You may include bracketed expression tags anywhere in the script to shape delivery (e.g. [happy], [sad], [whispers], [laughs]). The tool sends the audio directly to the channel with no text caption.";
   category = "discord" as const;
 
   parameters: ToolParameterSchema = {
@@ -177,6 +178,114 @@ export class GenerateVoiceMessageTool extends BaseTool {
     }
   }
 
+  /**
+   * Sends a voice message through the best available path:
+   * 1. Native REST with waveform metadata (webhook identity)
+   * 2. Native REST with waveform metadata (bot identity)
+   * 3. Plain attachment fallback (discord.js)
+   *
+   * @returns Sent message ID, or undefined on total failure
+   */
+  private async sendVoiceOrFallback(options: {
+    context: ToolContext;
+    audioBuffer: Buffer;
+    mimeType: string;
+    filename: string;
+    voiceMeta: VoiceMessageMetadata | null;
+    threadId?: string;
+  }): Promise<string | undefined> {
+    const { context, audioBuffer, mimeType, filename, voiceMeta, threadId } = options;
+    let sentMessageId: string | undefined;
+
+    if (voiceMeta) {
+      if (context.webhook?.token) {
+        sentMessageId = await this.sendNativeVoiceMessageViaRest({
+          webhook: context.webhook,
+          audioBuffer,
+          mimeType,
+          filename,
+          voiceMeta,
+          username: context.personaUsername,
+          avatarUrl: context.personaAvatarUrl,
+          threadId,
+        });
+        if (!sentMessageId) {
+          log.warn("[VoiceWaveform] Webhook REST send failed — trying bot REST path");
+        }
+      } else if (context.webhook && !context.webhook.token) {
+        log.warn(`[VoiceWaveform] Webhook token is null (id=${context.webhook.id}) — trying bot REST path`);
+      }
+
+      if (!sentMessageId) {
+        sentMessageId = await this.sendNativeVoiceMessageViaBotRest({
+          channel: context.channel,
+          audioBuffer,
+          mimeType,
+          filename,
+          voiceMeta,
+        });
+        if (!sentMessageId) {
+          log.warn("[VoiceWaveform] Bot REST send failed — falling back to plain attachment");
+        }
+      }
+    }
+
+    if (!sentMessageId) {
+      const attachment = new AttachmentBuilder(audioBuffer, { name: filename });
+      if (context.webhook && context.personaUsername) {
+        const sent = await sendWebhookMessageWithIdentity(
+          context.webhook,
+          {
+            files: [attachment],
+            allowedMentions: { parse: [], repliedUser: false },
+            ...(threadId ? { threadId } : {}),
+          },
+          {
+            username: context.personaUsername,
+            avatarUrl: context.personaAvatarUrl,
+            avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/") ? context.personaAvatarUrl : undefined,
+          },
+        );
+        sentMessageId = sent.id;
+      } else {
+        const sent = await context.channel.send({ files: [attachment] });
+        sentMessageId = sent.id;
+      }
+    }
+
+    return sentMessageId;
+  }
+
+  /**
+   * Posts the TTS caption text as a visible blockquote in the channel.
+   * Respects webhook persona identity when available.
+   */
+  private async postTranscriptCaption(context: ToolContext, captionText: string, threadId?: string): Promise<void> {
+    const quotedCaption = `> ${captionText.replace(/\n/g, "\n> ")}`;
+    try {
+      if (context.webhook && context.personaUsername) {
+        await sendWebhookMessageWithIdentity(
+          context.webhook,
+          {
+            content: quotedCaption,
+            allowedMentions: { parse: [] },
+            ...(threadId ? { threadId } : {}),
+          },
+          {
+            username: context.personaUsername,
+            avatarUrl: context.personaAvatarUrl,
+            avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/") ? context.personaAvatarUrl : undefined,
+          },
+        );
+      } else {
+        await context.channel.send({ content: quotedCaption, allowedMentions: { parse: [] } });
+      }
+      log.info(`[VoiceChat] Posted TTS transcript | persona="${context.personaUsername ?? "bot"}"`);
+    } catch (error) {
+      log.warn("[VoiceChat] Failed to post TTS transcript", error);
+    }
+  }
+
   async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
     const validation = this.validateParameters(args);
     if (!validation.isValid) {
@@ -195,11 +304,13 @@ export class GenerateVoiceMessageTool extends BaseTool {
       };
     }
 
-    // Prefer the Phase 4.1 speech_voice_id column; fall back to the legacy
-    // elevenlabs_voice_id for rows that haven't been migrated yet.
+    // Determine which synthesis path to use based on what the active persona has configured.
+    // Priority: speech_voice_sample_id (tts-clone) > speech_voice_id / elevenlabs_voice_id (ElevenLabs).
+    const voiceSampleId = context.tomoriState.speech_voice_sample_id ?? null;
     const voiceId =
       (context.tomoriState.speech_voice_id?.trim() || context.tomoriState.elevenlabs_voice_id?.trim()) ?? "";
-    if (!voiceId) {
+
+    if (!voiceSampleId && !voiceId) {
       return {
         success: false,
         error:
@@ -211,6 +322,64 @@ export class GenerateVoiceMessageTool extends BaseTool {
     // 2. Fall back to the legacy opt_api_keys entry for backward compatibility
     //    during the transition window before seed.sql migration has run.
     const speechEndpoint = await resolveActiveSpeechEndpoint(context.tomoriState.server_id);
+
+    // --- TTS clone path ---
+    if (voiceSampleId && speechEndpoint?.endpoint.api_style === "tts-clone") {
+      const cloneResult = await synthesizeSpeechViaTtsClone({
+        endpoint: speechEndpoint.endpoint,
+        voiceSampleId,
+        script,
+        apiKey: speechEndpoint.apiKey,
+      });
+      if (!cloneResult.success || !cloneResult.audioBuffer) {
+        return {
+          success: false,
+          error: cloneResult.details || "Failed to generate voice message via local TTS server.",
+        };
+      }
+
+      const attachmentName = this.buildAttachmentName(title, cloneResult.extension ?? "wav");
+      const threadId = this.resolveThreadId(context);
+      const captionText = cloneResult.cleanedCaptionText ?? "";
+      const mimeType = (cloneResult.contentType ?? "audio/wav").split(";")[0].trim();
+      const voiceMeta = await generateVoiceMessageMetadata(cloneResult.audioBuffer, mimeType);
+
+      if (!voiceMeta) {
+        log.warn("[VoiceWaveform] TTS clone waveform generation returned null — falling back to plain attachment");
+      }
+
+      const sentMessageId = await this.sendVoiceOrFallback({
+        context,
+        audioBuffer: cloneResult.audioBuffer,
+        mimeType,
+        filename: attachmentName,
+        voiceMeta,
+        threadId,
+      });
+
+      if (sentMessageId && captionText) {
+        setCachedVoiceTranscript(sentMessageId, captionText, "tts");
+        log.info(
+          `[VoiceCache] SET tts (clone) | msg=${sentMessageId} | chars=${captionText.length} | preview="${captionText.slice(0, 60)}${captionText.length > 60 ? "…" : ""}"`,
+        );
+      }
+
+      if (sentMessageId && captionText && context.tomoriState.config.voice_transcript_chat_mode) {
+        await this.postTranscriptCaption(context, captionText, threadId);
+      }
+
+      return { success: true, message: "Voice message generated and sent to Discord.", endTurn: true };
+    }
+
+    // --- ElevenLabs path ---
+    if (!voiceId) {
+      return {
+        success: false,
+        error:
+          "No voice ID is configured for the active persona. A server manager can set one with /config speech voice-assign.",
+      };
+    }
+
     const apiKey =
       speechEndpoint?.apiKey || (await getOptApiKey(context.tomoriState.server_id, ELEVENLABS_SERVICE_NAME));
 
@@ -237,96 +406,23 @@ export class GenerateVoiceMessageTool extends BaseTool {
     const attachmentName = this.buildAttachmentName(title, synthesisResult.extension ?? "mp3");
     const threadId = this.resolveThreadId(context);
     const captionText = synthesisResult.cleanedCaptionText ?? "";
-    // Strip any MIME parameters (e.g. "audio/mpeg; codecs=mp3" → "audio/mpeg")
-    // Discord rejects waveform/duration_secs when the content type isn't a
-    // bare audio/* type — it falls back to application/octet-stream otherwise.
+    // Strip MIME parameters — Discord rejects waveform/duration_secs for non-bare types.
     const mimeType = (synthesisResult.contentType ?? "audio/mpeg").split(";")[0].trim();
-
-    // Attempt to generate waveform + duration for Discord's native voice
-    // message UI. Falls back gracefully to a plain attachment if it fails.
     const voiceMeta = await generateVoiceMessageMetadata(synthesisResult.audioBuffer, mimeType);
-
-    let sentMessageId: string | undefined;
 
     if (!voiceMeta) {
       log.warn("[VoiceWaveform] Waveform generation returned null — falling back to plain attachment");
     }
 
-    // --- Native voice message path ---
-    // Bypasses discord.js MessagePayload serialization, which silently drops
-    // unknown attachment fields like waveform and duration_secs.
-    // Two sub-paths: webhook identity (alter persona) vs. bot identity (main persona).
-    if (voiceMeta) {
-      if (context.webhook?.token) {
-        // 1. Webhook identity path: alter persona with a valid token
-        sentMessageId = await this.sendNativeVoiceMessageViaRest({
-          webhook: context.webhook,
-          audioBuffer: synthesisResult.audioBuffer,
-          mimeType,
-          filename: attachmentName,
-          voiceMeta,
-          username: context.personaUsername,
-          avatarUrl: context.personaAvatarUrl,
-          threadId,
-        });
-        if (!sentMessageId) {
-          log.warn("[VoiceWaveform] Webhook REST send failed — trying bot REST path");
-        }
-      } else if (context.webhook && !context.webhook.token) {
-        // Log when the webhook object exists but Discord nulled out its token
-        log.warn(`[VoiceWaveform] Webhook token is null (id=${context.webhook.id}) — trying bot REST path`);
-      }
+    const sentMessageId = await this.sendVoiceOrFallback({
+      context,
+      audioBuffer: synthesisResult.audioBuffer,
+      mimeType,
+      filename: attachmentName,
+      voiceMeta,
+      threadId,
+    });
 
-      if (!sentMessageId) {
-        // 2. Bot identity path: main persona, no webhook, or webhook with no token
-        sentMessageId = await this.sendNativeVoiceMessageViaBotRest({
-          channel: context.channel,
-          audioBuffer: synthesisResult.audioBuffer,
-          mimeType,
-          filename: attachmentName,
-          voiceMeta,
-        });
-        if (!sentMessageId) {
-          log.warn("[VoiceWaveform] Bot REST send failed — falling back to plain attachment");
-        }
-      }
-    }
-
-    // --- Fallback: plain attachment via discord.js ---
-    // Used when waveform generation failed or both native REST paths failed.
-    if (!sentMessageId) {
-      const attachment = new AttachmentBuilder(synthesisResult.audioBuffer, {
-        name: attachmentName,
-      });
-
-      if (context.webhook && context.personaUsername) {
-        const sentMessage = await sendWebhookMessageWithIdentity(
-          context.webhook,
-          {
-            files: [attachment],
-            allowedMentions: {
-              parse: [],
-              repliedUser: false,
-            },
-            ...(threadId ? { threadId } : {}),
-          },
-          {
-            username: context.personaUsername,
-            avatarUrl: context.personaAvatarUrl,
-            avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/") ? context.personaAvatarUrl : undefined,
-          },
-        );
-        sentMessageId = sentMessage.id;
-      } else {
-        const sentMessage = await context.channel.send({
-          files: [attachment],
-        });
-        sentMessageId = sentMessage.id;
-      }
-    }
-
-    // Cache caption text keyed by message ID so the history formatter can
-    // inline the clean text in future context passes without re-running STT.
     if (sentMessageId && captionText) {
       setCachedVoiceTranscript(sentMessageId, captionText, "tts");
       log.info(
@@ -334,44 +430,10 @@ export class GenerateVoiceMessageTool extends BaseTool {
       );
     }
 
-    // In chat mode, also post the script as a visible blockquote text message
-    // so users can read what was said without playing the audio. The LLM will
-    // see it naturally from chat history; no extra context injection needed.
     if (sentMessageId && captionText && context.tomoriState.config.voice_transcript_chat_mode) {
-      const quotedCaption = `> ${captionText.replace(/\n/g, "\n> ")}`;
-      try {
-        if (context.webhook && context.personaUsername) {
-          await sendWebhookMessageWithIdentity(
-            context.webhook,
-            {
-              content: quotedCaption,
-              allowedMentions: { parse: [] },
-              ...(threadId ? { threadId } : {}),
-            },
-            {
-              username: context.personaUsername,
-              avatarUrl: context.personaAvatarUrl,
-              avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/") ? context.personaAvatarUrl : undefined,
-            },
-          );
-        } else {
-          await context.channel.send({
-            content: quotedCaption,
-            allowedMentions: { parse: [] },
-          });
-        }
-        log.info(
-          `[VoiceChat] Posted TTS transcript | msg=${sentMessageId} | persona="${context.personaUsername ?? "bot"}"`,
-        );
-      } catch (error) {
-        log.warn(`[VoiceChat] Failed to post TTS transcript for msg=${sentMessageId}`, error);
-      }
+      await this.postTranscriptCaption(context, captionText, threadId);
     }
 
-    return {
-      success: true,
-      message: "Voice message generated and sent to Discord.",
-      endTurn: true,
-    };
+    return { success: true, message: "Voice message generated and sent to Discord.", endTurn: true };
   }
 }

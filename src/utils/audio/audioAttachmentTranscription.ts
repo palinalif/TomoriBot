@@ -3,6 +3,7 @@ import { getOptApiKey } from "@/utils/security/crypto";
 import { safeDownload } from "@/utils/security/safeDownload";
 import { ELEVENLABS_SERVICE_NAME, getElevenLabsSttConfig } from "@/utils/audio/elevenLabsShared";
 import { transcribeViaElevenLabsAdapter } from "@/providers/custom/styles/transcriptionElevenLabsAdapter";
+import { transcribeViaOpenAIAdapter } from "@/providers/custom/styles/transcriptionOpenAIAdapter";
 import { resolveActiveTranscriptionEndpoint } from "@/utils/provider/speechEndpointResolver";
 
 const AUDIO_EXTENSION_REGEX = /\.(aac|flac|m4a|mp3|mp4|mpeg|mpga|oga|ogg|opus|wav|webm)$/i;
@@ -57,9 +58,13 @@ export async function transcribeMessageAudioAttachment(
   // 2. Legacy ElevenLabs key from opt_api_keys (transition fallback until Phase 4.3 cleanup).
   // 3. Skip transcription silently if neither is available.
   const transcriptionEndpoint = await resolveActiveTranscriptionEndpoint(serverId);
-  const apiKey = transcriptionEndpoint?.apiKey ?? (await getOptApiKey(serverId, ELEVENLABS_SERVICE_NAME));
+  const legacyElevenLabsApiKey = await getOptApiKey(serverId, ELEVENLABS_SERVICE_NAME);
+  const apiKey = transcriptionEndpoint?.apiKey ?? legacyElevenLabsApiKey ?? "";
+  const endpointApiStyle = transcriptionEndpoint?.endpoint.api_style ?? "elevenlabs-transcription";
+  const requiresApiKey =
+    endpointApiStyle === "elevenlabs-transcription" || transcriptionEndpoint?.endpoint.requires_auth;
 
-  if (!apiKey) {
+  if (requiresApiKey && !apiKey) {
     return {
       hasAudio: true,
       transcriptText: null,
@@ -86,12 +91,23 @@ export async function transcribeMessageAudioAttachment(
     };
   }
 
-  const transcriptionResult = await transcribeViaElevenLabsAdapter({
-    apiKey,
-    audioBuffer: downloadResult.buffer,
-    filename: attachment.name ?? "audio",
-    mimeType: attachment.contentType ?? undefined,
-  });
+  // Route to the appropriate adapter based on api_style of the active endpoint.
+  // openai-compatible-transcription covers local WhisperX, whisper.cpp, etc.
+  const transcriptionResult =
+    endpointApiStyle === "openai-compatible-transcription" && transcriptionEndpoint
+      ? await transcribeViaOpenAIAdapter({
+          endpoint: transcriptionEndpoint.endpoint,
+          apiKey,
+          audioBuffer: downloadResult.buffer,
+          filename: attachment.name ?? "audio",
+          mimeType: attachment.contentType ?? undefined,
+        })
+      : await transcribeViaElevenLabsAdapter({
+          apiKey,
+          audioBuffer: downloadResult.buffer,
+          filename: attachment.name ?? "audio",
+          mimeType: attachment.contentType ?? undefined,
+        });
   if (!transcriptionResult.success) {
     return {
       hasAudio: true,

@@ -23,6 +23,7 @@ import { hasOptApiKey } from "../utils/security/crypto";
 import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
 import { sql } from "@/utils/db/client";
+import { resolveActiveSpeechEndpoint } from "@/utils/provider/speechEndpointResolver";
 
 /**
  * Minimal state interface for context building operations
@@ -30,6 +31,7 @@ import { sql } from "@/utils/db/client";
  */
 export interface ToolStateForContext {
   server_id: string;
+  /** True when the active persona has either a local voice sample or provider-hosted voice assigned. */
   activePersonaHasElevenlabsVoice: boolean;
   llm: ToolAvailabilityLlmState;
   diffusion_model_id?: number | null;
@@ -401,7 +403,9 @@ class ToolRegistryImpl implements ToolRegistryInterface {
       // Apply NovelAI opt API key preference logic for image generation tools
       const serverIdNumber = stateForContext.server_id ? Number.parseInt(stateForContext.server_id, 10) : undefined;
       if (serverIdNumber) {
+        const activeSpeechEndpoint = await resolveActiveSpeechEndpoint(serverIdNumber);
         const hasElevenLabsOptKey = await hasOptApiKey(serverIdNumber, ELEVENLABS_SERVICE_NAME);
+        const hasSpeechProvider = Boolean(activeSpeechEndpoint) || hasElevenLabsOptKey;
         const [toolConfigRow] = await sql<
           [{ diffusion_model_id: number | null; nai_diffusion_model_id: number | null; video_model_id: number | null }]
         >`
@@ -478,7 +482,7 @@ class ToolRegistryImpl implements ToolRegistryInterface {
         }
 
         if (
-          !hasElevenLabsOptKey ||
+          !hasSpeechProvider ||
           !stateForContext.activePersonaHasElevenlabsVoice ||
           !stateForContext.config.voice_message_enabled
         ) {
@@ -487,10 +491,10 @@ class ToolRegistryImpl implements ToolRegistryInterface {
           if (builtInTools.length < beforeCount) {
             log.info(
               `Excluded generate_voice_message (${
-                !hasElevenLabsOptKey
-                  ? "no ElevenLabs opt key"
+                !hasSpeechProvider
+                  ? "no speech provider"
                   : !stateForContext.activePersonaHasElevenlabsVoice
-                    ? "active persona has no ElevenLabs voice"
+                    ? "active persona has no assigned voice"
                     : "voice_message_enabled is disabled"
               })`,
             );

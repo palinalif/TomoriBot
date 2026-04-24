@@ -234,15 +234,23 @@ export class ReviewCapabilitiesTool extends BaseTool {
         capabilitiesContent += "Video generation is **disabled** by server configuration.\n\n";
       }
 
-      // 5d. Voice System section (conditional on ElevenLabs voice assignment + server permission)
-      const elevenlabsVoiceId = context.tomoriState.elevenlabs_voice_id?.trim();
+      // 5d. Voice System section (conditional on speech voice assignment + server permission)
+      const hasVoiceAssignment = Boolean(
+        context.tomoriState.speech_voice_sample_id ||
+          context.tomoriState.speech_voice_id?.trim() ||
+          context.tomoriState.elevenlabs_voice_id?.trim(),
+      );
+      const voiceName =
+        context.tomoriState.speech_voice_name ||
+        context.tomoriState.elevenlabs_voice_name ||
+        (context.tomoriState.speech_voice_sample_id ? "Local voice sample" : "Unknown");
+      const voiceSource = context.tomoriState.speech_voice_sample_id ? "Local/custom TTS" : "Provider voice";
       const voiceEnabled = config.voice_message_enabled ?? true;
 
       capabilitiesContent += "## Voice System\n\n";
-      if (elevenlabsVoiceId && voiceEnabled) {
-        const voiceName = context.tomoriState.elevenlabs_voice_name || "Unknown";
+      if (hasVoiceAssignment && voiceEnabled) {
         capabilitiesContent += "You CAN send and receive voice messages:\n";
-        capabilitiesContent += `- **Voice**: ${voiceName} (ElevenLabs)\n`;
+        capabilitiesContent += `- **Voice**: ${voiceName} (${voiceSource})\n`;
         capabilitiesContent +=
           "- **TTS**: Generate spoken responses using the `generate_voice_message` tool with a title and script\n";
         capabilitiesContent +=
@@ -256,7 +264,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
           "Voice messages are **disabled** by server configuration. An admin can re-enable with `/config bot-permissions`.\n\n";
       } else {
         capabilitiesContent +=
-          "Voice messages are not configured for this persona. An admin can assign a voice with `/config voice elevenlabs`.\n\n";
+          "Voice messages are not configured for this persona. An admin can assign a voice with `/config speech voice-assign`.\n\n";
       }
 
       // 5e. SillyTavern Preset section (conditional on active ST preset)
@@ -348,10 +356,15 @@ export class ReviewCapabilitiesTool extends BaseTool {
         capabilitiesContent +=
           "- **cross_channel_message** (instantly send a message to another channel in the server, with optional boomerang report-back)\n";
         capabilitiesContent += "- **select_sticker_for_response** (choose stickers)\n";
+        const toolHasVoiceAssignment = Boolean(
+          context.tomoriState.speech_voice_sample_id ||
+            context.tomoriState.speech_voice_id?.trim() ||
+            context.tomoriState.elevenlabs_voice_id?.trim(),
+        );
         const voiceNote =
-          elevenlabsVoiceId && voiceEnabled
-            ? "generate spoken voice messages via ElevenLabs TTS"
-            : "not configured (assign a voice with `/config voice elevenlabs`)";
+          toolHasVoiceAssignment && voiceEnabled
+            ? "generate spoken voice messages via the configured speech provider"
+            : "not configured (assign a voice with `/config speech voice-assign`)";
         capabilitiesContent += `- **generate_voice_message** (${voiceNote})\n\n`;
       }
 
@@ -663,16 +676,23 @@ export class ReviewCapabilitiesTool extends BaseTool {
       // 6b-2. Voice System Configuration
       settingsContent += "## Voice System\n\n";
       const voiceEnabledSettings = config.voice_message_enabled ?? true;
-      const personaVoiceId = context.tomoriState.elevenlabs_voice_id?.trim();
-      const personaVoiceName = context.tomoriState.elevenlabs_voice_name;
-      if (voiceEnabledSettings && personaVoiceId) {
+      const hasPersonaVoice = Boolean(
+        context.tomoriState.speech_voice_sample_id ||
+          context.tomoriState.speech_voice_id?.trim() ||
+          context.tomoriState.elevenlabs_voice_id?.trim(),
+      );
+      const personaVoiceName =
+        context.tomoriState.speech_voice_name ||
+        context.tomoriState.elevenlabs_voice_name ||
+        (context.tomoriState.speech_voice_sample_id ? "Local voice sample" : "Unknown");
+      if (voiceEnabledSettings && hasPersonaVoice) {
         settingsContent += `Voice messages are **enabled** and configured.\n`;
-        settingsContent += `- **Voice**: ${personaVoiceName || "Unknown"} (${personaVoiceId})\n`;
+        settingsContent += `- **Voice**: ${personaVoiceName}\n`;
         settingsContent += `- **STT**: User audio attachments are automatically transcribed\n`;
         settingsContent += `- **TTS**: AI responses can be sent as native Discord voice messages\n\n`;
-      } else if (voiceEnabledSettings && !personaVoiceId) {
+      } else if (voiceEnabledSettings && !hasPersonaVoice) {
         settingsContent += `Voice messages are enabled but **no voice is assigned** to this persona.\n`;
-        settingsContent += `- Assign a voice with \`/config voice elevenlabs\`\n\n`;
+        settingsContent += `- Assign a voice with \`/config speech voice-assign\`\n\n`;
       } else {
         settingsContent += `Voice messages are **disabled** by server configuration.\n`;
         settingsContent += `- Re-enable with \`/config bot-permissions\`\n\n`;
@@ -737,7 +757,11 @@ export class ReviewCapabilitiesTool extends BaseTool {
       try {
         const toolsResult = await ToolRegistry.getAvailableToolsWithMCP(context.provider, {
           server_id: serverId.toString(),
-          activePersonaHasElevenlabsVoice: Boolean(context.tomoriState.elevenlabs_voice_id?.trim()),
+          activePersonaHasElevenlabsVoice: Boolean(
+            context.tomoriState.speech_voice_sample_id ||
+              context.tomoriState.speech_voice_id?.trim() ||
+              context.tomoriState.elevenlabs_voice_id?.trim(),
+          ),
           llm: {
             llm_codename: llm.llm_codename,
             has_tools: llm.has_tools,

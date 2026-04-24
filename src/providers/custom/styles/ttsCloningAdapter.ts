@@ -1,0 +1,218 @@
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { sql } from "@/utils/db/client";
+import { log } from "@/utils/misc/logger";
+import { voiceSampleSchema } from "@/types/db/schema";
+import type { CustomEndpointRow } from "@/types/db/schema";
+import { stripElevenLabsExpressionTags } from "@/utils/audio/elevenLabsShared";
+
+/** Base directory for local voice sample files (mirrors seed.sql path). */
+const VOICE_SAMPLES_BASE_DIR = path.resolve(process.cwd(), "data", "voice-samples");
+
+/** Timeout for /synthesize requests, configurable via env. */
+const TTS_CLONE_TIMEOUT_MS =
+  Number.parseInt(process.env.TTS_CLONE_TIMEOUT_MS ?? "", 10) > 0
+    ? Number.parseInt(process.env.TTS_CLONE_TIMEOUT_MS ?? "", 10)
+    : 30_000;
+
+/** Regex matching any bracket-tag in the form [content]. */
+const ANY_BRACKET_TAG_REGEX = /\[([^\]\r\n]{1,40})\]/g;
+
+export type TtsCloneErrorKind =
+  | "missing_sample"
+  | "sample_read_failed"
+  | "request_failed"
+  | "timeout"
+  | "invalid_response";
+
+export interface TtsCloneResult {
+  success: boolean;
+  audioBuffer?: Buffer;
+  /** Bare MIME type (no parameters), e.g. "audio/wav". */
+  contentType?: string;
+  extension?: string;
+  /** Script text with markup stripped, suitable for transcript display. */
+  cleanedCaptionText?: string;
+  errorKind?: TtsCloneErrorKind;
+  details?: string;
+}
+
+export interface TtsCloneRequest {
+  endpoint: CustomEndpointRow;
+  voiceSampleId: number;
+  script: string;
+  /** Empty string for local endpoints that don't require auth. */
+  apiKey: string;
+}
+
+function resolveExtensionFromContentType(contentType: string): string {
+  const bare = contentType.split(";")[0].trim().toLowerCase();
+  if (bare === "audio/wav" || bare === "audio/wave" || bare === "audio/x-wav") return "wav";
+  if (bare === "audio/ogg" || bare === "audio/opus") return "ogg";
+  return "mp3";
+}
+
+/**
+ * Strips all bracket tags for "plain" endpoints that only support clean speech text.
+ * Normalises whitespace produced by the removals.
+ */
+function stripAllBracketTags(text: string): string {
+  return text
+    .replace(ANY_BRACKET_TAG_REGEX, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[^\S\n]+/g, " ")
+    .trim();
+}
+
+/**
+ * Calls a local TTS clone server that implements the /synthesize spec.
+ *
+ * 1. Loads voice sample metadata from DB.
+ * 2. Reads the WAV file from disk and base64-encodes it.
+ * 3. Strips markup from script if script_markup = "plain".
+ * 4. POSTs to {endpoint_url}/synthesize.
+ * 5. Returns the raw audio buffer and content-type.
+ */
+export async function synthesizeSpeechViaTtsClone(request: TtsCloneRequest): Promise<TtsCloneResult> {
+  const { endpoint, voiceSampleId, script, apiKey } = request;
+
+  // 1. Load voice sample metadata from DB.
+  const rows = await sql`
+    SELECT * FROM voice_samples
+    WHERE sample_id = ${voiceSampleId}
+    LIMIT 1
+  `;
+
+  if (!rows || rows.length === 0) {
+    log.warn(`[TtsClone] Voice sample ${voiceSampleId} not found in DB`);
+    return {
+      success: false,
+      errorKind: "missing_sample",
+      details: `Voice sample ${voiceSampleId} not found in database.`,
+    };
+  }
+
+  const parsed = voiceSampleSchema.safeParse(rows[0]);
+  if (!parsed.success) {
+    log.warn(`[TtsClone] Failed to parse voice sample row for id ${voiceSampleId}`, parsed.error.message);
+    return {
+      success: false,
+      errorKind: "missing_sample",
+      details: "Failed to parse voice sample row from database.",
+    };
+  }
+
+  const sample = parsed.data;
+
+  // 2. Read the audio file from disk and base64-encode it.
+  const samplePath = path.join(VOICE_SAMPLES_BASE_DIR, sample.file_path);
+  let refAudioBuffer: Buffer;
+  try {
+    refAudioBuffer = await fs.readFile(samplePath);
+  } catch (error) {
+    log.warn(`[TtsClone] Failed to read voice sample file at ${samplePath}`, error);
+    return {
+      success: false,
+      errorKind: "sample_read_failed",
+      details: `Could not read voice sample file: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+
+  const scriptMarkup = (endpoint.extra_config.script_markup as string | undefined) ?? "plain";
+  const supportsInstruct = Boolean(endpoint.extra_config.supports_instruct);
+
+  // 3. Prepare script: strip all bracket tags for "plain" endpoints.
+  //    For bracket-tags/emoji endpoints, strip only for the caption text.
+  let processedScript: string;
+  let captionText: string;
+  if (scriptMarkup === "plain") {
+    processedScript = stripAllBracketTags(script);
+    captionText = processedScript;
+  } else {
+    processedScript = script;
+    captionText = stripElevenLabsExpressionTags(script);
+  }
+
+  // 4. Build the /synthesize request body per the TomoriBot TTS spec.
+  const body: Record<string, unknown> = {
+    text: processedScript,
+    ref_audio: refAudioBuffer.toString("base64"),
+    ref_text: sample.ref_text ?? null,
+    language: null,
+  };
+
+  if (supportsInstruct) {
+    body.instruct = null;
+  }
+
+  const endpointUrl = endpoint.endpoint_url.replace(/\/+$/, "");
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+  }
+
+  // 5. POST to {endpoint_url}/synthesize with a configurable timeout.
+  let response: Response;
+  try {
+    const abortController = new AbortController();
+    const timer = setTimeout(() => abortController.abort(), TTS_CLONE_TIMEOUT_MS);
+    try {
+      response = await fetch(`${endpointUrl}/synthesize`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: abortController.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (error) {
+    const isTimeout = error instanceof Error && error.name === "AbortError";
+    log.warn(`[TtsClone] Request to ${endpointUrl}/synthesize ${isTimeout ? "timed out" : "failed"}`, error);
+    return {
+      success: false,
+      errorKind: isTimeout ? "timeout" : "request_failed",
+      details: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  if (!response.ok) {
+    let errorDetails = `HTTP ${response.status}`;
+    try {
+      const errorBody = (await response.json()) as { error?: string };
+      if (errorBody.error) errorDetails += `: ${errorBody.error}`;
+    } catch {
+      // Ignore JSON parse failures on error responses.
+    }
+    log.warn(`[TtsClone] ${endpointUrl}/synthesize returned error: ${errorDetails}`);
+    return { success: false, errorKind: "request_failed", details: errorDetails };
+  }
+
+  // 6. Read the binary audio body.
+  const rawContentType = response.headers.get("content-type") ?? "audio/wav";
+  // Bare MIME type only — Discord rejects waveform metadata for non-bare types.
+  const contentType = rawContentType.split(";")[0].trim();
+
+  if (!contentType.startsWith("audio/")) {
+    log.warn(`[TtsClone] Unexpected content-type from /synthesize: ${rawContentType}`);
+    return {
+      success: false,
+      errorKind: "invalid_response",
+      details: `Expected audio/* content-type, got: ${rawContentType}`,
+    };
+  }
+
+  const audioBuffer = Buffer.from(await response.arrayBuffer());
+  if (audioBuffer.length === 0) {
+    return { success: false, errorKind: "invalid_response", details: "Empty audio response from TTS server." };
+  }
+
+  return {
+    success: true,
+    audioBuffer,
+    contentType,
+    extension: resolveExtensionFromContentType(contentType),
+    cleanedCaptionText: captionText,
+  };
+}

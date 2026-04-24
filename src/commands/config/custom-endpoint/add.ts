@@ -47,13 +47,12 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
           { name: localizer("en-US", "general.api_styles.openai_compatible"), value: "openai-compatible" },
           { name: localizer("en-US", "general.api_styles.comfyui"), value: "comfyui" },
           { name: localizer("en-US", "general.api_styles.ollama_native"), value: "ollama-native" },
+          { name: localizer("en-US", "general.api_styles.tts_clone"), value: "tts-clone" },
+          {
+            name: localizer("en-US", "general.api_styles.openai_compatible_transcription"),
+            value: "openai-compatible-transcription",
+          },
         ),
-    )
-    .addStringOption((option) =>
-      option
-        .setName("model_name")
-        .setDescription(localizer("en-US", "commands.config.custom_models.add.model_name_description"))
-        .setRequired(true),
     )
     .addStringOption((option) =>
       option
@@ -65,7 +64,15 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
           { name: "Embedding", value: "embedding" },
           { name: "Image", value: "image" },
           { name: "Video", value: "video" },
+          { name: "Speech (TTS)", value: "speech" },
+          { name: "Transcription (STT)", value: "transcription" },
         ),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("model_name")
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.model_name_description"))
+        .setRequired(false),
     )
     .addStringOption((option) =>
       option
@@ -79,6 +86,38 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
         .setDescription(localizer("en-US", "commands.config.custom_models.add.auth_token_description"))
         .setRequired(false),
     )
+    // Speech-specific options
+    .addStringOption((option) =>
+      option
+        .setName("script_markup")
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.speech_script_markup_description"))
+        .setRequired(false)
+        .addChoices(
+          { name: localizer("en-US", "general.script_markup.plain"), value: "plain" },
+          { name: localizer("en-US", "general.script_markup.bracket_tags"), value: "bracket-tags" },
+          { name: localizer("en-US", "general.script_markup.emoji"), value: "emoji" },
+        ),
+    )
+    .addBooleanOption((option) =>
+      option
+        .setName("supports_instruct")
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.speech_supports_instruct_description"))
+        .setRequired(false),
+    )
+    // Transcription-specific options
+    .addStringOption((option) =>
+      option
+        .setName("transcription_model")
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.transcription_model_description"))
+        .setRequired(false),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("transcription_language")
+        .setDescription(localizer("en-US", "commands.config.custom_models.add.transcription_language_description"))
+        .setRequired(false),
+    )
+    // Text/embedding model options
     .addIntegerOption((option) =>
       option
         .setName("num_ctx")
@@ -143,14 +182,20 @@ export async function execute(
     const capability = interaction.options.getString("capability", true) as CustomEndpointCapability;
     const apiStyle = interaction.options.getString("api_style", true) as CustomEndpointApiStyle;
     const endpointUrl = interaction.options.getString("endpoint_url", true).trim();
-    const rawModelName = interaction.options.getString("model_name", true);
-    const displayName = interaction.options.getString("display_name")?.trim() || rawModelName.trim();
+    const rawModelName = interaction.options.getString("model_name") ?? "";
+    const displayName = interaction.options.getString("display_name")?.trim() || rawModelName.trim() || label;
     const authToken = interaction.options.getString("auth_token");
     const numCtx = interaction.options.getInteger("num_ctx");
     const hasTools = interaction.options.getBoolean("has_tools") ?? false;
     const seesImages = interaction.options.getBoolean("sees_images") ?? false;
     const supportsStructOutput = interaction.options.getBoolean("supports_structoutput") ?? false;
     const workflowAttachment = interaction.options.getAttachment("workflow_json");
+    // Speech-specific
+    const scriptMarkup = interaction.options.getString("script_markup") ?? "plain";
+    const supportsInstruct = interaction.options.getBoolean("supports_instruct") ?? false;
+    // Transcription-specific
+    const transcriptionModel = interaction.options.getString("transcription_model")?.trim() || null;
+    const transcriptionLanguage = interaction.options.getString("transcription_language")?.trim() || null;
 
     if (!isValidCustomEndpointLabel(label)) {
       await replyInfoEmbed(interaction, locale, {
@@ -167,9 +212,7 @@ export async function execute(
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.custom_endpoint_unreachable_title",
         descriptionKey: "commands.config.custom_models.validation.unreachable",
-        descriptionVars: {
-          reason: urlValidation.failureCode ?? "invalid_url",
-        },
+        descriptionVars: { reason: urlValidation.failureCode ?? "invalid_url" },
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -187,7 +230,6 @@ export async function execute(
     }
 
     const modelName = rawModelName.trim();
-
     if ((capability === "text" || capability === "embedding") && !modelName) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.invalid_option_title",
@@ -200,7 +242,22 @@ export async function execute(
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    const extraConfig = workflowAttachment ? { workflow: await loadWorkflowJson(workflowAttachment) } : {};
+    // Build extra_config based on capability.
+    let extraConfig: Record<string, unknown> = {};
+    if (workflowAttachment) {
+      extraConfig = { workflow: await loadWorkflowJson(workflowAttachment) };
+    } else if (capability === "speech") {
+      extraConfig = {
+        script_markup: scriptMarkup,
+        supports_instruct: supportsInstruct,
+      };
+    } else if (capability === "transcription") {
+      extraConfig = {
+        model: transcriptionModel ?? "whisper-1",
+        language: transcriptionLanguage,
+      };
+    }
+
     const reachability = await validateCustomEndpointReachability({
       apiStyle,
       endpointUrl,
@@ -210,9 +267,7 @@ export async function execute(
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.custom_endpoint_unreachable_title",
         descriptionKey: "commands.config.custom_models.validation.unreachable",
-        descriptionVars: {
-          reason: reachability.reason,
-        },
+        descriptionVars: { reason: reachability.reason },
         color: ColorCode.ERROR,
       });
       return;
@@ -248,9 +303,16 @@ export async function execute(
     }
 
     invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
+
+    // For local tts-clone speech endpoints, append a next-step nudge pointing
+    // the admin to voice-add and voice-assign.
+    const isTtsCloneSpeech = capability === "speech" && apiStyle === "tts-clone";
+
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.config.custom_models.add.success_title",
-      descriptionKey: "commands.config.custom_models.add.success_description",
+      descriptionKey: isTtsCloneSpeech
+        ? "commands.config.custom_models.add.speech_next_steps_description"
+        : "commands.config.custom_models.add.success_description",
       descriptionVars: {
         display_name: displayName,
         label,

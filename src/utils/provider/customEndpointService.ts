@@ -711,20 +711,29 @@ export async function validateCustomEndpointReachability(params: {
   const fetchOptions = { strict: params.strict };
 
   try {
+    const baseUrl = params.endpointUrl.replace(/\/+$/, "");
+
     if (params.apiStyle === "comfyui") {
-      const response = await fetchUserRemoteUrl(
-        `${params.endpointUrl.replace(/\/+$/, "")}/system_stats`,
-        { headers },
-        fetchOptions,
-      );
+      const response = await fetchUserRemoteUrl(`${baseUrl}/system_stats`, { headers }, fetchOptions);
       return response.ok ? { ok: true } : { ok: false, reason: `HTTP ${response.status} ${response.statusText}` };
     }
 
-    const response = await fetchUserRemoteUrl(
-      `${params.endpointUrl.replace(/\/+$/, "")}/models`,
-      { headers },
-      fetchOptions,
-    );
+    // tts-clone servers implement GET /health per the TomoriBot TTS spec.
+    if (params.apiStyle === "tts-clone") {
+      const response = await fetchUserRemoteUrl(`${baseUrl}/health`, { headers }, fetchOptions);
+      return response.ok ? { ok: true } : { ok: false, reason: `HTTP ${response.status} ${response.statusText}` };
+    }
+
+    // openai-compatible-transcription servers expose /v1/models (OpenAI-compatible) or /models.
+    if (params.apiStyle === "openai-compatible-transcription") {
+      const response = await fetchUserRemoteUrl(`${baseUrl}/v1/models`, { headers }, fetchOptions);
+      if (response.ok) return { ok: true };
+      // Fall back to the shorter /models path some servers expose.
+      const fallback = await fetchUserRemoteUrl(`${baseUrl}/models`, { headers }, fetchOptions);
+      return fallback.ok ? { ok: true } : { ok: false, reason: `HTTP ${response.status} ${response.statusText}` };
+    }
+
+    const response = await fetchUserRemoteUrl(`${baseUrl}/models`, { headers }, fetchOptions);
     return response.ok ? { ok: true } : { ok: false, reason: `HTTP ${response.status} ${response.statusText}` };
   } catch (error) {
     return {
