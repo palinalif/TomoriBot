@@ -24,9 +24,7 @@ const CANCEL_BTN_ID = "voice_remove_cancel";
 const CONFIRM_TIMEOUT_MS = 30_000;
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand
-    .setName("voice-remove")
-    .setDescription(localizer("en-US", "commands.config.speech.voice_remove.description"));
+  subcommand.setName("voice-remove").setDescription(localizer("en-US", "commands.speech.voice_remove.description"));
 
 export async function execute(
   _client: Client,
@@ -72,8 +70,8 @@ export async function execute(
 
     if (!sampleRow) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.speech.voice_remove.no_sample_title",
-        descriptionKey: "commands.config.speech.voice_remove.no_sample_description",
+        titleKey: "commands.speech.voice_remove.no_sample_title",
+        descriptionKey: "commands.speech.voice_remove.no_sample_description",
         color: ColorCode.WARN,
       });
       return;
@@ -89,8 +87,8 @@ export async function execute(
 
     // Show a confirmation embed with Confirm / Cancel buttons.
     const confirmEmbed = createStandardEmbed(locale, {
-      titleKey: "commands.config.speech.voice_remove.confirm_title",
-      descriptionKey: "commands.config.speech.voice_remove.confirm_description",
+      titleKey: "commands.speech.voice_remove.confirm_title",
+      descriptionKey: "commands.speech.voice_remove.confirm_description",
       descriptionVars: {
         name: sampleRow.name,
         refs: String(refCount),
@@ -101,11 +99,11 @@ export async function execute(
     const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(CONFIRM_BTN_ID)
-        .setLabel(localizer(locale, "commands.config.speech.voice_remove.confirm_button"))
+        .setLabel(localizer(locale, "commands.speech.voice_remove.confirm_button"))
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
         .setCustomId(CANCEL_BTN_ID)
-        .setLabel(localizer(locale, "commands.config.speech.voice_remove.cancel_button"))
+        .setLabel(localizer(locale, "commands.speech.voice_remove.cancel_button"))
         .setStyle(ButtonStyle.Secondary),
     );
 
@@ -157,8 +155,8 @@ export async function execute(
     );
 
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.speech.voice_remove.success_title",
-      descriptionKey: "commands.config.speech.voice_remove.success_description",
+      titleKey: "commands.speech.voice_remove.success_title",
+      descriptionKey: "commands.speech.voice_remove.success_description",
       descriptionVars: { name: sampleRow.name },
       color: ColorCode.SUCCESS,
     });
@@ -168,12 +166,12 @@ export async function execute(
       serverId,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "config speech voice-remove",
+        command: "speech voice-remove",
         guildId: interaction.guild?.id,
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error("Error executing /config speech voice-remove", error as Error, context);
+    await log.error("Error executing /speech voice-remove", error as Error, context);
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",

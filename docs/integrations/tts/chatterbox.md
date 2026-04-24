@@ -19,4 +19,4 @@ Register with `/config custom-endpoint add`:
 - script_markup: `bracket-tags`
 - supports_instruct: `false`
 
-Then run `/config model speech`, `/config speech voice-add`, and `/config speech voice-assign`.
+Then run `/config model speech`, `/speech voice-add`, and `/speech voice-assign`.

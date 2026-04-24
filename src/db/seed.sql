@@ -432,7 +432,9 @@ VALUES
   ('openrouter', 'account-setting', false, false, false, true, false, false, false, false, false, false, false, 'Legacy codename (deprecated, use other-model)', '旧コードネーム（非推奨、other-modelを使用）'),
   ('openrouter', 'other-model', false, false, false, false, false, true, true, true, true, false, true, 'Advanced: Use any OpenRouter model by entering its codename', '上級者向け：コードネームを入力して任意のOpenRouterモデルを使用'),
   -- DeepSeek Models (bounded MVP: text chat + seeded tool calling only)
-  ('deepseek', 'deepseek-chat', false, true, false, false, false, true, false, false, false, false, true, 'Default DeepSeek chat model for general text generation, seeded tool use, and JSON structured output', '汎用テキスト生成、シード済みツール利用、JSON構造化出力に対応したDeepSeekのデフォルトチャットモデル'),
+  ('deepseek', 'deepseek-v4-flash', false, true, false, false, false, true, false, false, false, false, true, 'Fast and cost-efficient default DeepSeek v4 model with tool support and structured output', 'ツール利用と構造化出力に対応した、高速でコスト効率の良いデフォルトのDeepSeek v4モデル'),
+  ('deepseek', 'deepseek-v4-pro', true, false, false, false, false, true, false, false, false, false, true, 'Highly capable DeepSeek v4 model with tool support and structured output', 'ツール利用と構造化出力に対応した、高性能なDeepSeek v4モデル'),
+  ('deepseek', 'deepseek-chat', false, false, false, false, false, true, false, false, false, false, true, 'DeepSeek chat model for general text generation, seeded tool use, and JSON structured output', '汎用テキスト生成、シード済みツール利用、JSON構造化出力に対応したDeepSeekチャットモデル'),
   ('deepseek', 'deepseek-reasoner', true, false, true, false, false, true, false, false, false, false, true, 'Reasoning-focused DeepSeek model with thinking mode, seeded tool use, and JSON structured output', 'シンキングモード、シード済みツール利用、JSON構造化出力に対応した、推論特化のDeepSeekモデル'),
   -- NVIDIA NIM Models (curated hosted NVIDIA catalog)
   ('nvidia', 'deepseek-ai/deepseek-v3.2', false, true, false, false, true, true, false, false, false, false, true, 'Default NVIDIA NIM chat model with tool support and structured output', 'ツール利用と構造化出力に対応した、NVIDIA NIMのデフォルトチャットモデル'),

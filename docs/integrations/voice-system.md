@@ -12,13 +12,13 @@ Phase 4 routes both through custom endpoint capabilities:
 
 ## Commands
 
-- `/config speech elevenlabs` connects ElevenLabs speech and transcription in one flow.
+- `/speech elevenlabs` connects ElevenLabs speech and transcription in one flow.
 - `/config custom-endpoint add` registers local `tts-clone` and `openai-compatible-transcription` endpoints.
 - `/config model speech` selects the active TTS endpoint.
 - `/config model transcription` selects the active STT endpoint.
-- `/config speech voice-add` uploads the one server-local reference sample supported in Phase 4.
-- `/config speech voice-assign` assigns either the local sample or an ElevenLabs voice to a persona.
-- `/config speech transcripts` controls visible transcript posting in chat. It does not enable or disable background STT.
+- `/speech voice-add` uploads the one server-local reference sample supported in Phase 4.
+- `/speech voice-assign` assigns either the local sample or an ElevenLabs voice to a persona.
+- `/speech transcripts` controls visible transcript posting in chat. It does not enable or disable background STT.
 
 ## Runtime Behavior
 

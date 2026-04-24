@@ -4,122 +4,43 @@
  * This module provides security utilities for dynamic SQL query construction,
  * particularly for validating field names in UPDATE statements to prevent SQL injection.
  *
- * Field whitelists are automatically derived from Zod schemas to ensure consistency
- * and maintainability - when schemas change, security whitelists update automatically.
+ * Field whitelists are derived from Zod schema shapes at module load time.
+ * Only primary keys, foreign keys used as table anchors, and auto-managed timestamps
+ * are explicitly excluded — all other schema fields are allowed automatically.
+ * When new columns are added to a schema, they become writable here without any manual update.
  */
 
+import { userSchema, tomoriSchema, tomoriConfigSchema } from "../../types/db/schema";
 import type { UserRow, TomoriRow, TomoriConfigRow } from "../../types/db/schema";
 import { log } from "../misc/logger";
 
-// Extract allowed field names from Zod schemas
-// These exclude auto-managed fields (IDs, timestamps) that shouldn't be in dynamic updates
-const ALLOWED_USER_FIELDS = new Set<keyof UserRow>([
-  "user_disc_id",
-  "user_nickname",
-  "language_pref",
-  "registration_locale", // Static field (set once at registration, but whitelisted for safety)
-  "personal_memories",
-  "privacy_level",
-  "nai_char_tags",
-  "nai_char_ref_url",
-  "impersonation_prompt",
-  "shortterm_cache_crossserver_opt_in",
-  // Exclude: user_id (primary key), created_at, updated_at (auto-managed)
+/**
+ * Derives an allowed-fields Set from a Zod object schema's .shape,
+ * excluding the given key names (primary keys, FK anchors, auto-managed timestamps).
+ */
+function schemaKeysExcluding<T>(schema: { shape: Record<string, unknown> }, exclude: string[]): Set<keyof T> {
+  const excludeSet = new Set(exclude);
+  return new Set(Object.keys(schema.shape).filter((k) => !excludeSet.has(k)) as (keyof T)[]);
+}
+
+const ALLOWED_USER_FIELDS = schemaKeysExcluding<UserRow>(userSchema, [
+  "user_id", // primary key
+  "created_at",
+  "updated_at",
 ]);
 
-const ALLOWED_TOMORI_FIELDS = new Set<keyof TomoriRow>([
-  "server_id",
-  "tomori_nickname",
-  "attribute_list",
-  "sample_dialogues_in",
-  "sample_dialogues_out",
-  "autoch_counter",
-  "autoch_next_target",
-  "nai_tags",
-  "nai_char_ref_url",
-  "elevenlabs_voice_id",
-  "elevenlabs_voice_name",
-  "nai_attg_author",
-  "nai_attg_title",
-  "nai_attg_tags",
-  "nai_attg_genre",
-  "nai_attg_stars",
-  "persona_lineage_id",
-  "is_alter",
-  "webhook_avatar_url",
-  "alter_triggers",
-  // Exclude: tomori_id (primary key), created_at, updated_at (auto-managed)
+const ALLOWED_TOMORI_FIELDS = schemaKeysExcluding<TomoriRow>(tomoriSchema, [
+  "tomori_id", // primary key
+  "created_at",
+  "updated_at",
 ]);
 
-const ALLOWED_TOMORI_CONFIG_FIELDS = new Set<keyof TomoriConfigRow>([
-  "llm_id",
-  "embedding_model_id",
-  "llm_temperature",
-  "llm_top_p",
-  "llm_top_k",
-  "llm_frequency_penalty",
-  "llm_presence_penalty",
-  "llm_min_p",
-  "llm_disabled_params",
-  "llm_logit_biases",
-  "api_key",
-  "key_version",
-  "trigger_words",
-  "autoch_disc_ids",
-  "autoch_persona_overrides",
-  "autoch_threshold",
-  "autoch_threshold_max",
-  "message_fetch_limit",
-  "server_memteaching_enabled",
-  "attribute_memteaching_enabled",
-  "sampledialogue_memteaching_enabled",
-  "self_teaching_enabled",
-  "web_search_enabled",
-  "personal_memories_enabled",
-  "humanizer_degree",
-  "thinking_level",
-  "user_byok_mode",
-  "emoji_usage_enabled",
-  "sticker_usage_enabled",
-  "imagegen_enabled",
-  "timezone_offset",
-  "system_prompt",
-  "nai_preset_name",
-  "rp_channel_ids",
-  "private_channel_ids",
-  "stm_privacy_bypass",
-  "crosschannel_blocklist_ids",
-  "welcome_channel_disc_id",
-  "thought_log_channel_disc_id",
-  "welcome_prompt",
-  "welcome_persona_id",
-  "cascade_limit",
-  "match_limit",
-  "diffusion_model_id",
-  "nai_diffusion_model_id",
-  "manage_message_enabled",
-  "hide_respond_embed",
-  "hide_impersonation_embeds",
-  "tool_notice_hidden_keys",
-  "self_debug_enabled",
-  "uncensor_injection_enabled",
-  "uncensor_unicode_space_enabled",
-  "uncensor_sanitize_enabled",
-  "videogen_enabled",
-  "cooldown_type",
-  "cooldown_length",
-  "custom_endpoint_url",
-  "custom_model_name",
-  "nai_exclusive_imggen",
-  "nai_style_tags",
-  "nai_negative_tags",
-  "nai_sampler",
-  "nai_steps",
-  "nai_scale",
-  "nai_noise_schedule",
-  "nai_cfg_rescale",
-  "fallback_llm_ids",
-  // Exclude: tomori_config_id, tomori_id (keys), created_at, updated_at (auto-managed)
+const ALLOWED_TOMORI_CONFIG_FIELDS = schemaKeysExcluding<TomoriConfigRow>(tomoriConfigSchema, [
+  "tomori_config_id", // primary key
+  "tomori_id", // FK anchor
+  "server_id", // FK anchor
+  "created_at",
+  "updated_at",
 ]);
 
 /**

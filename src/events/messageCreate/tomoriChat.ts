@@ -5481,12 +5481,12 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               // Strip the server suffix for display; use @{localpart} as the mention
               // placeholder (matrixRelay.ts converts this to a proper HTML Matrix mention).
               const matrixLocalpart = reminderRecipientID.split(":")[0].replace(/^@/, "");
-              reminderContent = `[System: A reminder you set earlier for @${matrixLocalpart} (Mention ID: @{${matrixLocalpart}}) has triggered. Reminder: "${reminderData.reminder_purpose}". Remind and ping @${matrixLocalpart} about this. Do NOT create, save, or schedule this reminder again.]`;
+              reminderContent = `[System: A reminder you set earlier for @${matrixLocalpart} (Mention ID: @{${matrixLocalpart}}) has triggered. Reminder: "${reminderData.reminder_purpose}". Focus on reminding and pinging @${matrixLocalpart} about this. Do NOT create, save, or schedule this reminder again.]`;
               if (reminderData.reminder_lateness) {
                 reminderContent += `\n[System: You are also ${reminderData.reminder_lateness} late in reminding the user.]`;
               }
             } else {
-              reminderContent = `[System: A reminder you set earlier for <@${reminderRecipientID}> (Mention ID: ${reminderRecipientID}) has triggered. Reminder: "${reminderData.reminder_purpose}". Remind and ping <@${reminderRecipientID}> about this. Do NOT create, save, or schedule this reminder again.]`;
+              reminderContent = `[System: A reminder you set earlier for <@${reminderRecipientID}> (Mention ID: ${reminderRecipientID}) has triggered. Reminder: "${reminderData.reminder_purpose}". Focus on reminding and pinging <@${reminderRecipientID}> about this. Do NOT create, save, or schedule this reminder again.]`;
               if (reminderData.reminder_lateness) {
                 reminderContent += `\n[System: You are also ${reminderData.reminder_lateness} late in reminding the user.]`;
               }

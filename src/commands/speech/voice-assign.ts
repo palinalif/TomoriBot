@@ -43,11 +43,9 @@ function buildVoiceDescription(voice: ElevenLabsVoiceCatalogEntry, locale: strin
 function buildVoiceOptions(voices: ElevenLabsVoiceCatalogEntry[], locale: string): SelectOption[] {
   return [
     {
-      label: safeSelectOptionText(localizer(locale, "commands.config.speech.voice_assign.clear_choice_label")),
+      label: safeSelectOptionText(localizer(locale, "commands.speech.voice_assign.clear_choice_label")),
       value: CLEAR_VOICE_VALUE,
-      description: safeSelectOptionText(
-        localizer(locale, "commands.config.speech.voice_assign.clear_choice_description"),
-      ),
+      description: safeSelectOptionText(localizer(locale, "commands.speech.voice_assign.clear_choice_description")),
     },
     ...voices.map((voice) => ({
       label: safeSelectOptionText(voice.name),
@@ -58,9 +56,7 @@ function buildVoiceOptions(voices: ElevenLabsVoiceCatalogEntry[], locale: string
 }
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand
-    .setName("voice-assign")
-    .setDescription(localizer("en-US", "commands.config.speech.voice_assign.description"));
+  subcommand.setName("voice-assign").setDescription(localizer("en-US", "commands.speech.voice_assign.description"));
 
 export async function execute(
   _client: Client,
@@ -123,8 +119,8 @@ export async function execute(
 
     if (!effectiveStyle) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.speech.voice_assign.no_speech_endpoint_title",
-        descriptionKey: "commands.config.speech.voice_assign.no_speech_endpoint_description",
+        titleKey: "commands.speech.voice_assign.no_speech_endpoint_title",
+        descriptionKey: "commands.speech.voice_assign.no_speech_endpoint_description",
         color: ColorCode.WARN,
         flags: MessageFlags.Ephemeral,
       });
@@ -141,8 +137,8 @@ export async function execute(
 
       if (!sampleRow) {
         await replyInfoEmbed(interaction, locale, {
-          titleKey: "commands.config.speech.voice_assign.no_sample_title",
-          descriptionKey: "commands.config.speech.voice_assign.no_sample_description",
+          titleKey: "commands.speech.voice_assign.no_sample_title",
+          descriptionKey: "commands.speech.voice_assign.no_sample_description",
           color: ColorCode.WARN,
           flags: MessageFlags.Ephemeral,
         });
@@ -155,7 +151,7 @@ export async function execute(
           personas: allPersonas,
           color: ColorCode.INFO,
           preserveSelectedInteraction: true,
-          titleKey: "commands.config.speech.voice_assign.select_persona_title",
+          titleKey: "commands.speech.voice_assign.select_persona_title",
           onSelect: async () => {},
         });
         if (!personaSelection.success) {
@@ -178,30 +174,30 @@ export async function execute(
         // Show: assign sample OR clear assignment.
         const sampleOptions: SelectOption[] = [
           {
-            label: safeSelectOptionText(localizer(locale, "commands.config.speech.voice_assign.clear_choice_label")),
+            label: safeSelectOptionText(localizer(locale, "commands.speech.voice_assign.clear_choice_label")),
             value: CLEAR_VOICE_VALUE,
             description: safeSelectOptionText(
-              localizer(locale, "commands.config.speech.voice_assign.clear_choice_description"),
+              localizer(locale, "commands.speech.voice_assign.clear_choice_description"),
             ),
           },
           {
             label: safeSelectOptionText(sampleRow.name),
             value: String(sampleRow.sample_id),
             description: safeSelectOptionText(
-              localizer(locale, "commands.config.speech.voice_assign.assign_clone_description"),
+              localizer(locale, "commands.speech.voice_assign.assign_clone_description"),
             ),
           },
         ];
 
         const sampleModal = await promptWithPaginatedModal(personaButtonInteraction, locale, {
           modalCustomId: "voice_assign_clone_modal",
-          modalTitleKey: "commands.config.speech.voice_assign.assign_clone_title",
+          modalTitleKey: "commands.speech.voice_assign.assign_clone_title",
           components: [
             {
               customId: "sample_select",
-              labelKey: "commands.config.speech.voice_assign.assign_clone_title",
-              descriptionKey: "commands.config.speech.voice_assign.assign_clone_description",
-              placeholder: "commands.config.speech.voice_assign.assign_clone_title",
+              labelKey: "commands.speech.voice_assign.assign_clone_title",
+              descriptionKey: "commands.speech.voice_assign.assign_clone_description",
+              placeholder: "commands.speech.voice_assign.assign_clone_title",
               required: true,
               options: sampleOptions,
             },
@@ -243,12 +239,10 @@ export async function execute(
         await replyComponentsV2Status(
           interaction,
           locale,
+          isClear ? "commands.speech.voice_assign.cleared_title" : "commands.speech.voice_assign.success_title",
           isClear
-            ? "commands.config.speech.voice_assign.cleared_title"
-            : "commands.config.speech.voice_assign.success_title",
-          isClear
-            ? "commands.config.speech.voice_assign.cleared_description"
-            : "commands.config.speech.voice_assign.success_description",
+            ? "commands.speech.voice_assign.cleared_description"
+            : "commands.speech.voice_assign.success_description",
           ColorCode.SUCCESS,
           isClear
             ? { persona: selectedPersona.tomori_nickname }
@@ -273,8 +267,8 @@ export async function execute(
     const voiceCatalogResult = await fetchElevenLabsVoiceCatalog(activeElevenLabsKey);
     if (!voiceCatalogResult.success || !voiceCatalogResult.voices?.length) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.speech.voice_assign.elevenlabs_voice_fetch_failed_title",
-        descriptionKey: "commands.config.speech.voice_assign.elevenlabs_voice_fetch_failed_description",
+        titleKey: "commands.speech.voice_assign.elevenlabs_voice_fetch_failed_title",
+        descriptionKey: "commands.speech.voice_assign.elevenlabs_voice_fetch_failed_description",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -288,7 +282,7 @@ export async function execute(
         personas: allPersonas,
         color: ColorCode.INFO,
         preserveSelectedInteraction: true,
-        titleKey: "commands.config.speech.voice_assign.select_persona_title",
+        titleKey: "commands.speech.voice_assign.select_persona_title",
         onSelect: async () => {},
       });
       if (!personaSelection.success) {
@@ -310,7 +304,7 @@ export async function execute(
 
       modalResult = await promptWithPaginatedModal(personaButtonInteraction, locale, {
         modalCustomId: ELEVENLABS_MODAL_ID,
-        modalTitleKey: "commands.config.speech.voice_assign.elevenlabs_modal_title",
+        modalTitleKey: "commands.speech.voice_assign.elevenlabs_modal_title",
         components: [
           {
             customId: VOICE_SELECT_ID,
@@ -379,12 +373,10 @@ export async function execute(
       await replyComponentsV2Status(
         interaction,
         locale,
+        isClear ? "commands.speech.voice_assign.cleared_title" : "commands.speech.voice_assign.success_title",
         isClear
-          ? "commands.config.speech.voice_assign.cleared_title"
-          : "commands.config.speech.voice_assign.success_title",
-        isClear
-          ? "commands.config.speech.voice_assign.cleared_description"
-          : "commands.config.speech.voice_assign.success_description",
+          ? "commands.speech.voice_assign.cleared_description"
+          : "commands.speech.voice_assign.success_description",
         ColorCode.SUCCESS,
         isClear
           ? { persona: selectedPersona.tomori_nickname }
@@ -400,13 +392,13 @@ export async function execute(
       tomoriId: selectedPersona?.tomori_id ?? null,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "config speech voice-assign",
+        command: "speech voice-assign",
         guildId: interaction.guild?.id ?? interaction.user.id,
         executorDiscordId: interaction.user.id,
         selectedPersonaId: selectedPersona?.tomori_id ?? null,
       },
     };
-    await log.error("Error executing /config speech voice-assign", error as Error, context);
+    await log.error("Error executing /speech voice-assign", error as Error, context);
     await replyInfoEmbed(errorReplyInteraction, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",

@@ -7,10 +7,10 @@ TomoriBot treats speech as a custom endpoint capability. Local engines run outsi
 1. Start one wrapper from `scripts/tts/`.
 2. Register it with `/config custom-endpoint add` using capability `speech` and api style `tts-clone`.
 3. Select it with `/config model speech`.
-4. Add a reference sample with `/config speech voice-add`.
-5. Assign the sample to a persona with `/config speech voice-assign`.
+4. Add a reference sample with `/speech voice-add`.
+5. Assign the sample to a persona with `/speech voice-assign`.
 
-ElevenLabs users should use `/config speech elevenlabs`; it registers the speech and transcription endpoints together.
+ElevenLabs users should use `/speech elevenlabs`; it registers the speech and transcription endpoints together.
 
 ## Endpoint Contract
 

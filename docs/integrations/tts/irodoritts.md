@@ -19,4 +19,4 @@ Register with `/config custom-endpoint add`:
 - script_markup: `plain`
 - supports_instruct: `false`
 
-Then select it with `/config model speech`, upload a sample with `/config speech voice-add`, and assign it with `/config speech voice-assign`.
+Then select it with `/config model speech`, upload a sample with `/speech voice-add`, and assign it with `/speech voice-assign`.

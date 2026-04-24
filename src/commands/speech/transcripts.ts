@@ -10,11 +10,11 @@ import { localizer } from "@/utils/text/localizer";
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("transcripts")
-    .setDescription(localizer("en-US", "commands.config.speech.transcripts.description"))
+    .setDescription(localizer("en-US", "commands.speech.transcripts.description"))
     .addStringOption((option) =>
       option
         .setName("set")
-        .setDescription(localizer("en-US", "commands.config.speech.transcripts.set_description"))
+        .setDescription(localizer("en-US", "commands.speech.transcripts.set_description"))
         .setRequired(true)
         .addChoices(
           {
@@ -63,10 +63,10 @@ export async function execute(
     const currentSetting = tomoriState.config.voice_transcript_chat_mode ?? false;
     if (currentSetting === isEnabled) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.speech.transcripts.already_set_title",
+        titleKey: "commands.speech.transcripts.already_set_title",
         descriptionKey: isEnabled
-          ? "commands.config.speech.transcripts.already_enabled_description"
-          : "commands.config.speech.transcripts.already_disabled_description",
+          ? "commands.speech.transcripts.already_enabled_description"
+          : "commands.speech.transcripts.already_disabled_description",
         color: ColorCode.WARN,
       });
       return;
@@ -86,7 +86,7 @@ export async function execute(
         userId: userData.user_id,
         errorType: "DatabaseUpdateError",
         metadata: {
-          command: "config speech transcripts",
+          command: "speech transcripts",
           voiceTranscriptChatMode: isEnabled,
           targetTable: "tomori_configs",
         },
@@ -111,7 +111,7 @@ export async function execute(
         serverId: tomoriState.server_id,
         errorType: "SchemaValidationError",
         metadata: {
-          command: "config speech transcripts",
+          command: "speech transcripts",
           validationErrors: validatedConfig.error.flatten(),
         },
       };
@@ -127,10 +127,10 @@ export async function execute(
     invalidateTomoriStateCache(serverDiscId);
 
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.speech.transcripts.success_title",
+      titleKey: "commands.speech.transcripts.success_title",
       descriptionKey: isEnabled
-        ? "commands.config.speech.transcripts.enabled_success"
-        : "commands.config.speech.transcripts.disabled_success",
+        ? "commands.speech.transcripts.enabled_success"
+        : "commands.speech.transcripts.disabled_success",
       color: isEnabled ? ColorCode.SUCCESS : ColorCode.WARN,
     });
   } catch (error) {
@@ -139,11 +139,11 @@ export async function execute(
       serverId: (await getCachedTomoriState(serverDiscId))?.server_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "config speech transcripts",
+        command: "speech transcripts",
         options: interaction.options?.data,
       },
     };
-    await log.error("Error in /config speech transcripts command", error as Error, context);
+    await log.error("Error in /speech transcripts command", error as Error, context);
 
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",

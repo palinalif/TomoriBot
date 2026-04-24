@@ -88,24 +88,24 @@ function isAcceptedAudioFile(mimeType: string | null | undefined, filename: stri
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("voice-add")
-    .setDescription(localizer("en-US", "commands.config.speech.voice_add.description"))
+    .setDescription(localizer("en-US", "commands.speech.voice_add.description"))
     .addAttachmentOption((option) =>
       option
         .setName("audio_file")
-        .setDescription(localizer("en-US", "commands.config.speech.voice_add.audio_file_description"))
+        .setDescription(localizer("en-US", "commands.speech.voice_add.audio_file_description"))
         .setRequired(true),
     )
     .addStringOption((option) =>
       option
         .setName("name")
-        .setDescription(localizer("en-US", "commands.config.speech.voice_add.name_description"))
+        .setDescription(localizer("en-US", "commands.speech.voice_add.name_description"))
         .setRequired(true)
         .setMaxLength(80),
     )
     .addStringOption((option) =>
       option
         .setName("ref_text")
-        .setDescription(localizer("en-US", "commands.config.speech.voice_add.ref_text_description"))
+        .setDescription(localizer("en-US", "commands.speech.voice_add.ref_text_description"))
         .setRequired(false)
         .setMaxLength(500),
     );
@@ -133,8 +133,8 @@ export async function execute(
   // Pre-flight format check (before deferring, within the 3 s window).
   if (!isAcceptedAudioFile(attachment.contentType, attachment.name)) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.speech.voice_add.format_error_title",
-      descriptionKey: "commands.config.speech.voice_add.format_error_description",
+      titleKey: "commands.speech.voice_add.format_error_title",
+      descriptionKey: "commands.speech.voice_add.format_error_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
@@ -144,8 +144,8 @@ export async function execute(
   // Pre-flight size check using the reported size.
   if (attachment.size > SPEECH_SAMPLE_MAX_MB * 1024 * 1024) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.speech.voice_add.size_error_title",
-      descriptionKey: "commands.config.speech.voice_add.size_error_description",
+      titleKey: "commands.speech.voice_add.size_error_title",
+      descriptionKey: "commands.speech.voice_add.size_error_description",
       descriptionVars: { limit_mb: String(SPEECH_SAMPLE_MAX_MB) },
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
@@ -179,8 +179,8 @@ export async function execute(
   `;
   if (existingRow) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.speech.voice_add.duplicate_error_title",
-      descriptionKey: "commands.config.speech.voice_add.duplicate_error_description",
+      titleKey: "commands.speech.voice_add.duplicate_error_title",
+      descriptionKey: "commands.speech.voice_add.duplicate_error_description",
       color: ColorCode.ERROR,
     });
     return;
@@ -217,8 +217,8 @@ export async function execute(
 
     if (durationSecs > 0 && durationSecs > SPEECH_SAMPLE_MAX_DURATION_SECS) {
       await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.speech.voice_add.duration_error_title",
-        descriptionKey: "commands.config.speech.voice_add.duration_error_description",
+        titleKey: "commands.speech.voice_add.duration_error_title",
+        descriptionKey: "commands.speech.voice_add.duration_error_description",
         descriptionVars: { limit_secs: String(SPEECH_SAMPLE_MAX_DURATION_SECS) },
         color: ColorCode.ERROR,
       });
@@ -278,14 +278,14 @@ export async function execute(
     const durationDisplay = durationSecs > 0 ? `${Math.floor(durationSecs)}s` : localizer(locale, "general.unknown");
 
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.speech.voice_add.success_title",
-      descriptionKey: "commands.config.speech.voice_add.success_description",
+      titleKey: "commands.speech.voice_add.success_title",
+      descriptionKey: "commands.speech.voice_add.success_description",
       descriptionVars: {
         name: sampleName,
         duration: durationDisplay,
         ref_text_hint: refText
-          ? localizer(locale, "commands.config.speech.voice_add.ref_text_provided")
-          : localizer(locale, "commands.config.speech.voice_add.ref_text_missing"),
+          ? localizer(locale, "commands.speech.voice_add.ref_text_provided")
+          : localizer(locale, "commands.speech.voice_add.ref_text_missing"),
       },
       color: ColorCode.SUCCESS,
     });
@@ -299,12 +299,12 @@ export async function execute(
       serverId,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "config speech voice-add",
+        command: "speech voice-add",
         guildId: interaction.guild?.id,
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error("Error executing /config speech voice-add", error as Error, context);
+    await log.error("Error executing /speech voice-add", error as Error, context);
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",
