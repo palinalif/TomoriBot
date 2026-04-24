@@ -4,6 +4,7 @@ import base64
 import os
 import tempfile
 import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -21,7 +22,6 @@ PORT = int(os.getenv("TOMORI_TTS_PORT", "8011"))
 DEVICE = os.getenv("TOMORI_TTS_DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
 MAX_TEXT_CHARS = int(os.getenv("TOMORI_TTS_MAX_TEXT_CHARS", "2000"))
 
-app = FastAPI(title="TomoriBot Chatterbox-Turbo TTS Server")
 model = None
 model_lock = threading.Lock()
 
@@ -45,13 +45,21 @@ def decode_ref_audio(raw_base64: str, directory: str) -> str:
   return str(ref_path)
 
 
-@app.on_event("startup")
 def load_model() -> None:
   global model
 
   from chatterbox.tts_turbo import ChatterboxTurboTTS
 
   model = ChatterboxTurboTTS.from_pretrained(device=DEVICE)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+  load_model()
+  yield
+
+
+app = FastAPI(title="TomoriBot Chatterbox-Turbo TTS Server", lifespan=lifespan)
 
 
 @app.get("/health")

@@ -31,8 +31,11 @@ function getCapabilityLabelKey(
     case "video":
       return continued ? `${localeKeyRoot}.checkbox_video_label_continued` : `${localeKeyRoot}.checkbox_video_label`;
     case "speech":
+      return continued ? `${localeKeyRoot}.checkbox_speech_label_continued` : `${localeKeyRoot}.checkbox_speech_label`;
     case "transcription":
-      return `${localeKeyRoot}.checkbox_text_label`;
+      return continued
+        ? `${localeKeyRoot}.checkbox_transcription_label_continued`
+        : `${localeKeyRoot}.checkbox_transcription_label`;
   }
 }
 

@@ -13,21 +13,19 @@ import {
   acknowledgeModalSubmitForRefresh,
   replyInfoEmbed,
   replyComponentsV2Status,
-  updateButtonComponentsV2Status,
-  replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   safeSelectOptionText,
 } from "@/utils/discord/interactionHelper";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import type { UserRow, ErrorContext, TomoriState } from "@/types/db/schema";
 import type { SelectOption } from "@/types/discord/modal";
-import { deleteReminderById, loadAllPersonasForServer } from "@/utils/db/dbRead";
+import { deleteReminderById } from "@/utils/db/dbRead";
 import { formatTimeWithOffset, formatUTCOffset } from "@/utils/text/timezoneHelper";
 import { isBridgeUserId } from "@/utils/bridge";
 
-// Rule 20: Constants for static values at the top
 const MODAL_CUSTOM_ID = "scheduled_task_remove_modal";
 const REMINDER_SELECT_ID = "reminder_select";
+
 type ReminderSelectionRow = {
   reminder_id: number;
   reminder_purpose: string;
@@ -38,13 +36,14 @@ type ReminderSelectionRow = {
   created_by_nickname: string | null;
   user_discord_id: string;
   user_nickname: string;
+  persona_nickname: string | null;
 };
 
 /**
- * Helper function to perform reminder removal from database
  * @param reminderToRemove - Reminder data to remove
- * @param replyInteraction - Interaction to reply to (can be modal or pagination)
+ * @param replyInteraction - Interaction to reply to
  * @param locale - User locale
+ * @param suppressSuccessReply - Skip the success embed when true
  */
 async function performReminderRemoval(
   reminderToRemove: { reminder_id: number; reminder_purpose: string },
@@ -84,12 +83,10 @@ async function performReminderRemoval(
   return true;
 }
 
-// Rule 21: Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand.setName("remove").setDescription(localizer("en-US", "commands.scheduled-task.remove.description"));
 
 /**
- * Removes a reminder for the user using a paginated modal.
  * @param _client - Discord client instance
  * @param interaction - Command interaction
  * @param userData - User data from database
@@ -101,7 +98,6 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
-  // 1. Ensure command is run in a valid channel context
   if (!interaction.channel) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.channel_only_title",
@@ -113,9 +109,6 @@ export async function execute(
   }
 
   let tomoriState: TomoriState | null = null;
-  let targetTomoriId: number | null = null;
-  let targetIsAlter = false;
-  let personaSelectionInteraction: ButtonInteraction | null = null;
 
   try {
     tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
@@ -130,71 +123,28 @@ export async function execute(
     }
 
     const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
-
-    const allPersonas = await loadAllPersonasForServer(interaction.guild?.id ?? interaction.user.id);
-    if (allPersonas.length === 0) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "general.errors.tomori_not_setup_title",
-        descriptionKey: "general.errors.tomori_not_setup_description",
-        color: ColorCode.ERROR,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
+    const timezoneOffset = tomoriState.config.timezone_offset ?? 0;
+    const state = tomoriState;
 
     while (true) {
-      const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
-        personas: allPersonas,
-        color: ColorCode.INFO,
-        preserveSelectedInteraction: true,
-        onSelect: async () => {},
-      });
-
-      if (!personaSelection.success) {
-        if (personaSelection.reason === "cancelled" || personaSelection.reason === "fatal") return;
-        continue;
-      }
-      if (personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
-        return;
-      }
-
-      personaSelectionInteraction = personaSelection.interaction;
-      const selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
-      if (!selectedPersona?.tomori_id) {
-        await updateButtonComponentsV2Status(
-          personaSelectionInteraction,
-          locale,
-          "general.errors.invalid_option_title",
-          "general.errors.invalid_option_description",
-          ColorCode.ERROR,
-          undefined,
-          "general.pagination.reloading_persona_picker",
-        );
-        continue;
-      }
-      targetTomoriId = selectedPersona.tomori_id;
-      targetIsAlter = selectedPersona.is_alter === true;
-
+      // 1. Load all reminders for this server, tagged with their owning persona name
       let remindersQuery = sql<ReminderSelectionRow[]>`
-				SELECT
-					r.reminder_id,
-					r.reminder_purpose,
-					r.reminder_time,
-					r.repetition_interval_hours,
-					r.channel_disc_id,
-					r.created_by_user_id,
-					r.user_discord_id,
-					r.user_nickname,
-					u.user_nickname AS created_by_nickname
-				FROM reminders r
-				LEFT JOIN users u
-					ON r.created_by_user_id = u.user_id
-				WHERE r.server_id = ${tomoriState.server_id}
-			`;
-
-      remindersQuery = targetIsAlter
-        ? sql`${remindersQuery} AND r.persona_id = ${targetTomoriId}`
-        : sql`${remindersQuery} AND (r.persona_id = ${targetTomoriId} OR r.persona_id IS NULL)`;
+        SELECT
+          r.reminder_id,
+          r.reminder_purpose,
+          r.reminder_time,
+          r.repetition_interval_hours,
+          r.channel_disc_id,
+          r.created_by_user_id,
+          r.user_discord_id,
+          r.user_nickname,
+          u.user_nickname AS created_by_nickname,
+          t.tomori_nickname AS persona_nickname
+        FROM reminders r
+        LEFT JOIN users u ON r.created_by_user_id = u.user_id
+        LEFT JOIN tomoris t ON r.persona_id = t.tomori_id
+        WHERE r.server_id = ${tomoriState.server_id}
+      `;
 
       if (!hasManagePermission) {
         remindersQuery = sql`${remindersQuery} AND r.created_by_user_id = ${userData.user_id}`;
@@ -202,23 +152,20 @@ export async function execute(
 
       remindersQuery = sql`${remindersQuery} ORDER BY r.reminder_time ASC`;
       const reminders = await remindersQuery;
-      const selectionInteraction = personaSelectionInteraction ?? interaction;
 
       if (!reminders || reminders.length === 0) {
-        await updateButtonComponentsV2Status(
-          personaSelectionInteraction,
-          locale,
-          "commands.scheduled-task.remove.no_entries_title",
-          "commands.scheduled-task.remove.no_entries",
-          ColorCode.WARN,
-          undefined,
-          "general.pagination.reloading_persona_picker",
-        );
-        continue;
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "commands.scheduled-task.remove.no_entries_title",
+          descriptionKey: "commands.scheduled-task.remove.no_entries",
+          color: ColorCode.WARN,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
       }
 
-      const timezoneOffset = tomoriState.config.timezone_offset ?? 0;
+      // 2. Build select options — persona_id NULL means the main persona owns the reminder
       const reminderSelectOptions: SelectOption[] = reminders.map((reminder: ReminderSelectionRow, index: number) => {
+        const personaName = reminder.persona_nickname ?? state.tomori_nickname;
         const formattedTime = formatTimeWithOffset(new Date(reminder.reminder_time), timezoneOffset, {
           year: "numeric",
           month: "short",
@@ -226,12 +173,13 @@ export async function execute(
           hour: "2-digit",
           minute: "2-digit",
         });
-
         const channelName =
           interaction.guild?.channels.cache.get(reminder.channel_disc_id)?.name ?? reminder.channel_disc_id;
         const repeatText =
           typeof reminder.repetition_interval_hours === "number" && reminder.repetition_interval_hours >= 1
-            ? ` | repeats every ${reminder.repetition_interval_hours}h`
+            ? localizer(locale, "commands.scheduled-task.remove.select_repeat_text", {
+                hours: reminder.repetition_interval_hours,
+              })
             : "";
         // For Matrix-originated reminders (created_by_user_id = null, user_discord_id
         // is a Matrix ID like "@bred:localhost"), show who the reminder is for so
@@ -243,11 +191,18 @@ export async function execute(
             (reminder.created_by_user_id ? `user #${reminder.created_by_user_id}` : "unknown"));
         const managerCreatedByText =
           hasManagePermission && reminder.created_by_user_id !== userData.user_id
-            ? isMatrixReminder
-              ? ` | for ${creatorName}`
-              : ` | created for ${creatorName}`
+            ? localizer(locale, "commands.scheduled-task.remove.select_manager_created_by_text", {
+                creator_name: creatorName,
+              })
             : "";
-        const description = `At ${formattedTime} (${formatUTCOffset(timezoneOffset)}) in #${channelName}${repeatText}${managerCreatedByText}`;
+        const description = localizer(locale, "commands.scheduled-task.remove.select_option_description", {
+          persona_name: personaName,
+          reminder_time: formattedTime,
+          timezone: formatUTCOffset(timezoneOffset),
+          target_channel: channelName,
+          repeat_text: repeatText,
+          manager_created_by_text: managerCreatedByText,
+        });
 
         return {
           label: safeSelectOptionText(reminder.reminder_purpose, 40),
@@ -256,7 +211,8 @@ export async function execute(
         };
       });
 
-      const modalResult = await promptWithPaginatedModal(selectionInteraction, locale, {
+      // 3. Prompt user to pick a reminder to remove
+      const modalResult = await promptWithPaginatedModal(interaction, locale, {
         modalCustomId: MODAL_CUSTOM_ID,
         modalTitleKey: "commands.scheduled-task.remove.modal_title",
         components: [
@@ -271,14 +227,13 @@ export async function execute(
         ],
       });
 
-      // Handle modal outcome - keep the persona picker loop alive when the modal closes
       if (modalResult.outcome !== "submit") {
         log.info(`Reminder deletion modal ${modalResult.outcome} for user ${userData.user_id}`);
         await replyComponentsV2Status(
           interaction,
           locale,
-          "general.pagination.select_persona_title",
-          "general.pagination.reloading_persona_picker",
+          "commands.scheduled-task.remove.modal_title",
+          "commands.scheduled-task.remove.select_description",
           ColorCode.INFO,
         );
         continue;
@@ -302,6 +257,7 @@ export async function execute(
         return;
       }
 
+      // 4. Delete and show result
       const removalSucceeded = await performReminderRemoval(selectedReminder, modalSubmitInteraction, locale, true);
       if (!removalSucceeded) {
         return;
@@ -319,14 +275,14 @@ export async function execute(
               ? `${selectedReminder.reminder_purpose.slice(0, 77)}...`
               : selectedReminder.reminder_purpose,
         },
-        "general.pagination.reloading_persona_picker",
+        "commands.scheduled-task.remove.select_description",
       );
     }
   } catch (error) {
     const context: ErrorContext = {
       userId: userData.user_id,
       serverId: tomoriState?.server_id,
-      tomoriId: targetTomoriId ?? tomoriState?.tomori_id,
+      tomoriId: tomoriState?.tomori_id,
       errorType: "CommandExecutionError",
       metadata: {
         command: "scheduled-task remove",
@@ -340,11 +296,7 @@ export async function execute(
       context,
     );
 
-    const errorReplyTarget =
-      personaSelectionInteraction && !personaSelectionInteraction.deferred && !personaSelectionInteraction.replied
-        ? personaSelectionInteraction
-        : interaction;
-    await replyInfoEmbed(errorReplyTarget, locale, {
+    await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",
       color: ColorCode.ERROR,

@@ -16,12 +16,9 @@ import {
   promptWithUnacknowledgedConfirmation,
   replyComponentsV2Status,
   replyInfoEmbed,
-  replyPaginatedPersonaChoicesV2,
   safeSelectOptionText,
-  updateButtonComponentsV2Status,
 } from "@/utils/discord/interactionHelper";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
-import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import { updateReminder } from "@/utils/db/dbWrite";
 import { isBridgeUserId } from "@/utils/bridge";
 import { validateFutureTime } from "@/utils/text/stringHelper";
@@ -49,6 +46,7 @@ type ReminderSelectionRow = {
   created_by_nickname: string | null;
   user_discord_id: string;
   user_nickname: string;
+  persona_nickname: string | null;
 };
 
 type ParsedTimeOfDay = {
@@ -293,9 +291,6 @@ export async function execute(
   }
 
   let tomoriState: TomoriState | null = null;
-  let targetTomoriId: number | null = null;
-  let targetIsAlter = false;
-  let personaSelectionInteraction: ButtonInteraction | null = null;
 
   try {
     tomoriState = await getCachedTomoriState(interaction.guild?.id ?? interaction.user.id);
@@ -310,50 +305,11 @@ export async function execute(
     }
 
     const hasManagePermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
-    const allPersonas = await loadAllPersonasForServer(interaction.guild?.id ?? interaction.user.id);
-    if (allPersonas.length === 0) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "general.errors.tomori_not_setup_title",
-        descriptionKey: "general.errors.tomori_not_setup_description",
-        color: ColorCode.ERROR,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
+    const timezoneOffset = tomoriState.config.timezone_offset ?? 0;
+    const state = tomoriState;
 
     while (true) {
-      const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
-        personas: allPersonas,
-        color: ColorCode.INFO,
-        preserveSelectedInteraction: true,
-        onSelect: async () => {},
-      });
-
-      if (!personaSelection.success) {
-        if (personaSelection.reason === "cancelled" || personaSelection.reason === "fatal") return;
-        continue;
-      }
-      if (personaSelection.selectedIndex === undefined || !personaSelection.interaction) {
-        return;
-      }
-
-      personaSelectionInteraction = personaSelection.interaction;
-      const selectedPersona = allPersonas[personaSelection.selectedIndex] ?? null;
-      if (!selectedPersona?.tomori_id) {
-        await updateButtonComponentsV2Status(
-          personaSelectionInteraction,
-          locale,
-          "general.errors.invalid_option_title",
-          "general.errors.invalid_option_description",
-          ColorCode.ERROR,
-          undefined,
-          "general.pagination.reloading_persona_picker",
-        );
-        continue;
-      }
-      targetTomoriId = selectedPersona.tomori_id;
-      targetIsAlter = selectedPersona.is_alter === true;
-
+      // 1. Load all reminders for this server, tagged with their owning persona name
       let remindersQuery = sql<ReminderSelectionRow[]>`
         SELECT
           r.reminder_id,
@@ -365,16 +321,13 @@ export async function execute(
           r.created_by_user_id,
           r.user_discord_id,
           r.user_nickname,
-          u.user_nickname AS created_by_nickname
+          u.user_nickname AS created_by_nickname,
+          t.tomori_nickname AS persona_nickname
         FROM reminders r
-        LEFT JOIN users u
-          ON r.created_by_user_id = u.user_id
+        LEFT JOIN users u ON r.created_by_user_id = u.user_id
+        LEFT JOIN tomoris t ON r.persona_id = t.tomori_id
         WHERE r.server_id = ${tomoriState.server_id}
       `;
-
-      remindersQuery = targetIsAlter
-        ? sql`${remindersQuery} AND r.persona_id = ${targetTomoriId}`
-        : sql`${remindersQuery} AND (r.persona_id = ${targetTomoriId} OR r.persona_id IS NULL)`;
 
       if (!hasManagePermission) {
         remindersQuery = sql`${remindersQuery} AND r.created_by_user_id = ${userData.user_id}`;
@@ -384,20 +337,18 @@ export async function execute(
       const reminders = await remindersQuery;
 
       if (!reminders || reminders.length === 0) {
-        await updateButtonComponentsV2Status(
-          personaSelectionInteraction,
-          locale,
-          "commands.scheduled-task.edit.no_entries_title",
-          "commands.scheduled-task.edit.no_entries",
-          ColorCode.WARN,
-          undefined,
-          "general.pagination.reloading_persona_picker",
-        );
-        continue;
+        await replyInfoEmbed(interaction, locale, {
+          titleKey: "commands.scheduled-task.edit.no_entries_title",
+          descriptionKey: "commands.scheduled-task.edit.no_entries",
+          color: ColorCode.WARN,
+          flags: MessageFlags.Ephemeral,
+        });
+        return;
       }
 
-      const timezoneOffset = tomoriState.config.timezone_offset ?? 0;
+      // 2. Build select options — persona_id NULL means the main persona owns the reminder
       const reminderSelectOptions: SelectOption[] = reminders.map((reminder, index) => {
+        const personaName = reminder.persona_nickname ?? state.tomori_nickname;
         const formattedTime = formatTimeWithOffset(new Date(reminder.reminder_time), timezoneOffset, {
           year: "numeric",
           month: "short",
@@ -428,6 +379,7 @@ export async function execute(
               })
             : "";
         const description = localizer(locale, "commands.scheduled-task.edit.select_option_description", {
+          persona_name: personaName,
           reminder_time: formattedTime,
           timezone: formatUTCOffset(timezoneOffset),
           target_channel: getChannelDisplay(interaction, reminder.channel_disc_id),
@@ -443,7 +395,8 @@ export async function execute(
         };
       });
 
-      const selectModalResult = await promptWithPaginatedModal(personaSelectionInteraction, locale, {
+      // 3. Prompt user to pick a reminder
+      const selectModalResult = await promptWithPaginatedModal(interaction, locale, {
         modalCustomId: SELECT_MODAL_CUSTOM_ID,
         modalTitleKey: "commands.scheduled-task.edit.select_modal_title",
         components: [
@@ -463,8 +416,8 @@ export async function execute(
         await replyComponentsV2Status(
           interaction,
           locale,
-          "general.pagination.select_persona_title",
-          "general.pagination.reloading_persona_picker",
+          "commands.scheduled-task.edit.select_modal_title",
+          "commands.scheduled-task.edit.select_description",
           ColorCode.INFO,
         );
         continue;
@@ -489,6 +442,7 @@ export async function execute(
 
       await acknowledgeModalSubmitForRefresh(selectModalInteraction);
 
+      // 4. Confirm which reminder will be edited
       const confirmationResult = await promptWithUnacknowledgedConfirmation(interaction, locale, {
         embedTitleKey: "commands.scheduled-task.edit.confirm_title",
         embedDescriptionKey: "commands.scheduled-task.edit.confirm_description",
@@ -505,13 +459,14 @@ export async function execute(
         await replyComponentsV2Status(
           interaction,
           locale,
-          "general.pagination.select_persona_title",
-          "general.pagination.reloading_persona_picker",
+          "commands.scheduled-task.edit.select_modal_title",
+          "commands.scheduled-task.edit.select_description",
           ColorCode.INFO,
         );
         continue;
       }
 
+      // 5. Open the edit modal pre-filled with current values (times in server timezone)
       const reminderForInvoker =
         selectedReminder.self_reminder !== true && selectedReminder.user_discord_id === userData.user_disc_id;
       const editModalResult = await promptWithRawModal(confirmationResult.interaction, locale, {
@@ -563,8 +518,8 @@ export async function execute(
         await replyComponentsV2Status(
           interaction,
           locale,
-          "general.pagination.select_persona_title",
-          "general.pagination.reloading_persona_picker",
+          "commands.scheduled-task.edit.select_modal_title",
+          "commands.scheduled-task.edit.select_description",
           ColorCode.INFO,
         );
         continue;
@@ -576,6 +531,7 @@ export async function execute(
         return;
       }
 
+      // 6. Validate all edited fields before saving
       const editedPurpose = editModalResult.values?.[PURPOSE_INPUT_ID]?.trim() ?? "";
       const editedTimeInput = editModalResult.values?.[TIME_INPUT_ID]?.trim() ?? "";
       const editedIntervalInput = editModalResult.values?.[INTERVAL_INPUT_ID]?.trim() ?? "";
@@ -630,6 +586,7 @@ export async function execute(
         continue;
       }
 
+      // 7. Save and show updated details
       const editSucceeded = await performReminderEdit(
         selectedReminder,
         editedPurpose,
@@ -675,14 +632,14 @@ export async function execute(
         "commands.scheduled-task.edit.success_description",
         ColorCode.SUCCESS,
         updatedDetails,
-        "general.pagination.reloading_persona_picker",
+        "commands.scheduled-task.edit.select_description",
       );
     }
   } catch (error) {
     const context: ErrorContext = {
       userId: userData.user_id,
       serverId: tomoriState?.server_id,
-      tomoriId: targetTomoriId ?? tomoriState?.tomori_id,
+      tomoriId: tomoriState?.tomori_id,
       errorType: "CommandExecutionError",
       metadata: {
         command: "scheduled-task edit",
@@ -696,11 +653,7 @@ export async function execute(
       context,
     );
 
-    const errorReplyTarget =
-      personaSelectionInteraction && !personaSelectionInteraction.deferred && !personaSelectionInteraction.replied
-        ? personaSelectionInteraction
-        : interaction;
-    await replyInfoEmbed(errorReplyTarget, locale, {
+    await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",
       color: ColorCode.ERROR,

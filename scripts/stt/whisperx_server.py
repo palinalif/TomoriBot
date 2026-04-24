@@ -3,13 +3,14 @@ from __future__ import annotations
 import os
 import tempfile
 import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
 
 MODEL_ID = os.getenv("WHISPERX_MODEL", "large-v3")
@@ -20,19 +21,26 @@ COMPUTE_TYPE = os.getenv("WHISPERX_COMPUTE_TYPE", "float16" if torch.cuda.is_ava
 BATCH_SIZE = int(os.getenv("WHISPERX_BATCH_SIZE", "16"))
 ENABLE_ALIGNMENT = os.getenv("WHISPERX_ENABLE_ALIGNMENT", "0") == "1"
 
-app = FastAPI(title="TomoriBot WhisperX STT Server")
 model = None
 model_lock = threading.Lock()
 alignment_models = {}
 
 
-@app.on_event("startup")
 def load_model() -> None:
   global model
 
   import whisperx
 
   model = whisperx.load_model(MODEL_ID, DEVICE, compute_type=COMPUTE_TYPE)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+  load_model()
+  yield
+
+
+app = FastAPI(title="TomoriBot WhisperX STT Server", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -116,7 +124,7 @@ async def create_transcription(
   model_name: str = Form(alias="model", default=MODEL_ID),
   response_format: str = Form(default="json"),
   language: Optional[str] = Form(default=None),
-) -> Union[JSONResponse, PlainTextResponse]:
+) -> Response:
   if model_name and model_name != MODEL_ID:
     raise HTTPException(status_code=400, detail=f"Only model '{MODEL_ID}' is loaded.")
 

@@ -62,7 +62,7 @@ export async function execute(
     const configBraveapiSetMention = commandRegistry.getCommandMention("config", "braveapi", "set");
     const configBraveapiDeleteMention = commandRegistry.getCommandMention("config", "braveapi", "delete");
     const configTimezoneMention = commandRegistry.getCommandMention("config", "timezone");
-    const configPermissionsMention = commandRegistry.getCommandMention("config", "tool-use", "manage");
+    const configPermissionsMention = commandRegistry.getCommandMention("config", "tools", "manage");
     const personaRemoveMention = commandRegistry.getCommandMention("persona", "remove");
     const serverWhitelistChannelMention = commandRegistry.getCommandMention("server", "whitelist", "channel");
     const serverWhitelistPersonaMention = commandRegistry.getCommandMention("server", "whitelist", "persona");

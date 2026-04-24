@@ -50,9 +50,11 @@ export interface ExecuteCustomEndpointEditOptions {
     capabilityEmbedding: string;
     capabilityImage: string;
     capabilityVideo: string;
-  };
-  strictRemoteValidation: boolean;
-  loadEndpoints: (ownerId: number) => Promise<CustomEndpointRow[]>;
+    capabilitySpeech: string;
+    capabilityTranscription: string;
+    };
+    strictRemoteValidation: boolean;
+    loadEndpoints: (ownerId: any) => Promise<CustomEndpointRow[]>;
   onSuccess?: () => void | Promise<void>;
 }
 

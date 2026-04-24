@@ -1,5 +1,8 @@
-fastapi
-uvicorn[standard]
-python-multipart
-torch
-whisperx
+# PyTorch CUDA wheel (change cu124 to match your installed CUDA version, e.g. cu118 or cu121).
+# CPU-only users: remove the --extra-index-url line and pin torch without a +cu* suffix.
+--extra-index-url https://download.pytorch.org/whl/cu124
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+torch>=2.5.0
+whisperx>=3.3.0

@@ -4,6 +4,7 @@ import base64
 import os
 import tempfile
 import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -25,7 +26,6 @@ MODEL_PRECISION = os.getenv("IRODORI_MODEL_PRECISION", "bf16" if torch.cuda.is_a
 CODEC_PRECISION = os.getenv("IRODORI_CODEC_PRECISION", "fp32")
 MAX_TEXT_CHARS = int(os.getenv("TOMORI_TTS_MAX_TEXT_CHARS", "1000"))
 
-app = FastAPI(title="TomoriBot Irodori-TTS Server")
 runtime = None
 runtime_lock = threading.Lock()
 
@@ -49,7 +49,6 @@ def decode_ref_audio(raw_base64: str, directory: str) -> str:
   return str(ref_path)
 
 
-@app.on_event("startup")
 def load_model() -> None:
   global runtime
 
@@ -65,6 +64,15 @@ def load_model() -> None:
       codec_precision=CODEC_PRECISION,
     )
   )
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+  load_model()
+  yield
+
+
+app = FastAPI(title="TomoriBot Irodori-TTS Server", lifespan=lifespan)
 
 
 @app.get("/health")

@@ -5,26 +5,25 @@ import {
   ButtonBuilder,
   ButtonStyle,
   MessageFlags,
-  StringSelectMenuBuilder,
-  StringSelectMenuOptionBuilder,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Client,
   type SlashCommandSubcommandBuilder,
-  type StringSelectMenuInteraction,
 } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { log, ColorCode } from "@/utils/misc/logger";
-import { replyInfoEmbed, safeSelectOptionText } from "@/utils/discord/interactionHelper";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "@/utils/discord/interactionHelper";
 import { createStandardEmbed } from "@/utils/discord/embedHelper";
 import type { ErrorContext, UserRow } from "@/types/db/schema";
+import type { SelectOption } from "@/types/discord/modal";
 import { localizer } from "@/utils/text/localizer";
 
 const VOICE_SAMPLES_BASE_DIR = path.resolve(process.cwd(), "data", "voice-samples");
 
 const CONFIRM_BTN_ID = "voice_remove_confirm";
 const CANCEL_BTN_ID = "voice_remove_cancel";
-const SELECT_MENU_ID = "voice_remove_select";
+const MODAL_CUSTOM_ID = "voice_remove_modal";
+const SAMPLE_SELECT_ID = "sample_select";
 const INTERACTION_TIMEOUT_MS = 30_000;
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
@@ -46,8 +45,6 @@ export async function execute(
     return;
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
   const [serverRow] = await sql<[{ server_id: number }]>`
     SELECT server_id FROM servers
     WHERE server_disc_id = ${interaction.guild?.id ?? interaction.user.id}
@@ -58,6 +55,7 @@ export async function execute(
       titleKey: "general.errors.tomori_not_setup_title",
       descriptionKey: "general.errors.tomori_not_setup_description",
       color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -77,52 +75,48 @@ export async function execute(
         titleKey: "commands.speech.voice_remove.no_sample_title",
         descriptionKey: "commands.speech.voice_remove.no_sample_description",
         color: ColorCode.WARN,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
-    // 2. Show a select menu so the user picks which sample to delete.
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId(SELECT_MENU_ID)
-      .setPlaceholder(localizer(locale, "commands.speech.voice_remove.select_placeholder"))
-      .addOptions(
-        sampleRows.map((s) =>
-          new StringSelectMenuOptionBuilder()
-            .setLabel(safeSelectOptionText(s.name))
-            .setValue(String(s.sample_id))
-            .setDescription(
-              s.duration_ms > 0
-                ? safeSelectOptionText(`${Math.floor(s.duration_ms / 1000)}s`)
-                : safeSelectOptionText(localizer(locale, "general.unknown")),
-            ),
-        ),
-      );
+    // 2. Build select options using index as value to avoid truncation issues.
+    const sampleSelectOptions: SelectOption[] = sampleRows.map((s, index) => ({
+      label: safeSelectOptionText(s.name),
+      value: index.toString(),
+    }));
 
-    const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
-    const selectEmbed = createStandardEmbed(locale, {
-      titleKey: "commands.speech.voice_remove.select_sample_title",
-      color: ColorCode.WARN,
+    // 3. Show modal with string select — must be called before any defer/reply.
+    const modalResult = await promptWithPaginatedModal(interaction, locale, {
+      modalCustomId: MODAL_CUSTOM_ID,
+      modalTitleKey: "commands.speech.voice_remove.modal_title",
+      components: [
+        {
+          customId: SAMPLE_SELECT_ID,
+          labelKey: "commands.speech.voice_remove.select_label",
+          placeholder: "commands.speech.voice_remove.select_placeholder",
+          required: true,
+          options: sampleSelectOptions,
+        },
+      ],
     });
 
-    const selectMessage = await interaction.editReply({ embeds: [selectEmbed], components: [selectRow] });
-
-    let selectInteraction: StringSelectMenuInteraction;
-    try {
-      selectInteraction = (await selectMessage.awaitMessageComponent({
-        filter: (i) => i.user.id === interaction.user.id && i.customId === SELECT_MENU_ID,
-        time: INTERACTION_TIMEOUT_MS,
-      })) as StringSelectMenuInteraction;
-    } catch {
-      await interaction.editReply({ components: [] }).catch(() => {});
+    if (modalResult.outcome !== "submit") {
+      log.info(`Voice remove modal ${modalResult.outcome} for user ${interaction.user.id}`);
       return;
     }
 
-    await selectInteraction.deferUpdate();
+    // biome-ignore lint/style/noNonNullAssertion: "submit" outcome guarantees these exist
+    const modalSubmitInteraction = modalResult.interaction!;
+    if (!modalSubmitInteraction.deferred && !modalSubmitInteraction.replied) {
+      await modalSubmitInteraction.deferReply({ flags: MessageFlags.Ephemeral });
+    }
 
-    const selectedSampleId = Number(selectInteraction.values[0]);
-    const sampleRow = sampleRows.find((s) => s.sample_id === selectedSampleId);
+    // biome-ignore lint/style/noNonNullAssertion: "submit" outcome guarantees these exist
+    const selectedIndex = Number.parseInt(modalResult.values![SAMPLE_SELECT_ID], 10);
+    const sampleRow = sampleRows[selectedIndex];
     if (!sampleRow) {
-      await replyInfoEmbed(interaction, locale, {
+      await replyInfoEmbed(modalSubmitInteraction, locale, {
         titleKey: "general.errors.invalid_option_title",
         descriptionKey: "general.errors.invalid_option_description",
         color: ColorCode.ERROR,
@@ -130,7 +124,7 @@ export async function execute(
       return;
     }
 
-    // 3. Count how many personas currently reference this sample.
+    // 4. Count how many personas currently reference this sample.
     const [refCountRow] = await sql<[{ count: string }]>`
       SELECT COUNT(*) AS count FROM tomoris
       WHERE server_id = ${serverId}
@@ -138,7 +132,7 @@ export async function execute(
     `;
     const refCount = Number(refCountRow?.count ?? 0);
 
-    // 4. Show confirm / cancel buttons.
+    // 5. Show confirm / cancel buttons.
     const confirmEmbed = createStandardEmbed(locale, {
       titleKey: "commands.speech.voice_remove.confirm_title",
       descriptionKey: "commands.speech.voice_remove.confirm_description",
@@ -157,28 +151,28 @@ export async function execute(
         .setStyle(ButtonStyle.Secondary),
     );
 
-    await interaction.editReply({ embeds: [confirmEmbed], components: [confirmRow] });
+    const confirmMessage = await modalSubmitInteraction.editReply({ embeds: [confirmEmbed], components: [confirmRow] });
 
     let buttonInteraction: ButtonInteraction;
     try {
-      buttonInteraction = (await selectMessage.awaitMessageComponent({
+      buttonInteraction = (await confirmMessage.awaitMessageComponent({
         filter: (i) =>
           i.user.id === interaction.user.id && (i.customId === CONFIRM_BTN_ID || i.customId === CANCEL_BTN_ID),
         time: INTERACTION_TIMEOUT_MS,
       })) as ButtonInteraction;
     } catch {
-      await interaction.editReply({ components: [] }).catch(() => {});
+      await modalSubmitInteraction.editReply({ components: [] }).catch(() => {});
       return;
     }
 
     await buttonInteraction.deferUpdate();
 
     if (buttonInteraction.customId === CANCEL_BTN_ID) {
-      await interaction.editReply({ embeds: [], components: [] });
+      await modalSubmitInteraction.editReply({ embeds: [], components: [] });
       return;
     }
 
-    // 5. Deletion confirmed: clear persona assignments, remove DB row, delete file.
+    // 6. Deletion confirmed: clear persona assignments, remove DB row, delete file.
     await sql`
       UPDATE tomoris
       SET speech_voice_sample_id = NULL
@@ -200,7 +194,7 @@ export async function execute(
       `[VoiceRemove] Deleted sample "${sampleRow.name}" (id=${sampleRow.sample_id}) for server ${serverId} | ${refCount} persona(s) cleared`,
     );
 
-    await replyInfoEmbed(interaction, locale, {
+    await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey: "commands.speech.voice_remove.success_title",
       descriptionKey: "commands.speech.voice_remove.success_description",
       descriptionVars: { name: sampleRow.name },

@@ -4,6 +4,7 @@ import base64
 import os
 import tempfile
 import threading
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -39,7 +40,6 @@ LANGUAGE_NAMES = {
   "it": "Italian",
 }
 
-app = FastAPI(title="TomoriBot Qwen3-TTS 12Hz 1.7B Base Server")
 model = None
 model_lock = threading.Lock()
 
@@ -80,13 +80,12 @@ def resolve_language(language: Optional[str]) -> str:
   return LANGUAGE_NAMES.get(normalized, language.strip())
 
 
-@app.on_event("startup")
 def load_model() -> None:
   global model
 
   from qwen_tts import Qwen3TTSModel
 
-  kwargs = {
+  kwargs: dict = {
     "device_map": DEVICE_MAP,
     "dtype": resolve_dtype(),
   }
@@ -94,6 +93,15 @@ def load_model() -> None:
     kwargs["attn_implementation"] = "flash_attention_2"
 
   model = Qwen3TTSModel.from_pretrained(MODEL_ID, **kwargs)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+  load_model()
+  yield
+
+
+app = FastAPI(title="TomoriBot Qwen3-TTS 12Hz 1.7B Base Server", lifespan=lifespan)
 
 
 @app.get("/health")

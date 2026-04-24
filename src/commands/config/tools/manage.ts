@@ -26,7 +26,7 @@ const PERMISSIONS_CHECKBOX_ID = "config_permissions_checkbox";
 
 // Rule 21: Configure the subcommand — no options needed, UI is a checkbox modal
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("manage").setDescription(localizer("en-US", "commands.config.tool-use.manage.description"));
+  subcommand.setName("manage").setDescription(localizer("en-US", "commands.config.tools.manage.description"));
 
 /**
  * Defines all configurable permissions for the checkbox modal.
@@ -51,64 +51,64 @@ const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
   {
     value: "selfteaching",
     dbColumn: "self_teaching_enabled",
-    labelKey: "commands.config.tool-use.manage.selfteaching_option",
-    descKey: "commands.config.tool-use.manage.selfteaching_desc",
+    labelKey: "commands.config.tools.manage.selfteaching_option",
+    descKey: "commands.config.tools.manage.selfteaching_desc",
     getState: (c) => c.self_teaching_enabled,
   },
   {
     value: "personalization",
     dbColumn: "personal_memories_enabled",
-    labelKey: "commands.config.tool-use.manage.personalization_option",
-    descKey: "commands.config.tool-use.manage.personalization_desc",
+    labelKey: "commands.config.tools.manage.personalization_option",
+    descKey: "commands.config.tools.manage.personalization_desc",
     getState: (c) => c.personal_memories_enabled,
   },
   {
     value: "emojiusage",
     dbColumn: "emoji_usage_enabled",
-    labelKey: "commands.config.tool-use.manage.emojiusage_option",
-    descKey: "commands.config.tool-use.manage.emojiusage_desc",
+    labelKey: "commands.config.tools.manage.emojiusage_option",
+    descKey: "commands.config.tools.manage.emojiusage_desc",
     getState: (c) => c.emoji_usage_enabled,
   },
   {
     value: "stickerusage",
     dbColumn: "sticker_usage_enabled",
-    labelKey: "commands.config.tool-use.manage.stickerusage_option",
-    descKey: "commands.config.tool-use.manage.stickerusage_desc",
+    labelKey: "commands.config.tools.manage.stickerusage_option",
+    descKey: "commands.config.tools.manage.stickerusage_desc",
     getState: (c) => c.sticker_usage_enabled,
   },
   {
     value: "websearch",
     dbColumn: "web_search_enabled",
-    labelKey: "commands.config.tool-use.manage.websearch_option",
-    descKey: "commands.config.tool-use.manage.websearch_desc",
+    labelKey: "commands.config.tools.manage.websearch_option",
+    descKey: "commands.config.tools.manage.websearch_desc",
     getState: (c) => c.web_search_enabled,
   },
   {
     value: "managemessage",
     dbColumn: "manage_message_enabled",
-    labelKey: "commands.config.tool-use.manage.managemessage_option",
-    descKey: "commands.config.tool-use.manage.managemessage_desc",
+    labelKey: "commands.config.tools.manage.managemessage_option",
+    descKey: "commands.config.tools.manage.managemessage_desc",
     getState: (c) => c.manage_message_enabled,
   },
   {
     value: "imagegen",
     dbColumn: "imagegen_enabled",
-    labelKey: "commands.config.tool-use.manage.imagegen_option",
-    descKey: "commands.config.tool-use.manage.imagegen_desc",
+    labelKey: "commands.config.tools.manage.imagegen_option",
+    descKey: "commands.config.tools.manage.imagegen_desc",
     getState: (c) => c.imagegen_enabled,
   },
   {
     value: "videogen",
     dbColumn: "videogen_enabled",
-    labelKey: "commands.config.tool-use.manage.videogen_option",
-    descKey: "commands.config.tool-use.manage.videogen_desc",
+    labelKey: "commands.config.tools.manage.videogen_option",
+    descKey: "commands.config.tools.manage.videogen_desc",
     getState: (c) => c.videogen_enabled,
   },
   {
     value: "voicemessage",
     dbColumn: "voice_message_enabled",
-    labelKey: "commands.config.tool-use.manage.voicemessage_option",
-    descKey: "commands.config.tool-use.manage.voicemessage_desc",
+    labelKey: "commands.config.tools.manage.voicemessage_option",
+    descKey: "commands.config.tools.manage.voicemessage_desc",
     getState: (c) => c.voice_message_enabled ?? true,
     requiresElevenLabs: true,
   },
@@ -190,9 +190,9 @@ export async function execute(
         customId: `${PERMISSIONS_CHECKBOX_ID}_${groupIndex}`,
         labelKey:
           groupIndex === 0
-            ? "commands.config.tool-use.manage.select_placeholder"
-            : "commands.config.tool-use.manage.checkbox_label_continued",
-        descriptionKey: groupIndex === 0 ? "commands.config.tool-use.manage.select_embed_description" : undefined,
+            ? "commands.config.tools.manage.select_placeholder"
+            : "commands.config.tools.manage.checkbox_label_continued",
+        descriptionKey: groupIndex === 0 ? "commands.config.tools.manage.select_embed_description" : undefined,
         minValues: 0,
         maxValues: optionsChunk.length,
         required: false,
@@ -206,7 +206,7 @@ export async function execute(
       locale,
       {
         modalCustomId: MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.config.tool-use.manage.select_embed_title",
+        modalTitleKey: "commands.config.tools.manage.select_embed_title",
         components: checkboxGroups,
       },
       MessageFlags.Ephemeral,
@@ -249,8 +249,8 @@ export async function execute(
     // 7. If nothing changed, say so and exit
     if (changes.length === 0) {
       await replyInfoEmbed(modalInteraction, locale, {
-        titleKey: "commands.config.tool-use.manage.no_changes_title",
-        descriptionKey: "commands.config.tool-use.manage.no_changes_description",
+        titleKey: "commands.config.tools.manage.no_changes_title",
+        descriptionKey: "commands.config.tools.manage.no_changes_description",
         color: ColorCode.WARN,
       });
       return;
@@ -305,7 +305,7 @@ export async function execute(
     const enabledLabels = changes.filter((c) => c.isEnabled).map((c) => `\`${c.label}\``);
     const disabledLabels = changes.filter((c) => !c.isEnabled).map((c) => `\`${c.label}\``);
 
-    let resultDescription = localizer(locale, "commands.config.tool-use.manage.success_description", {
+    let resultDescription = localizer(locale, "commands.config.tools.manage.success_description", {
       count: changes.length,
     });
     if (enabledLabels.length > 0) {
@@ -318,7 +318,7 @@ export async function execute(
     await modalInteraction.editReply({
       embeds: [
         new EmbedBuilder()
-          .setTitle(localizer(locale, "commands.config.tool-use.manage.success_title"))
+          .setTitle(localizer(locale, "commands.config.tools.manage.success_title"))
           .setDescription(resultDescription)
           .setColor(ColorCode.SUCCESS),
       ],
@@ -344,11 +344,7 @@ export async function execute(
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error(
-      `Error executing /config tool-use manage for user ${userData.user_disc_id}`,
-      error as Error,
-      context,
-    );
+    await log.error(`Error executing /config tools manage for user ${userData.user_disc_id}`, error as Error, context);
 
     // 12. Inform user of unknown error
     // Use modalInteraction (auto-deferred) if available since the original

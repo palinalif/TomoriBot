@@ -91,7 +91,7 @@ function getCommandLocalizationAliases(key: string): string[] {
   }
 
   const configDescriptionAliases: Record<string, string> = {
-    "commands.config.tool-use.manage.description": "commands.config.tool-use.manage.description",
+    "commands.config.tools.manage.description": "commands.config.tools.manage.description",
     "commands.config.send-limit.description": "commands.config.sendlimit.description",
     "commands.server.always-reply.description": "commands.server.alwaysreply.description",
     "commands.server.deliberate-trigger-mode.description": "commands.server.deliberatetriggermode.description",

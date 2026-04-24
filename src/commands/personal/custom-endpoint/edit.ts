@@ -66,6 +66,8 @@ export async function execute(
         capabilityEmbedding: "commands.personal.custom_models.remove.capability_embedding",
         capabilityImage: "commands.personal.custom_models.remove.capability_image",
         capabilityVideo: "commands.personal.custom_models.remove.capability_video",
+        capabilitySpeech: "commands.personal.custom_models.remove.capability_speech",
+        capabilityTranscription: "commands.personal.custom_models.remove.capability_transcription",
       },
       strictRemoteValidation: true,
       loadEndpoints: loadCustomEndpointsForUser,

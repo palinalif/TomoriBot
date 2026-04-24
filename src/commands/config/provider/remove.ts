@@ -110,14 +110,16 @@ export async function execute(
   try {
     // 3. Load all saved provider configs
     const rawSavedConfigs = await loadSavedProviderConfigs(tomoriState.server_id);
+    // Custom providers with live endpoints are managed via /config custom-endpoint remove.
+    // Orphaned custom provider rows (no matching custom_endpoints) are kept here as a
+    // cleanup path — they have no other way to be removed.
     const visibleSavedConfigs = (
       await Promise.all(
         rawSavedConfigs.map(async (config) => {
-          if (!isCustomProvider(config.provider) || (await hasRegisteredCustomProvider(config.provider))) {
-            return config;
+          if (isCustomProvider(config.provider) && (await hasRegisteredCustomProvider(config.provider))) {
+            return null;
           }
-
-          return null;
+          return config;
         }),
       )
     ).flatMap((config) => (config ? [config] : []));
@@ -143,9 +145,12 @@ export async function execute(
       disabledProviders: tomoriState.config.user_byok_mode ? [] : [currentProvider],
       titleKey: "commands.config.provider.remove.picker_title",
       descriptionKey: "commands.config.provider.remove.picker_description",
-      additionalDescription: localizer(locale, "commands.config.provider.remove.active_provider_note", {
-        provider: getProviderDisplayName(currentProvider),
-      }),
+      additionalDescription: [
+        localizer(locale, "commands.config.provider.remove.active_provider_note", {
+          provider: getProviderDisplayName(currentProvider),
+        }),
+        localizer(locale, "commands.config.provider.remove.custom_endpoint_note"),
+      ].join("\n\n"),
     });
 
     if (!pickerResult) return; // cancelled or timed out
