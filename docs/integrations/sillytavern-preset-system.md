@@ -103,6 +103,8 @@ The template engine resolves ST-specific macros in preset node content at contex
 7. Process `{{trim}}` — trim whitespace; if empty, mark node as disabled
 8. Detect HTML content — set `hasHtmlWarning` flag
 
+After preset rearrangement, `buildContext()` also performs a final random-choice pass over assembled text parts and tail directives. This catches ST preset variants that use single braces, such as `{random::apple::banana}`, and ensures `/tool prompt snapshot` shows the same rolled text the provider receives.
+
 ### Identity Macros
 
 `{{user}}`, `{{char}}`, and `{{bot}}` are intentionally **not** resolved by the template engine. They are left intact for downstream resolution by `convertMentions()` in the context builder, which applies the stable "User" placeholder optimization for system-role content.
@@ -130,6 +132,8 @@ The engine tracks which content macros were expanded with real (non-empty) data 
 | `{{getvar::key}}` | Variable value or `""` | Reads a variable |
 | `{{random: A, B, C}}` | Random pick from list | Runtime |
 | `{{random::A::B::C}}` | Random pick from list | Runtime |
+| `{random: A, B, C}` | Random pick from list | Runtime |
+| `{random::A::B::C}` | Random pick from list | Runtime |
 | `{{roll: XdY}}` | Dice roll sum | Runtime |
 | `{{trim}}` | Trim whitespace | If empty after trim, node is disabled |
 | `{{// comment }}` | *(removed)* | Stripped entirely |
@@ -418,6 +422,8 @@ This section documents what our implementation supports versus what native Silly
 | `{{getvar::key}}` | Supported | Unknown keys resolve to `""` |
 | `{{random: A, B, C}}` | Supported | Random pick from comma-separated list |
 | `{{random::A::B::C}}` | Supported | Legacy random choice syntax |
+| `{random: A, B, C}` | Supported | Single-brace random choice syntax resolved by `buildContext()` |
+| `{random::A::B::C}` | Supported | Single-brace legacy random choice syntax resolved by `buildContext()` |
 | `{{roll: XdY}}` | Supported | Capped at 100 dice, 1000 sides |
 | `{{trim}}` | Supported | Node disabled if result is empty |
 | `{{// comment}}` | Supported | Stripped from output |

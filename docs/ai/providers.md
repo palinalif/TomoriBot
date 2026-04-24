@@ -142,11 +142,12 @@ Phase 3 promotes custom endpoints into labeled provider entries instead of a sin
 - registration and in-place updates happen through `/config custom-endpoint add|edit` and `/personal custom-endpoint add|edit`
 - endpoints are stored in `custom_endpoints`, keyed by `(server_id | user_id, label, capability)`
 - the saved credential row is namespaced per label as an internal provider ID such as `custom:s42:ollama-local` or `custom:u7:lmstudio`
-- custom endpoints can now be registered independently for `text`, `embedding`, `image`, and `video`
-- text and embedding use the OpenAI-compatible path; image and video currently route through either OpenAI-compatible image/video endpoints or ComfyUI workflow dispatch
+- custom endpoints can now be registered independently for `text`, `embedding`, `image`, `video`, `speech`, and `transcription`
+- text and embedding use the OpenAI-compatible path; image and video route through either OpenAI-compatible image/video endpoints or ComfyUI workflow dispatch; speech uses `tts-clone` or `elevenlabs`; transcription uses `openai-compatible-transcription` or `elevenlabs-transcription`
 - ComfyUI workflow dispatch now supports placeholder replacement inside uploaded API-format JSON before queueing, including prompt/model/aspect placeholders, derived width/height, video duration/resolution/audio flags, and indexed reference-image payload placeholders such as `{TOMORI_PROMPT}` and `{TOMORI_REFERENCE_IMAGE_1_DATA_URL}`
 - text-capability custom endpoints can declare `has_tools`, `sees_images`, `sees_videos`, and `supports_structoutput`, which drive picker visibility and request shaping
 - `/config model text|embedding|image|video|vision` shows each registered custom label as its own provider choice when that capability is available
+- `/config model speech` and `/config model transcription` switch the active server-scoped speech/STT endpoint by updating the default row in `custom_endpoints`
 - `/config custom-endpoint edit` and `/personal custom-endpoint edit` first ask which registered endpoint row to replace, then merge any provided slash-command fields over that row while keeping omitted fields unchanged
 - legacy inline fields on `tomori_configs` and saved-provider rows (`custom_endpoint_url`, `custom_model_name`, `custom_num_ctx`) remain for backward compatibility during rollout, but new registrations write through the labeled `custom_endpoints` table
 - conversation compaction, history extraction, persona preset generation, and image-analysis helpers all resolve through the effective custom endpoint metadata when a custom label is active

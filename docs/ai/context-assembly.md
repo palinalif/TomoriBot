@@ -226,6 +226,15 @@ The real Discord IDs stay in a per-request `MessageIdMap` carried alongside cont
 
 When those annotations are present, the dialogue formatter keeps the system lines intact and inserts the speaker prefix only before the remaining user text. This prevents forwarded/reply metadata from being misread as user-authored dialogue.
 
+### Runtime Random Macros
+
+After native assembly or SillyTavern preset rearrangement, `buildContext()` resolves random choice macros in all text parts and tail directives before returning context to callers. Supported forms:
+
+- `{{random: A, B, C}}` / `{random: A, B, C}`
+- `{{random::A::B::C}}` / `{random::A::B::C}`
+
+Each macro occurrence is rolled independently at context-build time. Media parts are left unchanged.
+
 ## File Map
 
 | File | Purpose |

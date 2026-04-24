@@ -57,6 +57,8 @@ This folder is organized by topic instead of numeric filenames.
 - [`integrations/modal-input-components.md`](./integrations/modal-input-components.md)
 - [`integrations/matrix-bridge.md`](./integrations/matrix-bridge.md)
 - [`integrations/voice-system.md`](./integrations/voice-system.md)
+- [`integrations/tts/README.md`](./integrations/tts/README.md)
+- [`integrations/transcription/README.md`](./integrations/transcription/README.md)
 
 ## Guides
 

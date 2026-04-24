@@ -1441,6 +1441,81 @@ export async function rescheduleReminder(reminderId: number, nextReminderTime: D
   }
 }
 
+export async function updateReminder(reminderData: {
+  reminder_id: number;
+  reminder_purpose: string;
+  reminder_time: Date;
+  repetition_interval_hours: number | null;
+  self_reminder: boolean;
+  user_discord_id: string;
+  user_nickname: string;
+  server_id: number;
+  owner_user_id?: number;
+}): Promise<ReminderRow | null> {
+  try {
+    const baseUpdate = sql`
+      UPDATE reminders
+      SET
+        reminder_purpose = ${reminderData.reminder_purpose},
+        reminder_time = ${reminderData.reminder_time},
+        repetition_interval_hours = ${reminderData.repetition_interval_hours},
+        self_reminder = ${reminderData.self_reminder},
+        user_discord_id = ${reminderData.user_discord_id},
+        user_nickname = ${reminderData.user_nickname},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE reminder_id = ${reminderData.reminder_id}
+        AND server_id = ${reminderData.server_id}
+    `;
+
+    const updateQuery =
+      typeof reminderData.owner_user_id === "number"
+        ? sql`${baseUpdate} AND created_by_user_id = ${reminderData.owner_user_id} RETURNING *`
+        : sql`${baseUpdate} RETURNING *`;
+
+    const [updatedReminder] = await updateQuery;
+    if (!updatedReminder) {
+      log.warn(`Failed to update reminder ${reminderData.reminder_id} (no row returned)`);
+      return null;
+    }
+
+    const validatedReminder = reminderSchema.safeParse(updatedReminder);
+    if (!validatedReminder.success) {
+      const context: ErrorContext = {
+        serverId: reminderData.server_id,
+        userId: reminderData.owner_user_id,
+        errorType: "SchemaValidationError",
+        metadata: {
+          operation: "updateReminder",
+          reminderId: reminderData.reminder_id,
+          validationErrors: validatedReminder.error.flatten(),
+        },
+      };
+      await log.error(
+        `Failed to validate reminder after update (ID: ${reminderData.reminder_id})`,
+        validatedReminder.error,
+        context,
+      );
+      return null;
+    }
+
+    log.success(`Reminder updated (ID: ${reminderData.reminder_id}) to ${reminderData.reminder_time.toISOString()}`);
+    emitScheduledWorkNudge(`reminder-update:${reminderData.reminder_id}`);
+    return validatedReminder.data;
+  } catch (error) {
+    const context: ErrorContext = {
+      serverId: reminderData.server_id,
+      userId: reminderData.owner_user_id,
+      errorType: "DatabaseUpdateError",
+      metadata: {
+        operation: "updateReminder",
+        reminderId: reminderData.reminder_id,
+      },
+    };
+    await log.error(`Error updating reminder ${reminderData.reminder_id}`, error, context);
+    return null;
+  }
+}
+
 // ─── Random Trigger Write Functions ─────────────────────────────────────────
 
 /**

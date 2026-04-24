@@ -305,16 +305,16 @@ Rules:
 ## Representative Command Groups
 
 - `bot`: respond, generate(image), kill, impersonate
-- `config`: setup, model(text/image/embedding), api-key(set/delete/rotation), system-prompt(set/remove/preset), context-note(set), params(*), timezone, message-fetch-limit, bot-permissions, notice-embeds(visibility)
+- `config`: setup, model(text/image/embedding/video/vision/speech/transcription), speech(elevenlabs/voice-add/voice-remove/voice-assign/transcripts), api-key(rotation), provider(add/remove), custom-endpoint(add/edit/remove), system-prompt(set/remove/preset), context-note(set), params(*), timezone, message-fetch-limit, bot-permissions, notice-embeds(visibility)
 - `nsfw`: jailbreaks
-- `optional-key`: google/set/remove, brave/set/remove, elevenlabs/set/remove, novelai/set/remove
+- `optional-key`: brave/set/remove
 - `server`: trigger(add/delete), whitelist(channel/persona/role/remove), stm(manage), cooldown(triggers), auto-trigger(channels/threshold), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove), member-permissions, always-reply, thought-logs-channel
 - `novelai`: attg, image(params/generate), image-tags(style/me/character/negative), character-reference
 - `server`: trigger(add/delete), whitelist(channel/persona/role/remove), stm(manage), cooldown(triggers), auto-trigger(*), matrix(link/unlink), quota(image-generation/text-generation/video-generation/reset), rp-channels, crosschannel-blocklist, welcome-channel(set/remove), private-channels, user-blacklist(add/remove)
 - `persona`: create, generate, import, export, default, swap, remove, attribute(add/edit/remove), sample-dialogue(add/edit/remove), prompt(set/remove), history(import/remove)
 - `memory`: document(add/remove), personal(add/edit/remove/import/export), server(add/edit/remove/import/export)
 - `personal`: privacy, language, nickname, cache, config(import/export/remove), provider(add/remove/model-text/model-embedding/model-image/model-video/model-vision/toggle-models), model(fallback), samplers, impersonate(prompt), spotlight(set/manage)
-- `scheduled-task`: remove
+- `scheduled-task`: edit, remove
 - `conditioning`: manage, reward(headpat/hug/kiss/tickle), punish(spank/pinch/bite/squeeze)
 - `tool`: ping, status, refresh, compact, comment
 

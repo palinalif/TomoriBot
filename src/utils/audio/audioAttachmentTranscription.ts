@@ -1,7 +1,6 @@
 import type { Attachment, Message } from "discord.js";
-import { getOptApiKey } from "@/utils/security/crypto";
 import { safeDownload } from "@/utils/security/safeDownload";
-import { ELEVENLABS_SERVICE_NAME, getElevenLabsSttConfig } from "@/utils/audio/elevenLabsShared";
+import { getElevenLabsSttConfig } from "@/utils/audio/elevenLabsShared";
 import { transcribeViaElevenLabsAdapter } from "@/providers/custom/styles/transcriptionElevenLabsAdapter";
 import { transcribeViaOpenAIAdapter } from "@/providers/custom/styles/transcriptionOpenAIAdapter";
 import { resolveActiveTranscriptionEndpoint } from "@/utils/provider/speechEndpointResolver";
@@ -53,16 +52,23 @@ export async function transcribeMessageAudioAttachment(
     };
   }
 
-  // Resolution order (Phase 4.1):
-  // 1. Custom transcription endpoint via custom_endpoints table.
-  // 2. Legacy ElevenLabs key from opt_api_keys (transition fallback until Phase 4.3 cleanup).
-  // 3. Skip transcription silently if neither is available.
+  // Resolution order:
+  // 1. Active transcription endpoint via custom_endpoints.
+  // 2. Skip transcription silently if none is configured.
   const transcriptionEndpoint = await resolveActiveTranscriptionEndpoint(serverId);
-  const legacyElevenLabsApiKey = await getOptApiKey(serverId, ELEVENLABS_SERVICE_NAME);
-  const apiKey = transcriptionEndpoint?.apiKey ?? legacyElevenLabsApiKey ?? "";
-  const endpointApiStyle = transcriptionEndpoint?.endpoint.api_style ?? "elevenlabs-transcription";
+  if (!transcriptionEndpoint) {
+    return {
+      hasAudio: true,
+      transcriptText: null,
+      attachmentName: attachment.name ?? null,
+      mimeType: attachment.contentType ?? null,
+    };
+  }
+
+  const apiKey = transcriptionEndpoint.apiKey;
+  const endpointApiStyle = transcriptionEndpoint.endpoint.api_style;
   const requiresApiKey =
-    endpointApiStyle === "elevenlabs-transcription" || transcriptionEndpoint?.endpoint.requires_auth;
+    endpointApiStyle === "elevenlabs-transcription" || transcriptionEndpoint.endpoint.requires_auth;
 
   if (requiresApiKey && !apiKey) {
     return {
@@ -94,7 +100,7 @@ export async function transcribeMessageAudioAttachment(
   // Route to the appropriate adapter based on api_style of the active endpoint.
   // openai-compatible-transcription covers local WhisperX, whisper.cpp, etc.
   const transcriptionResult =
-    endpointApiStyle === "openai-compatible-transcription" && transcriptionEndpoint
+    endpointApiStyle === "openai-compatible-transcription"
       ? await transcribeViaOpenAIAdapter({
           endpoint: transcriptionEndpoint.endpoint,
           apiKey,

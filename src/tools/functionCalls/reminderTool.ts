@@ -30,7 +30,7 @@ export class ReminderTool extends BaseTool {
       target_user: {
         type: "string",
         description:
-          "Name of the user this task should notify, as shown in the current conversation or current server. Use natural names, not IDs. If this is a task for yourself instead, set self_reminder to true.",
+          "OPTIONAL: Name of the user this task should notify, as shown in the current conversation or current server. Use natural names, not IDs. If omitted, the task notifies the current turn's invoking user. If this is a task for yourself instead, set self_reminder to true.",
       },
       reminder_time: {
         type: "string",
@@ -221,18 +221,19 @@ export class ReminderTool extends BaseTool {
         !!botUserId &&
         legacyTargetUserDiscordIdArg.trim() === botUserId);
 
-    if (!isSelfReminder) {
-      if (!requestedTargetUser) {
-        return {
-          success: false,
-          error: "The 'target_user' argument is required unless self_reminder is true.",
-          data: {
-            status: "reminder_creation_failed_invalid_args",
-            reason: "The 'target_user' argument is required unless self_reminder is true.",
-          },
-        };
-      }
-    } else if (!botUserId) {
+    const shouldDefaultTargetToInvoker = !isSelfReminder && !requestedTargetUser;
+    if (shouldDefaultTargetToInvoker && !requestingUserRow?.user_id) {
+      return {
+        success: false,
+        error: "The invoking user could not be resolved as the default reminder target.",
+        data: {
+          status: "reminder_creation_failed_user_not_found",
+          reason: "The invoking user could not be resolved as the default reminder target.",
+        },
+      };
+    }
+
+    if (isSelfReminder && !botUserId) {
       return {
         success: false,
         error: "Tomori bot user ID is not available to create a self reminder",
@@ -411,6 +412,11 @@ export class ReminderTool extends BaseTool {
         resolvedTargetUserId = botUserId as string;
         actualNicknameInDB = tomoriState.tomori_nickname || context.client.user?.username || "Tomori";
         resolvedTargetUserLabel = actualNicknameInDB;
+      } else if (shouldDefaultTargetToInvoker) {
+        resolvedTargetUserId = resolvedUserId;
+        actualNicknameInDB = requestingUserRow?.user_nickname ?? context.message?.author?.displayName ?? "Unknown";
+        resolvedTargetUserLabel = actualNicknameInDB;
+        log.info(`Reminder tool: Defaulted missing target_user to invoking user ${resolvedTargetUserId}`);
       } else {
         const userResolution = await resolveUserTarget(requestedTargetUser as string, context);
         if (userResolution.status === "ambiguous") {

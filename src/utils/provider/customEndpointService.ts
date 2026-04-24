@@ -479,6 +479,15 @@ export async function registerCustomEndpoint(
           label: input.label,
           capability: input.capability,
         });
+  const siblingEndpoints =
+    input.scope.kind === "server"
+      ? (await loadCustomEndpointsForServer(input.scope.ownerId)).filter(
+          (endpoint) => endpoint.capability === input.capability,
+        )
+      : (await loadCustomEndpointsForUser(input.scope.ownerId)).filter(
+          (endpoint) => endpoint.capability === input.capability,
+        );
+  const shouldBeDefault = existingEndpoint?.is_default ?? !siblingEndpoints.some((endpoint) => endpoint.is_default);
   const modelId = await upsertSyntheticCapabilityModel(provider, input);
   const trimmedAuthToken = input.authToken?.trim();
   const requiresAuth =
@@ -500,6 +509,7 @@ export async function registerCustomEndpoint(
     seesImages: input.seesImages ?? false,
     seesVideos: input.seesVideos ?? false,
     supportsStructOutput: input.supportsStructOutput ?? false,
+    isDefault: shouldBeDefault,
   });
 
   if (!customEndpoint) {
@@ -554,6 +564,51 @@ export async function registerCustomEndpoint(
     customEndpoint,
     modelId,
   };
+}
+
+export async function setActiveCustomEndpoint(params: {
+  serverId: number;
+  capability: "speech" | "transcription";
+  customEndpointId: number;
+}): Promise<boolean> {
+  try {
+    const [selectedEndpoint] = await sql<[{ custom_endpoint_id: number }]>`
+      SELECT custom_endpoint_id
+      FROM custom_endpoints
+      WHERE custom_endpoint_id = ${params.customEndpointId}
+        AND server_id = ${params.serverId}
+        AND user_id IS NULL
+        AND capability = ${params.capability}
+      LIMIT 1
+    `;
+
+    if (!selectedEndpoint) {
+      return false;
+    }
+
+    await sql`
+      UPDATE custom_endpoints
+      SET is_default = false,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE server_id = ${params.serverId}
+        AND user_id IS NULL
+        AND capability = ${params.capability}
+    `;
+
+    const result = await sql`
+      UPDATE custom_endpoints
+      SET is_default = true,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE custom_endpoint_id = ${params.customEndpointId}
+        AND server_id = ${params.serverId}
+        AND user_id IS NULL
+        AND capability = ${params.capability}
+    `;
+
+    return result.count > 0;
+  } catch {
+    return false;
+  }
 }
 
 export async function resolveCustomEndpointForProvider(

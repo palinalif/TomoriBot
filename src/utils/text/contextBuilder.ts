@@ -83,6 +83,9 @@ const MEDIA_IMAGE_MESSAGE_LIMIT = (() => {
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 3;
 })();
 
+const RANDOM_CHOICE_MACRO_REGEX =
+  /\{\{\s*random(?:::\s*([^{}]+)|:\s*([^{}]+))\s*\}\}|\{\s*random(?:::\s*([^{}]+)|:\s*([^{}]+))\s*\}/gi;
+
 export const DEFAULT_SYSTEM_PROMPT =
   "\n{bot} makes sure to respond short and concisely, as {bot} is aware that no one really likes to read walls of text. {bot} only makes lengthy responses if and only if people are asking for assistance or an explanation that warrants it.";
 
@@ -159,6 +162,70 @@ function splitLeadingSystemBlocks(content: string): { leadingSystemBlocks: strin
   return {
     leadingSystemBlocks,
     remainingContent: remainingContent || null,
+  };
+}
+
+/**
+ * Resolves ST-style random choice macros that can appear in imported presets
+ * or prompt fields. Each macro occurrence is rolled independently.
+ */
+export function resolveRandomChoiceMacros(text: string): string {
+  return text.replace(
+    RANDOM_CHOICE_MACRO_REGEX,
+    (
+      _match,
+      doubleBraceColonOptions: string | undefined,
+      doubleBraceCommaOptions: string | undefined,
+      singleBraceColonOptions: string | undefined,
+      singleBraceCommaOptions: string | undefined,
+    ) => {
+      const isColonSyntax = doubleBraceColonOptions !== undefined || singleBraceColonOptions !== undefined;
+      const rawOptions =
+        doubleBraceColonOptions ?? doubleBraceCommaOptions ?? singleBraceColonOptions ?? singleBraceCommaOptions ?? "";
+      const separator = isColonSyntax ? "::" : ",";
+      const items = rawOptions
+        .split(separator)
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0);
+
+      if (items.length === 0) return "";
+      return items[Math.floor(Math.random() * items.length)];
+    },
+  );
+}
+
+function resolveRandomChoiceMacrosInContextItem(item: StructuredContextItem): StructuredContextItem {
+  let changed = false;
+  const parts = item.parts.map((part): ContextPart => {
+    if (part.type !== "text") return part;
+
+    const resolvedText = resolveRandomChoiceMacros(part.text);
+    if (resolvedText === part.text) return part;
+
+    changed = true;
+    return { ...part, text: resolvedText };
+  });
+
+  return changed ? { ...item, parts } : item;
+}
+
+function resolveRandomChoiceMacrosInBuildOutput(output: {
+  contextItems: StructuredContextItem[];
+  tailDirectives: string[];
+  lowerPriorityTailDirectives: string[];
+  uncensorDirective?: string;
+}): {
+  contextItems: StructuredContextItem[];
+  tailDirectives: string[];
+  lowerPriorityTailDirectives: string[];
+  uncensorDirective?: string;
+} {
+  return {
+    contextItems: output.contextItems.map(resolveRandomChoiceMacrosInContextItem),
+    tailDirectives: output.tailDirectives.map(resolveRandomChoiceMacros),
+    lowerPriorityTailDirectives: output.lowerPriorityTailDirectives.map(resolveRandomChoiceMacros),
+    uncensorDirective:
+      output.uncensorDirective !== undefined ? resolveRandomChoiceMacros(output.uncensorDirective) : undefined,
   };
 }
 
@@ -1074,14 +1141,14 @@ export async function buildContext(params: BuildContextParams): Promise<BuildCon
             toolPromptMacroResolver: presetToolPromptMacroResolver,
           },
         );
-        return { ...presetResult, messageIdMap };
+        return { ...resolveRandomChoiceMacrosInBuildOutput(presetResult), messageIdMap };
       }
     }
   }
 
   // No active preset (or user impersonation) — use native assembly
   const nativeResult = await buildContextNative(paramsWithMap);
-  return { ...nativeResult, messageIdMap };
+  return { ...resolveRandomChoiceMacrosInBuildOutput(nativeResult), messageIdMap };
 }
 
 /**

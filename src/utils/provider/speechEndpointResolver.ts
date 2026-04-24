@@ -31,6 +31,7 @@ async function resolveActiveEndpointByCapability(
         AND capability = ${capability}
         AND user_id IS NULL
         AND is_default = true
+      ORDER BY updated_at DESC, custom_endpoint_id DESC
       LIMIT 1
     `;
 

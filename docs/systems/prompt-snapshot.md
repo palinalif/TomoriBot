@@ -32,6 +32,7 @@ The snapshot mirrors the real `messageCreate → tomoriChat` pipeline as closely
 | Stickers | ✅ | Included as PNG attachments. |
 | YouTube URLs in message text | ✅ | Converted to video attachments. |
 | SillyTavern preset routing | ✅ | `buildContext()` handles preset-aware reordering internally. |
+| Random prompt macros | ✅ | Resolved by `buildContext()` before serialization, so snapshots show the rolled value the provider receives. |
 | `/context-note` depth injection | ✅ | Applied by `buildContext()` — snapshot output carries the injected item inline. |
 | Self-debug / Tomori-authored diagnostic embeds | ❌ | Not included — these are debug UI, not LLM prompt input. |
 | Forwarded-message inline expansion | ⚠️ | Basic text is captured; full forwarded-body expansion used by tomoriChat is NOT replicated. |

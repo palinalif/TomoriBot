@@ -66,7 +66,7 @@ Current `generate_image_nai` runtime notes:
 
 Current name-resolution notes for built-in tools:
 
-- `create_task` now advertises `target_user` and optional `target_channel`
+- `create_task` now advertises optional `target_user` and optional `target_channel`; when `target_user` is omitted and `self_reminder` is not true, the reminder targets the current turn's invoking user.
 - `create_long_term_memory` and `update_long_term_memory` now advertise `target_user`
 - `update_long_term_memory` treats blank `memory_content` as a delete request and emits the same self-teach-style notification flow with a red embed
 - `peek_profile_picture` and `generate_image` now advertise `target_identity`

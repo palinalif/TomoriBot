@@ -731,12 +731,16 @@ export async function execute(
         const customModelsAddMention = commandRegistry.getCommandMention("config", "custom-endpoint", "add");
         const modelTextMention = commandRegistry.getCommandMention("config", "model", "text");
         const helpCustomModelsMention = commandRegistry.getCommandMention("help", "custom-endpoint");
+        const helpSpeechMention = commandRegistry.getCommandMention("help", "speech");
+        const helpTranscriptionMention = commandRegistry.getCommandMention("help", "transcription");
         successFields.push({
           nameKey: "commands.config.setup.custom_endpoint_bootstrap_field",
           value: localizer(locale, "commands.config.setup.custom_endpoint_bootstrap_value", {
             custom_models_add_command: customModelsAddMention,
             model_text_command: modelTextMention,
             help_custom_models_command: helpCustomModelsMention,
+            help_speech_command: helpSpeechMention,
+            help_transcription_command: helpTranscriptionMention,
           }),
         });
       }
