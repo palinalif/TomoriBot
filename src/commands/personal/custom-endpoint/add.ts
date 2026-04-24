@@ -1,10 +1,22 @@
-import type { Attachment, ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
+import type {
+  Attachment,
+  ChatInputCommandInteraction,
+  Client,
+  ModalSubmitInteraction,
+  SlashCommandSubcommandBuilder,
+} from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { CustomEndpointApiStyle, CustomEndpointCapability, ErrorContext, UserRow } from "@/types/db/schema";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { validateRemoteMcpUrl } from "@/utils/mcp/mcpUrlSecurity";
+import {
+  buildCapabilityAddModal,
+  capabilityNeedsAddModal,
+  ModalFieldId,
+  parseCapabilityModalFields,
+} from "@/utils/provider/customEndpointCapabilityModal";
 import { registerCustomEndpoint, validateCustomEndpointReachability } from "@/utils/provider/customEndpointService";
 import { isValidCustomEndpointLabel, normalizeCustomEndpointLabel } from "@/utils/provider/customProviderUtils";
 import { localizer } from "@/utils/text/localizer";
@@ -22,6 +34,12 @@ async function loadWorkflowJson(attachment: Attachment | null): Promise<Record<s
   return (await response.json()) as Record<string, unknown>;
 }
 
+/**
+ * Phase 4.5: slimmed to routing fields only.
+ * Capability-specific advanced fields are collected via a follow-up modal.
+ * The workflow_json attachment is kept here since modals cannot hold file uploads.
+ * Personal endpoints use strict remote URL validation.
+ */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("add")
@@ -63,44 +81,8 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
     )
     .addStringOption((option) =>
       option
-        .setName("model_name")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.model_name_description"))
-        .setRequired(true),
-    )
-    .addStringOption((option) =>
-      option
-        .setName("display_name")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.display_name_description"))
-        .setRequired(false),
-    )
-    .addStringOption((option) =>
-      option
         .setName("auth_token")
         .setDescription(localizer("en-US", "commands.personal.custom_models.add.auth_token_description"))
-        .setRequired(false),
-    )
-    .addIntegerOption((option) =>
-      option
-        .setName("num_ctx")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.num_ctx_description"))
-        .setRequired(false),
-    )
-    .addBooleanOption((option) =>
-      option
-        .setName("has_tools")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.has_tools_description"))
-        .setRequired(false),
-    )
-    .addBooleanOption((option) =>
-      option
-        .setName("sees_images")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.sees_images_description"))
-        .setRequired(false),
-    )
-    .addBooleanOption((option) =>
-      option
-        .setName("supports_structoutput")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.supports_structoutput_description"))
         .setRequired(false),
     )
     .addAttachmentOption((option) =>
@@ -137,50 +119,154 @@ export async function execute(
     return;
   }
 
-  try {
-    const label = normalizeCustomEndpointLabel(interaction.options.getString("endpoint_label", true));
-    const capability = interaction.options.getString("capability", true) as CustomEndpointCapability;
-    const apiStyle = interaction.options.getString("api_style", true) as CustomEndpointApiStyle;
-    const endpointUrl = interaction.options.getString("endpoint_url", true).trim();
-    const rawModelName = interaction.options.getString("model_name", true);
-    const displayName = interaction.options.getString("display_name")?.trim() || rawModelName.trim();
-    const authToken = interaction.options.getString("auth_token");
-    const numCtx = interaction.options.getInteger("num_ctx");
-    const hasTools = interaction.options.getBoolean("has_tools") ?? false;
-    const seesImages = interaction.options.getBoolean("sees_images") ?? false;
-    const supportsStructOutput = interaction.options.getBoolean("supports_structoutput") ?? false;
-    const workflowAttachment = interaction.options.getAttachment("workflow_json");
+  const rawLabel = interaction.options.getString("endpoint_label", true);
+  const label = normalizeCustomEndpointLabel(rawLabel);
+  const capability = interaction.options.getString("capability", true) as CustomEndpointCapability;
+  const apiStyle = interaction.options.getString("api_style", true) as CustomEndpointApiStyle;
+  const endpointUrl = interaction.options.getString("endpoint_url", true).trim();
+  const authToken = interaction.options.getString("auth_token");
+  const workflowAttachment = interaction.options.getAttachment("workflow_json");
 
-    if (!isValidCustomEndpointLabel(label)) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "general.errors.invalid_option_title",
-        descriptionKey: "commands.config.custom_models.validation.invalid_label",
-        color: ColorCode.ERROR,
-        flags: MessageFlags.Ephemeral,
+  if (!isValidCustomEndpointLabel(label)) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.errors.invalid_option_title",
+      descriptionKey: "commands.config.custom_models.validation.invalid_label",
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Strict validation: personal endpoints must be reachable remote hosts.
+  const urlValidation = await validateRemoteMcpUrl(endpointUrl, { strict: true });
+  if (!urlValidation.valid) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.errors.custom_endpoint_unreachable_title",
+      descriptionKey: "commands.config.custom_models.validation.unreachable",
+      descriptionVars: { reason: urlValidation.failureCode ?? "invalid_url" },
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  const modalCustomId = `personal_endpoint_add_modal_${interaction.id}`;
+
+  // 1a. Capabilities with a detail modal: show it as the primary interaction response.
+  if (capabilityNeedsAddModal(capability)) {
+    const modal = buildCapabilityAddModal(capability, locale, modalCustomId);
+
+    let modalSubmit: ModalSubmitInteraction;
+    try {
+      await interaction.showModal(modal);
+      modalSubmit = await interaction.awaitModalSubmit({
+        time: 600_000,
+        filter: (i) => i.customId === modalCustomId && i.user.id === interaction.user.id,
       });
+    } catch {
       return;
     }
 
-    const urlValidation = await validateRemoteMcpUrl(endpointUrl, { strict: true });
-    if (!urlValidation.valid) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "general.errors.custom_endpoint_unreachable_title",
-        descriptionKey: "commands.config.custom_models.validation.unreachable",
-        descriptionVars: {
-          reason: urlValidation.failureCode ?? "invalid_url",
+    await modalSubmit.deferReply({ flags: MessageFlags.Ephemeral });
+
+    try {
+      const rawFields: Record<string, string> = {};
+      for (const id of Object.values(ModalFieldId)) {
+        try {
+          rawFields[id] = modalSubmit.fields.getTextInputValue(id);
+        } catch {
+          rawFields[id] = "";
+        }
+      }
+
+      const parsed = parseCapabilityModalFields(rawFields, capability);
+
+      if ((capability === "text" || capability === "embedding") && !parsed.modelName) {
+        await replyInfoEmbed(modalSubmit, locale, {
+          titleKey: "general.errors.invalid_option_title",
+          descriptionKey: "commands.config.custom_models.validation.model_name_required",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+
+      const reachability = await validateCustomEndpointReachability({
+        apiStyle,
+        endpointUrl,
+        apiKey: authToken,
+        strict: true,
+      });
+      if (!reachability.ok) {
+        await replyInfoEmbed(modalSubmit, locale, {
+          titleKey: "general.errors.custom_endpoint_unreachable_title",
+          descriptionKey: "commands.config.custom_models.validation.unreachable",
+          descriptionVars: { reason: reachability.reason },
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+
+      const displayName = parsed.displayName || parsed.modelName || label;
+
+      const registered = await registerCustomEndpoint({
+        scope: { kind: "personal", ownerId: userData.user_id, baseConfig: tomoriState.config },
+        label,
+        capability,
+        apiStyle,
+        endpointUrl,
+        displayName,
+        modelName: parsed.modelName,
+        authToken,
+        numCtx: parsed.numCtx,
+        hasTools: parsed.hasTools,
+        seesImages: parsed.seesImages,
+        supportsStructOutput: parsed.supportsStructOutput,
+        extraConfig: {},
+      });
+
+      if (!registered) {
+        await replyInfoEmbed(modalSubmit, locale, {
+          titleKey: "general.errors.update_failed_title",
+          descriptionKey: "general.errors.update_failed_description",
+          color: ColorCode.ERROR,
+        });
+        return;
+      }
+
+      await replyInfoEmbed(modalSubmit, locale, {
+        titleKey: "commands.personal.custom_models.add.success_title",
+        descriptionKey: "commands.personal.custom_models.add.success_description",
+        descriptionVars: { display_name: displayName, label, capability },
+        color: ColorCode.SUCCESS,
+      });
+    } catch (error) {
+      const context: ErrorContext = {
+        userId: userData.user_id,
+        serverId: tomoriState.server_id,
+        tomoriId: tomoriState.tomori_id,
+        errorType: "CommandExecutionError",
+        metadata: {
+          command: "personal custom-endpoint add",
+          guildId: interaction.guild?.id,
+          executorDiscordId: interaction.user.id,
         },
+      };
+      await log.error("Error executing /personal custom-endpoint add (modal path)", error as Error, context);
+      await replyInfoEmbed(modalSubmit, locale, {
+        titleKey: "general.errors.unknown_error_title",
+        descriptionKey: "general.errors.unknown_error_description",
         color: ColorCode.ERROR,
-        flags: MessageFlags.Ephemeral,
       });
-      return;
     }
+    return;
+  }
 
-    const modelName = rawModelName.trim();
-
-    if ((capability === "text" || capability === "embedding") && !modelName) {
+  // 1b. Image / video path — no capability modal.
+  try {
+    if ((capability === "image" || capability === "video") && apiStyle === "comfyui" && !workflowAttachment) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.invalid_option_title",
-        descriptionKey: "commands.config.custom_models.validation.model_name_required",
+        descriptionKey: "commands.config.custom_models.validation.workflow_required",
         color: ColorCode.ERROR,
         flags: MessageFlags.Ephemeral,
       });
@@ -199,32 +285,25 @@ export async function execute(
       await replyInfoEmbed(interaction, locale, {
         titleKey: "general.errors.custom_endpoint_unreachable_title",
         descriptionKey: "commands.config.custom_models.validation.unreachable",
-        descriptionVars: {
-          reason: reachability.reason,
-        },
+        descriptionVars: { reason: reachability.reason },
         color: ColorCode.ERROR,
       });
       return;
     }
 
+    const workflow = workflowAttachment ? await loadWorkflowJson(workflowAttachment) : null;
+    const displayName = label;
+
     const registered = await registerCustomEndpoint({
-      scope: {
-        kind: "personal",
-        ownerId: userData.user_id,
-        baseConfig: tomoriState.config,
-      },
+      scope: { kind: "personal", ownerId: userData.user_id, baseConfig: tomoriState.config },
       label,
       capability,
       apiStyle,
       endpointUrl,
       displayName,
-      modelName: modelName || null,
+      modelName: null,
       authToken,
-      numCtx,
-      hasTools,
-      seesImages,
-      supportsStructOutput,
-      extraConfig: workflowAttachment ? { workflow: await loadWorkflowJson(workflowAttachment) } : {},
+      extraConfig: workflow ? { workflow } : {},
     });
 
     if (!registered) {
@@ -239,11 +318,7 @@ export async function execute(
     await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.personal.custom_models.add.success_title",
       descriptionKey: "commands.personal.custom_models.add.success_description",
-      descriptionVars: {
-        display_name: displayName,
-        label,
-        capability,
-      },
+      descriptionVars: { display_name: displayName, label, capability },
       color: ColorCode.SUCCESS,
     });
   } catch (error) {
@@ -258,7 +333,7 @@ export async function execute(
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error("Error executing /personal custom-endpoint add", error as Error, context);
+    await log.error("Error executing /personal custom-endpoint add (image/video path)", error as Error, context);
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",

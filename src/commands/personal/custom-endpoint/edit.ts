@@ -8,75 +8,13 @@ import { log, ColorCode } from "@/utils/misc/logger";
 import { executeCustomEndpointEditCommand } from "@/utils/provider/customEndpointEditCommand";
 import { localizer } from "@/utils/text/localizer";
 
+/**
+ * Phase 4.5: no slash parameters.
+ * All fields are collected via the two-step modal chain in executeCustomEndpointEditCommand.
+ * Personal endpoints use strict remote URL validation.
+ */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand
-    .setName("edit")
-    .setDescription(localizer("en-US", "commands.personal.custom_models.edit.description"))
-    .addStringOption((option) =>
-      option
-        .setName("endpoint_url")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.edit.endpoint_url_description"))
-        .setRequired(false),
-    )
-    .addStringOption((option) =>
-      option
-        .setName("api_style")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.edit.api_style_description"))
-        .setRequired(false)
-        .addChoices(
-          { name: localizer("en-US", "general.api_styles.openai_compatible"), value: "openai-compatible" },
-          { name: localizer("en-US", "general.api_styles.comfyui"), value: "comfyui" },
-          { name: localizer("en-US", "general.api_styles.ollama_native"), value: "ollama-native" },
-        ),
-    )
-    .addStringOption((option) =>
-      option
-        .setName("model_name")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.edit.model_name_description"))
-        .setRequired(false),
-    )
-    .addStringOption((option) =>
-      option
-        .setName("display_name")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.edit.display_name_description"))
-        .setRequired(false),
-    )
-    .addStringOption((option) =>
-      option
-        .setName("auth_token")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.edit.auth_token_description"))
-        .setRequired(false),
-    )
-    .addIntegerOption((option) =>
-      option
-        .setName("num_ctx")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.edit.num_ctx_description"))
-        .setRequired(false),
-    )
-    .addBooleanOption((option) =>
-      option
-        .setName("has_tools")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.edit.has_tools_description"))
-        .setRequired(false),
-    )
-    .addBooleanOption((option) =>
-      option
-        .setName("sees_images")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.edit.sees_images_description"))
-        .setRequired(false),
-    )
-    .addBooleanOption((option) =>
-      option
-        .setName("supports_structoutput")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.edit.supports_structoutput_description"))
-        .setRequired(false),
-    )
-    .addAttachmentOption((option) =>
-      option
-        .setName("workflow_json")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.edit.workflow_description"))
-        .setRequired(false),
-    );
+  subcommand.setName("edit").setDescription(localizer("en-US", "commands.personal.custom_models.edit.description"));
 
 export async function execute(
   _client: Client,
@@ -121,13 +59,9 @@ export async function execute(
         selectLabel: "commands.personal.custom_models.edit.select_label",
         selectDescription: "commands.personal.custom_models.edit.select_description",
         selectPlaceholder: "commands.personal.custom_models.edit.select_placeholder",
-        noChangesTitle: "commands.personal.custom_models.edit.no_changes_title",
-        noChangesDescription: "commands.personal.custom_models.edit.no_changes_description",
         successTitle: "commands.personal.custom_models.edit.success_title",
         successDescription: "commands.personal.custom_models.edit.success_description",
         validationUnreachable: "commands.config.custom_models.validation.unreachable",
-        validationWorkflowRequired: "commands.config.custom_models.validation.workflow_required",
-        validationModelNameRequired: "commands.config.custom_models.validation.model_name_required",
         capabilityText: "commands.personal.custom_models.remove.capability_text",
         capabilityEmbedding: "commands.personal.custom_models.remove.capability_embedding",
         capabilityImage: "commands.personal.custom_models.remove.capability_image",

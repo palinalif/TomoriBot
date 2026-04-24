@@ -1,38 +1,38 @@
-import type { Attachment, ChatInputCommandInteraction } from "discord.js";
-import { MessageFlags } from "discord.js";
-import type {
-  CustomEndpointApiStyle,
-  CustomEndpointCapability,
-  CustomEndpointRow,
-  TomoriConfigRow,
-} from "@/types/db/schema";
+/**
+ * Phase 4.5 edit flow: endpoint-select modal → summary + Edit button → capability detail modal.
+ *
+ * Discord's interaction rules:
+ *   - Slash command    → showModal (endpoint select) ✓
+ *   - ModalSubmit      → reply/defer (NOT showModal) ✓ — so we reply with a button
+ *   - ButtonInteraction → showModal (capability fields, pre-filled) ✓
+ *   - ModalSubmit      → deferUpdate → register → editReply ✓
+ */
+
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, EmbedBuilder, MessageFlags } from "discord.js";
+import type { ButtonInteraction, ChatInputCommandInteraction, ModalSubmitInteraction } from "discord.js";
+import type { CustomEndpointCapability, CustomEndpointRow, TomoriConfigRow } from "@/types/db/schema";
 import type { SelectOption } from "@/types/discord/modal";
-import { loadSavedProviderConfig, loadUserSavedProviderConfig } from "@/utils/db/dbRead";
 import { promptWithPaginatedModal, replyInfoEmbed, safeSelectOptionText } from "@/utils/discord/interactionHelper";
-import { CUSTOM_ENDPOINT_PLACEHOLDER_KEY } from "@/utils/discord/customProviderModal";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { validateRemoteMcpUrl } from "@/utils/mcp/mcpUrlSecurity";
-import { buildServerCustomProviderName, buildUserCustomProviderName } from "@/utils/provider/customProviderUtils";
+import {
+  buildCapabilityEditModal,
+  ModalFieldId,
+  parseCapabilityModalFields,
+} from "@/utils/provider/customEndpointCapabilityModal";
 import { registerCustomEndpoint, validateCustomEndpointReachability } from "@/utils/provider/customEndpointService";
-import { decryptApiKey } from "@/utils/security/crypto";
 import { localizer } from "@/utils/text/localizer";
 
 const SELECT_MODAL_CUSTOM_ID = "custom_endpoint_edit_select_modal";
 const ENDPOINT_SELECT_ID = "endpoint_select";
+const EDIT_BUTTON_ID = "edit_fields";
+const CANCEL_BUTTON_ID = "cancel_edit";
 
 type RegistrationScope =
-  | {
-      kind: "server";
-      ownerId: number;
-      baseConfig: TomoriConfigRow;
-    }
-  | {
-      kind: "personal";
-      ownerId: number;
-      baseConfig: TomoriConfigRow;
-    };
+  | { kind: "server"; ownerId: number; baseConfig: TomoriConfigRow }
+  | { kind: "personal"; ownerId: number; baseConfig: TomoriConfigRow };
 
-interface ExecuteCustomEndpointEditOptions {
+export interface ExecuteCustomEndpointEditOptions {
   interaction: ChatInputCommandInteraction;
   locale: string;
   scope: RegistrationScope;
@@ -43,13 +43,9 @@ interface ExecuteCustomEndpointEditOptions {
     selectLabel: string;
     selectDescription: string;
     selectPlaceholder: string;
-    noChangesTitle: string;
-    noChangesDescription: string;
     successTitle: string;
     successDescription: string;
     validationUnreachable: string;
-    validationWorkflowRequired: string;
-    validationModelNameRequired: string;
     capabilityText: string;
     capabilityEmbedding: string;
     capabilityImage: string;
@@ -58,19 +54,6 @@ interface ExecuteCustomEndpointEditOptions {
   strictRemoteValidation: boolean;
   loadEndpoints: (ownerId: number) => Promise<CustomEndpointRow[]>;
   onSuccess?: () => void | Promise<void>;
-}
-
-async function loadWorkflowJson(attachment: Attachment | null): Promise<Record<string, unknown> | null> {
-  if (!attachment) {
-    return null;
-  }
-
-  const response = await fetch(attachment.url);
-  if (!response.ok) {
-    throw new Error(`Workflow download failed: ${response.status} ${response.statusText}`);
-  }
-
-  return (await response.json()) as Record<string, unknown>;
 }
 
 function getCapabilityLabel(
@@ -104,82 +87,87 @@ function buildEndpointSelectOptions(
 ): SelectOption[] {
   return endpoints.map((endpoint) => {
     const primaryName = endpoint.model_name?.trim() || endpoint.display_name;
-    const description = `${getCapabilityLabel(locale, keys, endpoint.capability)} - ${endpoint.display_name}`;
-
+    const description = `${getCapabilityLabel(locale, keys, endpoint.capability)} — ${endpoint.display_name}`;
     return {
-      label: safeSelectOptionText(`${endpoint.label} - ${primaryName}`),
+      label: safeSelectOptionText(`${endpoint.label} — ${primaryName}`),
       value: getEndpointSelectionValue(endpoint),
       description: safeSelectOptionText(description),
     };
   });
 }
 
-async function resolveExistingAuthToken(scope: RegistrationScope, label: string): Promise<string | null> {
-  const provider =
-    scope.kind === "server"
-      ? buildServerCustomProviderName(scope.ownerId, label)
-      : buildUserCustomProviderName(scope.ownerId, label);
-  const existingConfig =
-    scope.kind === "server"
-      ? await loadSavedProviderConfig(scope.ownerId, provider)
-      : await loadUserSavedProviderConfig(scope.ownerId, provider);
+/** Build a concise embed summarising the selected endpoint's current configuration. */
+function buildEndpointSummaryEmbed(locale: string, endpoint: CustomEndpointRow): EmbedBuilder {
+  const extra = endpoint.extra_config as Record<string, unknown>;
+  const lines: string[] = [
+    `**${localizer(locale, "commands.config.custom_models.capability_modal.endpoint_url_label")}:** \`${endpoint.endpoint_url}\``,
+    `**${localizer(locale, "commands.config.custom_models.edit.summary_capability")}:** ${endpoint.capability}`,
+    `**${localizer(locale, "commands.config.custom_models.edit.summary_api_style")}:** ${endpoint.api_style}`,
+  ];
 
-  if (!existingConfig?.api_key) {
-    return null;
+  if (endpoint.model_name) {
+    lines.push(
+      `**${localizer(locale, "commands.config.custom_models.capability_modal.model_name_label")}:** \`${endpoint.model_name}\``,
+    );
   }
 
-  const decryptedKey = await decryptApiKey(existingConfig.api_key, existingConfig.key_version || 1);
-  return !decryptedKey || decryptedKey === CUSTOM_ENDPOINT_PLACEHOLDER_KEY ? null : decryptedKey;
-}
+  if (endpoint.display_name) {
+    lines.push(
+      `**${localizer(locale, "commands.config.custom_models.capability_modal.display_name_label")}:** ${endpoint.display_name}`,
+    );
+  }
 
-function hasWorkflow(extraConfig: Record<string, unknown>): boolean {
-  return Boolean(extraConfig.workflow);
-}
+  if (endpoint.capability === "text" || endpoint.capability === "embedding") {
+    const caps: string[] = [];
+    if (endpoint.has_tools) caps.push("tools");
+    if (endpoint.sees_images) caps.push("vision");
+    if (endpoint.supports_structoutput) caps.push("structoutput");
+    if (caps.length > 0) {
+      lines.push(
+        `**${localizer(locale, "commands.config.custom_models.capability_modal.text_capabilities_label")}:** ${caps.join(", ")}`,
+      );
+    }
+    if (endpoint.num_ctx) {
+      lines.push(
+        `**${localizer(locale, "commands.config.custom_models.capability_modal.num_ctx_label")}:** ${endpoint.num_ctx}`,
+      );
+    }
+  }
 
-function didCommandProvideChanges(interaction: ChatInputCommandInteraction): boolean {
-  return (
-    interaction.options.getString("endpoint_url") !== null ||
-    interaction.options.getString("api_style") !== null ||
-    interaction.options.getString("model_name") !== null ||
-    interaction.options.getString("display_name") !== null ||
-    interaction.options.getString("auth_token") !== null ||
-    interaction.options.getInteger("num_ctx") !== null ||
-    interaction.options.getBoolean("has_tools") !== null ||
-    interaction.options.getBoolean("sees_images") !== null ||
-    interaction.options.getBoolean("supports_structoutput") !== null ||
-    interaction.options.getAttachment("workflow_json") !== null
-  );
-}
+  if (endpoint.capability === "speech") {
+    const scriptMarkup = extra.script_markup as string | undefined;
+    const supportsInstruct = extra.supports_instruct as boolean | undefined;
+    if (scriptMarkup) {
+      lines.push(
+        `**${localizer(locale, "commands.config.custom_models.capability_modal.script_markup_label")}:** ${scriptMarkup}`,
+      );
+    }
+    if (supportsInstruct != null) {
+      lines.push(
+        `**${localizer(locale, "commands.config.custom_models.capability_modal.supports_instruct_label")}:** ${supportsInstruct ? "yes" : "no"}`,
+      );
+    }
+  }
 
-function isSameOptionalString(nextValue: string | null, existingValue: string | null | undefined): boolean {
-  return (nextValue ?? null) === (existingValue ?? null);
-}
+  if (endpoint.capability === "transcription") {
+    const model = extra.model as string | undefined;
+    const language = extra.language as string | null | undefined;
+    if (model) {
+      lines.push(
+        `**${localizer(locale, "commands.config.custom_models.capability_modal.transcription_model_label")}:** \`${model}\``,
+      );
+    }
+    if (language) {
+      lines.push(
+        `**${localizer(locale, "commands.config.custom_models.capability_modal.transcription_language_label")}:** ${language}`,
+      );
+    }
+  }
 
-function didMergedConfigChange(params: {
-  existing: CustomEndpointRow;
-  endpointUrl: string;
-  apiStyle: CustomEndpointApiStyle;
-  modelName: string | null;
-  displayName: string;
-  numCtx: number | null;
-  hasTools: boolean;
-  seesImages: boolean;
-  supportsStructOutput: boolean;
-  extraConfig: Record<string, unknown>;
-  authTokenProvided: boolean;
-}): boolean {
-  return (
-    params.authTokenProvided ||
-    params.endpointUrl !== params.existing.endpoint_url ||
-    params.apiStyle !== params.existing.api_style ||
-    !isSameOptionalString(params.modelName, params.existing.model_name) ||
-    params.displayName !== params.existing.display_name ||
-    (params.numCtx ?? null) !== (params.existing.num_ctx ?? null) ||
-    params.hasTools !== params.existing.has_tools ||
-    params.seesImages !== params.existing.sees_images ||
-    params.supportsStructOutput !== params.existing.supports_structoutput ||
-    JSON.stringify(params.extraConfig) !== JSON.stringify(params.existing.extra_config ?? {})
-  );
+  return new EmbedBuilder()
+    .setColor(ColorCode.INFO)
+    .setTitle(localizer(locale, "commands.config.custom_models.edit.summary_title").replace("{label}", endpoint.label))
+    .setDescription(lines.join("\n"));
 }
 
 export async function executeCustomEndpointEditCommand(options: ExecuteCustomEndpointEditOptions): Promise<void> {
@@ -196,8 +184,9 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
     return;
   }
 
+  // Step 1: show endpoint selection modal (slash command → showModal is Discord-allowed).
   const selectModalResult = await promptWithPaginatedModal(interaction, locale, {
-    modalCustomId: `${SELECT_MODAL_CUSTOM_ID}_${scope.kind}`,
+    modalCustomId: `${SELECT_MODAL_CUSTOM_ID}_${scope.kind}_${interaction.id}`,
     modalTitleKey: keys.selectModalTitle,
     components: [
       {
@@ -215,13 +204,12 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
     return;
   }
 
-  const replyInteraction = selectModalResult.interaction;
+  const selectInteraction = selectModalResult.interaction as ModalSubmitInteraction;
   const selectedValue = selectModalResult.values?.[ENDPOINT_SELECT_ID];
-  const existingEndpoint = registeredEndpoints.find(
-    (endpoint) => getEndpointSelectionValue(endpoint) === selectedValue,
-  );
+  const existingEndpoint = registeredEndpoints.find((e) => getEndpointSelectionValue(e) === selectedValue);
+
   if (!selectedValue || !existingEndpoint) {
-    await replyInfoEmbed(replyInteraction, locale, {
+    await replyInfoEmbed(selectInteraction, locale, {
       titleKey: "general.errors.invalid_option_title",
       descriptionKey: "general.errors.invalid_option_description",
       color: ColorCode.ERROR,
@@ -229,173 +217,205 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
     return;
   }
 
-  if (!didCommandProvideChanges(interaction)) {
-    await replyInfoEmbed(replyInteraction, locale, {
-      titleKey: keys.noChangesTitle,
-      descriptionKey: keys.noChangesDescription,
-      color: ColorCode.WARN,
+  // Step 2: reply with an endpoint summary embed + "Edit Fields" button.
+  // (Modal submit → showModal is forbidden; we must use reply → button → showModal.)
+  const summaryEmbed = buildEndpointSummaryEmbed(locale, existingEndpoint);
+  const editButton = new ButtonBuilder()
+    .setCustomId(EDIT_BUTTON_ID)
+    .setLabel(localizer(locale, "commands.config.custom_models.edit.edit_fields_button"))
+    .setStyle(ButtonStyle.Primary);
+  const cancelButton = new ButtonBuilder()
+    .setCustomId(CANCEL_BUTTON_ID)
+    .setLabel(localizer(locale, "general.pagination.cancel"))
+    .setStyle(ButtonStyle.Secondary);
+
+  await selectInteraction.reply({
+    embeds: [summaryEmbed],
+    components: [new ActionRowBuilder<ButtonBuilder>().addComponents(editButton, cancelButton)],
+    flags: MessageFlags.Ephemeral,
+  });
+
+  const summaryMessage = await selectInteraction.fetchReply();
+
+  // Step 3: wait for the Edit Fields button click.
+  let buttonInteraction: ButtonInteraction;
+  try {
+    buttonInteraction = await summaryMessage.awaitMessageComponent({
+      componentType: ComponentType.Button,
+      filter: (i) => i.user.id === interaction.user.id,
+      time: 300_000,
     });
+  } catch {
+    // Timed out or user ignored.
+    await selectInteraction.editReply({ components: [] });
     return;
   }
 
-  await replyInteraction.deferReply({ flags: MessageFlags.Ephemeral });
+  if (buttonInteraction.customId === CANCEL_BUTTON_ID) {
+    await buttonInteraction.update({ components: [] });
+    return;
+  }
 
-  const endpointUrlOption = interaction.options.getString("endpoint_url");
-  const apiStyleOption = interaction.options.getString("api_style") as CustomEndpointApiStyle | null;
-  const modelNameOption = interaction.options.getString("model_name");
-  const displayNameOption = interaction.options.getString("display_name");
-  const authTokenOption = interaction.options.getString("auth_token");
-  const numCtxOption = interaction.options.getInteger("num_ctx");
-  const hasToolsOption = interaction.options.getBoolean("has_tools");
-  const seesImagesOption = interaction.options.getBoolean("sees_images");
-  const supportsStructOutputOption = interaction.options.getBoolean("supports_structoutput");
-  const workflowAttachment = interaction.options.getAttachment("workflow_json");
+  // Step 4: from the button click, show the capability-specific edit modal (pre-filled).
+  const extra = existingEndpoint.extra_config as Record<string, unknown>;
+  const editModalCustomId = `custom_endpoint_edit_fields_${interaction.id}`;
+  const editModal = buildCapabilityEditModal(existingEndpoint.capability, locale, editModalCustomId, {
+    modelName: existingEndpoint.model_name,
+    displayName: existingEndpoint.display_name,
+    endpointUrl: existingEndpoint.endpoint_url,
+    numCtx: existingEndpoint.num_ctx,
+    hasTools: existingEndpoint.has_tools,
+    seesImages: existingEndpoint.sees_images,
+    supportsStructOutput: existingEndpoint.supports_structoutput,
+    scriptMarkup: extra.script_markup as string | null,
+    supportsInstruct: extra.supports_instruct as boolean | undefined,
+    transcriptionModel: extra.model as string | null,
+    transcriptionLanguage: extra.language as string | null,
+  });
 
-  const endpointUrl = endpointUrlOption?.trim() || existingEndpoint.endpoint_url;
-  const apiStyle = apiStyleOption ?? existingEndpoint.api_style;
-  const modelName = modelNameOption !== null ? modelNameOption.trim() || null : (existingEndpoint.model_name ?? null);
-  const displayName = displayNameOption?.trim() || existingEndpoint.display_name;
-  const numCtx = numCtxOption ?? existingEndpoint.num_ctx ?? null;
-  const hasTools = hasToolsOption ?? existingEndpoint.has_tools;
-  const seesImages = seesImagesOption ?? existingEndpoint.sees_images;
-  const supportsStructOutput = supportsStructOutputOption ?? existingEndpoint.supports_structoutput;
-  const uploadedWorkflow = await loadWorkflowJson(workflowAttachment);
-  const extraConfig = workflowAttachment
-    ? {
-        ...(existingEndpoint.extra_config ?? {}),
-        workflow: uploadedWorkflow,
+  let editModalSubmit: ModalSubmitInteraction;
+  try {
+    await buttonInteraction.showModal(editModal);
+    editModalSubmit = await buttonInteraction.awaitModalSubmit({
+      time: 600_000,
+      filter: (i) => i.customId === editModalCustomId && i.user.id === interaction.user.id,
+    });
+  } catch {
+    await selectInteraction.editReply({ components: [] });
+    return;
+  }
+
+  // Step 5: defer the modal submit before async work.
+  await editModalSubmit.deferUpdate();
+
+  try {
+    const rawFields: Record<string, string> = {};
+    for (const id of Object.values(ModalFieldId)) {
+      try {
+        rawFields[id] = editModalSubmit.fields.getTextInputValue(id);
+      } catch {
+        rawFields[id] = "";
       }
-    : (existingEndpoint.extra_config ?? {});
+    }
 
-  if (
-    !didMergedConfigChange({
-      existing: existingEndpoint,
+    const parsed = parseCapabilityModalFields(rawFields, existingEndpoint.capability);
+
+    // Merge parsed values with existing, treating blank strings as "keep existing".
+    const endpointUrl = parsed.endpointUrl || existingEndpoint.endpoint_url;
+    const displayName = parsed.displayName || existingEndpoint.display_name;
+    const modelName =
+      parsed.modelName !== null
+        ? parsed.modelName || existingEndpoint.model_name || null
+        : (existingEndpoint.model_name ?? null);
+    const numCtx = parsed.numCtx ?? existingEndpoint.num_ctx ?? null;
+    const hasTools = rawFields[ModalFieldId.text_capabilities] ? parsed.hasTools : existingEndpoint.has_tools;
+    const seesImages = rawFields[ModalFieldId.text_capabilities] ? parsed.seesImages : existingEndpoint.sees_images;
+    const supportsStructOutput = rawFields[ModalFieldId.text_capabilities]
+      ? parsed.supportsStructOutput
+      : existingEndpoint.supports_structoutput;
+    const authTokenProvided = Boolean(parsed.authToken);
+    const authToken = authTokenProvided ? parsed.authToken : undefined;
+
+    // Build extra_config (merge with existing).
+    let extraConfig = { ...(existingEndpoint.extra_config as Record<string, unknown>) };
+    if (existingEndpoint.capability === "speech") {
+      extraConfig = {
+        ...extraConfig,
+        script_markup: parsed.scriptMarkup,
+        supports_instruct: parsed.supportsInstruct,
+      };
+    } else if (existingEndpoint.capability === "transcription") {
+      extraConfig = {
+        ...extraConfig,
+        model: parsed.transcriptionModel || (extra.model as string | null) || "whisper-1",
+        language: parsed.transcriptionLanguage ?? (extra.language as string | null) ?? null,
+      };
+    }
+
+    // Validate the new endpoint URL if it changed.
+    if (endpointUrl !== existingEndpoint.endpoint_url) {
+      const urlValidation = strictRemoteValidation
+        ? await validateRemoteMcpUrl(endpointUrl, { strict: true })
+        : await validateRemoteMcpUrl(endpointUrl);
+      if (!urlValidation.valid) {
+        await selectInteraction.editReply({
+          embeds: [],
+          components: [],
+          content: localizer(locale, "commands.config.custom_models.validation.unreachable").replace(
+            "{reason}",
+            urlValidation.failureCode ?? "invalid_url",
+          ),
+        });
+        return;
+      }
+
+      const reachability = await validateCustomEndpointReachability({
+        apiStyle: existingEndpoint.api_style,
+        endpointUrl,
+        apiKey: authToken ?? null,
+        strict: strictRemoteValidation,
+      });
+      if (!reachability.ok) {
+        await selectInteraction.editReply({
+          embeds: [],
+          components: [],
+          content: localizer(locale, "commands.config.custom_models.validation.unreachable").replace(
+            "{reason}",
+            reachability.reason,
+          ),
+        });
+        return;
+      }
+    }
+
+    const registered = await registerCustomEndpoint({
+      scope,
+      label: existingEndpoint.label,
+      capability: existingEndpoint.capability,
+      apiStyle: existingEndpoint.api_style,
       endpointUrl,
-      apiStyle,
-      modelName,
       displayName,
+      modelName,
+      authToken,
       numCtx,
       hasTools,
       seesImages,
+      seesVideos: existingEndpoint.sees_videos,
       supportsStructOutput,
       extraConfig,
-      authTokenProvided: authTokenOption !== null,
-    })
-  ) {
-    await replyInfoEmbed(replyInteraction, locale, {
-      titleKey: keys.noChangesTitle,
-      descriptionKey: keys.noChangesDescription,
-      color: ColorCode.WARN,
     });
-    return;
-  }
 
-  if (endpointUrlOption !== null) {
-    const urlValidation = strictRemoteValidation
-      ? await validateRemoteMcpUrl(endpointUrl, { strict: true })
-      : await validateRemoteMcpUrl(endpointUrl);
-    if (!urlValidation.valid) {
-      await replyInfoEmbed(replyInteraction, locale, {
-        titleKey: "general.errors.custom_endpoint_unreachable_title",
-        descriptionKey: keys.validationUnreachable,
-        descriptionVars: {
-          reason: urlValidation.failureCode ?? "invalid_url",
-        },
-        color: ColorCode.ERROR,
+    if (!registered) {
+      await selectInteraction.editReply({
+        embeds: [],
+        components: [],
+        content: localizer(locale, "general.errors.update_failed_description"),
       });
       return;
     }
-  }
 
-  if (
-    (existingEndpoint.capability === "image" || existingEndpoint.capability === "video") &&
-    apiStyle === "comfyui" &&
-    !hasWorkflow(extraConfig)
-  ) {
-    await replyInfoEmbed(replyInteraction, locale, {
-      titleKey: "general.errors.invalid_option_title",
-      descriptionKey: keys.validationWorkflowRequired,
-      color: ColorCode.ERROR,
+    await onSuccess?.();
+
+    await selectInteraction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(ColorCode.SUCCESS)
+          .setTitle(localizer(locale, keys.successTitle))
+          .setDescription(
+            localizer(locale, keys.successDescription)
+              .replace("{display_name}", displayName)
+              .replace("{label}", existingEndpoint.label)
+              .replace("{capability}", existingEndpoint.capability),
+          ),
+      ],
+      components: [],
     });
-    return;
-  }
-
-  if ((existingEndpoint.capability === "text" || existingEndpoint.capability === "embedding") && !modelName) {
-    await replyInfoEmbed(replyInteraction, locale, {
-      titleKey: "general.errors.invalid_option_title",
-      descriptionKey: keys.validationModelNameRequired,
-      color: ColorCode.ERROR,
+  } catch (error) {
+    log.error("Error in executeCustomEndpointEditCommand (fields modal)", error);
+    await selectInteraction.editReply({
+      embeds: [],
+      components: [],
+      content: localizer(locale, "general.errors.unknown_error_description"),
     });
-    return;
   }
-
-  const remoteSettingsChanged = endpointUrlOption !== null || apiStyleOption !== null || authTokenOption !== null;
-  if (remoteSettingsChanged) {
-    let authTokenForValidation = authTokenOption?.trim() || null;
-
-    if (!authTokenForValidation && existingEndpoint.requires_auth) {
-      try {
-        authTokenForValidation = await resolveExistingAuthToken(scope, existingEndpoint.label);
-      } catch (error) {
-        log.warn(`Failed to load existing auth token for custom endpoint ${existingEndpoint.label}`, error);
-      }
-    }
-
-    const reachability = await validateCustomEndpointReachability({
-      apiStyle,
-      endpointUrl,
-      apiKey: authTokenForValidation,
-      strict: strictRemoteValidation,
-    });
-    if (!reachability.ok) {
-      await replyInfoEmbed(replyInteraction, locale, {
-        titleKey: "general.errors.custom_endpoint_unreachable_title",
-        descriptionKey: keys.validationUnreachable,
-        descriptionVars: {
-          reason: reachability.reason,
-        },
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
-  }
-
-  const registered = await registerCustomEndpoint({
-    scope,
-    label: existingEndpoint.label,
-    capability: existingEndpoint.capability,
-    apiStyle,
-    endpointUrl,
-    displayName,
-    modelName,
-    authToken: authTokenOption ?? undefined,
-    numCtx,
-    hasTools,
-    seesImages,
-    seesVideos: existingEndpoint.sees_videos,
-    supportsStructOutput,
-    extraConfig,
-  });
-
-  if (!registered) {
-    await replyInfoEmbed(replyInteraction, locale, {
-      titleKey: "general.errors.update_failed_title",
-      descriptionKey: "general.errors.update_failed_description",
-      color: ColorCode.ERROR,
-    });
-    return;
-  }
-
-  await onSuccess?.();
-
-  await replyInfoEmbed(replyInteraction, locale, {
-    titleKey: keys.successTitle,
-    descriptionKey: keys.successDescription,
-    descriptionVars: {
-      display_name: displayName,
-      label: existingEndpoint.label,
-      capability: existingEndpoint.capability,
-    },
-    color: ColorCode.SUCCESS,
-  });
 }
