@@ -3,9 +3,9 @@
  * labeled custom-provider bundles that no longer exist in `custom_endpoints`.
  *
  * Usage:
- * - `bun run scripts/cleanupLegacyProviderArtifacts.ts`
- * - `bun run scripts/cleanupLegacyProviderArtifacts.ts --apply`
- * - `bun run scripts/cleanupLegacyProviderArtifacts.ts --apply --yes`
+ * - `bun run scripts/maintenance/cleanupLegacyProviderArtifacts.ts`
+ * - `bun run scripts/maintenance/cleanupLegacyProviderArtifacts.ts --apply`
+ * - `bun run scripts/maintenance/cleanupLegacyProviderArtifacts.ts --apply --yes`
  */
 
 import { config } from "dotenv";

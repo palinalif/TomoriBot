@@ -23,6 +23,9 @@ function getCapabilityLabel(locale: string, capability: CustomEndpointCapability
       return localizer(locale, "commands.personal.custom_models.remove.capability_image");
     case "video":
       return localizer(locale, "commands.personal.custom_models.remove.capability_video");
+    case "speech":
+    case "transcription":
+      return capability;
   }
 }
 

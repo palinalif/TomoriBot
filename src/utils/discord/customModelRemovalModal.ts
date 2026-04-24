@@ -30,6 +30,9 @@ function getCapabilityLabelKey(
       return continued ? `${localeKeyRoot}.checkbox_image_label_continued` : `${localeKeyRoot}.checkbox_image_label`;
     case "video":
       return continued ? `${localeKeyRoot}.checkbox_video_label_continued` : `${localeKeyRoot}.checkbox_video_label`;
+    case "speech":
+    case "transcription":
+      return `${localeKeyRoot}.checkbox_text_label`;
   }
 }
 
@@ -47,7 +50,14 @@ export function buildCustomEndpointCheckboxGroups(
   localeKeyRoot: string,
 ): ModalCheckboxGroupField[] {
   const groups: ModalCheckboxGroupField[] = [];
-  const groupedCapabilities: CustomEndpointCapability[] = ["text", "embedding", "image", "video"];
+  const groupedCapabilities: CustomEndpointCapability[] = [
+    "text",
+    "embedding",
+    "image",
+    "video",
+    "speech",
+    "transcription",
+  ];
   let firstGroup = true;
 
   for (const capability of groupedCapabilities) {

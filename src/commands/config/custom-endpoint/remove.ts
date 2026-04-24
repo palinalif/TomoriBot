@@ -18,6 +18,9 @@ import { localizer } from "@/utils/text/localizer";
 
 async function resolveCurrentProvider(serverId: number, capability: CustomEndpointCapability): Promise<string | null> {
   switch (capability) {
+    case "speech":
+    case "transcription":
+      return null;
     case "text":
     case "image":
     case "embedding":
@@ -45,6 +48,9 @@ function getCapabilityLabel(locale: string, capability: CustomEndpointCapability
       return localizer(locale, "commands.config.custom_models.remove.capability_image");
     case "video":
       return localizer(locale, "commands.config.custom_models.remove.capability_video");
+    case "speech":
+    case "transcription":
+      return capability;
   }
 }
 

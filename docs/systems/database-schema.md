@@ -212,7 +212,7 @@ Schema is idempotent and startup-safe:
 
 ### Adding Columns — Always Use `seed.sql`
 
-`seed.sql` runs on **every startup** (via `scripts/seedDb.ts`). This means any `add_column_if_not_exists` call placed there is automatically applied to existing databases on the next restart — no separate one-off migration script needed.
+`seed.sql` runs on **every startup** during app initialization. This means any `add_column_if_not_exists` call placed there is automatically applied to existing databases on the next restart — no separate one-off migration script needed.
 
 **The rule:** whenever you add a column to any table, add the corresponding `add_column_if_not_exists` line to `seed.sql`. Group by table under a clearly labeled comment block (e.g. `-- Ensure all required columns exist in tomori_configs table`).
 
@@ -221,7 +221,7 @@ Schema is idempotent and startup-safe:
 SELECT add_column_if_not_exists('tomori_configs', 'my_new_flag', 'BOOLEAN', 'false');
 ```
 
-One-off `scripts/add*.ts` migration scripts are **not necessary** for column additions and should be avoided — they require manual execution and are easily forgotten. The `seed.sql` approach is self-applying and idempotent.
+One-off `scripts/maintenance/add*.ts` migration scripts are **not necessary** for column additions and should be avoided — they require manual execution and are easily forgotten. The `seed.sql` approach is self-applying and idempotent.
 
 ## Operational Notes
 

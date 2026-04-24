@@ -87,6 +87,9 @@ function getCapabilityLabel(
       return localizer(locale, keys.capabilityImage);
     case "video":
       return localizer(locale, keys.capabilityVideo);
+    case "speech":
+    case "transcription":
+      return capability;
   }
 }
 

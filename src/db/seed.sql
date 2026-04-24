@@ -2061,3 +2061,148 @@ WHERE daily_user_quota = 3
   AND serverwide_quota = 0
   AND serverwide_quota_resets_in = 365
   AND enabled = true;
+
+-- ============================================================
+-- Phase 4.1 — Foundation And Legacy Bridge
+-- ============================================================
+
+-- 1. voice_samples table: stores reference audio clip metadata for TTS cloning.
+--    Files live in /data/voice-samples/{server_id}/; this table holds metadata only.
+--    Phase 4.1 enforces one uploaded sample per server (enforced in application layer).
+CREATE TABLE IF NOT EXISTS voice_samples (
+    sample_id   SERIAL PRIMARY KEY,
+    server_id   INT NOT NULL,
+    name        TEXT NOT NULL,
+    file_path   TEXT NOT NULL,
+    ref_text    TEXT NULL,
+    duration_ms INT NOT NULL DEFAULT 0,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_voice_samples_server ON voice_samples(server_id);
+
+-- 2. New voice assignment columns on tomoris.
+--    speech_voice_sample_id: FK → voice_samples (local clone path).
+--    speech_voice_id: preset voice ID for provider-hosted voices (ElevenLabs).
+--    speech_voice_name: cached friendly name for display (either path).
+SELECT add_column_if_not_exists('tomoris', 'speech_voice_sample_id', 'INTEGER');
+SELECT add_column_if_not_exists('tomoris', 'speech_voice_id', 'TEXT');
+SELECT add_column_if_not_exists('tomoris', 'speech_voice_name', 'TEXT');
+
+-- 3. Backfill new columns from legacy ElevenLabs voice columns for any persona
+--    that had a voice configured before Phase 4.1. The legacy columns are kept
+--    read-only; new writes go to speech_voice_id / speech_voice_name.
+UPDATE tomoris
+SET
+    speech_voice_id   = elevenlabs_voice_id,
+    speech_voice_name = elevenlabs_voice_name
+WHERE elevenlabs_voice_id IS NOT NULL
+  AND speech_voice_id IS NULL;
+
+-- 4. ElevenLabs migration: copy encrypted key from opt_api_keys into
+--    saved_provider_configs so it can be resolved via the custom endpoint pathway.
+--    Provider name format matches buildServerCustomProviderName(serverId, "elevenlabs"):
+--    "custom:s{server_id}:elevenlabs"
+INSERT INTO saved_provider_configs (
+    server_id,
+    provider,
+    api_key,
+    key_version,
+    llm_id,
+    diffusion_model_id,
+    embedding_model_id,
+    nai_diffusion_model_id,
+    nai_preset_name,
+    custom_endpoint_url,
+    custom_model_name,
+    thinking_level,
+    fallback_llm_ids
+)
+SELECT
+    o.server_id,
+    'custom:s' || o.server_id::TEXT || ':elevenlabs',
+    o.api_key,
+    o.key_version,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    'auto',
+    '[]'::JSONB
+FROM opt_api_keys o
+WHERE o.service_name = 'elevenlabs'
+  AND NOT EXISTS (
+      SELECT 1 FROM saved_provider_configs spc
+      WHERE spc.server_id = o.server_id
+        AND spc.provider = 'custom:s' || o.server_id::TEXT || ':elevenlabs'
+  );
+
+-- 5. Create a speech custom_endpoint row (capability="speech", api_style="elevenlabs")
+--    for each server that has an ElevenLabs key.
+INSERT INTO custom_endpoints (
+    server_id,
+    label,
+    capability,
+    api_style,
+    endpoint_url,
+    display_name,
+    requires_auth,
+    extra_config,
+    is_default
+)
+SELECT
+    o.server_id,
+    'elevenlabs',
+    'speech',
+    'elevenlabs',
+    'https://api.elevenlabs.io',
+    'ElevenLabs TTS',
+    true,
+    '{"script_markup":"bracket-tags","supports_instruct":false}'::JSONB,
+    true
+FROM opt_api_keys o
+WHERE o.service_name = 'elevenlabs'
+  AND NOT EXISTS (
+      SELECT 1 FROM custom_endpoints ce
+      WHERE ce.server_id = o.server_id
+        AND ce.label = 'elevenlabs'
+        AND ce.capability = 'speech'
+        AND ce.user_id IS NULL
+  );
+
+-- 6. Create a transcription custom_endpoint row (capability="transcription",
+--    api_style="elevenlabs-transcription") for each server with an ElevenLabs key.
+INSERT INTO custom_endpoints (
+    server_id,
+    label,
+    capability,
+    api_style,
+    endpoint_url,
+    display_name,
+    requires_auth,
+    extra_config,
+    is_default
+)
+SELECT
+    o.server_id,
+    'elevenlabs',
+    'transcription',
+    'elevenlabs-transcription',
+    'https://api.elevenlabs.io',
+    'ElevenLabs STT',
+    true,
+    '{}'::JSONB,
+    true
+FROM opt_api_keys o
+WHERE o.service_name = 'elevenlabs'
+  AND NOT EXISTS (
+      SELECT 1 FROM custom_endpoints ce
+      WHERE ce.server_id = o.server_id
+        AND ce.label = 'elevenlabs'
+        AND ce.capability = 'transcription'
+        AND ce.user_id IS NULL
+  );

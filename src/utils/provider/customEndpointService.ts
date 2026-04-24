@@ -296,6 +296,10 @@ async function deleteSyntheticCapabilityModel(provider: string, capability: Cust
 				  AND codename = ${codename}
 			`;
       return;
+    case "speech":
+    case "transcription":
+      // Speech and transcription endpoints have no synthetic model table entries.
+      return;
   }
 }
 
@@ -312,6 +316,9 @@ function getCapabilityModelId(
       return config.diffusion_model_id ?? null;
     case "video":
       return config.video_model_id ?? null;
+    case "speech":
+    case "transcription":
+      return null;
   }
 }
 

@@ -195,11 +195,11 @@ async function main(): Promise<void> {
     console.log("Run with --export to write stale-translations.json for batch translation.");
   } else {
     // Export JSON for use by translateStaleLocales.ts
-    const outputPath = join(process.cwd(), "scripts", "stale-translations.json");
+    const outputPath = join(process.cwd(), "scripts", "maintenance", "stale-translations.json");
     await writeFile(outputPath, JSON.stringify(stale, null, 2), "utf-8");
     log.success(`Exported ${stale.length} entries to ${outputPath}`);
     log.info("Review and edit the file to remove entries you do NOT want translated.");
-    log.info("Then run: bun run scripts/translateStaleLocales.ts");
+    log.info("Then run: bun run scripts/maintenance/translateStaleLocales.ts");
   }
 }
 

@@ -2,7 +2,8 @@ import type { Attachment, Message } from "discord.js";
 import { getOptApiKey } from "@/utils/security/crypto";
 import { safeDownload } from "@/utils/security/safeDownload";
 import { ELEVENLABS_SERVICE_NAME, getElevenLabsSttConfig } from "@/utils/audio/elevenLabsShared";
-import { transcribeWithElevenLabs } from "@/utils/audio/elevenLabsStt";
+import { transcribeViaElevenLabsAdapter } from "@/providers/custom/styles/transcriptionElevenLabsAdapter";
+import { resolveActiveTranscriptionEndpoint } from "@/utils/provider/speechEndpointResolver";
 
 const AUDIO_EXTENSION_REGEX = /\.(aac|flac|m4a|mp3|mp4|mpeg|mpga|oga|ogg|opus|wav|webm)$/i;
 
@@ -51,8 +52,13 @@ export async function transcribeMessageAudioAttachment(
     };
   }
 
-  const config = getElevenLabsSttConfig();
-  const apiKey = await getOptApiKey(serverId, ELEVENLABS_SERVICE_NAME);
+  // Resolution order (Phase 4.1):
+  // 1. Custom transcription endpoint via custom_endpoints table.
+  // 2. Legacy ElevenLabs key from opt_api_keys (transition fallback until Phase 4.3 cleanup).
+  // 3. Skip transcription silently if neither is available.
+  const transcriptionEndpoint = await resolveActiveTranscriptionEndpoint(serverId);
+  const apiKey = transcriptionEndpoint?.apiKey ?? (await getOptApiKey(serverId, ELEVENLABS_SERVICE_NAME));
+
   if (!apiKey) {
     return {
       hasAudio: true,
@@ -63,6 +69,7 @@ export async function transcribeMessageAudioAttachment(
     };
   }
 
+  const config = getElevenLabsSttConfig();
   const downloadResult = await safeDownload(attachment.url, {
     maxSizeMB: config.maxSizeMb,
     timeoutMs: config.timeoutMs,
@@ -79,7 +86,7 @@ export async function transcribeMessageAudioAttachment(
     };
   }
 
-  const transcriptionResult = await transcribeWithElevenLabs({
+  const transcriptionResult = await transcribeViaElevenLabsAdapter({
     apiKey,
     audioBuffer: downloadResult.buffer,
     filename: attachment.name ?? "audio",

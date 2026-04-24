@@ -12,7 +12,7 @@ import { convertToPNG } from "@/utils/image/imageProcessor";
 config();
 
 // ---------------------------------------------------------------------------
-// scripts/backupPersonas.ts
+// scripts/maintenance/backupPersonas.ts
 //   bun run backup:personas  → export ALL personas across all servers
 //
 //   For each persona: writes an import-compatible JSON file containing the

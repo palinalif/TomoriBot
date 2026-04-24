@@ -1,13 +1,14 @@
 import { AttachmentBuilder, Routes } from "discord.js";
 import type { Webhook } from "discord.js";
 import { BaseTool, type ToolContext, type ToolParameterSchema, type ToolResult } from "@/types/tool/interfaces";
-import { synthesizeSpeechWithElevenLabs } from "@/utils/audio/elevenLabsTts";
+import { synthesizeSpeechViaElevenLabsAdapter } from "@/providers/custom/styles/elevenLabsAdapter";
 import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
 import { setCachedVoiceTranscript } from "@/utils/audio/voiceTranscriptCache";
 import { generateVoiceMessageMetadata } from "@/utils/audio/voiceMessageMetadata";
 import type { VoiceMessageMetadata } from "@/utils/audio/voiceMessageMetadata";
 import { getOptApiKey } from "@/utils/security/crypto";
 import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
+import { resolveActiveSpeechEndpoint } from "@/utils/provider/speechEndpointResolver";
 import { log } from "@/utils/misc/logger";
 
 /** Discord IS_VOICE_MESSAGE flag value (1 << 13). */
@@ -194,25 +195,34 @@ export class GenerateVoiceMessageTool extends BaseTool {
       };
     }
 
-    const voiceId = context.tomoriState.elevenlabs_voice_id?.trim();
+    // Prefer the Phase 4.1 speech_voice_id column; fall back to the legacy
+    // elevenlabs_voice_id for rows that haven't been migrated yet.
+    const voiceId =
+      (context.tomoriState.speech_voice_id?.trim() || context.tomoriState.elevenlabs_voice_id?.trim()) ?? "";
     if (!voiceId) {
       return {
         success: false,
         error:
-          "No ElevenLabs voice is configured for the active persona. A server manager can set one with /config voice elevenlabs.",
+          "No voice is configured for the active persona. A server manager can set one with /config speech voice-assign.",
       };
     }
 
-    const apiKey = await getOptApiKey(context.tomoriState.server_id, ELEVENLABS_SERVICE_NAME);
+    // 1. Try the new custom-endpoint credential path (Phase 4.1+).
+    // 2. Fall back to the legacy opt_api_keys entry for backward compatibility
+    //    during the transition window before seed.sql migration has run.
+    const speechEndpoint = await resolveActiveSpeechEndpoint(context.tomoriState.server_id);
+    const apiKey =
+      speechEndpoint?.apiKey || (await getOptApiKey(context.tomoriState.server_id, ELEVENLABS_SERVICE_NAME));
+
     if (!apiKey) {
       return {
         success: false,
         error:
-          "No ElevenLabs API key is available for this server. A server manager can set one with /optional-key elevenlabs set.",
+          "No speech API key is available for this server. A server manager can configure one with /config speech elevenlabs.",
       };
     }
 
-    const synthesisResult = await synthesizeSpeechWithElevenLabs({
+    const synthesisResult = await synthesizeSpeechViaElevenLabsAdapter({
       apiKey,
       voiceId,
       script,

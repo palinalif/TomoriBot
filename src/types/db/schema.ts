@@ -93,10 +93,28 @@ export const tomoriSchema = z.object({
   nai_attg_stars: z.number().int().min(1).max(5).nullable().optional(), // Added March 2026 - ATTG: Quality stars (Erato only)
   context_note: z.string().nullable().optional(), // Added April 2026 - Author's note injected into conversation history at inference
   context_note_depth: z.number().int().min(0).max(100).default(0), // Added April 2026 - Depth from bottom (0=lowest, 100=max)
+  speech_voice_sample_id: z.number().int().nullable().optional(), // Added Phase 4.1 - FK → voice_samples; used for local TTS clone path
+  speech_voice_id: z.string().nullable().optional(), // Added Phase 4.1 - Preset voice ID for provider-hosted voices (e.g. ElevenLabs)
+  speech_voice_name: z.string().nullable().optional(), // Added Phase 4.1 - Cached friendly voice display name (either path)
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
 export type TomoriRow = z.infer<typeof tomoriSchema>;
+
+/**
+ * Schema for voice_samples table — reference audio clips for local TTS voice cloning.
+ * Files live in /data/voice-samples/{server_id}/; this table stores metadata only.
+ */
+export const voiceSampleSchema = z.object({
+  sample_id: z.number().optional(),
+  server_id: z.number(),
+  name: z.string(),
+  file_path: z.string(),
+  ref_text: z.string().nullable().optional(),
+  duration_ms: z.number().int().default(0),
+  created_at: z.date().optional(),
+});
+export type VoiceSampleRow = z.infer<typeof voiceSampleSchema>;
 
 export const llmSchema = z.object({
   llm_id: z.number().optional(),
@@ -167,10 +185,25 @@ export const embeddingModelSchema = z.object({
 });
 export type EmbeddingModelRow = z.infer<typeof embeddingModelSchema>;
 
-export const customEndpointCapabilitySchema = z.enum(["text", "embedding", "image", "video"]);
+export const customEndpointCapabilitySchema = z.enum([
+  "text",
+  "embedding",
+  "image",
+  "video",
+  "speech",
+  "transcription",
+]);
 export type CustomEndpointCapability = z.infer<typeof customEndpointCapabilitySchema>;
 
-export const customEndpointApiStyleSchema = z.enum(["openai-compatible", "comfyui", "ollama-native"]);
+export const customEndpointApiStyleSchema = z.enum([
+  "openai-compatible",
+  "comfyui",
+  "ollama-native",
+  "elevenlabs",
+  "elevenlabs-transcription",
+  "tts-clone",
+  "openai-compatible-transcription",
+]);
 export type CustomEndpointApiStyle = z.infer<typeof customEndpointApiStyleSchema>;
 
 export const customEndpointSchema = z.object({

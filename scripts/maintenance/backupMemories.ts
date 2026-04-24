@@ -7,7 +7,7 @@ import { join } from "node:path";
 config();
 
 // ---------------------------------------------------------------------------
-// scripts/backupMemories.ts
+// scripts/maintenance/backupMemories.ts
 //   bun run backup:memories  → export ALL personal memories across all users
 //
 //   Iterates every user in the database and writes their personal_memories
