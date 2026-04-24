@@ -171,21 +171,6 @@ export async function execute(
   }
   const serverId = serverRow.server_id;
 
-  // Phase 4 limit: one uploaded local sample per server.
-  const [existingRow] = await sql<[{ sample_id: number }]>`
-    SELECT sample_id FROM voice_samples
-    WHERE server_id = ${serverId}
-    LIMIT 1
-  `;
-  if (existingRow) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.speech.voice_add.duplicate_error_title",
-      descriptionKey: "commands.speech.voice_add.duplicate_error_description",
-      color: ColorCode.ERROR,
-    });
-    return;
-  }
-
   try {
     // Download the audio attachment with the configured size limit.
     const downloadResult = await safeDownload(attachment.url, {

@@ -7,7 +7,7 @@ import { replySummaryEmbed } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
-type TranscriptionHelpEngine = "overview" | "whisperx" | "whispercpp" | "koboldcpp" | "elevenlabs";
+type TranscriptionHelpEngine = "overview" | "whisperx" | "koboldcpp" | "elevenlabs";
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
@@ -21,7 +21,6 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
         .addChoices(
           { name: "Overview", value: "overview" },
           { name: "WhisperX", value: "whisperx" },
-          { name: "whisper.cpp", value: "whispercpp" },
           { name: "KoboldCPP", value: "koboldcpp" },
           { name: "ElevenLabs", value: "elevenlabs" },
         ),

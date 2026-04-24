@@ -128,14 +128,15 @@ export async function execute(
     }
 
     if (effectiveStyle === "tts-clone") {
-      // --- TTS clone path: single server sample shared by all personas ---
-      const [sampleRow] = await sql<[{ sample_id: number; name: string }]>`
-        SELECT sample_id, name FROM voice_samples
+      // --- TTS clone path: all server samples available for assignment ---
+      const sampleRows = await sql<{ sample_id: number; name: string; ref_text: string | null; duration_ms: number }[]>`
+        SELECT sample_id, name, ref_text, duration_ms
+        FROM voice_samples
         WHERE server_id = ${serverId}
-        LIMIT 1
+        ORDER BY name
       `;
 
-      if (!sampleRow) {
+      if (!sampleRows.length) {
         await replyInfoEmbed(interaction, locale, {
           titleKey: "commands.speech.voice_assign.no_sample_title",
           descriptionKey: "commands.speech.voice_assign.no_sample_description",
@@ -171,7 +172,7 @@ export async function execute(
           return;
         }
 
-        // Show: assign sample OR clear assignment.
+        // Build options: clear + one entry per uploaded sample.
         const sampleOptions: SelectOption[] = [
           {
             label: safeSelectOptionText(localizer(locale, "commands.speech.voice_assign.clear_choice_label")),
@@ -180,13 +181,18 @@ export async function execute(
               localizer(locale, "commands.speech.voice_assign.clear_choice_description"),
             ),
           },
-          {
-            label: safeSelectOptionText(sampleRow.name),
-            value: String(sampleRow.sample_id),
-            description: safeSelectOptionText(
-              localizer(locale, "commands.speech.voice_assign.assign_clone_description"),
-            ),
-          },
+          ...sampleRows.map((s) => {
+            const durationLabel =
+              s.duration_ms > 0 ? `${Math.floor(s.duration_ms / 1000)}s` : localizer(locale, "general.unknown");
+            const hintKey = s.ref_text
+              ? "commands.speech.voice_assign.sample_ref_hint_with"
+              : "commands.speech.voice_assign.sample_ref_hint_without";
+            return {
+              label: safeSelectOptionText(s.name),
+              value: String(s.sample_id),
+              description: safeSelectOptionText(localizer(locale, hintKey, { duration: durationLabel })),
+            };
+          }),
         ];
 
         const sampleModal = await promptWithPaginatedModal(personaButtonInteraction, locale, {
@@ -196,7 +202,6 @@ export async function execute(
             {
               customId: "sample_select",
               labelKey: "commands.speech.voice_assign.assign_clone_title",
-              descriptionKey: "commands.speech.voice_assign.assign_clone_description",
               placeholder: "commands.speech.voice_assign.assign_clone_title",
               required: true,
               options: sampleOptions,
@@ -217,7 +222,8 @@ export async function execute(
 
         const chosenValue = sampleModal.values?.sample_select;
         const isClear = chosenValue === CLEAR_VOICE_VALUE;
-        const sampleIdToAssign = isClear ? null : sampleRow.sample_id;
+        const chosenSample = isClear ? null : (sampleRows.find((s) => String(s.sample_id) === chosenValue) ?? null);
+        const sampleIdToAssign = chosenSample?.sample_id ?? null;
 
         const updatedTomori = await updateTomori(selectedPersona.tomori_id, {
           speech_voice_sample_id: sampleIdToAssign,
@@ -246,7 +252,7 @@ export async function execute(
           ColorCode.SUCCESS,
           isClear
             ? { persona: selectedPersona.tomori_nickname }
-            : { persona: selectedPersona.tomori_nickname, voice: sampleRow.name },
+            : { persona: selectedPersona.tomori_nickname, voice: chosenSample?.name ?? "" },
           "general.pagination.reloading_persona_picker",
         );
       }

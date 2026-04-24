@@ -9,7 +9,7 @@ import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 
 // Configure the subcommand — no options, running the command flips the toggle
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
-  subcommand.setName("tool-use").setDescription(localizer("en-US", "commands.config.tool-use.description"));
+  subcommand.setName("toggle").setDescription(localizer("en-US", "commands.config.tool-use.toggle.description"));
 
 /**
  * Toggles the server-wide tool-use master switch.
@@ -66,7 +66,7 @@ export async function execute(
         userId: userData.user_id,
         errorType: "DatabaseUpdateError",
         metadata: {
-          command: "config tool-use",
+          command: "config tool-use toggle",
           toolUseEnabled: isEnabled,
           targetTable: "tomori_configs",
         },
@@ -91,7 +91,7 @@ export async function execute(
         serverId: tomoriState.server_id,
         errorType: "SchemaValidationError",
         metadata: {
-          command: "config tool-use",
+          command: "config tool-use toggle",
           validationErrors: validatedConfig.error.flatten(),
         },
       };
@@ -107,10 +107,10 @@ export async function execute(
     invalidateTomoriStateCache(serverDiscId);
 
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.tool-use.success_title",
+      titleKey: "commands.config.tool-use.toggle.success_title",
       descriptionKey: isEnabled
-        ? "commands.config.tool-use.enabled_success"
-        : "commands.config.tool-use.disabled_success",
+        ? "commands.config.tool-use.toggle.enabled_success"
+        : "commands.config.tool-use.toggle.disabled_success",
       color: isEnabled ? ColorCode.SUCCESS : ColorCode.WARN,
     });
   } catch (error) {
@@ -119,11 +119,11 @@ export async function execute(
       serverId: (await getCachedTomoriState(serverDiscId))?.server_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "config tool-use",
+        command: "config tool-use toggle",
         options: interaction.options?.data,
       },
     };
-    await log.error("Error in /config tool-use command", error as Error, context);
+    await log.error("Error in /config tool-use toggle command", error as Error, context);
 
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",

@@ -5,14 +5,17 @@ import {
   ButtonBuilder,
   ButtonStyle,
   MessageFlags,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Client,
   type SlashCommandSubcommandBuilder,
+  type StringSelectMenuInteraction,
 } from "discord.js";
 import { sql } from "@/utils/db/client";
 import { log, ColorCode } from "@/utils/misc/logger";
-import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
+import { replyInfoEmbed, safeSelectOptionText } from "@/utils/discord/interactionHelper";
 import { createStandardEmbed } from "@/utils/discord/embedHelper";
 import type { ErrorContext, UserRow } from "@/types/db/schema";
 import { localizer } from "@/utils/text/localizer";
@@ -21,7 +24,8 @@ const VOICE_SAMPLES_BASE_DIR = path.resolve(process.cwd(), "data", "voice-sample
 
 const CONFIRM_BTN_ID = "voice_remove_confirm";
 const CANCEL_BTN_ID = "voice_remove_cancel";
-const CONFIRM_TIMEOUT_MS = 30_000;
+const SELECT_MENU_ID = "voice_remove_select";
+const INTERACTION_TIMEOUT_MS = 30_000;
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand.setName("voice-remove").setDescription(localizer("en-US", "commands.speech.voice_remove.description"));
@@ -60,15 +64,15 @@ export async function execute(
   const serverId = serverRow.server_id;
 
   try {
-    // Load the server's current voice sample.
-    const [sampleRow] = await sql<[{ sample_id: number; name: string; file_path: string; duration_ms: number }]>`
+    // 1. Load all server voice samples.
+    const sampleRows = await sql<{ sample_id: number; name: string; file_path: string; duration_ms: number }[]>`
       SELECT sample_id, name, file_path, duration_ms
       FROM voice_samples
       WHERE server_id = ${serverId}
-      LIMIT 1
+      ORDER BY name
     `;
 
-    if (!sampleRow) {
+    if (!sampleRows.length) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.speech.voice_remove.no_sample_title",
         descriptionKey: "commands.speech.voice_remove.no_sample_description",
@@ -77,7 +81,56 @@ export async function execute(
       return;
     }
 
-    // Count how many personas currently reference this sample.
+    // 2. Show a select menu so the user picks which sample to delete.
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId(SELECT_MENU_ID)
+      .setPlaceholder(localizer(locale, "commands.speech.voice_remove.select_placeholder"))
+      .addOptions(
+        sampleRows.map((s) =>
+          new StringSelectMenuOptionBuilder()
+            .setLabel(safeSelectOptionText(s.name))
+            .setValue(String(s.sample_id))
+            .setDescription(
+              s.duration_ms > 0
+                ? safeSelectOptionText(`${Math.floor(s.duration_ms / 1000)}s`)
+                : safeSelectOptionText(localizer(locale, "general.unknown")),
+            ),
+        ),
+      );
+
+    const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+    const selectEmbed = createStandardEmbed(locale, {
+      titleKey: "commands.speech.voice_remove.select_sample_title",
+      color: ColorCode.WARN,
+    });
+
+    const selectMessage = await interaction.editReply({ embeds: [selectEmbed], components: [selectRow] });
+
+    let selectInteraction: StringSelectMenuInteraction;
+    try {
+      selectInteraction = (await selectMessage.awaitMessageComponent({
+        filter: (i) => i.user.id === interaction.user.id && i.customId === SELECT_MENU_ID,
+        time: INTERACTION_TIMEOUT_MS,
+      })) as StringSelectMenuInteraction;
+    } catch {
+      await interaction.editReply({ components: [] }).catch(() => {});
+      return;
+    }
+
+    await selectInteraction.deferUpdate();
+
+    const selectedSampleId = Number(selectInteraction.values[0]);
+    const sampleRow = sampleRows.find((s) => s.sample_id === selectedSampleId);
+    if (!sampleRow) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.invalid_option_title",
+        descriptionKey: "general.errors.invalid_option_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    // 3. Count how many personas currently reference this sample.
     const [refCountRow] = await sql<[{ count: string }]>`
       SELECT COUNT(*) AS count FROM tomoris
       WHERE server_id = ${serverId}
@@ -85,14 +138,11 @@ export async function execute(
     `;
     const refCount = Number(refCountRow?.count ?? 0);
 
-    // Show a confirmation embed with Confirm / Cancel buttons.
+    // 4. Show confirm / cancel buttons.
     const confirmEmbed = createStandardEmbed(locale, {
       titleKey: "commands.speech.voice_remove.confirm_title",
       descriptionKey: "commands.speech.voice_remove.confirm_description",
-      descriptionVars: {
-        name: sampleRow.name,
-        refs: String(refCount),
-      },
+      descriptionVars: { name: sampleRow.name, refs: String(refCount) },
       color: ColorCode.WARN,
     });
 
@@ -107,20 +157,16 @@ export async function execute(
         .setStyle(ButtonStyle.Secondary),
     );
 
-    const confirmMessage = await interaction.editReply({
-      embeds: [confirmEmbed],
-      components: [confirmRow],
-    });
+    await interaction.editReply({ embeds: [confirmEmbed], components: [confirmRow] });
 
     let buttonInteraction: ButtonInteraction;
     try {
-      buttonInteraction = (await confirmMessage.awaitMessageComponent({
+      buttonInteraction = (await selectMessage.awaitMessageComponent({
         filter: (i) =>
           i.user.id === interaction.user.id && (i.customId === CONFIRM_BTN_ID || i.customId === CANCEL_BTN_ID),
-        time: CONFIRM_TIMEOUT_MS,
+        time: INTERACTION_TIMEOUT_MS,
       })) as ButtonInteraction;
     } catch {
-      // Timed out — disable the buttons silently.
       await interaction.editReply({ components: [] }).catch(() => {});
       return;
     }
@@ -132,7 +178,7 @@ export async function execute(
       return;
     }
 
-    // Deletion confirmed: remove DB row, clear persona assignments, delete file.
+    // 5. Deletion confirmed: clear persona assignments, remove DB row, delete file.
     await sql`
       UPDATE tomoris
       SET speech_voice_sample_id = NULL

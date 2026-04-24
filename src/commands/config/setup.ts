@@ -580,7 +580,7 @@ export async function execute(
       // NovelAI auto-disable: flip emoji and sticker usage off immediately after setup.
       // The schema defaults both to true, but NovelAI's token budget makes them
       // counterproductive — they consume context without the model being able to use them.
-      // The user is notified in the success embed and can re-enable via /config bot-permissions.
+      // The user is notified in the success embed and can re-enable via /config tool-use manage.
       if (normalizedProvider === "novelai") {
         try {
           await sql`

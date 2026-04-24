@@ -34,7 +34,7 @@ export async function execute(
     const configSetupMention = commandRegistry.getCommandMention("config", "setup");
     const serverInitializeExpressionsMention = commandRegistry.getCommandMention("server", "initialize", "expressions");
     const serverTriggerMention = commandRegistry.getCommandMention("server", "trigger", "add");
-    const configPermissionsMention = commandRegistry.getCommandMention("config", "bot-permissions");
+    const configPermissionsMention = commandRegistry.getCommandMention("config", "tool-use", "manage");
     const serverAutotriggerMention = commandRegistry.getCommandMention("server", "auto-trigger", "channels");
     const personaMention = commandRegistry.getCommandMention("persona");
     const serverMention = commandRegistry.getCommandMention("server");

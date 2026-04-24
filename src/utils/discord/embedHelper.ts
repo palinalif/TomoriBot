@@ -83,7 +83,7 @@ export function createStandardEmbed(locale: string, options: StandardEmbedOption
     ? description
     : descriptionKey
       ? localizer(locale, descriptionKey, descriptionVars)
-      : "";
+      : null;
 
   const embed = new EmbedBuilder()
     .setColor(color)
@@ -123,7 +123,7 @@ export function createSummaryEmbed(locale: string, options: SummaryEmbedOptions)
     ? description
     : descriptionKey
       ? localizer(locale, descriptionKey, descriptionVars)
-      : "";
+      : null;
 
   const embed = new EmbedBuilder()
     .setColor(color)
