@@ -1166,9 +1166,23 @@ export async function acknowledgeModalSubmitForRefresh(interaction: ModalSubmitI
 }
 
 /**
- * Resolves avatar images for a single page of personas.
+ * Resolved avatar data for a single persona, cached across page renders within a picker session.
+ * - `url`: a public HTTP(S) URL or the bot fallback — no file attachment needed.
+ * - `buffer`: raw image bytes for a local-disk avatar that must be attached to the Discord message.
+ */
+type AvatarCacheEntry = { type: "url"; url: string } | { type: "buffer"; buffer: Buffer };
+
+/**
+ * Session-scoped avatar cache keyed by absolute persona index (not page-local).
+ * Populated lazily on first page visit; reused on re-navigation to the same page.
+ */
+type AvatarSessionCache = Map<number, AvatarCacheEntry>;
+
+/**
+ * Resolves avatar images for a single page of personas, using a session cache to
+ * avoid re-fetching the same avatar on repeated page visits.
  *
- * Resolution order per alter persona:
+ * Resolution order per alter persona (only runs on first visit per persona):
  * 1. Public HTTP(S) URL (always works in production, and in dev when
  *    AVATAR_PUBLIC_BASE_URL is configured)
  * 2. Discord file attachment — used in non-production when the avatar is stored
@@ -1179,34 +1193,56 @@ export async function acknowledgeModalSubmitForRefresh(interaction: ModalSubmitI
  * 3. Fallback URL (bot server avatar) when no avatar is available.
  *
  * @param pagePersonas - The personas visible on the current page
+ * @param pageStartIdx - Absolute index of the first persona on this page (for cache keying)
  * @param fallbackAvatarUrl - URL to use when no avatar can be resolved
+ * @param sessionCache - Mutable cache shared across all page renders in one picker session
  */
 async function resolvePersonaPageAvatarData(
   pagePersonas: TomoriState[],
+  pageStartIdx: number,
   fallbackAvatarUrl: string,
+  sessionCache: AvatarSessionCache,
 ): Promise<{ avatarUrls: Map<number, string>; files: AttachmentBuilder[] }> {
   const avatarUrls = new Map<number, string>();
   const files: AttachmentBuilder[] = [];
 
   await Promise.all(
     pagePersonas.map(async (persona, idx) => {
+      const absoluteIdx = pageStartIdx + idx;
+
+      // 1. Return cached result immediately — skip all I/O on repeated page visits.
+      const cached = sessionCache.get(absoluteIdx);
+      if (cached) {
+        if (cached.type === "url") {
+          avatarUrls.set(idx, cached.url);
+        } else {
+          const attachmentName = `avatar_${idx}.png`;
+          files.push(new AttachmentBuilder(cached.buffer, { name: attachmentName }));
+          avatarUrls.set(idx, `attachment://${attachmentName}`);
+        }
+        return;
+      }
+
       if (!persona.is_alter) {
+        sessionCache.set(absoluteIdx, { type: "url", url: fallbackAvatarUrl });
         avatarUrls.set(idx, fallbackAvatarUrl);
         return;
       }
 
-      // 1. Try public URL resolution first (http/https refs or configured base URL)
+      // 2. Try public URL resolution first (http/https refs or configured base URL)
       const publicUrl = resolvePersonaAvatarPublicUrl(persona.webhook_avatar_url);
       if (publicUrl) {
+        sessionCache.set(absoluteIdx, { type: "url", url: publicUrl });
         avatarUrls.set(idx, publicUrl);
         return;
       }
 
-      // 2. For local paths with no public URL, attach the file directly
+      // 3. For local paths with no public URL, load the buffer and attach directly
       const avatarRef = persona.webhook_avatar_url;
       if (avatarRef && isLocalPersonaAvatarPath(avatarRef)) {
         const buffer = await loadStoredPersonaAvatarBuffer(avatarRef);
         if (buffer) {
+          sessionCache.set(absoluteIdx, { type: "buffer", buffer });
           const attachmentName = `avatar_${idx}.png`;
           files.push(new AttachmentBuilder(buffer, { name: attachmentName }));
           avatarUrls.set(idx, `attachment://${attachmentName}`);
@@ -1214,7 +1250,8 @@ async function resolvePersonaPageAvatarData(
         }
       }
 
-      // 3. Nothing resolved — use fallback
+      // 4. Nothing resolved — use fallback
+      sessionCache.set(absoluteIdx, { type: "url", url: fallbackAvatarUrl });
       avatarUrls.set(idx, fallbackAvatarUrl);
     }),
   );
@@ -1760,6 +1797,8 @@ export async function replyPaginatedPersonaChoicesV2(
   // Discord API calls — by the time an error escapes the inner try, the interaction
   // token may already be dead and any recovery attempt just wastes rate-limit quota.
   const sessionStart = Date.now();
+  // Lazy avatar cache: populated on first visit to each page, reused on re-navigation.
+  const avatarSessionCache: AvatarSessionCache = new Map();
   try {
     while (true) {
       // 1. Inner try wraps the ENTIRE loop body — setup, render, and button wait.
@@ -1804,7 +1843,13 @@ export async function replyPaginatedPersonaChoicesV2(
         // 1d. Pre-resolve avatar URLs (and collect local file attachments when needed).
         //     In non-production without AVATAR_PUBLIC_BASE_URL, alter avatars stored as
         //     local paths are loaded from disk and attached directly to the message.
-        const { avatarUrls, files } = await resolvePersonaPageAvatarData(pagePersonas, fallbackAvatarUrl);
+        //     avatarSessionCache ensures each persona's avatar is only fetched once per session.
+        const { avatarUrls, files } = await resolvePersonaPageAvatarData(
+          pagePersonas,
+          startIdx,
+          fallbackAvatarUrl,
+          avatarSessionCache,
+        );
 
         const components = buildPersonaPageComponents(
           interaction,

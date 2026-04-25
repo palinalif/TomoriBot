@@ -6538,7 +6538,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       // Cross-provider fallback — load saved config for the fallback provider.
                       // Same pattern as persona override (see line ~5364).
                       const fallbackSavedConfig = await loadSavedProviderConfig(
-                        tomoriState!.server_id,
+                        primaryEffectiveTomoriState.server_id,
                         fallbackProviderName,
                       );
                       if (!fallbackSavedConfig?.api_key) {
@@ -6578,9 +6578,9 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                     );
 
                     // Load the saved provider config for this custom endpoint label to get the API key
-                    const customProviderName = `custom:s${tomoriState!.server_id}:${ep.label}`;
+                    const customProviderName = `custom:s${primaryEffectiveTomoriState.server_id}:${ep.label}`;
                     const fallbackSavedConfig = await loadSavedProviderConfig(
-                      tomoriState!.server_id,
+                      primaryEffectiveTomoriState.server_id,
                       customProviderName,
                     );
                     if (!fallbackSavedConfig?.api_key) {

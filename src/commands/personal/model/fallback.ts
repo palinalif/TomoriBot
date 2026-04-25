@@ -175,8 +175,8 @@ export async function execute(
       llmRefIds.length > 0 ? getLlmsByIds(llmRefIds) : Promise.resolve([]),
       epRefIds.length > 0 ? loadCustomEndpointsByIds(epRefIds) : Promise.resolve([]),
     ]);
-    const llmMap = new Map(refLlms.map((m) => [m.llm_id!, m]));
-    const epMap = new Map(refEndpoints.map((e) => [e.custom_endpoint_id!, e]));
+    const llmMap = new Map(refLlms.map((m) => [m.llm_id as number, m]));
+    const epMap = new Map(refEndpoints.map((e) => [e.custom_endpoint_id as number, e]));
     const existingChain: FallbackEntry[] = existingRefs
       .map((ref) => {
         if (ref.type === "llm") {
