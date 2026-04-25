@@ -3369,7 +3369,7 @@ Prompt Guidance Rescale: {cfg_rescale}
           description: `ペルソナに使うElevenLabs音声を選択します。`,
           select_persona_title: `音声を設定するペルソナを選択`,
           no_key_title: `ElevenLabs APIキーが設定されていません`,
-          no_key_description: `ペルソナの音声を選ぶにはElevenLabsキーが必要です。まず \`/config speech elevenlabs\` で接続してください。`,
+          no_key_description: `ペルソナの音声を選ぶにはElevenLabsキーが必要です。まず \`/speech elevenlabs\` で接続してください。`,
           voice_fetch_failed_title: `音声一覧を取得できませんでした`,
           voice_fetch_failed_description: `このサーバーで利用できるElevenLabs音声を読み込めませんでした。設定済みキーを確認して、もう一度お試しください。`,
           no_voices_title: `利用可能な音声がありません`,
@@ -3399,7 +3399,7 @@ Prompt Guidance Rescale: {cfg_rescale}
         speech: {
           description: `有効な音声生成エンドポイントを選択します。`,
           no_endpoints_title: `音声エンドポイントがありません`,
-          no_endpoints_description: `まず \`/config custom-endpoint add\` または \`/config speech elevenlabs\` で音声エンドポイントを登録してください。`,
+          no_endpoints_description: `まず \`/config custom-endpoint add\` または \`/speech elevenlabs\` で音声エンドポイントを登録してください。`,
           modal_title: `音声エンドポイントを選択`,
           select_label: `音声エンドポイント`,
           select_description: `ペルソナのボイスメッセージ生成に使うエンドポイントを選択します。`,
@@ -3415,7 +3415,7 @@ Prompt Guidance Rescale: {cfg_rescale}
         transcription: {
           description: `有効な文字起こしエンドポイントを選択します。`,
           no_endpoints_title: `文字起こしエンドポイントがありません`,
-          no_endpoints_description: `まず \`/config custom-endpoint add\` または \`/config speech elevenlabs\` で文字起こしエンドポイントを登録してください。`,
+          no_endpoints_description: `まず \`/config custom-endpoint add\` または \`/speech elevenlabs\` で文字起こしエンドポイントを登録してください。`,
           modal_title: `文字起こしエンドポイントを選択`,
           select_label: `文字起こしエンドポイント`,
           select_description: `音声添付の文字起こしに使うエンドポイントを選択します。`,

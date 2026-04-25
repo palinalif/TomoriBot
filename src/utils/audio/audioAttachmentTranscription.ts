@@ -7,7 +7,12 @@ import { resolveActiveTranscriptionEndpoint } from "@/utils/provider/speechEndpo
 
 const AUDIO_EXTENSION_REGEX = /\.(aac|flac|m4a|mp3|mp4|mpeg|mpga|oga|ogg|opus|wav|webm)$/i;
 
-export type AudioAttachmentFailureReason = "missing_api_key" | "download_failed" | "stt_failed" | "empty_transcript";
+export type AudioAttachmentFailureReason =
+  | "no_endpoint"
+  | "missing_api_key"
+  | "download_failed"
+  | "stt_failed"
+  | "empty_transcript";
 
 export interface AudioAttachmentTranscriptionResult {
   hasAudio: boolean;
@@ -62,6 +67,7 @@ export async function transcribeMessageAudioAttachment(
       transcriptText: null,
       attachmentName: attachment.name ?? null,
       mimeType: attachment.contentType ?? null,
+      failureReason: "no_endpoint",
     };
   }
 

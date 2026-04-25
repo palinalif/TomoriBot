@@ -387,7 +387,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
       return {
         success: false,
         error:
-          "No speech API key is available for this server. A server manager can configure one with /config speech elevenlabs.",
+          "No speech API key is available for this server. A server manager can configure one with /speech elevenlabs.",
       };
     }
 

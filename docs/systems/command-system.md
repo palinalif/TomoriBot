@@ -244,6 +244,7 @@ Rules:
 
 - wrap the persona-picker flow in `while (true)` so recoverable states can `continue` back to the picker
 - use `preserveSelectedInteraction: true` so the selected persona button stays valid for opening the next modal
+- declare `const avatarSessionCache: AvatarSessionCache = new Map()` **before** the `while (true)` loop and pass it as `avatarSessionCache` in the options — this prevents avatar re-fetches across loop iterations (page navigation, retries after failed transactions)
 - on invalid persona or other recoverable picker-side errors, replace the picker in place with `updateButtonComponentsV2Status(..., "general.pagination.reloading_persona_picker")`
 - on modal close or timeout, refresh the original picker message with `replyComponentsV2Status(interaction, ..., "general.pagination.reloading_persona_picker")` and continue
 - on successful submit, prefer a single in-place picker update by calling `acknowledgeModalSubmitForRefresh(modalSubmitInteraction)` and then `replyComponentsV2Status(interaction, success_title, success_description, ..., "general.pagination.reloading_persona_picker")`

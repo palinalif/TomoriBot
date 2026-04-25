@@ -432,6 +432,7 @@ VALUES
   ('openrouter', 'aion-labs/aion-2.0', false, false, false, true, false, false, false, false, false, false, false, 'Cheap role-play fine-tune of DeepSeek with no tools, vision, or structured output support', 'ツール・画像理解・構造化出力に対応しない、DeepSeekベースの低コストなロールプレイ特化ファインチューニングモデル'),
   ('openrouter', 'account-setting', false, false, false, true, false, false, false, false, false, false, false, 'Legacy codename (deprecated, use other-model)', '旧コードネーム（非推奨、other-modelを使用）'),
   ('openrouter', 'other-model', false, false, false, false, false, true, true, true, true, false, true, 'Advanced: Use any OpenRouter model by entering its codename', '上級者向け：コードネームを入力して任意のOpenRouterモデルを使用'),
+  ('openrouter', 'rekaai/reka-edge', false, false, false, false, false, true, true, false, false, false, true, 'Extremely efficient and cheap multimodal model, recommended to pair with a blind model for image captioning', '非常に効率的で安価なマルチモーダルモデル、画像キャプション用にテキスト専用モデルとペアリングすることを推奨'),
   -- DeepSeek Models (bounded MVP: text chat + seeded tool calling only)
   ('deepseek', 'deepseek-v4-flash', false, true, false, false, false, true, false, false, false, false, true, 'Fast and cost-efficient default DeepSeek v4 model with tool support and structured output', 'ツール利用と構造化出力に対応した、高速でコスト効率の良いデフォルトのDeepSeek v4モデル'),
   ('deepseek', 'deepseek-v4-pro', true, false, false, false, false, true, false, false, false, false, true, 'Highly capable DeepSeek v4 model with tool support and structured output', 'ツール利用と構造化出力に対応した、高性能なDeepSeek v4モデル'),
@@ -445,6 +446,7 @@ VALUES
   ('nvidia', 'stepfun-ai/step-3.5-flash', false, false, false, false, true, true, false, false, false, false, false, 'Fast NVIDIA NIM chat model with tool support only', 'ツール利用のみに対応した高速NVIDIA NIMチャットモデル'),
   ('nvidia', 'google/gemma-3-27b-it', false, false, false, true, true, false, true, false, false, false, false, 'Vision-capable NVIDIA NIM Gemma model for image understanding', '画像理解に対応した、NVIDIA NIMのGemmaビジョンモデル'),
   ('nvidia', 'google/gemma-4-31b-it', false, false, false, false, false, true, true, false, false, false, true, 'Vision-capable NVIDIA NIM Gemma 4.31B IT model with tool use and structured output (video disabled)', '動画非対応ながらツール利用と構造化出力に対応するNVIDIA NIM向けGemma 4.31B ITモデル'),
+  ('nvidia', 'deepseek-ai/deepseek-v4-flash', false, false, false, false, false, true, false, false, false, true, true, 'Fast and cost-efficient DeepSeek v4 model via NVIDIA NIM with tool support and structured output', 'NVIDIA NIM経由でツール利用と構造化出力に対応した、高速でコスト効率の良いDeepSeek v4モデル'),
   -- Z.ai (Coding) Models (plain codenames preserved for backward compatibility)
   ('zaicoding', 'glm-4.6', false, false, false, false, false, true, false, false, false, false, true, 'Text-only GLM model optimized for roleplay', 'ロールプレイ向けに最適化されたテキスト専用GLMモデル'),
   ('zaicoding', 'glm-4.6v', false, false, false, false, false, true, true, false, false, false, true, 'Vision-capable GLM model with image understanding, tool use, and structured output', '画像理解、ツール利用、構造化出力に対応したビジョン対応GLMモデル'),

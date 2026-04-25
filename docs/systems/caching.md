@@ -102,6 +102,31 @@ Caching reduces repeated DB/API calls and helps meet Discord interaction timing 
 - Warmed at startup from preset rows
 - No TTL; refresh via restart/re-init
 
+### 12) Persona picker avatar session cache (transient, in `interactionHelper.ts`)
+
+Unlike the caches above, this one is **not** stored in `src/utils/cache/`. It is an ephemeral
+`Map<number, AvatarCacheEntry>` created per command invocation and discarded when the command finishes.
+
+- **Scope:** one picker session (one slash command invocation)
+- **Key:** absolute persona index within the `personas` array passed to `replyPaginatedPersonaChoicesV2`
+- **Value:** `{ type: "url"; url: string }` for public/fallback URLs, or `{ type: "buffer"; buffer: Buffer }` for local-disk avatars that must be attached to the Discord message
+- **Purpose:** avatar images (especially local-disk reads) are resolved once on the first page visit and reused on all subsequent page turns and loop re-entries. Without this cache, every page navigation and every retry after a failed transaction re-reads the same files from disk.
+- **Usage in commands:** declare `const avatarSessionCache: AvatarSessionCache = new Map()` before the outer `while (true)` loop and pass it as `avatarSessionCache` in `replyPaginatedPersonaChoicesV2` options. The helper uses `options.avatarSessionCache ?? new Map()` so callers that omit it still work correctly.
+
+```ts
+import { type AvatarSessionCache, replyPaginatedPersonaChoicesV2 } from "@/utils/discord/interactionHelper";
+
+const avatarSessionCache: AvatarSessionCache = new Map();
+while (true) {
+  const result = await replyPaginatedPersonaChoicesV2(interaction, locale, {
+    personas: allPersonas,
+    avatarSessionCache,
+    // ...
+  });
+  // ...
+}
+```
+
 ## Cache Invalidation Rules (Critical)
 
 Invalidate after successful DB writes that affect cached reads.

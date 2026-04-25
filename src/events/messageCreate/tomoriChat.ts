@@ -1538,6 +1538,10 @@ function formatAttachmentSystemHint(filename: string, messageId: string): string
   return `[System: A file named \`${filename}\` is attached (message ID: ${messageId}). Use \`read_file\` with this message ID to read its contents, only if needed.]`;
 }
 
+function formatAudioAttachmentHint(filename: string): string {
+  return `[System: An audio file named \`${filename}\` was sent here but was not transcribed.]`;
+}
+
 function buildRecentMessageMetadataInline(createdAt: number): string {
   return `sent ${formatTimestampInline(createdAt)}`;
 }
@@ -2773,7 +2777,10 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           // Silently drop voice-only messages when no API key is configured —
           // most servers don't use STT and the unavailable embed is noisy.
           // Only surface an error embed for actual failures (timeout, STT error, etc.)
-          if (transcriptionResult.failureReason !== "missing_api_key") {
+          if (
+            transcriptionResult.failureReason !== "no_endpoint" &&
+            transcriptionResult.failureReason !== "missing_api_key"
+          ) {
             await sendStandardEmbed(channel, locale, {
               color: ColorCode.WARN,
               titleKey: "general.errors.voice_transcription_failed_title",
@@ -5012,11 +5019,11 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       messageContentForLlm = messageContentForLlm ? `${messageContentForLlm}\n${voiceText}` : voiceText;
                     }
                   }
-                  // For "tts" source or cache miss, fall through to a generic attachment hint
-                  // so the LLM still knows an audio file was present.
+                  // For "tts" source or cache miss, note that audio was present but
+                  // untranscribed. read_file cannot process audio, so no message ID needed.
                   else {
-                    const attachName = attachment.name ?? "file";
-                    const attachHint = formatAttachmentSystemHint(attachName, messageIdMap.register(msg.id, "media"));
+                    const attachName = attachment.name ?? "audio";
+                    const attachHint = formatAudioAttachmentHint(attachName);
                     messageContentForLlm = messageContentForLlm ? `${messageContentForLlm} ${attachHint}` : attachHint;
                   }
                 }
