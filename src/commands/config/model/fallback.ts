@@ -1,15 +1,19 @@
 import type { ChatInputCommandInteraction, ButtonInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags, ButtonBuilder, ButtonStyle, ActionRowBuilder } from "discord.js";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
-import { loadAvailableModelsForProvider } from "../../../utils/db/dbRead";
-import { setFallbackLlms } from "../../../utils/db/dbWrite";
+import { loadAvailableModelsForProvider, loadCustomEndpointsForServer } from "../../../utils/db/dbRead";
+import { setFallbackModelRefs } from "../../../utils/db/dbWrite";
 import { localizer } from "../../../utils/text/localizer";
 import { log, ColorCode } from "../../../utils/misc/logger";
 import { replyInfoEmbed, promptWithRawModal, safeSelectOptionText } from "../../../utils/discord/interactionHelper";
 import { createStandardEmbed } from "../../../utils/discord/embedHelper";
-import type { LlmRow, UserRow } from "../../../types/db/schema";
+import type { LlmRow, UserRow, FallbackModelRef, FallbackEntry, CustomEndpointRow } from "../../../types/db/schema";
 import type { SelectOption } from "../../../types/discord/modal";
 import { replyLegacyOpenRouterOtherModelMoved } from "@/utils/discord/openrouterModelMigrationNotice";
+import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
+import { promptForSavedProvider } from "@/commands/config/model/providerPicker";
+import { isCustomProvider, parseCustomProvider } from "@/utils/provider/customProviderUtils";
+import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 
 // Modal field identifiers
 // Note: MODAL_CUSTOM_ID is generated per-invocation (see execute()) to prevent stale
@@ -30,6 +34,8 @@ const SLOT_LABEL_KEYS = [
   "commands.config.model.fallback.slot_5_label",
 ] as const;
 const CLEAR_SLOT_VALUE = "__none__";
+// Prefix used to distinguish custom endpoint values from LLM codenames in modal select values
+const CUSTOM_ENDPOINT_VALUE_PREFIX = "ce:";
 
 // One select option is reserved for the explicit "None" / clear choice.
 const ITEMS_PER_PAGE = 24;
@@ -39,7 +45,6 @@ const FALLBACK_DEBUG_ENABLED = new Set(["1", "true", "yes", "on"]).has(
 
 /**
  * Returns a localized description string for a given LLM model, with capability flags prepended.
- * Reuses the same format as the /config model text command for consistency.
  *
  * @param model - The LLM model row from the database
  * @param locale - User's preferred locale (e.g., "ja", "en-US")
@@ -63,39 +68,82 @@ function getLocalizedDescription(model: LlmRow, locale: string): string {
   return `${flagPrefix}${baseDescription}`;
 }
 
+/**
+ * Returns a capability flags string for a custom endpoint (e.g. "(TOOLS+IMG)").
+ *
+ * @param ep - The custom endpoint row
+ * @returns Flag prefix string or empty string if no flags
+ */
+function getEndpointFlagPrefix(ep: CustomEndpointRow): string {
+  const flags: string[] = [];
+  if (ep.has_tools) flags.push("TOOLS");
+  if (ep.sees_images) flags.push("IMG");
+  if (ep.sees_videos) flags.push("VID");
+  if (ep.supports_structoutput) flags.push("STRUCT");
+  return flags.length > 0 ? `(${flags.join("+")}) ` : "";
+}
+
 function truncatePlaceholderValue(value: string): string {
   return value.length > 90 ? `${value.slice(0, 87)}...` : value;
 }
 
-function getCurrentFallbackModelLabel(
+/**
+ * Builds a human-readable label for one slot in the fallback chain.
+ * Includes the provider name in parentheses when the entry is from a different provider than selected.
+ *
+ * @param locale - User locale
+ * @param entry - Resolved fallback entry for this slot, or null if empty
+ * @param rawRef - Raw ref from config (for unknown/unresolved IDs)
+ * @param selectedProvider - The provider currently being configured (to decide if provider suffix is needed)
+ */
+function buildSlotPlaceholder(
   locale: string,
-  model: LlmRow | null,
-  rawLlmId: number | null,
-  otherModelCodename?: string | null,
+  entry: FallbackEntry | null,
+  rawRef: FallbackModelRef | null,
+  selectedProvider: string,
 ): string {
-  if (!model) {
-    if (rawLlmId !== null) {
-      return `${localizer(locale, "general.unknown")} (#${rawLlmId})`;
+  if (!entry) {
+    if (rawRef !== null) {
+      return localizer(locale, "commands.config.model.fallback.current_placeholder", {
+        model: truncatePlaceholderValue(`${localizer(locale, "general.unknown")} (#${rawRef.id})`),
+      });
     }
-
-    return localizer(locale, "general.none");
+    return localizer(locale, "commands.config.model.fallback.current_placeholder", {
+      model: localizer(locale, "general.none"),
+    });
   }
 
-  if (model.llm_codename === "other-model" && otherModelCodename) {
-    return `other-model -> ${otherModelCodename}`;
+  if (entry.kind === "llm") {
+    const modelLabel =
+      entry.model.llm_codename === "other-model"
+        ? `other-model -> ${entry.model.llm_codename}`
+        : entry.model.llm_codename;
+
+    // Show provider in parentheses when different from the one currently being configured
+    const entryProvider = entry.model.llm_provider.toLowerCase();
+    if (!isCustomProvider(selectedProvider) && entryProvider !== selectedProvider.toLowerCase()) {
+      return localizer(locale, "commands.config.model.fallback.current_placeholder_with_provider", {
+        model: truncatePlaceholderValue(modelLabel),
+        provider: getProviderDisplayName(entryProvider),
+      });
+    }
+    return localizer(locale, "commands.config.model.fallback.current_placeholder", {
+      model: truncatePlaceholderValue(modelLabel),
+    });
   }
 
-  return model.llm_codename;
-}
-
-function buildCurrentFallbackPlaceholder(
-  locale: string,
-  model: LlmRow | null,
-  rawLlmId: number | null,
-  otherModelCodename?: string | null,
-): string {
+  // Custom endpoint
+  const epLabel = `${entry.endpoint.label}:${entry.endpoint.model_name ?? entry.endpoint.label}`;
+  const parsed = parseCustomProvider(selectedProvider);
+  const selectedLabel = parsed?.label ?? null;
+  if (selectedLabel !== entry.endpoint.label) {
+    return localizer(locale, "commands.config.model.fallback.current_placeholder_with_provider", {
+      model: truncatePlaceholderValue(epLabel),
+      provider: localizer(locale, "commands.config.model.fallback.custom_provider_label"),
+    });
+  }
   return localizer(locale, "commands.config.model.fallback.current_placeholder", {
-    model: truncatePlaceholderValue(getCurrentFallbackModelLabel(locale, model, rawLlmId, otherModelCodename)),
+    model: truncatePlaceholderValue(epLabel),
   });
 }
 
@@ -106,6 +154,7 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
 /**
  * Handles the /config model fallback command.
  * Allows server admins to configure up to 5 ordered fallback models for automatic failover.
+ * Supports mixing models from different providers and custom endpoints.
  *
  * @param _client - Discord client instance (unused)
  * @param interaction - The slash command interaction
@@ -146,58 +195,92 @@ export async function execute(
   }
   if (FALLBACK_DEBUG_ENABLED) {
     log.info(
-      `[FallbackDebug][/config model fallback] server_disc_id=${serverDiscId} server_id=${tomoriState.server_id} current_fallbacks=[${(tomoriState.fallback_llms ?? []).map((llm) => `${llm.llm_id}:${llm.llm_codename}`).join(", ")}]`,
+      `[FallbackDebug][/config model fallback] server_disc_id=${serverDiscId} server_id=${tomoriState.server_id} current_chain=${JSON.stringify(tomoriState.config.fallback_model_refs)}`,
     );
   }
 
-  // 3. Block custom providers — model names are free-text, no enumerated list to select from
-  const currentProvider = tomoriState.llm.llm_provider.toLowerCase();
-  if (currentProvider === "custom") {
+  // 3. Load saved providers and show provider picker (includes custom providers)
+  const savedProviders = await loadSavedProvidersForCapability(tomoriState.server_id, "text");
+  if (savedProviders.length === 0) {
     await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.model.fallback.custom_provider_title",
-      descriptionKey: "commands.config.model.fallback.custom_provider_description",
+      titleKey: "commands.config.model.fallback.no_providers_title",
+      descriptionKey: "commands.config.model.fallback.no_providers_description",
       color: ColorCode.ERROR,
       flags: MessageFlags.Ephemeral,
     });
     return;
   }
 
-  // 4. Load available models for the current provider
-  const availableModels = await loadAvailableModelsForProvider(currentProvider, false, {
-    kind: "server",
-    ownerId: tomoriState.server_id,
-  });
-  if (!availableModels || availableModels.length === 0) {
-    await replyInfoEmbed(interaction, locale, {
-      titleKey: "commands.config.model.fallback.no_models_title",
-      descriptionKey: "commands.config.model.fallback.no_models_description",
-      color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
+  const providerSelection = await promptForSavedProvider(interaction, locale, savedProviders);
+  if (!providerSelection) return;
+
+  const selectedProvider = providerSelection.provider;
+  const responseInteraction = providerSelection.interaction;
+
+  // 4. Load model options for the selected provider
+  let availableModels: LlmRow[] = [];
+  let availableEndpoints: CustomEndpointRow[] = [];
+  let allModelOptions: SelectOption[];
+
+  if (isCustomProvider(selectedProvider)) {
+    // Custom endpoint path — enumerate registered endpoints for this label
+    const parsed = parseCustomProvider(selectedProvider);
+    const label = parsed?.label ?? null;
+    const allEndpoints = await loadCustomEndpointsForServer(tomoriState.server_id);
+    availableEndpoints = label ? allEndpoints.filter((ep) => ep.label === label && ep.capability === "text") : [];
+
+    if (availableEndpoints.length === 0) {
+      await replyInfoEmbed(responseInteraction, locale, {
+        titleKey: "commands.config.model.fallback.no_models_title",
+        descriptionKey: "commands.config.model.fallback.no_models_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    allModelOptions = availableEndpoints.map((ep) => ({
+      label: safeSelectOptionText(`${ep.label}:${ep.model_name ?? ep.label}`),
+      value: `${CUSTOM_ENDPOINT_VALUE_PREFIX}${ep.custom_endpoint_id}`,
+      description: safeSelectOptionText(`${getEndpointFlagPrefix(ep)}${ep.model_name ?? ep.label}`),
+    }));
+  } else {
+    // Standard provider path
+    availableModels =
+      (await loadAvailableModelsForProvider(selectedProvider, false, {
+        kind: "server",
+        ownerId: tomoriState.server_id,
+      })) ?? [];
+
+    if (availableModels.length === 0) {
+      await replyInfoEmbed(responseInteraction, locale, {
+        titleKey: "commands.config.model.fallback.no_models_title",
+        descriptionKey: "commands.config.model.fallback.no_models_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    const selectableModels =
+      selectedProvider === "openrouter"
+        ? availableModels.filter((model) => model.llm_codename !== "other-model")
+        : availableModels;
+
+    allModelOptions = selectableModels.map((m) => ({
+      label: safeSelectOptionText(m.llm_codename),
+      value: safeSelectOptionText(m.llm_codename),
+      description: safeSelectOptionText(getLocalizedDescription(m, userData.language_pref)),
+    }));
   }
 
-  const currentFallbackIds = tomoriState.config.fallback_llm_ids ?? [];
+  // 5. Build per-slot placeholders from the existing fallback_chain (cross-provider aware)
+  const existingRefs = tomoriState.config.fallback_model_refs ?? [];
+  const existingChain = tomoriState.fallback_chain ?? [];
   const currentFallbackPlaceholders = SLOT_IDS.map((_, index) =>
-    buildCurrentFallbackPlaceholder(
-      locale,
-      tomoriState.fallback_llms?.[index] ?? null,
-      currentFallbackIds[index] ?? null,
-      tomoriState.config.other_model_codename,
-    ),
+    buildSlotPlaceholder(locale, existingChain[index] ?? null, existingRefs[index] ?? null, selectedProvider),
   );
 
-  const selectableModels =
-    currentProvider === "openrouter"
-      ? availableModels.filter((model) => model.llm_codename !== "other-model")
-      : availableModels;
-
-  // 5. Build select options from available models
-  const allModelOptions: SelectOption[] = selectableModels.map((m) => ({
-    label: safeSelectOptionText(m.llm_codename),
-    value: safeSelectOptionText(m.llm_codename),
-    description: safeSelectOptionText(getLocalizedDescription(m, userData.language_pref)),
-  }));
   const clearOption: SelectOption = {
     label: safeSelectOptionText(localizer(locale, "commands.config.model.fallback.clear_option_label")),
     value: CLEAR_SLOT_VALUE,
@@ -206,7 +289,7 @@ export async function execute(
 
   // 6. Handle pagination when models exceed Discord's 25-option limit per select
   let optionsForModal = allModelOptions;
-  let modalInteraction: ChatInputCommandInteraction | ButtonInteraction = interaction;
+  let modalInteraction: ChatInputCommandInteraction | ButtonInteraction = responseInteraction;
 
   if (allModelOptions.length > ITEMS_PER_PAGE) {
     const totalPages = Math.ceil(allModelOptions.length / ITEMS_PER_PAGE);
@@ -232,12 +315,17 @@ export async function execute(
 
     const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(...pageButtons);
 
-    // 6b. Reply with page selector (first acknowledgment for this interaction)
-    const pageSelectMessage = await interaction.reply({
-      embeds: [pageSelectEmbed],
-      components: [actionRow],
-      flags: MessageFlags.Ephemeral,
-    });
+    // 6b. Reply (or update picker) with page selector
+    const pageSelectMessage = providerSelection.pickerInteraction
+      ? await (responseInteraction as ButtonInteraction).editReply({
+          embeds: [pageSelectEmbed],
+          components: [actionRow],
+        })
+      : await interaction.reply({
+          embeds: [pageSelectEmbed],
+          components: [actionRow],
+          flags: MessageFlags.Ephemeral,
+        });
 
     try {
       // 6c. Wait for user to select a page
@@ -253,7 +341,7 @@ export async function execute(
       optionsForModal = [clearOption, ...allModelOptions.slice(startIndex, endIndex)];
       modalInteraction = pageButtonInteraction as ButtonInteraction;
     } catch {
-      // Timeout — user did not select a page; clean up and exit
+      // Timeout — clean up and exit
       await interaction.editReply({ embeds: [], components: [] }).catch(() => {});
       return;
     }
@@ -264,7 +352,6 @@ export async function execute(
   }
 
   // 7. Show modal with 5 select fields (one per fallback slot)
-  // autoDeferReply: MessageFlags.Ephemeral ensures the submit interaction is pre-deferred
   const modalResult = await promptWithRawModal(
     modalInteraction,
     locale,
@@ -300,62 +387,82 @@ export async function execute(
   const modalSubmitInteraction = modalResult.interaction;
   const values = modalResult.values;
 
-  // 8. Collect non-empty slot values in order
-  const rawSlots = SLOT_IDS.map((id) => {
-    const value = (values[id] ?? "").trim();
-    return value === CLEAR_SLOT_VALUE ? "" : value;
-  }).filter((v) => v !== "");
-
-  // 9. Deduplicate while preserving order (silently drop later duplicates)
-  const seen = new Set<string>();
-  const deduplicatedCodenames: string[] = [];
-  for (const codename of rawSlots) {
-    if (!seen.has(codename)) {
-      seen.add(codename);
-      deduplicatedCodenames.push(codename);
+  // 8. Build fast lookup maps for the current provider's options and existing chain
+  const resolvedModelMap = new Map<number, LlmRow>();
+  for (const m of availableModels) {
+    if (m.llm_id !== undefined) resolvedModelMap.set(m.llm_id, m);
+  }
+  for (const entry of existingChain) {
+    if (entry.kind === "llm" && entry.model.llm_id !== undefined) {
+      resolvedModelMap.set(entry.model.llm_id, entry.model);
+    }
+  }
+  const resolvedEndpointMap = new Map<number, CustomEndpointRow>();
+  for (const ep of availableEndpoints) {
+    if (ep.custom_endpoint_id !== undefined) resolvedEndpointMap.set(ep.custom_endpoint_id, ep);
+  }
+  for (const entry of existingChain) {
+    if (entry.kind === "custom_endpoint" && entry.endpoint.custom_endpoint_id !== undefined) {
+      resolvedEndpointMap.set(entry.endpoint.custom_endpoint_id, entry.endpoint);
     }
   }
 
-  if (currentProvider === "openrouter" && deduplicatedCodenames.includes("other-model")) {
-    await replyLegacyOpenRouterOtherModelMoved(modalSubmitInteraction, locale, "server");
-    return;
+  // 9. Per-slot merge: blank = keep existing, __none__ = clear, value = update
+  const mergedRefs: FallbackModelRef[] = [];
+  for (let i = 0; i < 5; i++) {
+    const raw = (values[SLOT_IDS[i]] ?? "").trim();
+
+    if (raw === "") {
+      // User didn't touch this slot — preserve existing ref
+      if (existingRefs[i]) mergedRefs.push(existingRefs[i]);
+    } else if (raw === CLEAR_SLOT_VALUE) {
+      // Explicit clear — skip (no push)
+    } else if (raw.startsWith(CUSTOM_ENDPOINT_VALUE_PREFIX)) {
+      // Custom endpoint selection
+      const epId = Number.parseInt(raw.slice(CUSTOM_ENDPOINT_VALUE_PREFIX.length), 10);
+      if (!Number.isNaN(epId)) mergedRefs.push({ type: "custom_endpoint", id: epId });
+    } else {
+      // LLM codename selection
+      if (selectedProvider === "openrouter" && raw === "other-model") {
+        await replyLegacyOpenRouterOtherModelMoved(modalSubmitInteraction, locale, "server");
+        return;
+      }
+      const match = availableModels.find((m) => m.llm_codename === raw);
+      if (match?.llm_id !== undefined) mergedRefs.push({ type: "llm", id: match.llm_id });
+    }
   }
 
-  // 10. Validate: no fallback can duplicate the primary model
-  const primaryCodename = tomoriState.llm.llm_codename;
-  if (deduplicatedCodenames.some((c) => c === primaryCodename)) {
+  // 10. Deduplicate by type+id, preserving order
+  const seen = new Set<string>();
+  const finalRefs: FallbackModelRef[] = [];
+  for (const ref of mergedRefs) {
+    const key = `${ref.type}:${ref.id}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      finalRefs.push(ref);
+    }
+  }
+
+  // 11. Validate: no fallback can duplicate the primary model
+  const primaryLlmId = tomoriState.config.llm_id;
+  if (primaryLlmId && finalRefs.some((r) => r.type === "llm" && r.id === primaryLlmId)) {
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey: "commands.config.model.fallback.primary_conflict_title",
       descriptionKey: "commands.config.model.fallback.primary_conflict_description",
-      descriptionVars: { model: primaryCodename },
+      descriptionVars: { model: tomoriState.llm.llm_codename },
       color: ColorCode.ERROR,
     });
     return;
   }
 
-  // 11. Resolve codenames to llm_id values (invalid codenames are silently skipped)
-  const resolvedIds: number[] = [];
-  const resolvedCodenames: string[] = [];
-  for (const codename of deduplicatedCodenames) {
-    const match = availableModels.find((m) => m.llm_codename === codename);
-    if (match?.llm_id !== undefined) {
-      resolvedIds.push(match.llm_id);
-      resolvedCodenames.push(codename);
-    }
-  }
   if (FALLBACK_DEBUG_ENABLED) {
     log.info(
-      `[FallbackDebug][/config model fallback] server_disc_id=${serverDiscId} selected_slots=[${rawSlots.join(", ")}] deduplicated=[${deduplicatedCodenames.join(", ")}] resolved_ids=[${resolvedIds.join(", ")}]`,
+      `[FallbackDebug][/config model fallback] server_disc_id=${serverDiscId} final_refs=${JSON.stringify(finalRefs)}`,
     );
   }
 
   // 12. Write to database
-  const writeOk = await setFallbackLlms(tomoriState.server_id, resolvedIds);
-  if (FALLBACK_DEBUG_ENABLED) {
-    log.info(
-      `[FallbackDebug][/config model fallback] server_disc_id=${serverDiscId} server_id=${tomoriState.server_id} write_ok=${writeOk}`,
-    );
-  }
+  const writeOk = await setFallbackModelRefs(tomoriState.server_id, finalRefs);
   if (!writeOk) {
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey: "general.errors.update_failed_title",
@@ -368,15 +475,28 @@ export async function execute(
   // 13. Invalidate cache so the next generation uses the new fallback chain
   invalidateTomoriStateCache(serverDiscId);
 
-  // 14. Success embed
-  if (resolvedIds.length === 0) {
+  // 14. Reply with success — modalSubmitInteraction is already deferred and handles both picker and direct flows
+  if (finalRefs.length === 0) {
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey: "commands.config.model.fallback.cleared_title",
       descriptionKey: "commands.config.model.fallback.cleared_description",
       color: ColorCode.SUCCESS,
     });
   } else {
-    const modelList = resolvedCodenames.map((c, i) => `${i + 1}. \`${c}\``).join("\n");
+    const modelList = finalRefs
+      .map((ref, i) => {
+        if (ref.type === "llm") {
+          const m = resolvedModelMap.get(ref.id);
+          const codename = m?.llm_codename ?? `#${ref.id}`;
+          const provider = m?.llm_provider ? ` (${getProviderDisplayName(m.llm_provider)})` : "";
+          return `${i + 1}. \`${codename}\`${provider}`;
+        }
+        const ep = resolvedEndpointMap.get(ref.id);
+        const label = ep ? `${ep.label}:${ep.model_name ?? ep.label}` : `#${ref.id}`;
+        return `${i + 1}. \`${label}\` (Custom)`;
+      })
+      .join("\n");
+
     await replyInfoEmbed(modalSubmitInteraction, locale, {
       titleKey: "commands.config.model.fallback.success_title",
       descriptionKey: "commands.config.model.fallback.success_description",

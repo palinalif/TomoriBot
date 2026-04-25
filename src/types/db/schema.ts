@@ -326,6 +326,11 @@ export const fallbackModelRefSchema = z.object({
 });
 export type FallbackModelRef = z.infer<typeof fallbackModelRefSchema>;
 
+/** Resolved fallback entry — either a known LLM row or a custom endpoint row. */
+export type FallbackEntry =
+  | { kind: "llm"; model: z.infer<typeof llmSchema> }
+  | { kind: "custom_endpoint"; endpoint: z.infer<typeof customEndpointSchema> };
+
 function normalizeFallbackModelRefs(value: unknown): FallbackModelRef[] {
   const rows = normalizeJsonbArray(value);
   const parsed = fallbackModelRefSchema.array().safeParse(rows);
@@ -1061,7 +1066,8 @@ export type TomoriState = TomoriRow & {
   persona_llm?: LlmRow; // Added March 2026 - Persona-specific model override (highest priority in chain)
   vision_llm?: LlmRow; // Added March 2026 - Dedicated vision model for non-vision chat models
   nai_preset?: NaiPresetRow; // Added March 2026 - Active NovelAI sampling preset (null when not using NAI)
-  fallback_llms?: LlmRow[]; // Added March 2026 - Resolved LLM rows for fallback model failover chain
+  fallback_llms?: LlmRow[]; // Added March 2026 - Resolved LLM rows for fallback model failover chain (legacy; prefer fallback_chain)
+  fallback_chain?: FallbackEntry[]; // Added April 2026 - Ordered fallback entries resolving both llm and custom_endpoint refs
 };
 
 /**
@@ -1079,7 +1085,15 @@ export const tomoriStateSchema = tomoriSchema.extend({
   persona_llm: llmSchema.optional(), // Added March 2026 - Persona-specific model override
   vision_llm: llmSchema.optional(), // Added March 2026 - Dedicated vision model for non-vision chat models
   nai_preset: naiPresetSchema.optional(), // Added March 2026 - Active NovelAI sampling preset
-  fallback_llms: z.array(llmSchema).optional(), // Added March 2026 - Resolved fallback LLM rows
+  fallback_llms: z.array(llmSchema).optional(), // Added March 2026 - Resolved fallback LLM rows (legacy; prefer fallback_chain)
+  fallback_chain: z
+    .array(
+      z.discriminatedUnion("kind", [
+        z.object({ kind: z.literal("llm"), model: llmSchema }),
+        z.object({ kind: z.literal("custom_endpoint"), endpoint: customEndpointSchema }),
+      ]),
+    )
+    .optional(), // Added April 2026 - Ordered fallback entries (llm + custom_endpoint refs)
 });
 
 /**

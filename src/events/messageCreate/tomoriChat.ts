@@ -70,10 +70,10 @@ import { getLinkedMatrixRoom, pendingMatrixReplyChannels, sendMatrixTypingIndica
 import { isBridgeUserId, stripBridgePrefix, extractBridgeUserId, isMatrixBridgeWebhookUsername } from "@/utils/bridge";
 import { isPersonaAllowedForTrigger } from "@/utils/db/personaAccess";
 
-import type { TomoriState, TomoriConfigRow, ServerEmojiRow, ServerStickerRow } from "@/types/db/schema";
+import type { TomoriState, TomoriConfigRow, ServerEmojiRow, ServerStickerRow, FallbackEntry } from "@/types/db/schema";
 import { PrivacyLevel } from "@/types/db/schema";
 // Provider-specific function declarations moved to providers
-import { getProviderForTomori } from "../../utils/provider/providerFactory";
+import { getProviderForTomori, ProviderFactory } from "../../utils/provider/providerFactory";
 import type { LLMProvider, StreamResult, ThoughtLogPayload } from "../../types/provider/interfaces";
 import { ToolRegistry } from "../../tools/toolRegistry";
 import { keyManager } from "@/utils/security/keyManager";
@@ -6474,12 +6474,18 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                * provider, serverDiscId (for NovelAI context limit re-application).
                */
               const runWithFallbackModels = async (): Promise<FallbackRunResult> => {
-                const fallbackLlms = tomoriState?.fallback_llms ?? [];
+                // Prefer the typed fallback_chain (supports mixed providers + custom endpoints).
+                // Fall back to legacy fallback_llms for servers not yet migrated.
+                const fallbackChain: FallbackEntry[] =
+                  tomoriState?.fallback_chain ??
+                  (tomoriState?.fallback_llms ?? []).map((m) => ({ kind: "llm" as const, model: m }));
+
                 // Snapshot the original effective state to restore if all fallbacks fail
                 const primaryEffectiveTomoriState = effectiveTomoriState;
+                const primaryProvider = primaryEffectiveTomoriState.llm.llm_provider.toLowerCase();
 
                 // 1. Attempt with the primary model
-                streamingContext.forceModelFallback = fallbackLlms.length > 0;
+                streamingContext.forceModelFallback = fallbackChain.length > 0;
                 const primaryResult = await runStreamWithKeyRetry();
 
                 if (primaryResult.abort) {
@@ -6511,34 +6517,106 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 ];
                 let lastResult = primaryResult;
 
-                for (let fi = 0; fi < fallbackLlms.length; fi++) {
-                  const fallbackLlm = fallbackLlms[fi];
-                  const isLast = fi === fallbackLlms.length - 1;
+                for (let fi = 0; fi < fallbackChain.length; fi++) {
+                  const entry = fallbackChain[fi];
+                  const isLast = fi === fallbackChain.length - 1;
 
-                  log.info(
-                    `Primary model failed (${failures[0].errorCode}). ` +
-                      `Trying fallback ${fi + 1}/${fallbackLlms.length}: ${fallbackLlm.llm_codename}`,
-                  );
+                  // 2a. Derive a display codename and swap in the fallback model
+                  let fallbackCodename: string;
 
-                  // 2a. Swap in the fallback model and recreate provider config
-                  effectiveTomoriState = {
-                    ...effectiveTomoriState,
-                    llm: fallbackLlm,
-                  };
-                  providerConfig = await provider.createConfig(effectiveTomoriState, decryptedApiKey);
-                  // Re-apply NovelAI subscription context limit when relevant
-                  if (fallbackLlm.llm_provider === "novelai") {
-                    const cachedKayraLimit = getCachedContextTokens(serverDiscId);
-                    if (cachedKayraLimit !== undefined) {
-                      (providerConfig as NovelaiStreamConfig).kayraContextLimit = cachedKayraLimit;
+                  if (entry.kind === "llm") {
+                    fallbackCodename = entry.model.llm_codename;
+                    log.info(
+                      `Primary model failed (${failures[0].errorCode}). ` +
+                        `Trying fallback ${fi + 1}/${fallbackChain.length}: ${fallbackCodename}`,
+                    );
+
+                    effectiveTomoriState = { ...effectiveTomoriState, llm: entry.model };
+
+                    const fallbackProviderName = entry.model.llm_provider.toLowerCase();
+                    if (fallbackProviderName !== primaryProvider) {
+                      // Cross-provider fallback — load saved config for the fallback provider.
+                      // Same pattern as persona override (see line ~5364).
+                      const fallbackSavedConfig = await loadSavedProviderConfig(
+                        tomoriState!.server_id,
+                        fallbackProviderName,
+                      );
+                      if (!fallbackSavedConfig?.api_key) {
+                        log.warn(
+                          `Cross-provider fallback skipped: no saved config/key for provider ${fallbackProviderName}`,
+                        );
+                        failures.push({ modelCodename: fallbackCodename, errorCode: "NO_PROVIDER_CONFIG" });
+                        continue;
+                      }
+                      provider = await ProviderFactory.getProviderByName(fallbackProviderName);
+                      decryptedApiKey = await decryptApiKey(
+                        fallbackSavedConfig.api_key,
+                        fallbackSavedConfig.key_version ?? 1,
+                      );
+                    } else {
+                      // Same provider — use existing key rotation
+                      excludedRotationKeyIds.clear();
+                      const resetKeySelection = await selectApiKeyForAttempt();
+                      decryptedApiKey = resetKeySelection.apiKey;
+                      selectedKeyResult = resetKeySelection.selectedKeyResult;
                     }
+
+                    // Re-apply NovelAI subscription context limit when relevant
+                    if (entry.model.llm_provider === "novelai") {
+                      const cachedKayraLimit = getCachedContextTokens(serverDiscId);
+                      if (cachedKayraLimit !== undefined) {
+                        (providerConfig as NovelaiStreamConfig).kayraContextLimit = cachedKayraLimit;
+                      }
+                    }
+                  } else {
+                    // Custom endpoint fallback
+                    const ep = entry.endpoint;
+                    fallbackCodename = `${ep.label}:${ep.model_name ?? ep.label}`;
+                    log.info(
+                      `Primary model failed (${failures[0].errorCode}). ` +
+                        `Trying fallback ${fi + 1}/${fallbackChain.length}: ${fallbackCodename} (custom endpoint)`,
+                    );
+
+                    // Load the saved provider config for this custom endpoint label to get the API key
+                    const customProviderName = `custom:s${tomoriState!.server_id}:${ep.label}`;
+                    const fallbackSavedConfig = await loadSavedProviderConfig(
+                      tomoriState!.server_id,
+                      customProviderName,
+                    );
+                    if (!fallbackSavedConfig?.api_key) {
+                      log.warn(`Custom endpoint fallback skipped: no saved config/key for ${customProviderName}`);
+                      failures.push({ modelCodename: fallbackCodename, errorCode: "NO_PROVIDER_CONFIG" });
+                      continue;
+                    }
+
+                    provider = await ProviderFactory.getProviderByName("custom");
+                    decryptedApiKey = await decryptApiKey(
+                      fallbackSavedConfig.api_key,
+                      fallbackSavedConfig.key_version ?? 1,
+                    );
+
+                    // Patch the effective state with the endpoint's URL and model name, and synthesise
+                    // an LlmRow so the downstream pipeline has a valid .llm field to inspect.
+                    effectiveTomoriState = {
+                      ...effectiveTomoriState,
+                      config: {
+                        ...effectiveTomoriState.config,
+                        custom_endpoint_url: ep.endpoint_url,
+                        custom_model_name: ep.model_name ?? null,
+                      },
+                      llm: {
+                        ...effectiveTomoriState.llm,
+                        llm_codename: ep.model_name ?? ep.label,
+                        llm_provider: "custom",
+                        has_tools: ep.has_tools,
+                        sees_images: ep.sees_images,
+                        sees_videos: ep.sees_videos,
+                        supports_structoutput: ep.supports_structoutput,
+                      },
+                    };
                   }
 
-                  // 2b. Reset key rotation state for a clean attempt
-                  excludedRotationKeyIds.clear();
-                  const resetKeySelection = await selectApiKeyForAttempt();
-                  decryptedApiKey = resetKeySelection.apiKey;
-                  selectedKeyResult = resetKeySelection.selectedKeyResult;
+                  providerConfig = await provider.createConfig(effectiveTomoriState, decryptedApiKey);
 
                   if (!decryptedApiKey) {
                     log.error("API key unavailable during fallback model attempt", undefined, {
@@ -6555,7 +6633,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                     };
                   }
 
-                  // 2c. Show error on last attempt; suppress on all earlier attempts
+                  // 2b. Show error on last attempt; suppress on all earlier attempts
                   streamingContext.forceModelFallback = !isLast;
 
                   const fallbackResult = await runStreamWithKeyRetry();
@@ -6579,12 +6657,12 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       streamResult: fallbackResult.streamResult,
                       abort: false,
                       fallbackUsed: failures,
-                      successModel: fallbackLlm,
+                      successModel: entry.kind === "llm" ? entry.model : effectiveTomoriState.llm,
                     };
                   }
 
                   failures.push({
-                    modelCodename: fallbackLlm.llm_codename,
+                    modelCodename: fallbackCodename,
                     errorCode: extractErrorCode(fallbackResult.streamResult),
                   });
                 }

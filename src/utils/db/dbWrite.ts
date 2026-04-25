@@ -31,6 +31,7 @@ import {
   type SavedProviderConfigUpsert,
   userSavedProviderConfigSchema,
   type UserSavedProviderConfigUpsert,
+  type FallbackModelRef,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import { validateTomoriConfigFields, validateTomoriFields, validateUserFields } from "./sqlSecurity";
@@ -1846,6 +1847,53 @@ export async function setFallbackLlms(serverId: number, llmIds: number[]): Promi
     return true;
   } catch (error) {
     log.error(`Error setting fallback LLMs for server ${serverId} (ids: [${llmIds.join(", ")}]):`, error);
+    return false;
+  }
+}
+
+/**
+ * Writes the ordered fallback model reference list to a server's config.
+ * Supports mixed provider types (llm and custom_endpoint). Also mirrors llm-only IDs into the
+ * legacy fallback_llm_ids column for backward compatibility with readers not yet using fallback_model_refs.
+ * After calling, invalidate TomoriState cache for the server.
+ *
+ * @param serverId - Database server_id for the target server
+ * @param refs - Ordered array of FallbackModelRef entries (up to 5), or [] to clear all fallbacks
+ * @returns True on success, false on failure
+ */
+export async function setFallbackModelRefs(serverId: number, refs: FallbackModelRef[]): Promise<boolean> {
+  try {
+    const refsJson = JSON.stringify(refs);
+    // Mirror llm-only IDs into the legacy column so older code paths keep working
+    const legacyIds = refs.filter((r) => r.type === "llm").map((r) => r.id);
+    const legacyJson = JSON.stringify(legacyIds);
+
+    const updatedRows = await sql`
+			UPDATE tomori_configs
+			SET
+				fallback_model_refs = ${refsJson}::JSONB,
+				fallback_llm_ids    = ${legacyJson}::JSONB,
+				updated_at          = CURRENT_TIMESTAMP
+			WHERE server_id = ${serverId}
+			   OR (
+			       server_id IS NULL
+			       AND tomori_id IN (
+			           SELECT tomori_id FROM tomoris
+			           WHERE server_id = ${serverId}
+			             AND is_alter = false
+			       )
+			   )
+			RETURNING tomori_config_id
+		`;
+
+    if (updatedRows.length === 0) {
+      log.warn(`[FallbackConfig] setFallbackModelRefs matched 0 rows for server_id ${serverId}`);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    log.error(`Error setting fallback model refs for server ${serverId}:`, error);
     return false;
   }
 }

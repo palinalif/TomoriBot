@@ -49,6 +49,8 @@ import {
   userSavedProviderConfigSchema,
   type UserSavedProviderConfigRow,
   type NaiPresetRow,
+  type FallbackEntry,
+  type FallbackModelRef,
 } from "../../types/db/schema"; // Import base schemas and types
 import { log } from "../misc/logger";
 import { getCachedLLM } from "../cache/llmCache";
@@ -388,7 +390,7 @@ export async function loadTomoriState(serverDiscId: string): Promise<TomoriState
       }
     }
 
-    // 8. Load fallback LLMs if any are configured for this server
+    // 8. Resolve fallback model chain — prefer fallback_model_refs (new), fall back to fallback_llm_ids (legacy)
     const rawFallbackIds = configData.fallback_llm_ids;
     const fallbackLlmIds = configData.fallback_llm_ids;
     const fallbackLlms = fallbackLlmIds.length > 0 ? await getLlmsByIds(fallbackLlmIds) : [];
@@ -396,6 +398,33 @@ export async function loadTomoriState(serverDiscId: string): Promise<TomoriState
       log.info(
         `[FallbackDebug][loadTomoriState] server_disc_id=${serverDiscId} server_id=${serverId} raw_fallback_ids=${JSON.stringify(rawFallbackIds)} parsed_fallback_ids=[${fallbackLlmIds.join(", ")}] resolved_fallbacks=[${fallbackLlms.map((llm) => `${llm.llm_id}:${llm.llm_codename}`).join(", ")}]`,
       );
+    }
+
+    // 8b. Build typed fallback_chain from fallback_model_refs (supports both llm and custom_endpoint refs)
+    const modelRefs = configData.fallback_model_refs ?? [];
+    let fallbackChain: FallbackEntry[] | undefined;
+    if (modelRefs.length > 0) {
+      const llmRefIds = modelRefs.filter((r: FallbackModelRef) => r.type === "llm").map((r: FallbackModelRef) => r.id);
+      const epRefIds = modelRefs
+        .filter((r: FallbackModelRef) => r.type === "custom_endpoint")
+        .map((r: FallbackModelRef) => r.id);
+      const [refLlms, refEndpoints] = await Promise.all([
+        llmRefIds.length > 0 ? getLlmsByIds(llmRefIds) : Promise.resolve([]),
+        epRefIds.length > 0 ? loadCustomEndpointsByIds(epRefIds) : Promise.resolve([]),
+      ]);
+      const llmMap = new Map(refLlms.map((m) => [m.llm_id!, m]));
+      const epMap = new Map(refEndpoints.map((e) => [e.custom_endpoint_id!, e]));
+      const resolved = modelRefs
+        .map((ref: FallbackModelRef) => {
+          if (ref.type === "llm") {
+            const model = llmMap.get(ref.id);
+            return model ? ({ kind: "llm", model } as FallbackEntry) : null;
+          }
+          const endpoint = epMap.get(ref.id);
+          return endpoint ? ({ kind: "custom_endpoint", endpoint } as FallbackEntry) : null;
+        })
+        .filter((e): e is FallbackEntry => e !== null);
+      if (resolved.length > 0) fallbackChain = resolved;
     }
 
     // 9. Load vision model if configured (for non-vision chat model image analysis delegation)
@@ -430,7 +459,8 @@ export async function loadTomoriState(serverDiscId: string): Promise<TomoriState
       rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined, // Add rotation keys if any
       vision_llm: visionLlm, // Dedicated vision model (undefined when not configured)
       nai_preset: naiPreset, // Active NAI sampling preset (undefined when not configured)
-      fallback_llms: fallbackLlms.length > 0 ? fallbackLlms : undefined, // Resolved fallback model chain
+      fallback_llms: fallbackLlms.length > 0 ? fallbackLlms : undefined, // Resolved fallback model chain (legacy)
+      fallback_chain: fallbackChain, // Resolved typed fallback chain (llm + custom_endpoint)
     };
 
     // Use Zod to parse and validate the combined structure
@@ -496,7 +526,7 @@ export async function loadAllPersonasForServer(serverDiscId: string): Promise<To
           return [];
         }
 
-        // 3. Resolve server-scoped fallback LLM chain once.
+        // 3. Resolve server-scoped fallback chain once (shared across all personas for this server).
         const rawFallbackIds = configData.fallback_llm_ids;
         const fallbackLlmIds = configData.fallback_llm_ids;
         const fallbackLlms = fallbackLlmIds.length > 0 ? await getLlmsByIds(fallbackLlmIds) : [];
@@ -504,6 +534,35 @@ export async function loadAllPersonasForServer(serverDiscId: string): Promise<To
           log.info(
             `[FallbackDebug][loadAllPersonasForServer] server_disc_id=${serverDiscId} server_id=${serverId} raw_fallback_ids=${JSON.stringify(rawFallbackIds)} parsed_fallback_ids=[${fallbackLlmIds.join(", ")}] resolved_fallbacks=[${fallbackLlms.map((llm) => `${llm.llm_id}:${llm.llm_codename}`).join(", ")}]`,
           );
+        }
+
+        // 3b. Build typed fallback_chain from fallback_model_refs
+        const modelRefs = configData.fallback_model_refs ?? [];
+        let fallbackChain: FallbackEntry[] | undefined;
+        if (modelRefs.length > 0) {
+          const llmRefIds = modelRefs
+            .filter((r: FallbackModelRef) => r.type === "llm")
+            .map((r: FallbackModelRef) => r.id);
+          const epRefIds = modelRefs
+            .filter((r: FallbackModelRef) => r.type === "custom_endpoint")
+            .map((r: FallbackModelRef) => r.id);
+          const [refLlms, refEndpoints] = await Promise.all([
+            llmRefIds.length > 0 ? getLlmsByIds(llmRefIds) : Promise.resolve([]),
+            epRefIds.length > 0 ? loadCustomEndpointsByIds(epRefIds) : Promise.resolve([]),
+          ]);
+          const llmMap = new Map(refLlms.map((m) => [m.llm_id!, m]));
+          const epMap = new Map(refEndpoints.map((e) => [e.custom_endpoint_id!, e]));
+          const resolved = modelRefs
+            .map((ref: FallbackModelRef) => {
+              if (ref.type === "llm") {
+                const model = llmMap.get(ref.id);
+                return model ? ({ kind: "llm", model } as FallbackEntry) : null;
+              }
+              const endpoint = epMap.get(ref.id);
+              return endpoint ? ({ kind: "custom_endpoint", endpoint } as FallbackEntry) : null;
+            })
+            .filter((e): e is FallbackEntry => e !== null);
+          if (resolved.length > 0) fallbackChain = resolved;
         }
 
         // 4. Load LLM data once (with cache fallback). BYOK-only servers may intentionally
@@ -663,7 +722,8 @@ export async function loadAllPersonasForServer(serverDiscId: string): Promise<To
             server_memories: serverMemories,
             rotation_keys: rotationKeys.length > 0 ? rotationKeys : undefined,
             vision_llm: visionLlm, // Dedicated vision model (undefined when not configured)
-            fallback_llms: fallbackLlms.length > 0 ? fallbackLlms : undefined,
+            fallback_llms: fallbackLlms.length > 0 ? fallbackLlms : undefined, // legacy
+            fallback_chain: fallbackChain,
             persona_llm: personaLlm, // undefined if no override set
           };
 
@@ -3638,6 +3698,51 @@ export async function loadCustomEndpointsForUser(userId: number): Promise<Custom
       .flatMap((parsed) => (parsed.success ? [parsed.data] : []));
   } catch (error) {
     log.error(`Error loading custom endpoints for user ${userId}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Fetches custom endpoint rows by their IDs in a single query.
+ * Returns results in the same order as the input ids array.
+ * Uses unsafe SQL with IN list to avoid Bun SQL integer-array protocol issues (same pattern as getLlmsByIds).
+ *
+ * @param ids - Array of custom_endpoint_id values to fetch
+ * @returns Ordered array of validated CustomEndpointRow objects (preserves input order, skips missing/invalid rows)
+ */
+export async function loadCustomEndpointsByIds(ids: number[]): Promise<CustomEndpointRow[]> {
+  if (ids.length === 0) return [];
+
+  try {
+    // 1. Fetch all matching rows in a single query; avoid ANY($1) array binding (protocol error 08P01)
+    const distinctIds = Array.from(new Set(ids));
+    const placeholders = distinctIds.map((_, index) => `$${index + 1}`).join(", ");
+    const rows = await sql.unsafe(
+      `SELECT * FROM custom_endpoints WHERE custom_endpoint_id IN (${placeholders})`,
+      distinctIds,
+    );
+
+    // 2. Validate each row and index by ID for order-preserving lookup
+    const rowMap = new Map<number, CustomEndpointRow>();
+    for (const row of rows) {
+      const parsed = customEndpointSchema.safeParse(row);
+      if (parsed.success && parsed.data.custom_endpoint_id !== undefined) {
+        rowMap.set(parsed.data.custom_endpoint_id, parsed.data);
+      } else if (!parsed.success) {
+        log.warn(
+          `Invalid custom endpoint row for id ${(row as Record<string, unknown>).custom_endpoint_id}:`,
+          parsed.error.flatten(),
+        );
+      }
+    }
+
+    // 3. Return in the same order as the input ids, skipping missing entries
+    return ids.flatMap((id) => {
+      const ep = rowMap.get(id);
+      return ep ? [ep] : [];
+    });
+  } catch (error) {
+    log.error(`Error loading custom endpoints by ids [${ids.join(", ")}]:`, error);
     return [];
   }
 }
