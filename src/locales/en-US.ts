@@ -1460,7 +1460,7 @@ Please try again with different inputs or check your API key.`,
         docs_description: `See \`docs/integrations/tts/\` and \`scripts/tts/README.md\` for copy-paste setup commands and wrapper notes.`,
         overview: {
           title: `Speech Setup Overview`,
-          description: `Speech endpoints let TomoriBot send native Discord voice messages using either a local clone server or ElevenLabs.`,
+          description: `Speech endpoints let TomoriBot send native Discord voice messages using either a local clone server or ElevenLabs. For local voice cloning, any audio format is accepted (auto-converted to mono WAV). It is recommended to use 10-20 second clips with no background music.`,
           steps_title: `Setup Flow`,
           steps_description: `Local: start a wrapper server, register it with {custom_endpoint_add}, select it with {model_speech}, upload a sample with {voice_add}, then assign it with {voice_assign}.\n\nElevenLabs: run {elevenlabs}, then use {voice_assign} later for more personas.\n\n**Per-engine setup guides:**\n• Chatterbox-Turbo → \`/help speech engine:Chatterbox-Turbo\`\n• Qwen3-TTS → \`/help speech engine:Qwen3-TTS\`\n• IrodoriTTS → \`/help speech engine:IrodoriTTS\`\n• ElevenLabs → \`/help speech engine:ElevenLabs\``,
         },

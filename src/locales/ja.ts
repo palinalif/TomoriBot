@@ -1460,7 +1460,7 @@ export default {
         docs_description: `コピー用のセットアップ手順とラッパーの注意点は \`docs/integrations/tts/\` と \`scripts/tts/README.md\` を確認してください。`,
         overview: {
           title: `音声生成の概要`,
-          description: `音声エンドポイントを使うと、ローカル音声クローンまたはElevenLabsでDiscordボイスメッセージを送信できます。`,
+          description: `音声エンドポイントを使うと、ローカル音声クローンまたはElevenLabsでDiscordボイスメッセージを送信できます。ローカルクローンの場合、どの音声形式でも自動でモノラルWAVに変換されます。BGMなしの10〜20秒のクリップを推奨します。`,
           steps_title: `設定フロー`,
           steps_description: `ローカル: ラッパーサーバーを起動し、{custom_endpoint_add} で登録、{model_speech} で選択、{voice_add} でサンプル追加、{voice_assign} で割り当てます。\n\nElevenLabs: {elevenlabs} を実行し、追加ペルソナは後で {voice_assign} を使います。\n\n**エンジン別設定ガイド:**\n• Chatterbox-Turbo → \`/help speech engine:Chatterbox-Turbo\`\n• Qwen3-TTS → \`/help speech engine:Qwen3-TTS\`\n• IrodoriTTS → \`/help speech engine:IrodoriTTS\`\n• ElevenLabs → \`/help speech engine:ElevenLabs\``,
         },
