@@ -24,6 +24,7 @@ import {
   replyInfoEmbed,
   replyComponentsV2Status,
   updateButtonComponentsV2Status,
+  type AvatarSessionCache,
   replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   safeSelectOptionText,
@@ -199,6 +200,7 @@ export async function execute(
     const scope: HistoryScope = scopeInput === "serverwide" ? "serverwide" : "persona";
 
     // 5. Handle persona scope: show persona selector
+    const avatarSessionCache: AvatarSessionCache = new Map();
     while (true) {
       if (scope === "persona") {
         const allPersonas = await loadAllPersonasForServer(interaction.guild?.id ?? interaction.user.id);
@@ -214,6 +216,7 @@ export async function execute(
 
         const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
           personas: allPersonas,
+          avatarSessionCache,
           color: ColorCode.INFO,
           preserveSelectedInteraction: true,
           onSelect: async () => {},

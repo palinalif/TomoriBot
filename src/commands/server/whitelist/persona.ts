@@ -32,6 +32,7 @@ import {
   promptWithRawModal,
   replyComponentsV2Status,
   replyInfoEmbed,
+  type AvatarSessionCache,
   replyPaginatedPersonaChoicesV2,
   updateButtonComponentsV2Status,
 } from "@/utils/discord/interactionHelper";
@@ -111,9 +112,11 @@ export async function execute(
       return;
     }
 
+    const avatarSessionCache: AvatarSessionCache = new Map();
     while (true) {
       const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
         personas: allPersonas,
+        avatarSessionCache,
         color: ColorCode.INFO,
         preserveSelectedInteraction: true,
         onSelect: async () => {},

@@ -15,6 +15,7 @@ import {
   replyInfoEmbed,
   replyComponentsV2Status,
   updateButtonComponentsV2Status,
+  type AvatarSessionCache,
   replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   safeSelectOptionText,
@@ -169,6 +170,7 @@ export async function execute(
 
     const scopeInput = interaction.options.getString("scope");
     const scope: DocumentScope = scopeInput === "serverwide" ? "serverwide" : "persona";
+    const avatarSessionCache: AvatarSessionCache = new Map();
 
     while (true) {
       if (scope === "persona") {
@@ -185,6 +187,7 @@ export async function execute(
 
         const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
           personas: allPersonas,
+          avatarSessionCache,
           color: ColorCode.INFO,
           preserveSelectedInteraction: true,
           onSelect: async () => {},

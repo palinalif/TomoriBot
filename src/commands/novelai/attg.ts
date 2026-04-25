@@ -14,6 +14,7 @@ import {
   promptWithModal,
   replyComponentsV2Status,
   replyInfoEmbed,
+  type AvatarSessionCache,
   replyPaginatedPersonaChoicesV2,
 } from "../../utils/discord/interactionHelper";
 import type { TomoriState, UserRow } from "../../types/db/schema";
@@ -94,12 +95,14 @@ export async function execute(
 
     // 3. Loop: show paginated persona selector, then modal.
     //    After each completed transaction, refresh the picker so the user can continue.
+    const avatarSessionCache: AvatarSessionCache = new Map();
     while (true) {
       // 3a. Show paginated persona selector.
       //    preserveSelectedInteraction=true leaves the ButtonInteraction unacknowledged
       //    so we can open a modal as the first response to it.
       const personaResult = await replyPaginatedPersonaChoicesV2(interaction, locale, {
         personas: allPersonas,
+        avatarSessionCache,
         titleKey: "commands.novelai.attg.persona_select_title",
         color: ColorCode.INFO,
         preserveSelectedInteraction: true,

@@ -982,6 +982,8 @@ interface PersonaPaginatedChoiceOptions {
   onSelect?: (index: number) => Promise<void>;
   onCancel?: () => Promise<void>;
   preserveSelectedInteraction?: boolean;
+  /** Persistent avatar cache to share across multiple picker calls in an outer retry loop. */
+  avatarSessionCache?: AvatarSessionCache;
 }
 
 type AccentColorInput = string | number | readonly [red: number, green: number, blue: number];
@@ -1170,13 +1172,15 @@ export async function acknowledgeModalSubmitForRefresh(interaction: ModalSubmitI
  * - `url`: a public HTTP(S) URL or the bot fallback — no file attachment needed.
  * - `buffer`: raw image bytes for a local-disk avatar that must be attached to the Discord message.
  */
-type AvatarCacheEntry = { type: "url"; url: string } | { type: "buffer"; buffer: Buffer };
+export type AvatarCacheEntry = { type: "url"; url: string } | { type: "buffer"; buffer: Buffer };
 
 /**
  * Session-scoped avatar cache keyed by absolute persona index (not page-local).
  * Populated lazily on first page visit; reused on re-navigation to the same page.
+ * Pass into {@link PersonaPaginatedChoiceOptions.avatarSessionCache} to persist the cache
+ * across multiple picker invocations in an outer retry loop.
  */
-type AvatarSessionCache = Map<number, AvatarCacheEntry>;
+export type AvatarSessionCache = Map<number, AvatarCacheEntry>;
 
 /**
  * Resolves avatar images for a single page of personas, using a session cache to
@@ -1797,8 +1801,8 @@ export async function replyPaginatedPersonaChoicesV2(
   // Discord API calls — by the time an error escapes the inner try, the interaction
   // token may already be dead and any recovery attempt just wastes rate-limit quota.
   const sessionStart = Date.now();
-  // Lazy avatar cache: populated on first visit to each page, reused on re-navigation.
-  const avatarSessionCache: AvatarSessionCache = new Map();
+  // Use a provided cache (outer retry loop) or create a fresh one for this session.
+  const avatarSessionCache: AvatarSessionCache = options.avatarSessionCache ?? new Map();
   try {
     while (true) {
       // 1. Inner try wraps the ENTIRE loop body — setup, render, and button wait.

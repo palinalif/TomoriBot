@@ -13,6 +13,7 @@ import {
   replyInfoEmbed,
   replyComponentsV2Status,
   updateButtonComponentsV2Status,
+  type AvatarSessionCache,
   replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   safeSelectOptionText,
@@ -236,9 +237,11 @@ export async function execute(
       return;
     }
 
+    const avatarSessionCache: AvatarSessionCache = new Map();
     while (true) {
       const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
         personas: allPersonas,
+        avatarSessionCache,
         color: ColorCode.INFO,
         preserveSelectedInteraction: true,
         onSelect: async () => {},
