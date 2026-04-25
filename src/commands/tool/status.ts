@@ -35,6 +35,7 @@ import { getAllWhitelistRoles } from "@/utils/db/roleWhitelist";
 import { getQuotaConfig } from "@/utils/quota/imageQuotaManager";
 import { getTextQuotaConfig } from "@/utils/quota/textQuotaManager";
 import { getVideoQuotaConfig } from "@/utils/quota/videoQuotaManager";
+import { resolveActiveTranscriptionEndpoint, resolveActiveSpeechEndpoint } from "@/utils/provider/speechEndpointResolver";
 import type {
   UserRow,
   ChannelWhitelistRow,
@@ -996,6 +997,8 @@ export async function execute(
             embeddingModel,
             videoModel,
             naiDiffusionModel,
+            speechModel,
+            transcriptionModel,
           ] = await Promise.all([
             loadAllPersonasForServer(serverDiscId),
             getAllChannelLlmOverridesForServer(tomoriState.server_id),
@@ -1008,6 +1011,8 @@ export async function execute(
             config.nai_diffusion_model_id
               ? getDiffusionModelById(config.nai_diffusion_model_id)
               : Promise.resolve(null),
+            resolveActiveSpeechEndpoint(tomoriState.server_id),
+            resolveActiveTranscriptionEndpoint(tomoriState.server_id),
           ]);
 
           // 3. Format model display values
@@ -1039,6 +1044,12 @@ export async function execute(
           const embeddingModelValue = embeddingModel
             ? `${embeddingModel.codename} (${embeddingModel.provider})`
             : localizer(locale, "commands.choices.none");
+          const speechModelValue = speechModel
+            ? `${speechModel.endpoint.display_name} (${speechModel.endpoint.api_style})`
+            : localizer(locale, "commands.choices.none");
+          const transcriptionModelValue = transcriptionModel
+            ? `${transcriptionModel.endpoint.display_name} (${transcriptionModel.endpoint.api_style})`
+            : localizer(locale, "commands.choices.none");
           const customEndpointConfiguredValue = formatBooleanLocalized(!!config.custom_endpoint_url, locale);
           const naiDiffusionModelValue = naiDiffusionModel
             ? `${naiDiffusionModel.codename} (${naiDiffusionModel.provider})`
@@ -1067,6 +1078,16 @@ export async function execute(
                 nameKey: "commands.tool.status.field_model",
                 value: modelValue,
                 inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_speech_model",
+                value: speechModelValue,
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_transcription_model",
+                value: transcriptionModelValue,
+                inline: true,
               },
               {
                 nameKey: "commands.tool.status.field_temperature",
@@ -1610,7 +1631,7 @@ export async function execute(
               },
               {
                 nameKey: "commands.tool.status.field_voice_transcript_mode",
-                value: formatBooleanLocalized(config.voice_transcript_chat_mode ?? false, locale),
+                value: formatBooleanLocalized(config.voice_transcript_chat_mode ?? true, locale),
                 inline: true,
               },
               {

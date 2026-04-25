@@ -472,7 +472,7 @@ export const tomoriConfigSchema = z.object({
     z.array(toolNoticeKeySchema).default([]),
   ), // Added April 2026 - Hidden notice embed types; missing entries remain visible by default
   voice_message_enabled: z.boolean().default(true), // Added March 2026 - Allow Tomori to send ElevenLabs TTS voice messages
-  voice_transcript_chat_mode: z.boolean().default(false), // Added March 2026 - Post voice transcripts as webhook chat messages instead of using internal cache
+  voice_transcript_chat_mode: z.boolean().default(true), // Added March 2026 - Post voice transcripts as webhook chat messages instead of using internal cache
   self_debug_enabled: z.boolean().default(false), // Added March 2026 - Include Tomori error embeds in context as [System: ...]
   uncensor_injection_enabled: z.boolean().default(false), // Added February 2026 - Prompt injection mitigation toggle
   uncensor_unicode_space_enabled: z.boolean().default(false), // Added February 2026 - Unicode space replacement toggle

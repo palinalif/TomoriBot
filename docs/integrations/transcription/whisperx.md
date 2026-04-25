@@ -7,7 +7,7 @@ cd scripts/stt
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -r requirements-whisperx.txt
+pip install -r requirements.txt
 python whisperx_server.py
 ```
 

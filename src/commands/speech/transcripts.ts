@@ -60,7 +60,7 @@ export async function execute(
       return;
     }
 
-    const currentSetting = tomoriState.config.voice_transcript_chat_mode ?? false;
+    const currentSetting = tomoriState.config.voice_transcript_chat_mode ?? true;
     if (currentSetting === isEnabled) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.speech.transcripts.already_set_title",

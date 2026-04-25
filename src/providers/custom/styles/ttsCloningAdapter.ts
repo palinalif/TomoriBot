@@ -13,7 +13,7 @@ const VOICE_SAMPLES_BASE_DIR = path.resolve(process.cwd(), "data", "voice-sample
 const TTS_CLONE_TIMEOUT_MS =
   Number.parseInt(process.env.TTS_CLONE_TIMEOUT_MS ?? "", 10) > 0
     ? Number.parseInt(process.env.TTS_CLONE_TIMEOUT_MS ?? "", 10)
-    : 30_000;
+    : 120_000;
 
 /** Regex matching any bracket-tag in the form [content]. */
 const ANY_BRACKET_TAG_REGEX = /\[([^\]\r\n]{1,40})\]/g;

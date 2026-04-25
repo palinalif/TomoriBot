@@ -2729,7 +2729,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       markAudioTranscriptionHandled(message);
 
       if (transcriptionResult.transcriptText) {
-        const isChatMode = earlyTomoriState.config?.voice_transcript_chat_mode ?? false;
+        const isChatMode = earlyTomoriState.config?.voice_transcript_chat_mode ?? true;
 
         if (isChatMode) {
           // 1. Chat mode: post transcript as a visible webhook message instead of

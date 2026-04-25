@@ -1,9 +1,4 @@
-import type {
-  ChatInputCommandInteraction,
-  Client,
-  ModalSubmitInteraction,
-  SlashCommandSubcommandBuilder,
-} from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { CustomEndpointApiStyle, CustomEndpointCapability, ErrorContext, UserRow } from "@/types/db/schema";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
@@ -11,7 +6,7 @@ import { promptWithRawModal, replyInfoEmbed } from "@/utils/discord/interactionH
 import { log, ColorCode } from "@/utils/misc/logger";
 import { validateRemoteMcpUrl } from "@/utils/mcp/mcpUrlSecurity";
 import {
-  buildCapabilityAddModal,
+  buildCapabilityAddModalComponents,
   capabilityNeedsAddModal,
   ModalFieldId,
   parseCapabilityModalFields,
@@ -156,36 +151,22 @@ export async function execute(
   // Unique modal ID per invocation prevents stale awaitModalSubmit collisions.
   const modalCustomId = `custom_endpoint_add_modal_${interaction.id}`;
 
-  // 1a. Capabilities with a TextInput-only detail modal: show it as the primary interaction response.
+  // 1a. Capabilities with a detail modal: show it as the primary interaction response.
   if (capabilityNeedsAddModal(capability)) {
-    const modal = buildCapabilityAddModal(capability, locale, modalCustomId);
+    const modalResult = await promptWithRawModal(interaction, locale, {
+      modalCustomId,
+      modalTitleKey: `commands.config.custom_models.capability_modal.${capability}_title`,
+      components: buildCapabilityAddModalComponents(capability, locale),
+    });
 
-    let modalSubmit: ModalSubmitInteraction;
-    try {
-      await interaction.showModal(modal);
-      modalSubmit = await interaction.awaitModalSubmit({
-        time: 600_000,
-        filter: (i) => i.customId === modalCustomId && i.user.id === interaction.user.id,
-      });
-    } catch {
-      // Timed out or dismissed — no follow-up needed.
-      return;
-    }
+    if (modalResult.outcome !== "submit") return;
 
-    // Defer the modal submit before all async work.
+    // biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees interaction exists
+    const modalSubmit = modalResult.interaction!;
     await modalSubmit.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
-      const rawFields: Record<string, string> = {};
-      for (const id of Object.values(ModalFieldId)) {
-        try {
-          rawFields[id] = modalSubmit.fields.getTextInputValue(id);
-        } catch {
-          rawFields[id] = "";
-        }
-      }
-
-      const parsed = parseCapabilityModalFields(rawFields, capability);
+      const parsed = parseCapabilityModalFields(modalResult.values ?? {}, modalResult.multiValues ?? {}, capability);
 
       // Capability-specific model name requirement (text/embedding).
       if ((capability === "text" || capability === "embedding") && !parsed.modelName) {

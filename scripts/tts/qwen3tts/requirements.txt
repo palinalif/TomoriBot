@@ -1,0 +1,27 @@
+# PyTorch CUDA wheel (change cu124 to match your installed CUDA version, e.g. cu118 or cu121).
+# CPU-only users: replace --index-url with --extra-index-url and remove the --extra-index-url pypi line.
+#
+# REQUIRED: SoX system binary (used by qwen-tts for reference audio resampling).
+#   Windows: scoop install sox  OR  download the installer from sourceforge.net/projects/sox/
+#            (neither winget nor choco carry it)
+#   macOS:   brew install sox
+#   Linux:   sudo apt install sox  (or your distro equivalent)
+# Restart your terminal after install so sox is on PATH.
+#
+# OPTIONAL: flash-attn for faster attention (GPU only, requires Ampere/RTX 30xx+ and CUDA torch).
+# Must install CUDA PyTorch first, then:
+#   pip install wheel
+#   pip install flash-attn --no-build-isolation
+# Compiles from C++ source — takes 20-40 min on Windows. Skip during initial setup.
+# The server runs fine without it, falling back to standard PyTorch attention.
+#
+# NOTE: generation can take 30-90s on first run or on CPU. Set TTS_CLONE_TIMEOUT_MS=120000
+# (or higher) in TomoriBot's .env if requests abort before audio is returned.
+--index-url https://download.pytorch.org/whl/cu124
+--extra-index-url https://pypi.org/simple
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.5.0
+torch>=2.5.0
+soundfile>=0.12.0
+qwen-tts>=0.1.0

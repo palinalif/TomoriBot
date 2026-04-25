@@ -26,7 +26,7 @@ scripts\stt\.venv\Scripts\Activate.ps1
 python -m pip install -U pip
 
 # 3. Install dependencies
-python -m pip install -r scripts\stt\requirements-whisperx.txt
+python -m pip install -r scripts\stt\requirements.txt
 
 # 4. (GPU only) Reinstall PyTorch with CUDA support — skip this for CPU-only installs
 pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124

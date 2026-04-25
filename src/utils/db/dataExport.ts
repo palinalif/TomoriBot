@@ -234,7 +234,7 @@ export async function exportServerData(serverDiscId: string, tomoriId?: number):
 				COALESCE(tc_server.manage_message_enabled, tc_legacy.manage_message_enabled, true) as manage_message_enabled,
 				COALESCE(tc_server.videogen_enabled, tc_legacy.videogen_enabled, false) as videogen_enabled,
 				COALESCE(tc_server.voice_message_enabled, tc_legacy.voice_message_enabled, true) as voice_message_enabled,
-				COALESCE(tc_server.voice_transcript_chat_mode, tc_legacy.voice_transcript_chat_mode, false) as voice_transcript_chat_mode,
+				COALESCE(tc_server.voice_transcript_chat_mode, tc_legacy.voice_transcript_chat_mode, true) as voice_transcript_chat_mode,
 				COALESCE(tc_server.uncensor_injection_enabled, tc_legacy.uncensor_injection_enabled, false) as uncensor_injection_enabled,
 				COALESCE(tc_server.uncensor_unicode_space_enabled, tc_legacy.uncensor_unicode_space_enabled, false) as uncensor_unicode_space_enabled,
 				COALESCE(tc_server.uncensor_sanitize_enabled, tc_legacy.uncensor_sanitize_enabled, false) as uncensor_sanitize_enabled,

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 import torch
+import torchaudio
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
@@ -23,7 +24,7 @@ PORT = int(os.getenv("TOMORI_TTS_PORT", "8013"))
 MODEL_DEVICE = os.getenv("IRODORI_MODEL_DEVICE", "cuda" if torch.cuda.is_available() else "cpu")
 CODEC_DEVICE = os.getenv("IRODORI_CODEC_DEVICE", MODEL_DEVICE)
 MODEL_PRECISION = os.getenv("IRODORI_MODEL_PRECISION", "bf16" if torch.cuda.is_available() else "fp32")
-CODEC_PRECISION = os.getenv("IRODORI_CODEC_PRECISION", "fp32")
+CODEC_PRECISION = os.getenv("IRODORI_CODEC_PRECISION", MODEL_PRECISION)
 MAX_TEXT_CHARS = int(os.getenv("TOMORI_TTS_MAX_TEXT_CHARS", "1000"))
 
 runtime = None
@@ -102,7 +103,7 @@ def synthesize(payload: SynthesizeRequest) -> Response:
     ref_path = decode_ref_audio(payload.ref_audio, temp_dir)
     output_path = Path(temp_dir) / "output.wav"
 
-    from irodori_tts.inference_runtime import SamplingRequest, save_wav
+    from irodori_tts.inference_runtime import SamplingRequest
 
     with runtime_lock:
       result = runtime.synthesize(
@@ -115,7 +116,8 @@ def synthesize(payload: SynthesizeRequest) -> Response:
         log_fn=None,
       )
 
-    save_wav(output_path, result.audio, int(result.sample_rate))
+    # Cast to float32 before saving — WAV doesn't support bfloat16
+    torchaudio.save(str(output_path), result.audio.float().cpu(), int(result.sample_rate))
     return Response(content=output_path.read_bytes(), media_type="audio/wav")
 
 

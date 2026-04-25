@@ -12,12 +12,16 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, EmbedBuild
 import type { ButtonInteraction, ChatInputCommandInteraction, ModalSubmitInteraction } from "discord.js";
 import type { CustomEndpointCapability, CustomEndpointRow, TomoriConfigRow } from "@/types/db/schema";
 import type { SelectOption } from "@/types/discord/modal";
-import { promptWithPaginatedModal, replyInfoEmbed, safeSelectOptionText } from "@/utils/discord/interactionHelper";
+import {
+  promptWithPaginatedModal,
+  promptWithRawModal,
+  replyInfoEmbed,
+  safeSelectOptionText,
+} from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { validateRemoteMcpUrl } from "@/utils/mcp/mcpUrlSecurity";
 import {
-  buildCapabilityEditModal,
-  ModalFieldId,
+  buildCapabilityEditModalComponents,
   parseCapabilityModalFields,
 } from "@/utils/provider/customEndpointCapabilityModal";
 import { registerCustomEndpoint, validateCustomEndpointReachability } from "@/utils/provider/customEndpointService";
@@ -244,7 +248,7 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
   try {
     buttonInteraction = await summaryMessage.awaitMessageComponent({
       componentType: ComponentType.Button,
-      filter: (i) => i.user.id === interaction.user.id,
+      filter: (i: ButtonInteraction) => i.user.id === interaction.user.id,
       time: 300_000,
     });
   } catch {
@@ -261,48 +265,41 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
   // Step 4: from the button click, show the capability-specific edit modal (pre-filled).
   const extra = existingEndpoint.extra_config as Record<string, unknown>;
   const editModalCustomId = `custom_endpoint_edit_fields_${interaction.id}`;
-  const editModal = buildCapabilityEditModal(existingEndpoint.capability, locale, editModalCustomId, {
-    modelName: existingEndpoint.model_name,
-    displayName: existingEndpoint.display_name,
-    endpointUrl: existingEndpoint.endpoint_url,
-    numCtx: existingEndpoint.num_ctx,
-    hasTools: existingEndpoint.has_tools,
-    seesImages: existingEndpoint.sees_images,
-    supportsStructOutput: existingEndpoint.supports_structoutput,
-    scriptMarkup: extra.script_markup as string | null,
-    supportsInstruct: extra.supports_instruct as boolean | undefined,
-    transcriptionModel: extra.model as string | null,
-    transcriptionLanguage: extra.language as string | null,
+  const editModalResult = await promptWithRawModal(buttonInteraction, locale, {
+    modalCustomId: editModalCustomId,
+    modalTitleKey: `commands.config.custom_models.capability_modal.${existingEndpoint.capability}_edit_title`,
+    components: buildCapabilityEditModalComponents(existingEndpoint.capability, locale, {
+      modelName: existingEndpoint.model_name,
+      displayName: existingEndpoint.display_name,
+      endpointUrl: existingEndpoint.endpoint_url,
+      numCtx: existingEndpoint.num_ctx,
+      hasTools: existingEndpoint.has_tools,
+      seesImages: existingEndpoint.sees_images,
+      supportsStructOutput: existingEndpoint.supports_structoutput,
+      scriptMarkup: extra.script_markup as string | null,
+      supportsInstruct: extra.supports_instruct as boolean | undefined,
+      transcriptionModel: extra.model as string | null,
+      transcriptionLanguage: extra.language as string | null,
+    }),
   });
 
-  let editModalSubmit: ModalSubmitInteraction;
-  try {
-    await buttonInteraction.showModal(editModal);
-    editModalSubmit = await buttonInteraction.awaitModalSubmit({
-      time: 600_000,
-      filter: (i) => i.customId === editModalCustomId && i.user.id === interaction.user.id,
-    });
-  } catch {
+  if (editModalResult.outcome !== "submit") {
     await selectInteraction.editReply({ components: [] });
     return;
   }
 
   // Step 5: defer the modal submit before async work.
-  await editModalSubmit.deferUpdate();
+  // biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees interaction exists
+  await editModalResult.interaction!.deferUpdate();
 
   try {
-    const rawFields: Record<string, string> = {};
-    for (const id of Object.values(ModalFieldId)) {
-      try {
-        rawFields[id] = editModalSubmit.fields.getTextInputValue(id);
-      } catch {
-        rawFields[id] = "";
-      }
-    }
+    const parsed = parseCapabilityModalFields(
+      editModalResult.values ?? {},
+      editModalResult.multiValues ?? {},
+      existingEndpoint.capability,
+    );
 
-    const parsed = parseCapabilityModalFields(rawFields, existingEndpoint.capability);
-
-    // Merge parsed values with existing, treating blank strings as "keep existing".
+    // Merge parsed values with existing, treating blank text inputs as "keep existing".
     const endpointUrl = parsed.endpointUrl || existingEndpoint.endpoint_url;
     const displayName = parsed.displayName || existingEndpoint.display_name;
     const modelName =
@@ -310,11 +307,10 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
         ? parsed.modelName || existingEndpoint.model_name || null
         : (existingEndpoint.model_name ?? null);
     const numCtx = parsed.numCtx ?? existingEndpoint.num_ctx ?? null;
-    const hasTools = rawFields[ModalFieldId.text_capabilities] ? parsed.hasTools : existingEndpoint.has_tools;
-    const seesImages = rawFields[ModalFieldId.text_capabilities] ? parsed.seesImages : existingEndpoint.sees_images;
-    const supportsStructOutput = rawFields[ModalFieldId.text_capabilities]
-      ? parsed.supportsStructOutput
-      : existingEndpoint.supports_structoutput;
+    // Checkbox group always returns definitive state (pre-filled with existing); use directly.
+    const hasTools = parsed.hasTools;
+    const seesImages = parsed.seesImages;
+    const supportsStructOutput = parsed.supportsStructOutput;
     const authTokenProvided = Boolean(parsed.authToken);
     const authToken = authTokenProvided ? parsed.authToken : undefined;
 

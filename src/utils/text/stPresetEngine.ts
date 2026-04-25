@@ -68,8 +68,8 @@ const VAR_DECLARATION_REGEX = /\{\{(setvar|addvar)::([^:}]+)::([^}]*)\}\}/g;
 /** Matches {{getvar::key}} references */
 const GETVAR_REGEX = /\{\{getvar::([^}]+)\}\}/g;
 
-/** Matches {{random: A, B, C}} selections */
-const RANDOM_COMMA_REGEX = /\{\{random:\s*([^}]+)\}\}/gi;
+/** Matches {{random: A, B, C}} selections — negative lookahead prevents matching {{random::...}} double-colon form */
+const RANDOM_COMMA_REGEX = /\{\{random:(?!:)\s*([^}]+)\}\}/gi;
 
 /** Matches legacy {{random::A::B::C}} selections */
 const RANDOM_DOUBLE_COLON_REGEX = /\{\{random::([^}]+)\}\}/gi;

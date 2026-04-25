@@ -1,33 +1,29 @@
 /**
- * Capability-specific modal builder and field parser for custom endpoint add/edit flows.
+ * Capability-specific modal component builder and field parser for custom endpoint add/edit flows.
  *
- * Phase 4.5: replaces wide slash-option form with a two-step pattern:
- *   Add:  slash (routing fields) → showModal (capability detail fields)
- *   Edit: endpoint-select modal → reply(Edit button) → button → showModal (capability detail fields pre-filled)
+ * Phase 4.5 (updated): uses ModalComponent[] (raw modal components) instead of discord.js ModalBuilder,
+ * enabling Radio Group (type 21), Checkbox Group (type 22), and Checkbox (type 23) inputs.
  *
- * Discord modals allow max 5 TextInput rows. The field layout per capability is:
- *   text:          model_name, display_name, num_ctx, text_capabilities
- *   embedding:     model_name, display_name
- *   speech:        display_name, script_markup, supports_instruct
- *   transcription: display_name, transcription_model, transcription_language
- *   image/video:   display_name + workflow_json file upload (via promptWithRawModal, not this builder)
+ * Field layout per capability:
+ *   text:          model_name (text), display_name (text), num_ctx (text), text_capabilities (checkbox group)
+ *   embedding:     model_name (text), display_name (text)
+ *   speech:        display_name (text), script_markup (radio group), supports_instruct (checkbox)
+ *   transcription: display_name (text), transcription_model (text), transcription_language (text)
+ *   image/video:   display_name (text) + workflow_json file upload (separate path via promptWithRawModal)
  *
- * For the add flow, endpoint_url and auth_token come from the initial slash params, so the add
- * modal only contains the capability-specific advanced fields (model_name, display_name, etc.).
- * image/video add uses promptWithRawModal directly to support the workflow_json file upload field.
- * The edit modal includes endpoint_url and auth_token since those are also editable.
+ * For the add flow, endpoint_url and auth_token come from the initial slash params.
+ * The edit flow includes endpoint_url and auth_token as editable text inputs.
  */
 
-import { ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from "discord.js";
 import type { CustomEndpointCapability } from "@/types/db/schema";
+import type { ModalComponent } from "@/types/discord/modal";
 import { localizer } from "@/utils/text/localizer";
 
-/** Custom IDs for each modal text input field */
+/** Custom IDs for each modal field */
 export const ModalFieldId = {
   model_name: "model_name",
   display_name: "display_name",
   num_ctx: "num_ctx",
-  /** Comma-separated capability flags: "tools, vision, structoutput" */
   text_capabilities: "text_capabilities",
   script_markup: "script_markup",
   supports_instruct: "supports_instruct",
@@ -40,32 +36,6 @@ export const ModalFieldId = {
 /** Capabilities that need a detail modal after the initial slash submission (add flow). */
 export function capabilityNeedsAddModal(capability: CustomEndpointCapability): boolean {
   return capability !== "image" && capability !== "video";
-}
-
-/** Parse a boolean text field ("yes"/"no"/"true"/"false"); blank returns `defaultVal`. */
-function parseBoolField(value: string, defaultVal: boolean): boolean {
-  const v = value.trim().toLowerCase();
-  if (!v || v === "-") return defaultVal;
-  return v !== "no" && v !== "false" && v !== "0";
-}
-
-/** Parse comma-separated capability flags from a text field. */
-function parseCapabilityFlags(value: string): {
-  hasTools: boolean;
-  seesImages: boolean;
-  supportsStructOutput: boolean;
-} {
-  const flags = new Set(
-    value
-      .split(",")
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean),
-  );
-  return {
-    hasTools: flags.has("tools") || flags.has("tool"),
-    seesImages: flags.has("vision") || flags.has("image"),
-    supportsStructOutput: flags.has("structoutput") || flags.has("struct") || flags.has("structured"),
-  };
 }
 
 /** Parse a context window integer; returns null if blank or invalid (<512). */
@@ -92,18 +62,21 @@ export interface ParsedCapabilityModalFields {
 }
 
 /**
- * Parse modal submission fields into typed values.
- * Missing fields default to safe values; blank strings return null.
+ * Parse modal submission values into typed fields.
+ * @param values - Scalar values from text inputs, radio groups, and single checkboxes.
+ * @param multiValues - Array values from checkbox groups, keyed by customId.
+ * @param capability - Which capability's fields to parse.
  */
 export function parseCapabilityModalFields(
-  fields: Record<string, string>,
+  values: Record<string, string>,
+  multiValues: Record<string, string[]>,
   capability: CustomEndpointCapability,
 ): ParsedCapabilityModalFields {
   const result: ParsedCapabilityModalFields = {
     modelName: null,
-    displayName: fields[ModalFieldId.display_name]?.trim() || null,
-    endpointUrl: fields[ModalFieldId.endpoint_url]?.trim() || null,
-    authToken: fields[ModalFieldId.auth_token]?.trim() || null,
+    displayName: values[ModalFieldId.display_name]?.trim() || null,
+    endpointUrl: values[ModalFieldId.endpoint_url]?.trim() || null,
+    authToken: values[ModalFieldId.auth_token]?.trim() || null,
     numCtx: null,
     hasTools: false,
     seesImages: false,
@@ -116,30 +89,27 @@ export function parseCapabilityModalFields(
 
   switch (capability) {
     case "text": {
-      result.modelName = fields[ModalFieldId.model_name]?.trim() || null;
-      result.numCtx = parseNumCtxField(fields[ModalFieldId.num_ctx] ?? "");
-      const capFlags = parseCapabilityFlags(fields[ModalFieldId.text_capabilities] ?? "");
-      result.hasTools = capFlags.hasTools;
-      result.seesImages = capFlags.seesImages;
-      result.supportsStructOutput = capFlags.supportsStructOutput;
+      result.modelName = values[ModalFieldId.model_name]?.trim() || null;
+      result.numCtx = parseNumCtxField(values[ModalFieldId.num_ctx] ?? "");
+      const selectedCaps = new Set(multiValues[ModalFieldId.text_capabilities] ?? []);
+      result.hasTools = selectedCaps.has("tools");
+      result.seesImages = selectedCaps.has("vision");
+      result.supportsStructOutput = selectedCaps.has("structoutput");
       break;
     }
     case "embedding": {
-      result.modelName = fields[ModalFieldId.model_name]?.trim() || null;
+      result.modelName = values[ModalFieldId.model_name]?.trim() || null;
       break;
     }
     case "speech": {
-      const markupRaw = fields[ModalFieldId.script_markup]?.trim().toLowerCase() ?? "";
-      const validMarkup: Array<ParsedCapabilityModalFields["scriptMarkup"]> = ["bracket-tags", "emoji"];
-      result.scriptMarkup = validMarkup.includes(markupRaw as (typeof validMarkup)[number])
-        ? (markupRaw as ParsedCapabilityModalFields["scriptMarkup"])
-        : "plain";
-      result.supportsInstruct = parseBoolField(fields[ModalFieldId.supports_instruct] ?? "", false);
+      const rawMarkup = values[ModalFieldId.script_markup]?.trim().toLowerCase();
+      result.scriptMarkup = rawMarkup === "bracket-tags" || rawMarkup === "emoji" ? rawMarkup : "plain";
+      result.supportsInstruct = values[ModalFieldId.supports_instruct] === "true";
       break;
     }
     case "transcription": {
-      result.transcriptionModel = fields[ModalFieldId.transcription_model]?.trim() || null;
-      result.transcriptionLanguage = fields[ModalFieldId.transcription_language]?.trim() || null;
+      result.transcriptionModel = values[ModalFieldId.transcription_model]?.trim() || null;
+      result.transcriptionLanguage = values[ModalFieldId.transcription_language]?.trim() || null;
       break;
     }
     case "image":
@@ -150,180 +120,179 @@ export function parseCapabilityModalFields(
   return result;
 }
 
-/** Helper that calls setValue only when the value is a non-empty string. */
-function setIfNonEmpty(input: TextInputBuilder, value: string | null | undefined): TextInputBuilder {
-  if (value) input.setValue(value);
-  return input;
-}
-
 /**
- * Build a capability-specific add modal (routing fields already captured via slash params).
- * Only shows advanced detail fields relevant to the chosen capability.
+ * Build ModalComponent[] for the capability-specific add modal.
+ * Routing fields (endpoint_url, auth_token) are captured via the slash command params.
+ * image/video use a separate promptWithRawModal call in the command layer (file upload support).
  */
-export function buildCapabilityAddModal(
+export function buildCapabilityAddModalComponents(
   capability: CustomEndpointCapability,
   locale: string,
-  modalCustomId: string,
-): ModalBuilder {
-  const modal = new ModalBuilder()
-    .setCustomId(modalCustomId)
-    .setTitle(localizer(locale, `commands.config.custom_models.capability_modal.${capability}_title`));
-
+): ModalComponent[] {
   switch (capability) {
-    case "text": {
-      modal.addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder()
-            .setCustomId(ModalFieldId.model_name)
-            .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.model_name_label"))
-            .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.model_name_placeholder"))
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true)
-            .setMaxLength(200),
-        ),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder()
-            .setCustomId(ModalFieldId.display_name)
-            .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.display_name_label"))
-            .setPlaceholder(
-              localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
-            )
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
-            .setMaxLength(100),
-        ),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder()
-            .setCustomId(ModalFieldId.num_ctx)
-            .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.num_ctx_label"))
-            .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.num_ctx_placeholder"))
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
-            .setMaxLength(8),
-        ),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder()
-            .setCustomId(ModalFieldId.text_capabilities)
-            .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.text_capabilities_label"))
-            .setPlaceholder(
-              localizer(locale, "commands.config.custom_models.capability_modal.text_capabilities_placeholder"),
-            )
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
-            .setMaxLength(60),
-        ),
-      );
-      break;
-    }
-    case "embedding": {
-      modal.addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder()
-            .setCustomId(ModalFieldId.model_name)
-            .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.model_name_label"))
-            .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.model_name_placeholder"))
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true)
-            .setMaxLength(200),
-        ),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder()
-            .setCustomId(ModalFieldId.display_name)
-            .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.display_name_label"))
-            .setPlaceholder(
-              localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
-            )
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
-            .setMaxLength(100),
-        ),
-      );
-      break;
-    }
-    case "speech": {
-      modal.addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder()
-            .setCustomId(ModalFieldId.display_name)
-            .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.display_name_label"))
-            .setPlaceholder(
-              localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
-            )
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
-            .setMaxLength(100),
-        ),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder()
-            .setCustomId(ModalFieldId.script_markup)
-            .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.script_markup_label"))
-            .setPlaceholder(
-              localizer(locale, "commands.config.custom_models.capability_modal.script_markup_placeholder"),
-            )
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
-            .setMaxLength(20),
-        ),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder()
-            .setCustomId(ModalFieldId.supports_instruct)
-            .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.supports_instruct_label"))
-            .setPlaceholder(
-              localizer(locale, "commands.config.custom_models.capability_modal.supports_instruct_placeholder"),
-            )
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
-            .setMaxLength(5),
-        ),
-      );
-      break;
-    }
-    case "transcription": {
-      modal.addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder()
-            .setCustomId(ModalFieldId.display_name)
-            .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.display_name_label"))
-            .setPlaceholder(
-              localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
-            )
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
-            .setMaxLength(100),
-        ),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder()
-            .setCustomId(ModalFieldId.transcription_model)
-            .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.transcription_model_label"))
-            .setPlaceholder(
-              localizer(locale, "commands.config.custom_models.capability_modal.transcription_model_placeholder"),
-            )
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true)
-            .setMaxLength(100),
-        ),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
-          new TextInputBuilder()
-            .setCustomId(ModalFieldId.transcription_language)
-            .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.transcription_language_label"))
-            .setPlaceholder(
-              localizer(locale, "commands.config.custom_models.capability_modal.transcription_language_placeholder"),
-            )
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
-            .setMaxLength(10),
-        ),
-      );
-      break;
-    }
+    case "text":
+      return [
+        {
+          customId: ModalFieldId.model_name,
+          labelKey: "commands.config.custom_models.capability_modal.model_name_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.model_name_placeholder"),
+          required: true,
+          maxLength: 200,
+        },
+        {
+          customId: ModalFieldId.display_name,
+          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
+          required: false,
+          maxLength: 100,
+        },
+        {
+          customId: ModalFieldId.num_ctx,
+          labelKey: "commands.config.custom_models.capability_modal.num_ctx_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.num_ctx_placeholder"),
+          required: false,
+          maxLength: 8,
+        },
+        {
+          kind: "checkboxGroup" as const,
+          customId: ModalFieldId.text_capabilities,
+          labelKey: "commands.config.custom_models.capability_modal.text_capabilities_label",
+          descriptionKey: "commands.config.custom_models.capability_modal.text_capabilities_description",
+          options: [
+            {
+              value: "tools",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.text_cap_tools"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.text_cap_tools_description",
+              ),
+            },
+            {
+              value: "vision",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.text_cap_vision"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.text_cap_vision_description",
+              ),
+            },
+            {
+              value: "structoutput",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.text_cap_structoutput"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.text_cap_structoutput_description",
+              ),
+            },
+          ],
+          minValues: 0,
+          required: false,
+        },
+      ];
+
+    case "embedding":
+      return [
+        {
+          customId: ModalFieldId.model_name,
+          labelKey: "commands.config.custom_models.capability_modal.model_name_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.model_name_placeholder"),
+          required: true,
+          maxLength: 200,
+        },
+        {
+          customId: ModalFieldId.display_name,
+          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
+          required: false,
+          maxLength: 100,
+        },
+      ];
+
+    case "speech":
+      return [
+        {
+          customId: ModalFieldId.display_name,
+          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
+          required: false,
+          maxLength: 100,
+        },
+        {
+          kind: "radioGroup" as const,
+          customId: ModalFieldId.script_markup,
+          labelKey: "commands.config.custom_models.capability_modal.script_markup_label",
+          descriptionKey: "commands.config.custom_models.capability_modal.script_markup_description",
+          options: [
+            {
+              value: "plain",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.script_markup_plain"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.script_markup_plain_description",
+              ),
+              default: true,
+            },
+            {
+              value: "bracket-tags",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.script_markup_bracket_tags"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.script_markup_bracket_tags_description",
+              ),
+            },
+            {
+              value: "emoji",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.script_markup_emoji"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.script_markup_emoji_description",
+              ),
+            },
+          ],
+          required: true,
+        },
+        {
+          kind: "checkbox" as const,
+          customId: ModalFieldId.supports_instruct,
+          labelKey: "commands.config.custom_models.capability_modal.supports_instruct_label",
+          descriptionKey: "commands.config.custom_models.capability_modal.supports_instruct_description",
+        },
+      ];
+
+    case "transcription":
+      return [
+        {
+          customId: ModalFieldId.display_name,
+          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
+          required: false,
+          maxLength: 100,
+        },
+        {
+          customId: ModalFieldId.transcription_model,
+          labelKey: "commands.config.custom_models.capability_modal.transcription_model_label",
+          placeholder: localizer(
+            locale,
+            "commands.config.custom_models.capability_modal.transcription_model_placeholder",
+          ),
+          required: true,
+          maxLength: 100,
+        },
+        {
+          customId: ModalFieldId.transcription_language,
+          labelKey: "commands.config.custom_models.capability_modal.transcription_language_label",
+          placeholder: localizer(
+            locale,
+            "commands.config.custom_models.capability_modal.transcription_language_placeholder",
+          ),
+          required: false,
+          maxLength: 10,
+        },
+      ];
+
     case "image":
     case "video":
-      // image/video add modals are built via promptWithRawModal in the command layer
-      // to support the workflow_json file upload field.
-      break;
+      return [];
   }
-
-  return modal;
 }
 
 export interface EditModalExistingValues {
@@ -341,238 +310,237 @@ export interface EditModalExistingValues {
 }
 
 /**
- * Build a capability-specific edit modal pre-filled with the endpoint's current values.
- * Includes endpoint_url and auth_token so the user can update routing fields too.
- * auth_token is omitted for text/embedding (5-row limit reached by more critical fields).
+ * Build ModalComponent[] for the capability-specific edit modal, pre-filled with existing values.
+ * Includes endpoint_url and auth_token as editable text inputs.
  */
-export function buildCapabilityEditModal(
+export function buildCapabilityEditModalComponents(
   capability: CustomEndpointCapability,
   locale: string,
-  modalCustomId: string,
   existing: EditModalExistingValues,
-): ModalBuilder {
-  const modal = new ModalBuilder()
-    .setCustomId(modalCustomId)
-    .setTitle(localizer(locale, `commands.config.custom_models.capability_modal.${capability}_edit_title`));
-
-  // 1. endpoint_url always editable (all capabilities)
-  const urlInput = new TextInputBuilder()
-    .setCustomId(ModalFieldId.endpoint_url)
-    .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.endpoint_url_label"))
-    .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.endpoint_url_placeholder"))
-    .setStyle(TextInputStyle.Short)
-    .setRequired(false)
-    .setMaxLength(500);
-  setIfNonEmpty(urlInput, existing.endpointUrl);
+): ModalComponent[] {
+  const urlComponent: ModalComponent = {
+    customId: ModalFieldId.endpoint_url,
+    labelKey: "commands.config.custom_models.capability_modal.endpoint_url_label",
+    placeholder: localizer(locale, "commands.config.custom_models.capability_modal.endpoint_url_placeholder"),
+    required: false,
+    maxLength: 500,
+    value: existing.endpointUrl ?? undefined,
+  };
 
   switch (capability) {
-    case "text": {
-      // 5 rows: model_name, display_name, num_ctx, text_capabilities, endpoint_url
-      const existingCaps: string[] = [];
-      if (existing.hasTools) existingCaps.push("tools");
-      if (existing.seesImages) existingCaps.push("vision");
-      if (existing.supportsStructOutput) existingCaps.push("structoutput");
+    case "text":
+      return [
+        {
+          customId: ModalFieldId.model_name,
+          labelKey: "commands.config.custom_models.capability_modal.model_name_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.model_name_placeholder"),
+          required: false,
+          maxLength: 200,
+          value: existing.modelName ?? undefined,
+        },
+        {
+          customId: ModalFieldId.display_name,
+          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
+          required: false,
+          maxLength: 100,
+          value: existing.displayName ?? undefined,
+        },
+        {
+          customId: ModalFieldId.num_ctx,
+          labelKey: "commands.config.custom_models.capability_modal.num_ctx_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.num_ctx_placeholder"),
+          required: false,
+          maxLength: 8,
+          value: existing.numCtx != null ? String(existing.numCtx) : undefined,
+        },
+        {
+          kind: "checkboxGroup" as const,
+          customId: ModalFieldId.text_capabilities,
+          labelKey: "commands.config.custom_models.capability_modal.text_capabilities_label",
+          descriptionKey: "commands.config.custom_models.capability_modal.text_capabilities_description",
+          options: [
+            {
+              value: "tools",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.text_cap_tools"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.text_cap_tools_description",
+              ),
+              default: existing.hasTools ?? false,
+            },
+            {
+              value: "vision",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.text_cap_vision"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.text_cap_vision_description",
+              ),
+              default: existing.seesImages ?? false,
+            },
+            {
+              value: "structoutput",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.text_cap_structoutput"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.text_cap_structoutput_description",
+              ),
+              default: existing.supportsStructOutput ?? false,
+            },
+          ],
+          minValues: 0,
+          required: false,
+        },
+        urlComponent,
+      ];
 
-      const modelInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.model_name)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.model_name_label"))
-        .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.model_name_placeholder"))
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(200);
-      setIfNonEmpty(modelInput, existing.modelName);
+    case "embedding":
+      return [
+        {
+          customId: ModalFieldId.model_name,
+          labelKey: "commands.config.custom_models.capability_modal.model_name_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.model_name_placeholder"),
+          required: false,
+          maxLength: 200,
+          value: existing.modelName ?? undefined,
+        },
+        {
+          customId: ModalFieldId.display_name,
+          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
+          required: false,
+          maxLength: 100,
+          value: existing.displayName ?? undefined,
+        },
+        urlComponent,
+      ];
 
-      const displayInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.display_name)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.display_name_label"))
-        .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"))
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(100);
-      setIfNonEmpty(displayInput, existing.displayName);
-
-      const numCtxInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.num_ctx)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.num_ctx_label"))
-        .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.num_ctx_placeholder"))
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(8);
-      if (existing.numCtx != null) numCtxInput.setValue(String(existing.numCtx));
-
-      const capsInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.text_capabilities)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.text_capabilities_label"))
-        .setPlaceholder(
-          localizer(locale, "commands.config.custom_models.capability_modal.text_capabilities_placeholder"),
-        )
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(60);
-      if (existingCaps.length > 0) capsInput.setValue(existingCaps.join(", "));
-
-      modal.addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(modelInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(displayInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(numCtxInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(capsInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(urlInput),
-      );
-      break;
-    }
-    case "embedding": {
-      // 3 rows: model_name, display_name, endpoint_url
-      const modelInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.model_name)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.model_name_label"))
-        .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.model_name_placeholder"))
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(200);
-      setIfNonEmpty(modelInput, existing.modelName);
-
-      const displayInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.display_name)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.display_name_label"))
-        .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"))
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(100);
-      setIfNonEmpty(displayInput, existing.displayName);
-
-      modal.addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(modelInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(displayInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(urlInput),
-      );
-      break;
-    }
     case "speech": {
-      // 5 rows: display_name, endpoint_url, auth_token, script_markup, supports_instruct
-      const displayInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.display_name)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.display_name_label"))
-        .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"))
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(100);
-      setIfNonEmpty(displayInput, existing.displayName);
-
-      const authInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.auth_token)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.auth_token_label"))
-        .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.auth_token_placeholder"))
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(500);
-
-      const markupInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.script_markup)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.script_markup_label"))
-        .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.script_markup_placeholder"))
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(20);
-      setIfNonEmpty(markupInput, existing.scriptMarkup);
-
-      const instructInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.supports_instruct)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.supports_instruct_label"))
-        .setPlaceholder(
-          localizer(locale, "commands.config.custom_models.capability_modal.supports_instruct_placeholder"),
-        )
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(5);
-      if (existing.supportsInstruct != null) instructInput.setValue(existing.supportsInstruct ? "yes" : "no");
-
-      modal.addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(displayInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(urlInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(authInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(markupInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(instructInput),
-      );
-      break;
+      const currentMarkup = existing.scriptMarkup?.toLowerCase();
+      return [
+        {
+          customId: ModalFieldId.display_name,
+          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
+          required: false,
+          maxLength: 100,
+          value: existing.displayName ?? undefined,
+        },
+        urlComponent,
+        {
+          customId: ModalFieldId.auth_token,
+          labelKey: "commands.config.custom_models.capability_modal.auth_token_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.auth_token_placeholder"),
+          required: false,
+          maxLength: 500,
+        },
+        {
+          kind: "radioGroup" as const,
+          customId: ModalFieldId.script_markup,
+          labelKey: "commands.config.custom_models.capability_modal.script_markup_label",
+          descriptionKey: "commands.config.custom_models.capability_modal.script_markup_description",
+          options: [
+            {
+              value: "plain",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.script_markup_plain"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.script_markup_plain_description",
+              ),
+              default: !currentMarkup || currentMarkup === "plain",
+            },
+            {
+              value: "bracket-tags",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.script_markup_bracket_tags"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.script_markup_bracket_tags_description",
+              ),
+              default: currentMarkup === "bracket-tags",
+            },
+            {
+              value: "emoji",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.script_markup_emoji"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.script_markup_emoji_description",
+              ),
+              default: currentMarkup === "emoji",
+            },
+          ],
+          required: true,
+        },
+        {
+          kind: "checkbox" as const,
+          customId: ModalFieldId.supports_instruct,
+          labelKey: "commands.config.custom_models.capability_modal.supports_instruct_label",
+          descriptionKey: "commands.config.custom_models.capability_modal.supports_instruct_description",
+          default: existing.supportsInstruct ?? false,
+        },
+      ];
     }
-    case "transcription": {
-      // 5 rows: display_name, endpoint_url, auth_token, transcription_model, transcription_language
-      const displayInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.display_name)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.display_name_label"))
-        .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"))
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(100);
-      setIfNonEmpty(displayInput, existing.displayName);
 
-      const authInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.auth_token)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.auth_token_label"))
-        .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.auth_token_placeholder"))
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(500);
+    case "transcription":
+      return [
+        {
+          customId: ModalFieldId.display_name,
+          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
+          required: false,
+          maxLength: 100,
+          value: existing.displayName ?? undefined,
+        },
+        urlComponent,
+        {
+          customId: ModalFieldId.auth_token,
+          labelKey: "commands.config.custom_models.capability_modal.auth_token_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.auth_token_placeholder"),
+          required: false,
+          maxLength: 500,
+        },
+        {
+          customId: ModalFieldId.transcription_model,
+          labelKey: "commands.config.custom_models.capability_modal.transcription_model_label",
+          placeholder: localizer(
+            locale,
+            "commands.config.custom_models.capability_modal.transcription_model_placeholder",
+          ),
+          required: false,
+          maxLength: 100,
+          value: existing.transcriptionModel ?? undefined,
+        },
+        {
+          customId: ModalFieldId.transcription_language,
+          labelKey: "commands.config.custom_models.capability_modal.transcription_language_label",
+          placeholder: localizer(
+            locale,
+            "commands.config.custom_models.capability_modal.transcription_language_placeholder",
+          ),
+          required: false,
+          maxLength: 10,
+          value: existing.transcriptionLanguage ?? undefined,
+        },
+      ];
 
-      const tModelInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.transcription_model)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.transcription_model_label"))
-        .setPlaceholder(
-          localizer(locale, "commands.config.custom_models.capability_modal.transcription_model_placeholder"),
-        )
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(100);
-      setIfNonEmpty(tModelInput, existing.transcriptionModel);
-
-      const tLangInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.transcription_language)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.transcription_language_label"))
-        .setPlaceholder(
-          localizer(locale, "commands.config.custom_models.capability_modal.transcription_language_placeholder"),
-        )
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(10);
-      setIfNonEmpty(tLangInput, existing.transcriptionLanguage);
-
-      modal.addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(displayInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(urlInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(authInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(tModelInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(tLangInput),
-      );
-      break;
-    }
     case "image":
-    case "video": {
-      // 3 rows: display_name, endpoint_url, auth_token
-      const displayInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.display_name)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.display_name_label"))
-        .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"))
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(100);
-      setIfNonEmpty(displayInput, existing.displayName);
-
-      const authInput = new TextInputBuilder()
-        .setCustomId(ModalFieldId.auth_token)
-        .setLabel(localizer(locale, "commands.config.custom_models.capability_modal.auth_token_label"))
-        .setPlaceholder(localizer(locale, "commands.config.custom_models.capability_modal.auth_token_placeholder"))
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(500);
-
-      modal.addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(displayInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(urlInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(authInput),
-      );
-      break;
-    }
+    case "video":
+      return [
+        {
+          customId: ModalFieldId.display_name,
+          labelKey: "commands.config.custom_models.capability_modal.display_name_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
+          required: false,
+          maxLength: 100,
+          value: existing.displayName ?? undefined,
+        },
+        urlComponent,
+        {
+          customId: ModalFieldId.auth_token,
+          labelKey: "commands.config.custom_models.capability_modal.auth_token_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.auth_token_placeholder"),
+          required: false,
+          maxLength: 500,
+        },
+      ];
   }
-
-  return modal;
 }
