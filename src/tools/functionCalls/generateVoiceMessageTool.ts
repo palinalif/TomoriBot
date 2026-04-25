@@ -18,10 +18,52 @@ const IS_VOICE_MESSAGE_FLAG = 8192;
 /** Discord REST API base URL. */
 const DISCORD_API_BASE = "https://discord.com/api/v10";
 
+/**
+ * Per-endpoint description variants for the voice message tool.
+ * The registry proxies the tool with the matching variant based on the server's active
+ * speech endpoint's script_markup setting. Defaults to bracket-tags (ElevenLabs / no endpoint).
+ */
+export const VOICE_TOOL_VARIANTS = {
+  "bracket-tags": {
+    toolDescription:
+      "Generate a spoken Discord audio message using the active persona's configured voice. " +
+      "Use this only when voice delivery materially improves the reply. " +
+      "You may include bracketed expression tags anywhere in the script to shape delivery " +
+      "(e.g. [happy], [sad], [whispers], [laughs]). " +
+      "The tool sends the audio directly to the channel with no text caption.",
+    scriptDescription:
+      "The exact spoken script for the voice message. Keep it concise and natural for speech. " +
+      "Bracketed expression tags (emotional states like [happy], [sad], [tired] or actions like " +
+      "[whispers], [laughs]) can be placed inline to shape delivery.",
+  },
+  plain: {
+    toolDescription:
+      "Generate a spoken Discord audio message using the active persona's configured voice. " +
+      "Use this only when voice delivery materially improves the reply. " +
+      "Write the script as natural plain speech text only — do not include any bracketed tags or special markup. " +
+      "The tool sends the audio directly to the channel with no text caption.",
+    scriptDescription:
+      "The exact spoken script for the voice message. Keep it concise and natural for speech. " +
+      "Plain text only — do not write bracketed tags or any special markup.",
+  },
+  emoji: {
+    toolDescription:
+      "Generate a spoken Discord audio message using the active persona's configured voice. " +
+      "Use this only when voice delivery materially improves the reply. " +
+      "You may embed emoji characters inline in the script to convey emotion " +
+      "(e.g. 😊 for happy, 😢 for sad, 😮 for surprised). Do not use bracketed tags. " +
+      "The tool sends the audio directly to the channel with no text caption.",
+    scriptDescription:
+      "The exact spoken script for the voice message. Keep it concise and natural for speech. " +
+      "Embed emoji characters inline to convey emotion (e.g. 😊, 😢, 😮). No bracketed tags.",
+  },
+} as const satisfies Record<string, { toolDescription: string; scriptDescription: string }>;
+
+export type VoiceScriptMarkup = keyof typeof VOICE_TOOL_VARIANTS;
+
 export class GenerateVoiceMessageTool extends BaseTool {
   name = "generate_voice_message";
-  description =
-    "Generate a spoken Discord audio message using the active persona's configured voice. Use this only when voice delivery materially improves the reply. You may include bracketed expression tags anywhere in the script to shape delivery (e.g. [happy], [sad], [whispers], [laughs]). The tool sends the audio directly to the channel with no text caption.";
+  description = VOICE_TOOL_VARIANTS["bracket-tags"].toolDescription;
   category = "discord" as const;
 
   parameters: ToolParameterSchema = {
@@ -34,8 +76,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
       },
       script: {
         type: "string",
-        description:
-          "The exact spoken script for the voice message. Keep it concise and natural for speech. Bracketed expression tags (emotional states like [happy], [sad], [tired] or actions like [whispers], [laughs]) can be placed inline to shape the delivery.",
+        description: VOICE_TOOL_VARIANTS["bracket-tags"].scriptDescription,
       },
     },
     required: ["title", "script"],

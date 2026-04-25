@@ -24,6 +24,7 @@ import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
 import { sql } from "@/utils/db/client";
 import { resolveActiveSpeechEndpoint } from "@/utils/provider/speechEndpointResolver";
+import { VOICE_TOOL_VARIANTS, type VoiceScriptMarkup } from "@/tools/functionCalls/generateVoiceMessageTool";
 
 /**
  * Minimal state interface for context building operations
@@ -499,6 +500,32 @@ class ToolRegistryImpl implements ToolRegistryInterface {
               })`,
             );
           }
+        } else {
+          // Proxy the voice tool with a description that matches the endpoint's script_markup mode.
+          // activeSpeechEndpoint is already resolved above; no extra DB call needed.
+          const scriptMarkup =
+            (activeSpeechEndpoint?.endpoint.extra_config?.script_markup as string | undefined) ?? "bracket-tags";
+          const variant = VOICE_TOOL_VARIANTS[scriptMarkup as VoiceScriptMarkup] ?? VOICE_TOOL_VARIANTS["bracket-tags"];
+
+          builtInTools = builtInTools.map((tool) => {
+            if (tool.name !== "generate_voice_message") return tool;
+            return Object.create(tool, {
+              description: { value: variant.toolDescription, enumerable: true },
+              parameters: {
+                value: {
+                  ...tool.parameters,
+                  properties: {
+                    ...tool.parameters.properties,
+                    script: {
+                      ...tool.parameters.properties.script,
+                      description: variant.scriptDescription,
+                    },
+                  },
+                },
+                enumerable: true,
+              },
+            });
+          });
         }
       }
 

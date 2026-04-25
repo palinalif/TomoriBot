@@ -7,9 +7,13 @@
  *   - GHSA-p8p7-x288-28g6 — request<=2.88.2 SSRF; `request` was archived in
  *     2020 and will never receive a fix. Reaches us via:
  *     matrix-appservice-bridge → @vector-im/matrix-bot-sdk → request
+ *   - GHSA-w5hq-g745-h8pq — uuid<14.0.0 missing buffer bounds check in
+ *     v3/v5/v6 when `buf` is provided. Reaches us only via the archived
+ *     `request` package which never passes a `buf` argument — unexploitable
+ *     in this dependency chain.
  */
 
-const GHOST_ADVISORIES = new Set(["GHSA-P8P7-X288-28G6"]);
+const GHOST_ADVISORIES = new Set(["GHSA-P8P7-X288-28G6", "GHSA-W5HQ-G745-H8PQ"]);
 
 // Run `bun audit` and capture combined stdout + stderr
 const proc = Bun.spawn(["bun", "audit"], { stderr: "pipe", stdout: "pipe" });

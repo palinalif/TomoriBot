@@ -81,7 +81,7 @@ If you're enjoying TomoriBot, please consider giving her a ⭐ on GitHub or supp
 ![Screenshots 2](img/scs/2.png)
 <h3 align="center">Complete Multimodal Input/Output</h3>
 <p align="center">TomoriBot can process images, audio, and video sent       
-  directly in Discord and generate them in return directly in Discord using various APIs such as NovelAI, ElevenLabs and Google's NanoBanana/Veo. All keys are encrypted and securely stored in a persistent database. Support for local image/audio models are currently in the works, while local LLMs are already supported!</p>
+  directly in Discord and generate them in return directly in Discord using various APIs such as NovelAI, ElevenLabs and Google's NanoBanana/Veo. All keys are encrypted and securely stored in a persistent database. Local image generation (ComfyUI), local TTS/STT, and local LLMs are all fully supported through self-hosted endpoints!</p>
 
 <br />
 
@@ -124,7 +124,7 @@ TomoriBot supports a wide range of LLM providers, image generation APIs, voice s
 | **Deepseek** | ✅ | ✅ | - | - |- |
 | **Z.ai** | ✅ | ✅ | ✅ | - |Free Models Available |
 | **Z.ai Coding** | ✅ | ✅ | - | - |Subscription Plan ⚠️ ToS restricts to coding/agent use only |
-| **Google Vertex AI** | ✅ | ✅ | ✅ |✅ | - |
+| **Google Vertex AI** | ✅ | ✅ | ✅ |✅ | Includes 'free' Express version |
 | **Codex CLI (via ChatMock)** | ✅ | ✅ | ✅ | - |via ChatMock (README for Instructions)) |
 | **Custom (OpenAI-compatible)** | ✅ | ✅ | ✅ | - |KoboldCPP, etc.
 
@@ -158,6 +158,57 @@ TomoriBot supports a wide range of LLM providers, image generation APIs, voice s
 |----------|-------------|-----|-------|
 | **Brave Search** | Web search, news, local | ✅ | REST API integration ⚠️ Set $5 usage limit in dashboard to avoid charges |
 | **DuckDuckGo/Felo Search** | Web search, instant answers | ✅ | MCP server integration |
+
+
+## Local & Self-Hosted Endpoints
+
+TomoriBot never runs models directly — all local setups are HTTP servers you host, and TomoriBot calls them. No API keys needed for any of these.
+
+### Local LLM (Text / Embeddings)
+
+Any OpenAI-compatible server works out of the box via the **Custom** provider. Popular options:
+
+| Server | Notes |
+|--------|-------|
+| [Ollama](https://ollama.com) | Easiest local LLM setup; enable OpenAI-compat mode |
+| [KoboldCPP](https://github.com/LostRuins/koboldcpp) | GGUF models; OpenAI-compat mode built in |
+| [LM Studio](https://lmstudio.ai) | GUI-based; exposes a local `/v1` server |
+| [vLLM](https://github.com/vllm-project/vllm) | High-throughput GPU serving |
+| [LiteLLM](https://github.com/BerriAI/litellm) | Unified proxy over many backends |
+
+Configure via `/config custom-models add` in Discord, pointing at your local endpoint URL (e.g. `http://192.168.1.10:11434/v1`).
+
+### Local Image Generation (ComfyUI)
+
+TomoriBot ships a ready-to-use ComfyUI workflow for image generation.
+
+- **Workflow file**: [`scripts/comfyui-workflows/`](scripts/comfyui-workflows/)
+- Upload the `.json` workflow during `/config custom-models add` (capability: `image`, API style: `comfyui`)
+- ComfyUI must be reachable on the network — TomoriBot polls its `/history` endpoint until the image is ready
+
+### Local TTS (Voice Messages)
+
+Three reference FastAPI wrapper servers are included, each exposing a `/synthesize` endpoint that TomoriBot calls for native Discord voice messages.
+
+| Engine | Folder | Model | Strength |
+|--------|--------|-------|---------|
+| [Chatterbox](https://github.com/resemble-ai/chatterbox) | [`scripts/tts/chatterbox/`](scripts/tts/chatterbox/) | Chatterbox Turbo | English, expressive bracket tags |
+| [Qwen3-TTS](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base) | [`scripts/tts/qwen3tts/`](scripts/tts/qwen3tts/) | Qwen3-TTS 1.7B Base | Multilingual reference-audio cloning |
+| [IrodoriTTS](https://huggingface.co/Aratako/Irodori-TTS-500M-v2) | [`scripts/tts/irodoritts/`](scripts/tts/irodoritts/) | Irodori-TTS 500M v2 | Japanese-focused reference-audio cloning |
+
+Each folder contains a `server.py` and `requirements.txt`. Start the server, then register it in Discord with `/config custom-models add` (capability: `speech`). Upload a short reference audio clip via `/config speech voice-add` and assign it to a persona with `/config speech voice-assign`.
+
+ElevenLabs is also supported as a cloud TTS/STT option via `/speech elevenlabs`.
+
+### Local STT (Audio Transcription)
+
+A reference WhisperX server is included for transcribing audio attachments sent to TomoriBot.
+
+- **Server script**: [`scripts/stt/whisperx_server.py`](scripts/stt/whisperx_server.py)
+- Exposes the standard OpenAI `/v1/audio/transcriptions` endpoint shape
+- Compatible alternatives: whisper.cpp HTTP mode, KoboldCPP STT
+
+Register via `/config custom-models add` (capability: `transcription`). Use `/help transcription` in Discord for a step-by-step setup guide.
 
 
 ## Built-In Tool Reference for Prompt Customization
@@ -307,7 +358,7 @@ Before running TomoriBot, ensure you have the following installed:
   ```sql
   CREATE EXTENSION vector;
   ```
-  - TomoriBot auto-detects pgvector on startup — no additional configuration needed.
+  - This is needed for RAG on all setups to create vectorized data on your database
 
   **pg_cron (Optional for periodic cleanup jobs):**
   - Use this only for optional database maintenance jobs such as cooldown/reminder cleanup. Reminder delivery and random triggers run in the app, not in `pg_cron`.
@@ -582,10 +633,13 @@ The PostgreSQL datasource is automatically configured and ready to create dashbo
 - [x] Image Generation Capabilities
 - [x] Voice integration (ElevenLabs TTS/STT)
 - [x] SillyTavern card import and preset system
+- [x] Video Generation Capabilities
+- [x] TTS/STT Capabilities
+- [x] Full Local Model Support
 - [ ] Knowledge graph memory system (Qdrant)
 - [ ] TomoriBot Wiki (for local set-up and locale contributions)
 - [ ] Replace AI-generated placeholder assets
-- [ ] Video Generation Capabilities
+
 - [ ] Web dashboard for configuration
 - [ ] Create "easy install" file for non-technical users wishing to host their own TomoriBot
 
@@ -621,9 +675,7 @@ Since TomoriBot is still in Beta, any contributions made are **greatly appreciat
 
 ### To contribute new features
 
-The TomoriBot wiki for contributors is still WIP but there are already comprehensive documentation available at `/docs/` that can help you understand TomoriBot's architecture more. Please make sure that `bun run vl` does not return any errors before doing a pull request of a new feature. You may also use DeepWiki to learn more about the repo.
-
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Bredrumb/TomoriBot)
+The TomoriBot wiki for contributors is still WIP but there are already comprehensive documentation available at `/docs/` that can help you understand TomoriBot's architecture more. Please make sure that `bun run vl` does not return any errors before doing a pull request of a new feature.
 
 <!-- LEGAL -->
 ## Legal & License
