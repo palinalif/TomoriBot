@@ -35,7 +35,10 @@ import { getAllWhitelistRoles } from "@/utils/db/roleWhitelist";
 import { getQuotaConfig } from "@/utils/quota/imageQuotaManager";
 import { getTextQuotaConfig } from "@/utils/quota/textQuotaManager";
 import { getVideoQuotaConfig } from "@/utils/quota/videoQuotaManager";
-import { resolveActiveTranscriptionEndpoint, resolveActiveSpeechEndpoint } from "@/utils/provider/speechEndpointResolver";
+import {
+  resolveActiveTranscriptionEndpoint,
+  resolveActiveSpeechEndpoint,
+} from "@/utils/provider/speechEndpointResolver";
 import type {
   UserRow,
   ChannelWhitelistRow,

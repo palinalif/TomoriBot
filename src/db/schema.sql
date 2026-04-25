@@ -2563,3 +2563,55 @@ SELECT add_column_if_not_exists('tomoris', 'context_note_depth', 'INTEGER', '0')
 -- Server-wide / global fallback note (on tomori_configs)
 SELECT add_column_if_not_exists('tomori_configs', 'context_note', 'TEXT', 'NULL');
 SELECT add_column_if_not_exists('tomori_configs', 'context_note_depth', 'INTEGER', '0');
+
+-- ============================================================
+-- Voice / TTS feature toggles (March 2026)
+-- ============================================================
+-- voice_message_enabled: Allow sending ElevenLabs TTS voice messages in this server
+SELECT add_column_if_not_exists('tomori_configs', 'voice_message_enabled', 'BOOLEAN', 'true');
+-- voice_transcript_chat_mode: Post voice transcripts as webhook chat messages instead of internal cache
+SELECT add_column_if_not_exists('tomori_configs', 'voice_transcript_chat_mode', 'BOOLEAN', 'true');
+
+-- ============================================================
+-- Prompt snapshot permission (April 2026)
+-- ============================================================
+-- prompt_snapshot_enabled: Allow non-admin members to use /tool prompt snapshot
+SELECT add_column_if_not_exists('tomori_configs', 'prompt_snapshot_enabled', 'BOOLEAN', 'false');
+
+-- ============================================================
+-- Voice samples table + per-persona TTS voice assignment (Phase 4.1)
+-- voice_samples stores reference audio clips for local TTS voice cloning.
+-- speech_voice_sample_id: FK → voice_samples; used for local TTS clone path.
+-- speech_voice_id: Preset voice ID for provider-hosted voices (e.g. ElevenLabs).
+-- speech_voice_name: Cached friendly voice display name (either path).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS voice_samples (
+  sample_id SERIAL PRIMARY KEY,
+  server_id INT NOT NULL,
+  name TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  ref_text TEXT,
+  duration_ms INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (server_id) REFERENCES servers(server_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_voice_samples_server ON voice_samples(server_id);
+
+SELECT add_column_if_not_exists('tomoris', 'speech_voice_sample_id', 'INTEGER', 'NULL');
+SELECT add_column_if_not_exists('tomoris', 'speech_voice_id', 'TEXT', 'NULL');
+SELECT add_column_if_not_exists('tomoris', 'speech_voice_name', 'TEXT', 'NULL');
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'tomoris_speech_voice_sample_id_fkey'
+  ) THEN
+    ALTER TABLE tomoris
+    ADD CONSTRAINT tomoris_speech_voice_sample_id_fkey
+    FOREIGN KEY (speech_voice_sample_id)
+    REFERENCES voice_samples(sample_id)
+    ON DELETE SET NULL;
+  END IF;
+END $$;
