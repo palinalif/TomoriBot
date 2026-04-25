@@ -1,5 +1,4 @@
 import type {
-  Attachment,
   ChatInputCommandInteraction,
   Client,
   ModalSubmitInteraction,
@@ -8,7 +7,7 @@ import type {
 import { MessageFlags } from "discord.js";
 import type { CustomEndpointApiStyle, CustomEndpointCapability, ErrorContext, UserRow } from "@/types/db/schema";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
-import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
+import { promptWithRawModal, replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { validateRemoteMcpUrl } from "@/utils/mcp/mcpUrlSecurity";
 import {
@@ -21,12 +20,15 @@ import { registerCustomEndpoint, validateCustomEndpointReachability } from "@/ut
 import { isValidCustomEndpointLabel, normalizeCustomEndpointLabel } from "@/utils/provider/customProviderUtils";
 import { localizer } from "@/utils/text/localizer";
 
-async function loadWorkflowJson(attachment: Attachment | null): Promise<Record<string, unknown> | null> {
-  if (!attachment) {
+const WORKFLOW_UPLOAD_ID = "workflow_json";
+
+/** Download and parse a workflow JSON from a URL returned by Discord's CDN. */
+async function loadWorkflowJson(url: string | null): Promise<Record<string, unknown> | null> {
+  if (!url) {
     return null;
   }
 
-  const response = await fetch(attachment.url);
+  const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Workflow download failed: ${response.status} ${response.statusText}`);
   }
@@ -35,9 +37,9 @@ async function loadWorkflowJson(attachment: Attachment | null): Promise<Record<s
 }
 
 /**
- * Phase 4.5: slimmed to routing fields only.
+ * Phase 4.5 (updated): slim routing fields only.
  * Capability-specific advanced fields are collected via a follow-up modal.
- * The workflow_json attachment is kept here since modals cannot hold file uploads.
+ * workflow_json is collected in the image/video capability modal (file upload component).
  * Personal endpoints use strict remote URL validation.
  */
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
@@ -84,12 +86,6 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
         .setName("auth_token")
         .setDescription(localizer("en-US", "commands.personal.custom_models.add.auth_token_description"))
         .setRequired(false),
-    )
-    .addAttachmentOption((option) =>
-      option
-        .setName("workflow_json")
-        .setDescription(localizer("en-US", "commands.personal.custom_models.add.workflow_description"))
-        .setRequired(false),
     );
 
 export async function execute(
@@ -125,7 +121,6 @@ export async function execute(
   const apiStyle = interaction.options.getString("api_style", true) as CustomEndpointApiStyle;
   const endpointUrl = interaction.options.getString("endpoint_url", true).trim();
   const authToken = interaction.options.getString("auth_token");
-  const workflowAttachment = interaction.options.getAttachment("workflow_json");
 
   if (!isValidCustomEndpointLabel(label)) {
     await replyInfoEmbed(interaction, locale, {
@@ -152,7 +147,7 @@ export async function execute(
 
   const modalCustomId = `personal_endpoint_add_modal_${interaction.id}`;
 
-  // 1a. Capabilities with a detail modal: show it as the primary interaction response.
+  // 1a. Capabilities with a TextInput-only detail modal: show it as the primary interaction response.
   if (capabilityNeedsAddModal(capability)) {
     const modal = buildCapabilityAddModal(capability, locale, modalCustomId);
 
@@ -261,19 +256,51 @@ export async function execute(
     return;
   }
 
-  // 1b. Image / video path — no capability modal.
+  // 1b. Image / video: show a raw modal with display_name + workflow_json file upload.
+  const imageVideoModalCustomId = `personal_endpoint_add_image_modal_${interaction.id}`;
+  const modalResult = await promptWithRawModal(interaction, locale, {
+    modalCustomId: imageVideoModalCustomId,
+    modalTitleKey: `commands.config.custom_models.capability_modal.${capability}_title`,
+    components: [
+      {
+        customId: ModalFieldId.display_name,
+        labelKey: "commands.config.custom_models.capability_modal.display_name_label",
+        placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
+        required: false,
+        maxLength: 100,
+      },
+      {
+        customId: WORKFLOW_UPLOAD_ID,
+        labelKey: "commands.config.custom_models.capability_modal.workflow_json_label",
+        descriptionKey: "commands.config.custom_models.capability_modal.workflow_json_description",
+        minValues: 0,
+        maxValues: 1,
+        required: false,
+      },
+    ],
+  });
+
+  if (modalResult.outcome !== "submit") {
+    return;
+  }
+
+  // biome-ignore lint/style/noNonNullAssertion: submit outcome guarantees interaction exists
+  const modalSubmit = modalResult.interaction!;
+
   try {
+    await modalSubmit.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const displayName = modalResult.values?.[ModalFieldId.display_name]?.trim() || label;
+    const workflowAttachment = modalResult.attachments?.[WORKFLOW_UPLOAD_ID];
+
     if ((capability === "image" || capability === "video") && apiStyle === "comfyui" && !workflowAttachment) {
-      await replyInfoEmbed(interaction, locale, {
+      await replyInfoEmbed(modalSubmit, locale, {
         titleKey: "general.errors.invalid_option_title",
         descriptionKey: "commands.config.custom_models.validation.workflow_required",
         color: ColorCode.ERROR,
-        flags: MessageFlags.Ephemeral,
       });
       return;
     }
-
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const reachability = await validateCustomEndpointReachability({
       apiStyle,
@@ -282,7 +309,7 @@ export async function execute(
       strict: true,
     });
     if (!reachability.ok) {
-      await replyInfoEmbed(interaction, locale, {
+      await replyInfoEmbed(modalSubmit, locale, {
         titleKey: "general.errors.custom_endpoint_unreachable_title",
         descriptionKey: "commands.config.custom_models.validation.unreachable",
         descriptionVars: { reason: reachability.reason },
@@ -291,8 +318,7 @@ export async function execute(
       return;
     }
 
-    const workflow = workflowAttachment ? await loadWorkflowJson(workflowAttachment) : null;
-    const displayName = label;
+    const workflow = workflowAttachment ? await loadWorkflowJson(workflowAttachment.url) : null;
 
     const registered = await registerCustomEndpoint({
       scope: { kind: "personal", ownerId: userData.user_id, baseConfig: tomoriState.config },
@@ -307,7 +333,7 @@ export async function execute(
     });
 
     if (!registered) {
-      await replyInfoEmbed(interaction, locale, {
+      await replyInfoEmbed(modalSubmit, locale, {
         titleKey: "general.errors.update_failed_title",
         descriptionKey: "general.errors.update_failed_description",
         color: ColorCode.ERROR,
@@ -315,7 +341,7 @@ export async function execute(
       return;
     }
 
-    await replyInfoEmbed(interaction, locale, {
+    await replyInfoEmbed(modalSubmit, locale, {
       titleKey: "commands.personal.custom_models.add.success_title",
       descriptionKey: "commands.personal.custom_models.add.success_description",
       descriptionVars: { display_name: displayName, label, capability },
@@ -334,11 +360,10 @@ export async function execute(
       },
     };
     await log.error("Error executing /personal custom-endpoint add (image/video path)", error as Error, context);
-    await replyInfoEmbed(interaction, locale, {
+    await replyInfoEmbed(modalSubmit, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",
       color: ColorCode.ERROR,
-      flags: MessageFlags.Ephemeral,
     });
   }
 }

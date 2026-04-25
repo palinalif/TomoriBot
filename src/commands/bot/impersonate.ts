@@ -134,7 +134,7 @@ async function handleTargetUserImpersonation(
  * @param locale - User's locale
  */
 async function handlePersonaImpersonation(
-  _client: Client,
+  client: Client,
   interaction: ChatInputCommandInteraction,
   userData: UserRow,
   locale: string,
@@ -310,9 +310,10 @@ async function handlePersonaImpersonation(
     }
 
     // 7. Send message based on persona type
+    let sentMessage: import("discord.js").Message | null = null;
     if (!selectedPersona.is_alter) {
       // Main persona: Send as bot directly with embeds
-      await channel.send({
+      sentMessage = await channel.send({
         content: messageContent,
         embeds,
       });
@@ -341,7 +342,7 @@ async function handlePersonaImpersonation(
       }
 
       const identity = await resolvePersonaWebhookIdentity(selectedPersona, interaction.guild);
-      await sendWebhookMessageWithIdentity(
+      sentMessage = await sendWebhookMessageWithIdentity(
         webhook,
         {
           content: messageContent,
@@ -350,6 +351,13 @@ async function handlePersonaImpersonation(
         },
         identity,
       );
+    }
+
+    // 7.5. If the sent message contains a trigger word, let the normal cascade fire.
+    // tomoriChat runs with isManuallyTriggered=false so trigger rules apply as usual.
+    // The self-message detection skips the sending persona; other personas may respond.
+    if (sentMessage) {
+      void tomoriChat(client, sentMessage, false);
     }
 
     // 8. Send success confirmation to user

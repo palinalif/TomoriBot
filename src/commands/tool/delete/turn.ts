@@ -488,13 +488,17 @@ export async function execute(
     let embedColor: ColorCode;
 
     if (deletedCount === 0 && failedCount > 0) {
-      // Complete failure — show actionable bot permission error
+      // Complete failure — show actionable bot permission error or generic failure
       titleKey = "commands.tool.delete.turn.bot_no_delete_title";
-      descKey = "commands.tool.delete.turn.bot_no_delete_description";
+      descKey = !botHasManageMessages
+        ? "commands.tool.delete.turn.bot_no_delete_description"
+        : "commands.tool.delete.turn.bot_failed_delete_description";
       embedColor = ColorCode.ERROR;
     } else if (deletedCount < totalCount) {
       titleKey = "commands.tool.delete.turn.partial_title";
-      descKey = "commands.tool.delete.turn.partial_description";
+      descKey = !botHasManageMessages
+        ? "commands.tool.delete.turn.partial_no_manage_messages_description"
+        : "commands.tool.delete.turn.partial_description";
       embedColor = ColorCode.WARN;
     } else if (regenerate && resolvedPersona) {
       titleKey = "commands.tool.delete.turn.success_title";

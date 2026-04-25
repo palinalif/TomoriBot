@@ -6,6 +6,13 @@
 - `GET /v1/models`
 - `POST /v1/audio/transcriptions`
 
+## Prerequisites
+
+- **Python 3.10+** — used to create the virtual environment
+- **FFmpeg** — required by WhisperX for audio decoding; install it system-wide
+  (e.g. `winget install Gyan.FFmpeg.Shared` on Windows, `brew install ffmpeg` on macOS, or your distro package manager)
+- **CUDA 12.x + drivers** *(optional)* — required for GPU acceleration; without it the server falls back to CPU (significantly slower)
+
 ## Setup (Windows PowerShell)
 
 Run these commands from the repo root.
@@ -21,13 +28,14 @@ python -m pip install -U pip
 # 3. Install dependencies
 python -m pip install -r scripts\stt\requirements-whisperx.txt
 
-# 4. Start the server
+# 4. (GPU only) Reinstall PyTorch with CUDA support — skip this for CPU-only installs
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+
+# 5. Start the server
 python scripts\stt\whisperx_server.py
 ```
 
-> **CUDA version**: the requirements file defaults to `cu124` (CUDA 12.4). Edit the
-> `--extra-index-url` line to `cu118` or `cu121` if your driver targets an older toolkit.
-> Remove the line entirely for a CPU-only install (significantly slower).
+> **CUDA version**: use `cu118` or `cu121` in the index URL above if your driver targets an older toolkit.
 
 ## Configuration (environment variables)
 

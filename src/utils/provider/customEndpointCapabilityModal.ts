@@ -6,14 +6,15 @@
  *   Edit: endpoint-select modal → reply(Edit button) → button → showModal (capability detail fields pre-filled)
  *
  * Discord modals allow max 5 TextInput rows. The field layout per capability is:
- *   text:          model_name, display_name, num_ctx, text_capabilities, endpoint_url
- *   embedding:     model_name, display_name, endpoint_url
- *   speech:        display_name, endpoint_url, auth_token, script_markup, supports_instruct
- *   transcription: display_name, endpoint_url, auth_token, transcription_model, transcription_language
- *   image/video:   display_name, endpoint_url, auth_token   (workflow_json stays as slash param)
+ *   text:          model_name, display_name, num_ctx, text_capabilities
+ *   embedding:     model_name, display_name
+ *   speech:        display_name, script_markup, supports_instruct
+ *   transcription: display_name, transcription_model, transcription_language
+ *   image/video:   display_name + workflow_json file upload (via promptWithRawModal, not this builder)
  *
  * For the add flow, endpoint_url and auth_token come from the initial slash params, so the add
  * modal only contains the capability-specific advanced fields (model_name, display_name, etc.).
+ * image/video add uses promptWithRawModal directly to support the workflow_json file upload field.
  * The edit modal includes endpoint_url and auth_token since those are also editable.
  */
 
@@ -317,7 +318,8 @@ export function buildCapabilityAddModal(
     }
     case "image":
     case "video":
-      // No modal: workflow_json is the only advanced field and it must be an attachment.
+      // image/video add modals are built via promptWithRawModal in the command layer
+      // to support the workflow_json file upload field.
       break;
   }
 

@@ -52,9 +52,9 @@ export interface ExecuteCustomEndpointEditOptions {
     capabilityVideo: string;
     capabilitySpeech: string;
     capabilityTranscription: string;
-    };
-    strictRemoteValidation: boolean;
-    loadEndpoints: (ownerId: any) => Promise<CustomEndpointRow[]>;
+  };
+  strictRemoteValidation: boolean;
+  loadEndpoints: (ownerId: number) => Promise<CustomEndpointRow[]>;
   onSuccess?: () => void | Promise<void>;
 }
 

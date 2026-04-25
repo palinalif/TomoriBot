@@ -1,20 +1,28 @@
-import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
+import type { ButtonInteraction, ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { THINKING_LEVEL_VALUES, type ThinkingLevelValue, isThinkingLevelValue } from "@/constants/thinkingLevels";
-import type { ErrorContext, UserRow } from "@/types/db/schema";
+import type { ErrorContext, SavedProviderConfigRow, UserRow } from "@/types/db/schema";
+import { createStandardEmbed } from "@/utils/discord/embedHelper";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
-import { getAllProviderChoices, getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
+import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { localizer } from "@/utils/text/localizer";
-import { loadActivePersonalTextProvider, loadPersonalProviderOrNull } from "@/utils/provider/personalProviderHelpers";
+import { loadUserSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { upsertUserSavedProviderConfig } from "@/utils/db/dbWrite";
+import { promptForSavedProvider } from "@/commands/config/model/providerPicker";
 
+/**
+ * Formats a list of changed sampler settings into a human-readable string.
+ */
 function formatChangedSettings(locale: string, settings: Array<{ label: string; value: string }>): string {
   return (
     settings.map((setting) => `${setting.label}=\`${setting.value}\``).join(", ") || localizer(locale, "general.none")
   );
 }
 
+/**
+ * Returns the localized display label for a given sampler setting key.
+ */
 function getChangedSettingLabel(locale: string, setting: string): string {
   const labelKeys: Record<string, string> = {
     temperature: "commands.config.samplers.sampler_temperature_label",
@@ -33,13 +41,6 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
   subcommand
     .setName("samplers")
     .setDescription(localizer("en-US", "commands.personal.samplers.description"))
-    .addStringOption((option) =>
-      option
-        .setName("provider")
-        .setDescription(localizer("en-US", "commands.personal.samplers.provider_description"))
-        .setRequired(false)
-        .addChoices(...getAllProviderChoices()),
-    )
     .addNumberOption((option) =>
       option
         .setName("temperature")
@@ -121,21 +122,7 @@ export async function execute(
   }
 
   try {
-    const requestedProvider = interaction.options.getString("provider")?.trim().toLowerCase() ?? null;
-    const savedConfig = requestedProvider
-      ? await loadPersonalProviderOrNull(userData.user_id, requestedProvider)
-      : await loadActivePersonalTextProvider(userData.user_id);
-
-    if (!savedConfig) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.personal.samplers.no_provider_title",
-        descriptionKey: "commands.personal.samplers.no_provider_description",
-        color: ColorCode.WARN,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
+    // 1. Validate thinking_level before showing the picker, to surface errors immediately
     const nextThinkingLevel = interaction.options.getString("thinking_level");
     if (nextThinkingLevel && !isThinkingLevelValue(nextThinkingLevel)) {
       await replyInfoEmbed(interaction, locale, {
@@ -147,6 +134,67 @@ export async function execute(
       return;
     }
 
+    // 2. Require at least one sampler value before showing the picker
+    const hasAnyChange =
+      interaction.options.getNumber("temperature") !== null ||
+      interaction.options.getNumber("top_p") !== null ||
+      interaction.options.getInteger("top_k") !== null ||
+      interaction.options.getNumber("frequency_penalty") !== null ||
+      interaction.options.getNumber("presence_penalty") !== null ||
+      interaction.options.getNumber("min_p") !== null ||
+      nextThinkingLevel !== null;
+
+    if (!hasAnyChange) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.config.samplers.no_changes_title",
+        descriptionKey: "commands.config.samplers.no_changes_description",
+        color: ColorCode.WARN,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    // 3. Load all saved personal text providers and present the picker.
+    //    UserSavedProviderConfigRow shares the `provider` field that promptForSavedProvider reads,
+    //    so the cast is safe — the picker only uses that field to build button labels.
+    const savedProviders = await loadUserSavedProvidersForCapability(userData.user_id, "text");
+    const providerSelection = await promptForSavedProvider(
+      interaction,
+      locale,
+      savedProviders as unknown as SavedProviderConfigRow[],
+      { descriptionKey: "commands.config.samplers.picker_description" },
+    );
+    if (!providerSelection) return;
+
+    const selectedProvider = providerSelection.provider;
+    const responseInteraction = providerSelection.interaction;
+
+    // Helper: update the picker message or issue a fresh reply depending on whether a picker was shown
+    const replyWithResult = async (options: Parameters<typeof replyInfoEmbed>[2]) => {
+      if (providerSelection.pickerInteraction) {
+        // A button was clicked — update the picker message in-place (this also acknowledges the button)
+        await (responseInteraction as ButtonInteraction).update({
+          embeds: [createStandardEmbed(locale, options)],
+          components: [],
+        });
+      } else {
+        // Single provider was auto-selected — no picker message exists, reply normally
+        await replyInfoEmbed(interaction, locale, { ...options, flags: MessageFlags.Ephemeral });
+      }
+    };
+
+    // 4. Retrieve the saved config from the already-loaded list (avoids a second DB round-trip)
+    const savedConfig = savedProviders.find((p) => p.provider.toLowerCase() === selectedProvider) ?? null;
+    if (!savedConfig) {
+      await replyWithResult({
+        titleKey: "general.errors.operation_failed_title",
+        descriptionKey: "general.errors.unknown_error_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    // 5. Build the updated config by overlaying only the options the user explicitly passed
     const nextConfig = {
       ...savedConfig,
       llm_temperature: interaction.options.getNumber("temperature") ?? savedConfig.llm_temperature,
@@ -158,6 +206,7 @@ export async function execute(
       thinking_level: (nextThinkingLevel as ThinkingLevelValue | null) ?? savedConfig.thinking_level,
     };
 
+    // 6. Collect display labels for the success message
     const changedSettings: Array<{ label: string; value: string }> = [];
     if (interaction.options.getNumber("temperature") !== null) {
       changedSettings.push({
@@ -193,28 +242,18 @@ export async function execute(
       });
     }
 
-    if (changedSettings.length === 0) {
-      await replyInfoEmbed(interaction, locale, {
-        titleKey: "commands.config.samplers.no_changes_title",
-        descriptionKey: "commands.config.samplers.no_changes_description",
-        color: ColorCode.WARN,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
+    // 7. Persist the updated personal sampler config
     const writeOk = await upsertUserSavedProviderConfig(userData.user_id, nextConfig);
     if (!writeOk) {
-      await replyInfoEmbed(interaction, locale, {
+      await replyWithResult({
         titleKey: "general.errors.update_failed_title",
         descriptionKey: "general.errors.update_failed_description",
         color: ColorCode.ERROR,
-        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
-    await replyInfoEmbed(interaction, locale, {
+    await replyWithResult({
       titleKey: "commands.personal.samplers.success_title",
       descriptionKey: "commands.personal.samplers.success_description",
       descriptionVars: {
@@ -222,7 +261,6 @@ export async function execute(
         settings: formatChangedSettings(locale, changedSettings),
       },
       color: ColorCode.SUCCESS,
-      flags: MessageFlags.Ephemeral,
     });
   } catch (error) {
     const context: ErrorContext = {
