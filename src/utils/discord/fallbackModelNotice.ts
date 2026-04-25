@@ -1,8 +1,9 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, MessageFlags } from "discord.js";
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, type Message, MessageFlags } from "discord.js";
 import type { LlmRow } from "@/types/db/schema";
 import type { ToolContext } from "@/types/tool/interfaces";
 import { createStandardEmbed } from "@/utils/discord/embedHelper";
 import { isNoticeEmbedVisible, routeHiddenToolNotice } from "@/utils/discord/toolProgressNotice";
+import { sendWebhookMessageWithIdentity } from "@/utils/discord/webhookManager";
 import { ColorCode, log } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
 
@@ -92,9 +93,32 @@ export async function sendFallbackModelUsageNotice({
   });
 
   try {
-    const noticeMessage = await context.channel.send({
-      components: [createFallbackDetailsButton(context.locale)],
-    });
+    const buttonRow = createFallbackDetailsButton(context.locale);
+    const disabledButtonRow = createFallbackDetailsButton(context.locale, true);
+
+    // Resolve thread ID — webhooks targeting a parent channel need it to post into a thread.
+    const threadId =
+      "isThread" in context.channel && typeof context.channel.isThread === "function" && context.channel.isThread()
+        ? context.channel.id
+        : undefined;
+
+    let noticeMessage: Message;
+
+    if (context.webhook && context.personaUsername) {
+      // Send through the persona/user-impersonation webhook so the button appears
+      // as belonging to the same identity that delivered the AI response.
+      noticeMessage = await sendWebhookMessageWithIdentity(
+        context.webhook,
+        {
+          components: [buttonRow],
+          ...(threadId ? { threadId } : {}),
+        },
+        { username: context.personaUsername, avatarUrl: context.personaAvatarUrl },
+        threadId ?? context.webhook.channelId ?? context.webhook.id,
+      );
+    } else {
+      noticeMessage = await context.channel.send({ components: [buttonRow] });
+    }
 
     const collector = noticeMessage.createMessageComponentCollector({
       componentType: ComponentType.Button,
@@ -114,11 +138,17 @@ export async function sendFallbackModelUsageNotice({
     });
 
     collector.on("end", async () => {
-      await noticeMessage
-        .edit({
-          components: [createFallbackDetailsButton(context.locale, true)],
-        })
-        .catch(() => {});
+      // Webhook messages must be edited via the webhook token, not the bot token.
+      if (context.webhook) {
+        await context.webhook
+          .editMessage(noticeMessage.id, {
+            components: [disabledButtonRow],
+            ...(threadId ? { threadId } : {}),
+          })
+          .catch(() => {});
+      } else {
+        await noticeMessage.edit({ components: [disabledButtonRow] }).catch(() => {});
+      }
     });
   } catch (error) {
     log.warn("Failed to send compact fallback model notice", error as Error);
