@@ -62,6 +62,15 @@ export async function execute(
           }),
           inline: false,
         },
+        ...(engine === "whisperx"
+          ? [
+              {
+                nameKey: "commands.help.transcription.whisperx.models_title",
+                value: localizer(locale, "commands.help.transcription.whisperx.models_description"),
+                inline: false,
+              },
+            ]
+          : []),
         {
           nameKey: "commands.help.transcription.docs_title",
           value: localizer(locale, "commands.help.transcription.docs_description"),

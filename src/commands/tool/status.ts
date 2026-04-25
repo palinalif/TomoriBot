@@ -785,8 +785,16 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
         .setRequired(true)
         .addChoices(
           {
-            name: localizer("en-US", "commands.tool.status.scope_choice_server"),
-            value: "server",
+            name: localizer("en-US", "commands.tool.status.scope_choice_server_model"),
+            value: "server_model",
+          },
+          {
+            name: localizer("en-US", "commands.tool.status.scope_choice_server_config"),
+            value: "server_config",
+          },
+          {
+            name: localizer("en-US", "commands.tool.status.scope_choice_server_channels"),
+            value: "server_channels",
           },
           {
             name: localizer("en-US", "commands.tool.status.scope_choice_personal"),
@@ -957,8 +965,10 @@ export async function execute(
         break;
       }
 
-      case "server": {
-        // 1. Load Tomori state for this server
+      case "server_model":
+      case "server_config":
+      case "server_channels": {
+        // 1. Load Tomori state — required by all three server scopes
         const tomoriState = await getCachedTomoriState(serverDiscId);
 
         if (!tomoriState) {
@@ -973,900 +983,891 @@ export async function execute(
         const config = tomoriState.config;
         const llm = tomoriState.llm;
 
-        // 2. Load all supporting data in parallel
-        const [
-          optApiKeyRows,
-          blacklistedMemberIds,
-          whitelistPersonas,
-          whitelistChannels,
-          whitelistRoles,
-          randomTriggers,
-          allPersonas,
-          channelLlmOverrides,
-          imageQuotaConfig,
-          textQuotaConfig,
-          videoQuotaConfig,
-          diffusionModel,
-          embeddingModel,
-          videoModel,
-          naiDiffusionModel,
-          savedProviderConfigs,
-          guildMcpServers,
-          matrixLinks,
-          stPresets,
-          serverCustomEndpoints,
-        ] = await Promise.all([
-          sql<OptApiKeyStatusRow[]>`
-            SELECT service_name
-            FROM opt_api_keys
-            WHERE server_id = ${tomoriState.server_id}
-            ORDER BY service_name ASC
-          `,
-          getBlacklistedMemberIds(tomoriState.server_id),
-          getAllWhitelistPersonas(tomoriState.server_id),
-          getAllWhitelistChannels(tomoriState.server_id),
-          getAllWhitelistRoles(tomoriState.server_id),
-          getServerRandomTriggers(tomoriState.server_id),
-          loadAllPersonasForServer(serverDiscId),
-          getAllChannelLlmOverridesForServer(tomoriState.server_id),
-          getQuotaConfig(tomoriState.server_id),
-          getTextQuotaConfig(tomoriState.server_id),
-          getVideoQuotaConfig(tomoriState.server_id),
-          // 2a. Resolve shared image, embedding, and video models by ID (null if unset)
-          config.diffusion_model_id ? getDiffusionModelById(config.diffusion_model_id) : Promise.resolve(null),
-          config.embedding_model_id ? loadEmbeddingModelById(config.embedding_model_id) : Promise.resolve(null),
-          config.video_model_id ? loadVideoModelById(config.video_model_id) : Promise.resolve(null),
-          // 2b. Resolve NAI-specific diffusion model (separate from shared model)
-          config.nai_diffusion_model_id ? getDiffusionModelById(config.nai_diffusion_model_id) : Promise.resolve(null),
-          loadSavedProviderConfigs(tomoriState.server_id),
-          loadGuildMcpServers(tomoriState.server_id),
-          sql<MatrixLinkStatusRow[]>`
-            SELECT channel_disc_id
-            FROM matrix_channel_links
-            WHERE server_id = ${tomoriState.server_id}
-            ORDER BY created_at ASC
-          `,
-          loadPresetsForServer(tomoriState.server_id),
-          loadCustomEndpointsForServer(tomoriState.server_id),
-        ]);
+        // ── server_model: pages 1, 6, 7, 8 ────────────────────────────
+        if (scope === "server_model") {
+          // 2. Load model-related data in parallel
+          const [
+            allPersonas,
+            channelLlmOverrides,
+            imageQuotaConfig,
+            textQuotaConfig,
+            videoQuotaConfig,
+            diffusionModel,
+            embeddingModel,
+            videoModel,
+            naiDiffusionModel,
+          ] = await Promise.all([
+            loadAllPersonasForServer(serverDiscId),
+            getAllChannelLlmOverridesForServer(tomoriState.server_id),
+            getQuotaConfig(tomoriState.server_id),
+            getTextQuotaConfig(tomoriState.server_id),
+            getVideoQuotaConfig(tomoriState.server_id),
+            config.diffusion_model_id ? getDiffusionModelById(config.diffusion_model_id) : Promise.resolve(null),
+            config.embedding_model_id ? loadEmbeddingModelById(config.embedding_model_id) : Promise.resolve(null),
+            config.video_model_id ? loadVideoModelById(config.video_model_id) : Promise.resolve(null),
+            config.nai_diffusion_model_id
+              ? getDiffusionModelById(config.nai_diffusion_model_id)
+              : Promise.resolve(null),
+          ]);
 
-        const activeStPreset = stPresets.find((preset) => preset.is_active) ?? null;
-        const activeStPresetNodes =
-          activeStPreset?.preset_id != null ? await loadToggleableNodes(activeStPreset.preset_id) : [];
-
-        // 3. Build a persona name map for random trigger display (tomori_id -> nickname)
-        const personaNameMap = new Map<number, string>();
-        for (const persona of allPersonas) {
-          if (persona.tomori_id) {
-            personaNameMap.set(persona.tomori_id, persona.tomori_nickname);
-          }
-        }
-        const mainPersonaName =
-          allPersonas.find((persona) => !persona.is_alter)?.tomori_nickname ??
-          localizer(locale, "commands.choices.none");
-        const optApiKeyServiceNames = optApiKeyRows.map((row) => row.service_name);
-        const braveApiKeySet = optApiKeyServiceNames.includes("brave-search");
-
-        // 4. Format timezone (UTC+08:00 style)
-        const timezoneOffset = config.timezone_offset;
-        const timezoneSign = timezoneOffset >= 0 ? "+" : "-";
-        const timezoneHours = Math.abs(timezoneOffset).toString().padStart(2, "0");
-        const timezoneValue = `UTC${timezoneSign}${timezoneHours}:00`;
-
-        // 5. Format cooldown type and duration
-        const cooldownType = config.cooldown_type ?? CooldownType.OFF;
-        const cooldownTypeLabel = getCooldownTypeLabel(locale, cooldownType);
-        const cooldownLengthValue =
-          cooldownType === CooldownType.OFF
-            ? localizer(locale, "commands.choices.disabled")
-            : localizer(locale, "commands.tool.status.field_cooldown_length_value", {
-                seconds: config.cooldown_length,
-              });
-        const autochThresholdMax =
-          config.autoch_threshold_max > 0
-            ? Math.max(config.autoch_threshold_max, config.autoch_threshold)
-            : config.autoch_threshold;
-        const autochModeValue =
-          config.autoch_threshold === 0
-            ? localizer(locale, "commands.choices.always")
-            : autochThresholdMax > config.autoch_threshold
-              ? `${config.autoch_threshold}-${autochThresholdMax}`
-              : String(config.autoch_threshold);
-
-        // 6. Format blacklisted members
-        const blacklistedCount = blacklistedMemberIds.length;
-        const blacklistedValue =
-          blacklistedCount === 0
-            ? localizer(locale, "commands.choices.none")
-            : blacklistedCount <= MAX_ITEMS_DISPLAY
-              ? blacklistedMemberIds.map((id) => `<@${id}>`).join(", ")
-              : localizer(locale, "commands.tool.status.field_blacklisted_members_with_count", {
-                  current: blacklistedCount,
-                });
-
-        // 7. Format channel lists (auto-chat, RP, private, cross-channel blocklist, welcome, whitelist, random triggers, channel model overrides, Matrix links)
-        const [
-          autoChannelsValue,
-          rpChannelsValue,
-          privateChannelsValue,
-          crosschannelBlocklistValue,
-          welcomeChannelValue,
-          thoughtLogChannelValue,
-          whitelistPersonasValue,
-          whitelistValue,
-          whitelistRolesValue,
-          randomTriggersValue,
-          channelLlmOverridesValue,
-          matrixLinksValue,
-        ] = await Promise.all([
-          formatAutochatChannels(client, config, personaNameMap, mainPersonaName, locale),
-          formatChannelList(client, config.rp_channel_ids, locale),
-          formatChannelList(client, config.private_channel_ids, locale),
-          formatChannelList(client, config.crosschannel_blocklist_ids ?? [], locale),
-          formatWelcomeChannel(client, config, personaNameMap, locale),
-          formatChannelList(
-            client,
-            config.thought_log_channel_disc_id ? [config.thought_log_channel_disc_id] : [],
+          // 3. Format model display values
+          const modelValue = config.llm_id
+            ? formatLlmDisplayLabel(llm, config.custom_model_name, config.other_model_codename)
+            : config.user_byok_mode
+              ? localizer(locale, "commands.choices.none_user_byok")
+              : localizer(locale, "commands.choices.none");
+          const visionModelValue = tomoriState.vision_llm
+            ? formatLlmDisplayLabel(tomoriState.vision_llm, config.custom_model_name, config.other_model_codename)
+            : localizer(locale, "commands.choices.none");
+          const fallbackModelsValue = formatFallbackChain(
+            tomoriState.fallback_chain,
+            tomoriState.fallback_llms,
             locale,
-          ),
-          formatWhitelistPersonaEntries(client, whitelistPersonas, personaNameMap, locale),
-          formatWhitelistEntries(client, whitelistChannels, locale),
-          formatWhitelistRolesEntries(whitelistRoles, locale),
-          formatRandomTriggers(client, randomTriggers, personaNameMap, locale),
-          formatChannelLlmOverrides(
+            config.custom_model_name,
+            config.other_model_codename,
+          );
+          const logitBiasesValue =
+            config.llm_logit_biases.length > 0
+              ? localizer(locale, "commands.tool.status.item_count", { count: config.llm_logit_biases.length })
+              : localizer(locale, "commands.choices.none");
+          const diffusionModelValue = diffusionModel
+            ? `${diffusionModel.codename} (${diffusionModel.provider})`
+            : localizer(locale, "commands.choices.none");
+          const videoModelValue = videoModel
+            ? `${videoModel.codename} (${videoModel.provider})`
+            : localizer(locale, "commands.choices.none");
+          const embeddingModelValue = embeddingModel
+            ? `${embeddingModel.codename} (${embeddingModel.provider})`
+            : localizer(locale, "commands.choices.none");
+          const customEndpointConfiguredValue = formatBooleanLocalized(!!config.custom_endpoint_url, locale);
+          const naiDiffusionModelValue = naiDiffusionModel
+            ? `${naiDiffusionModel.codename} (${naiDiffusionModel.provider})`
+            : localizer(locale, "commands.choices.none");
+          const channelLlmOverridesValue = await formatChannelLlmOverrides(
             client,
             channelLlmOverrides,
             locale,
             config.custom_model_name,
             config.other_model_codename,
-          ),
-          formatMatrixLinks(client, matrixLinks, locale),
-        ]);
-        const welcomePromptConfiguredValue = formatBooleanLocalized(!!config.welcome_prompt?.trim(), locale);
+          );
+          const personaLlmOverridesValue = formatPersonaLlmOverrides(
+            allPersonas,
+            locale,
+            config.custom_model_name,
+            config.other_model_codename,
+          );
 
-        // 8. Format system prompt preview (code block, up to MAX_PROMPT_PREVIEW chars)
-        const rawSystemPrompt = config.system_prompt ?? null;
-        const systemPromptText = rawSystemPrompt
-          ? rawSystemPrompt.length > MAX_PROMPT_PREVIEW
-            ? `${rawSystemPrompt.slice(0, MAX_PROMPT_PREVIEW)}...`
-            : rawSystemPrompt
-          : DEFAULT_SYSTEM_PROMPT.trim();
-        const systemPromptValue = `\`\`\`\n${systemPromptText}\n\`\`\``;
+          // ── Page 1: Model & Sampling ───────────────────────────────────
+          const serverPage1: SummaryEmbedOptions = {
+            titleKey: "commands.tool.status.server_page1_title",
+            descriptionKey: "commands.tool.status.server_page1_description",
+            color: ColorCode.INFO,
+            fields: [
+              {
+                nameKey: "commands.tool.status.field_model",
+                value: modelValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_temperature",
+                value: String(config.llm_temperature),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_top_p",
+                value: String(config.llm_top_p),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_top_k",
+                value: String(config.llm_top_k),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_min_p",
+                value: String(config.llm_min_p),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_frequency_penalty",
+                value: String(config.llm_frequency_penalty),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_presence_penalty",
+                value: String(config.llm_presence_penalty),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_omitted_params",
+                value: formatOmittedSamplingParams(config.llm_disabled_params, locale),
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_humanizer",
+                value: String(config.humanizer_degree),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_thinking_level",
+                value: getThinkingLevelLabel(locale, config.thinking_level),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_vision_model",
+                value: visionModelValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_fallback_models",
+                value: fallbackModelsValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_logit_biases",
+                value: logitBiasesValue,
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_diffusion_model",
+                value: diffusionModelValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_video_model",
+                value: videoModelValue,
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_embedding_model",
+                value: embeddingModelValue,
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_custom_endpoint",
+                value: customEndpointConfiguredValue,
+                inline: true,
+              },
+            ],
+          };
 
-        // 9. Format server author's note (context_note) preview for Page 5
-        const rawContextNote = config.context_note ?? null;
-        const contextNoteValue = rawContextNote
-          ? `\`\`\`\n${
-              rawContextNote.length > MAX_PROMPT_PREVIEW
-                ? `${rawContextNote.slice(0, MAX_PROMPT_PREVIEW)}...`
-                : rawContextNote
-            }\n\`\`\``
-          : localizer(locale, "commands.tool.status.field_context_note_not_set");
+          // ── Page 2: Model Overrides ─────────────────────────────────────
+          const serverPage2: SummaryEmbedOptions = {
+            titleKey: "commands.tool.status.server_page6_title",
+            descriptionKey: "commands.tool.status.server_page6_description",
+            color: ColorCode.INFO,
+            fields: [
+              {
+                nameKey: "commands.tool.status.field_channel_llm_overrides",
+                value: channelLlmOverridesValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_persona_llm_overrides",
+                value: personaLlmOverridesValue,
+                inline: false,
+              },
+            ],
+          };
 
-        // 10. Format vision and fallback model display labels
-        const visionModelValue = tomoriState.vision_llm
-          ? formatLlmDisplayLabel(tomoriState.vision_llm, config.custom_model_name, config.other_model_codename)
-          : localizer(locale, "commands.choices.none");
-        const fallbackModelsValue = formatFallbackChain(
-          tomoriState.fallback_chain,
-          tomoriState.fallback_llms,
-          locale,
-          config.custom_model_name,
-          config.other_model_codename,
-        );
+          // ── Page 3: Quotas ──────────────────────────────────────────────
+          const serverPage3: SummaryEmbedOptions = {
+            titleKey: "commands.tool.status.server_page7_title",
+            descriptionKey: "commands.tool.status.server_page7_description",
+            color: ColorCode.INFO,
+            fields: [
+              {
+                nameKey: "commands.tool.status.field_image_quota_enabled",
+                value: formatBooleanLocalized(imageQuotaConfig.enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_image_quota_daily_user",
+                value: formatQuotaLimitValue(locale, imageQuotaConfig.daily_user_quota),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_image_quota_serverwide",
+                value: formatQuotaLimitValue(locale, imageQuotaConfig.serverwide_quota),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_image_quota_reset_days",
+                value: localizer(locale, "commands.tool.status.field_quota_reset_days_value", {
+                  days: imageQuotaConfig.serverwide_quota_resets_in,
+                }),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_text_quota_enabled",
+                value: formatBooleanLocalized(textQuotaConfig.enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_text_quota_daily_user",
+                value: formatQuotaLimitValue(locale, textQuotaConfig.daily_user_quota),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_text_quota_serverwide",
+                value: formatQuotaLimitValue(locale, textQuotaConfig.serverwide_quota),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_text_quota_reset_days",
+                value: localizer(locale, "commands.tool.status.field_quota_reset_days_value", {
+                  days: textQuotaConfig.serverwide_quota_resets_in,
+                }),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_video_quota_enabled",
+                value: formatBooleanLocalized(videoQuotaConfig.enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_video_quota_daily_user",
+                value: formatQuotaLimitValue(locale, videoQuotaConfig.daily_user_quota),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_video_quota_serverwide",
+                value: formatQuotaLimitValue(locale, videoQuotaConfig.serverwide_quota),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_video_quota_reset_days",
+                value: localizer(locale, "commands.tool.status.field_quota_reset_days_value", {
+                  days: videoQuotaConfig.serverwide_quota_resets_in,
+                }),
+                inline: true,
+              },
+            ],
+          };
 
-        // 11. Format logit biases count
-        const logitBiasesValue =
-          config.llm_logit_biases.length > 0
-            ? localizer(locale, "commands.tool.status.item_count", { count: config.llm_logit_biases.length })
-            : localizer(locale, "commands.choices.none");
+          // ── Page 4: NAI Image Config ────────────────────────────────────
+          const serverPage4: SummaryEmbedOptions = {
+            titleKey: "commands.tool.status.server_page8_title",
+            descriptionKey: "commands.tool.status.server_page8_description",
+            color: ColorCode.INFO,
+            fields: [
+              {
+                nameKey: "commands.tool.status.field_nai_diffusion_model",
+                value: naiDiffusionModelValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_nai_preset",
+                value: config.nai_preset_name ?? localizer(locale, "commands.choices.none"),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_nai_sampler",
+                value: config.nai_sampler ?? localizer(locale, "commands.choices.none"),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_nai_steps",
+                value: config.nai_steps != null ? String(config.nai_steps) : localizer(locale, "commands.choices.none"),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_nai_scale",
+                value: config.nai_scale != null ? String(config.nai_scale) : localizer(locale, "commands.choices.none"),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_nai_noise_schedule",
+                value: config.nai_noise_schedule ?? localizer(locale, "commands.choices.none"),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_nai_cfg_rescale",
+                value:
+                  config.nai_cfg_rescale != null
+                    ? String(config.nai_cfg_rescale)
+                    : localizer(locale, "commands.choices.none"),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_nai_style_tags",
+                value:
+                  config.nai_style_tags.length > 0
+                    ? config.nai_style_tags.join(", ")
+                    : localizer(locale, "commands.choices.none"),
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_nai_negative_tags",
+                value:
+                  config.nai_negative_tags.length > 0
+                    ? config.nai_negative_tags.join(", ")
+                    : localizer(locale, "commands.choices.none"),
+                inline: false,
+              },
+            ],
+          };
 
-        // 12. Format resolved model labels for image, video, and embedding models
-        const diffusionModelValue = diffusionModel
-          ? `${diffusionModel.codename} (${diffusionModel.provider})`
-          : localizer(locale, "commands.choices.none");
-        const videoModelValue = videoModel
-          ? `${videoModel.codename} (${videoModel.provider})`
-          : localizer(locale, "commands.choices.none");
-        const embeddingModelValue = embeddingModel
-          ? `${embeddingModel.codename} (${embeddingModel.provider})`
-          : localizer(locale, "commands.choices.none");
+          await replyPaginatedStatusPages(
+            interaction,
+            locale,
+            [serverPage1, serverPage2, serverPage3, serverPage4],
+            MessageFlags.Ephemeral,
+          );
+          break;
+        }
 
-        // 13. Format NAI-specific image config display values
-        const naiDiffusionModelValue = naiDiffusionModel
-          ? `${naiDiffusionModel.codename} (${naiDiffusionModel.provider})`
-          : localizer(locale, "commands.choices.none");
-        const customEndpointConfiguredValue = formatBooleanLocalized(!!config.custom_endpoint_url, locale);
-        const rotationKeys = tomoriState.rotation_keys ?? [];
-        const rotationStatusValue =
-          rotationKeys.length >= 2
-            ? localizer(locale, "commands.choices.enabled")
-            : localizer(locale, "commands.choices.disabled");
-        const rotationPoolValue = formatRotationPoolValue(tomoriState.rotation_keys, locale);
-        const optionalApiKeyCount = new Set(optApiKeyServiceNames.map((serviceName) => serviceName.toLowerCase())).size;
-        const optionalApiKeysValue = formatOptionalApiKeys(optApiKeyServiceNames, locale);
-        const savedProviderConfigCount = new Set(
-          savedProviderConfigs.map((savedConfig) => savedConfig.provider.toLowerCase()),
-        ).size;
-        const savedProviderConfigsValue = formatSavedProviderConfigs(savedProviderConfigs, locale);
-        const hiddenNoticeKeys = config.tool_notice_hidden_keys ?? [];
-        const hiddenNoticeEmbedsValue = formatHiddenNoticeEmbeds(hiddenNoticeKeys, locale);
-        const stPresetLibraryValue = localizer(locale, "commands.tool.status.field_st_preset_library_value", {
-          count: stPresets.length,
-        });
-        const activeStPresetValue = formatActiveStPresetValue(activeStPreset, locale);
-        const stPresetNodeSummaryValue = formatStPresetNodeSummary(activeStPresetNodes, locale);
-        const mcpServersValue = formatMcpServers(guildMcpServers, locale);
-        const serverCustomEndpointsValue = formatCustomEndpoints(serverCustomEndpoints, locale);
-        const serverUserByokToggleMention = commandRegistry.getCommandMention("server", "user-byok", "toggle");
-        const modelValue = config.llm_id
-          ? formatLlmDisplayLabel(llm, config.custom_model_name, config.other_model_codename)
-          : config.user_byok_mode
-            ? localizer(locale, "commands.choices.none_user_byok")
-            : localizer(locale, "commands.choices.none");
-        const userByokValue = localizer(
-          locale,
-          config.user_byok_mode
-            ? "commands.tool.status.field_user_byok_enabled"
-            : "commands.tool.status.field_user_byok_disabled",
-          {
-            toggle_command: serverUserByokToggleMention,
-          },
-        );
+        // ── server_config: pages 1-4 (Behavior, Features, System Prompt, Integrations) ─
+        if (scope === "server_config") {
+          // 2. Load config-related data in parallel
+          const [optApiKeyRows, savedProviderConfigs, guildMcpServers, matrixLinks, stPresets, serverCustomEndpoints] =
+            await Promise.all([
+              sql<OptApiKeyStatusRow[]>`
+              SELECT service_name FROM opt_api_keys
+              WHERE server_id = ${tomoriState.server_id}
+              ORDER BY service_name ASC
+            `,
+              loadSavedProviderConfigs(tomoriState.server_id),
+              loadGuildMcpServers(tomoriState.server_id),
+              sql<MatrixLinkStatusRow[]>`
+              SELECT channel_disc_id FROM matrix_channel_links
+              WHERE server_id = ${tomoriState.server_id}
+              ORDER BY created_at ASC
+            `,
+              loadPresetsForServer(tomoriState.server_id),
+              loadCustomEndpointsForServer(tomoriState.server_id),
+            ]);
 
-        // ── Page 1: Model & Sampling ───────────────────────────────────
-        const serverPage1: SummaryEmbedOptions = {
-          titleKey: "commands.tool.status.server_page1_title",
-          descriptionKey: "commands.tool.status.server_page1_description",
-          color: ColorCode.INFO,
-          fields: [
-            {
-              nameKey: "commands.tool.status.field_model",
-              value: modelValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_temperature",
-              value: String(config.llm_temperature),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_top_p",
-              value: String(config.llm_top_p),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_top_k",
-              value: String(config.llm_top_k),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_min_p",
-              value: String(config.llm_min_p),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_frequency_penalty",
-              value: String(config.llm_frequency_penalty),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_presence_penalty",
-              value: String(config.llm_presence_penalty),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_omitted_params",
-              value: formatOmittedSamplingParams(config.llm_disabled_params, locale),
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_humanizer",
-              value: String(config.humanizer_degree),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_thinking_level",
-              value: getThinkingLevelLabel(locale, config.thinking_level),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_vision_model",
-              value: visionModelValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_fallback_models",
-              value: fallbackModelsValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_logit_biases",
-              value: logitBiasesValue,
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_diffusion_model",
-              value: diffusionModelValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_video_model",
-              value: videoModelValue,
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_embedding_model",
-              value: embeddingModelValue,
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_custom_endpoint",
-              value: customEndpointConfiguredValue,
-              inline: true,
-            },
-          ],
-        };
+          const activeStPreset = stPresets.find((preset) => preset.is_active) ?? null;
+          const activeStPresetNodes =
+            activeStPreset?.preset_id != null ? await loadToggleableNodes(activeStPreset.preset_id) : [];
 
-        // ── Page 2: Behavior ───────────────────────────────────────────
-        const serverPage2: SummaryEmbedOptions = {
-          titleKey: "commands.tool.status.server_page2_title",
-          descriptionKey: "commands.tool.status.server_page2_description",
-          color: ColorCode.INFO,
-          fields: [
-            {
-              nameKey: "commands.tool.status.field_timezone",
-              value: timezoneValue,
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_message_fetch_limit",
-              value: String(config.message_fetch_limit),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_cascade_limit",
-              value: String(config.cascade_limit),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_send_message_limit",
-              value:
-                (config.send_message_limit ?? 0) > 0
-                  ? String(config.send_message_limit)
+          // 3. Format behavior values
+          const timezoneOffset = config.timezone_offset;
+          const timezoneSign = timezoneOffset >= 0 ? "+" : "-";
+          const timezoneHours = Math.abs(timezoneOffset).toString().padStart(2, "0");
+          const timezoneValue = `UTC${timezoneSign}${timezoneHours}:00`;
+          const cooldownType = config.cooldown_type ?? CooldownType.OFF;
+          const cooldownTypeLabel = getCooldownTypeLabel(locale, cooldownType);
+          const cooldownLengthValue =
+            cooldownType === CooldownType.OFF
+              ? localizer(locale, "commands.choices.disabled")
+              : localizer(locale, "commands.tool.status.field_cooldown_length_value", {
+                  seconds: config.cooldown_length,
+                });
+          const autochThresholdMax =
+            config.autoch_threshold_max > 0
+              ? Math.max(config.autoch_threshold_max, config.autoch_threshold)
+              : config.autoch_threshold;
+          const autochModeValue =
+            config.autoch_threshold === 0
+              ? localizer(locale, "commands.choices.always")
+              : autochThresholdMax > config.autoch_threshold
+                ? `${config.autoch_threshold}-${autochThresholdMax}`
+                : String(config.autoch_threshold);
+          const serverUserByokToggleMention = commandRegistry.getCommandMention("server", "user-byok", "toggle");
+          const userByokValue = localizer(
+            locale,
+            config.user_byok_mode
+              ? "commands.tool.status.field_user_byok_enabled"
+              : "commands.tool.status.field_user_byok_disabled",
+            { toggle_command: serverUserByokToggleMention },
+          );
+
+          // 4. Format system prompt / context note previews
+          const rawSystemPrompt = config.system_prompt ?? null;
+          const systemPromptText = rawSystemPrompt
+            ? rawSystemPrompt.length > MAX_PROMPT_PREVIEW
+              ? `${rawSystemPrompt.slice(0, MAX_PROMPT_PREVIEW)}...`
+              : rawSystemPrompt
+            : DEFAULT_SYSTEM_PROMPT.trim();
+          const systemPromptValue = `\`\`\`\n${systemPromptText}\n\`\`\``;
+          const rawContextNote = config.context_note ?? null;
+          const contextNoteValue = rawContextNote
+            ? `\`\`\`\n${
+                rawContextNote.length > MAX_PROMPT_PREVIEW
+                  ? `${rawContextNote.slice(0, MAX_PROMPT_PREVIEW)}...`
+                  : rawContextNote
+              }\n\`\`\``
+            : localizer(locale, "commands.tool.status.field_context_note_not_set");
+
+          // 5. Format integrations / access values
+          const optApiKeyServiceNames = optApiKeyRows.map((row) => row.service_name);
+          const braveApiKeySet = optApiKeyServiceNames.includes("brave-search");
+          const rotationKeys = tomoriState.rotation_keys ?? [];
+          const rotationStatusValue =
+            rotationKeys.length >= 2
+              ? localizer(locale, "commands.choices.enabled")
+              : localizer(locale, "commands.choices.disabled");
+          const rotationPoolValue = formatRotationPoolValue(tomoriState.rotation_keys, locale);
+          const optionalApiKeyCount = new Set(optApiKeyServiceNames.map((serviceName) => serviceName.toLowerCase()))
+            .size;
+          const optionalApiKeysValue = formatOptionalApiKeys(optApiKeyServiceNames, locale);
+          const savedProviderConfigCount = new Set(
+            savedProviderConfigs.map((savedConfig) => savedConfig.provider.toLowerCase()),
+          ).size;
+          const savedProviderConfigsValue = formatSavedProviderConfigs(savedProviderConfigs, locale);
+          const hiddenNoticeKeys = config.tool_notice_hidden_keys ?? [];
+          const hiddenNoticeEmbedsValue = formatHiddenNoticeEmbeds(hiddenNoticeKeys, locale);
+          const stPresetLibraryValue = localizer(locale, "commands.tool.status.field_st_preset_library_value", {
+            count: stPresets.length,
+          });
+          const activeStPresetValue = formatActiveStPresetValue(activeStPreset, locale);
+          const stPresetNodeSummaryValue = formatStPresetNodeSummary(activeStPresetNodes, locale);
+          const mcpServersValue = formatMcpServers(guildMcpServers, locale);
+          const serverCustomEndpointsValue = formatCustomEndpoints(serverCustomEndpoints, locale);
+          const matrixLinksValue = await formatMatrixLinks(client, matrixLinks, locale);
+
+          // ── Page 1: Behavior ───────────────────────────────────────────
+          const configPage1: SummaryEmbedOptions = {
+            titleKey: "commands.tool.status.server_page2_title",
+            descriptionKey: "commands.tool.status.server_page2_description",
+            color: ColorCode.INFO,
+            fields: [
+              {
+                nameKey: "commands.tool.status.field_timezone",
+                value: timezoneValue,
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_message_fetch_limit",
+                value: String(config.message_fetch_limit),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_cascade_limit",
+                value: String(config.cascade_limit),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_send_message_limit",
+                value:
+                  (config.send_message_limit ?? 0) > 0
+                    ? String(config.send_message_limit)
+                    : localizer(locale, "commands.choices.disabled"),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_always_reply",
+                value: config.always_reply_enabled
+                  ? localizer(locale, "commands.choices.enabled")
                   : localizer(locale, "commands.choices.disabled"),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_always_reply",
-              value: config.always_reply_enabled
-                ? localizer(locale, "commands.choices.enabled")
-                : localizer(locale, "commands.choices.disabled"),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_match_limit",
-              value: String(config.match_limit),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_cooldown_type",
-              value: cooldownTypeLabel,
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_cooldown_length",
-              value: cooldownLengthValue,
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_autoch_threshold",
-              value: autochModeValue,
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_deliberate_trigger",
-              value: formatBooleanLocalized(config.deliberate_trigger_mode ?? false, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_user_byok",
-              value: userByokValue,
-              inline: false,
-            },
-          ],
-        };
-
-        // ── Page 3: Channels & Automation ──────────────────────────────
-        const serverPage3: SummaryEmbedOptions = {
-          titleKey: "commands.tool.status.server_page3_title",
-          descriptionKey: "commands.tool.status.server_page3_description",
-          color: ColorCode.INFO,
-          fields: [
-            {
-              nameKey: "commands.tool.status.field_autoch_channels",
-              value: autoChannelsValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_rp_channels",
-              value: rpChannelsValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_private_channels",
-              value: privateChannelsValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_crosschannel_blocklist",
-              value: crosschannelBlocklistValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_welcome_channel",
-              value: welcomeChannelValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_welcome_prompt",
-              value: welcomePromptConfiguredValue,
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_thought_logs_channel",
-              value: thoughtLogChannelValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_whitelist_personas",
-              value: whitelistPersonasValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_whitelist_channels",
-              value: whitelistValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_whitelist_roles",
-              value: whitelistRolesValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_random_triggers",
-              value: randomTriggersValue,
-              inline: false,
-            },
-          ],
-        };
-
-        // ── Page 4: Features & Moderation ─────────────────────────────
-        const serverPage4: SummaryEmbedOptions = {
-          titleKey: "commands.tool.status.server_page4_title",
-          descriptionKey: "commands.tool.status.server_page4_description",
-          color: ColorCode.INFO,
-          fields: [
-            {
-              nameKey: "commands.tool.status.field_personalization",
-              value: formatBooleanLocalized(config.personal_memories_enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_self_teach",
-              value: formatBooleanLocalized(config.self_teaching_enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_image_generation",
-              value: formatBooleanLocalized(config.imagegen_enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_videogen",
-              value: formatBooleanLocalized(config.videogen_enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_web_search",
-              value: formatBooleanLocalized(config.web_search_enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_manage_message",
-              value: formatBooleanLocalized(config.manage_message_enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_emoji_usage",
-              value: formatBooleanLocalized(config.emoji_usage_enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_sticker_usage",
-              value: formatBooleanLocalized(config.sticker_usage_enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_api_key_set",
-              value: formatBooleanLocalized(!!config.api_key, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_brave_api_key_set",
-              value: formatBooleanLocalized(braveApiKeySet, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_server_memteaching",
-              value: formatBooleanLocalized(config.server_memteaching_enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_attribute_memteaching",
-              value: formatBooleanLocalized(config.attribute_memteaching_enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_sampledialogue_memteaching",
-              value: formatBooleanLocalized(config.sampledialogue_memteaching_enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_hide_impersonation",
-              value: formatBooleanLocalized(!isNoticeEmbedVisible(config, "impersonation_notice"), locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_hide_respond_embed",
-              value: formatBooleanLocalized(!isNoticeEmbedVisible(config, "respond_embed"), locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_self_debug",
-              value: formatBooleanLocalized(config.self_debug_enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_uncensor_injection",
-              value: formatBooleanLocalized(config.uncensor_injection_enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_uncensor_unicode",
-              value: formatBooleanLocalized(config.uncensor_unicode_space_enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_uncensor_sanitize",
-              value: formatBooleanLocalized(config.uncensor_sanitize_enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_tool_use",
-              value: formatBooleanLocalized(config.tool_use_enabled ?? true, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_prompt_snapshot",
-              value: formatBooleanLocalized(config.prompt_snapshot_enabled ?? false, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_stm_privacy_bypass",
-              value: formatBooleanLocalized(config.stm_privacy_bypass ?? false, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_voice_messages",
-              value: formatBooleanLocalized(config.voice_message_enabled ?? true, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_voice_transcript_mode",
-              value: formatBooleanLocalized(config.voice_transcript_chat_mode ?? false, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_nai_exclusive_imggen",
-              value: formatBooleanLocalized(config.nai_exclusive_imggen ?? false, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_blacklisted_members",
-              value: blacklistedValue,
-              inline: blacklistedCount <= MAX_ITEMS_DISPLAY,
-            },
-          ],
-        };
-
-        // ── Page 5: System Prompt & Author's Note ───────────────────────
-        const serverPage5: SummaryEmbedOptions = {
-          titleKey: "commands.tool.status.server_page5_title",
-          descriptionKey: "commands.tool.status.server_page5_description",
-          color: ColorCode.INFO,
-          footerKey: "commands.tool.status.export_footer_server_config",
-          fields: [
-            {
-              nameKey: "commands.tool.status.field_system_prompt",
-              value: systemPromptValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_context_note",
-              value: contextNoteValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_context_note_depth",
-              value: String(config.context_note_depth ?? 0),
-              inline: true,
-            },
-          ],
-        };
-
-        // ── Page 6: Model Overrides ─────────────────────────────────────
-        const personaLlmOverridesValue = formatPersonaLlmOverrides(
-          allPersonas,
-          locale,
-          config.custom_model_name,
-          config.other_model_codename,
-        );
-
-        const serverPage6: SummaryEmbedOptions = {
-          titleKey: "commands.tool.status.server_page6_title",
-          descriptionKey: "commands.tool.status.server_page6_description",
-          color: ColorCode.INFO,
-          fields: [
-            {
-              nameKey: "commands.tool.status.field_channel_llm_overrides",
-              value: channelLlmOverridesValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_persona_llm_overrides",
-              value: personaLlmOverridesValue,
-              inline: false,
-            },
-          ],
-        };
-
-        // ── Page 7: Quotas ──────────────────────────────────────────────
-        const serverPage7: SummaryEmbedOptions = {
-          titleKey: "commands.tool.status.server_page7_title",
-          descriptionKey: "commands.tool.status.server_page7_description",
-          color: ColorCode.INFO,
-          fields: [
-            {
-              nameKey: "commands.tool.status.field_image_quota_enabled",
-              value: formatBooleanLocalized(imageQuotaConfig.enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_image_quota_daily_user",
-              value: formatQuotaLimitValue(locale, imageQuotaConfig.daily_user_quota),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_image_quota_serverwide",
-              value: formatQuotaLimitValue(locale, imageQuotaConfig.serverwide_quota),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_image_quota_reset_days",
-              value: localizer(locale, "commands.tool.status.field_quota_reset_days_value", {
-                days: imageQuotaConfig.serverwide_quota_resets_in,
-              }),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_text_quota_enabled",
-              value: formatBooleanLocalized(textQuotaConfig.enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_text_quota_daily_user",
-              value: formatQuotaLimitValue(locale, textQuotaConfig.daily_user_quota),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_text_quota_serverwide",
-              value: formatQuotaLimitValue(locale, textQuotaConfig.serverwide_quota),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_text_quota_reset_days",
-              value: localizer(locale, "commands.tool.status.field_quota_reset_days_value", {
-                days: textQuotaConfig.serverwide_quota_resets_in,
-              }),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_video_quota_enabled",
-              value: formatBooleanLocalized(videoQuotaConfig.enabled, locale),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_video_quota_daily_user",
-              value: formatQuotaLimitValue(locale, videoQuotaConfig.daily_user_quota),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_video_quota_serverwide",
-              value: formatQuotaLimitValue(locale, videoQuotaConfig.serverwide_quota),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_video_quota_reset_days",
-              value: localizer(locale, "commands.tool.status.field_quota_reset_days_value", {
-                days: videoQuotaConfig.serverwide_quota_resets_in,
-              }),
-              inline: true,
-            },
-          ],
-        };
-
-        // ── Page 8: NAI Image Config ────────────────────────────────────
-        const serverPage8: SummaryEmbedOptions = {
-          titleKey: "commands.tool.status.server_page8_title",
-          descriptionKey: "commands.tool.status.server_page8_description",
-          color: ColorCode.INFO,
-          fields: [
-            {
-              nameKey: "commands.tool.status.field_nai_diffusion_model",
-              value: naiDiffusionModelValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_nai_preset",
-              value: config.nai_preset_name ?? localizer(locale, "commands.choices.none"),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_nai_sampler",
-              value: config.nai_sampler ?? localizer(locale, "commands.choices.none"),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_nai_steps",
-              value: config.nai_steps != null ? String(config.nai_steps) : localizer(locale, "commands.choices.none"),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_nai_scale",
-              value: config.nai_scale != null ? String(config.nai_scale) : localizer(locale, "commands.choices.none"),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_nai_noise_schedule",
-              value: config.nai_noise_schedule ?? localizer(locale, "commands.choices.none"),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_nai_cfg_rescale",
-              value:
-                config.nai_cfg_rescale != null
-                  ? String(config.nai_cfg_rescale)
-                  : localizer(locale, "commands.choices.none"),
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_nai_style_tags",
-              value:
-                config.nai_style_tags.length > 0
-                  ? config.nai_style_tags.join(", ")
-                  : localizer(locale, "commands.choices.none"),
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_nai_negative_tags",
-              value:
-                config.nai_negative_tags.length > 0
-                  ? config.nai_negative_tags.join(", ")
-                  : localizer(locale, "commands.choices.none"),
-              inline: false,
-            },
-          ],
-        };
-
-        // ── Page 9: Integrations & Access ───────────────────────────────
-        const serverPage9: SummaryEmbedOptions = {
-          titleKey: "commands.tool.status.server_page9_title",
-          descriptionKey: "commands.tool.status.server_page9_description",
-          color: ColorCode.INFO,
-          fields: [
-            {
-              nameKey: "commands.tool.status.field_api_key_rotation_status",
-              value: rotationStatusValue,
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_api_key_rotation_pool",
-              value: rotationPoolValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_optional_api_keys_with_count",
-              nameVars: {
-                count: optionalApiKeyCount,
+                inline: true,
               },
-              value: optionalApiKeysValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_saved_provider_configs_with_count",
-              nameVars: {
-                count: savedProviderConfigCount,
+              {
+                nameKey: "commands.tool.status.field_match_limit",
+                value: String(config.match_limit),
+                inline: true,
               },
-              value: savedProviderConfigsValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_server_custom_endpoints_with_count",
-              nameVars: {
-                count: serverCustomEndpoints.length,
+              {
+                nameKey: "commands.tool.status.field_cooldown_type",
+                value: cooldownTypeLabel,
+                inline: true,
               },
-              value: serverCustomEndpointsValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_mcp_servers_with_count",
-              nameVars: {
-                count: guildMcpServers.length,
+              {
+                nameKey: "commands.tool.status.field_cooldown_length",
+                value: cooldownLengthValue,
+                inline: true,
               },
-              value: mcpServersValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_matrix_links_with_count",
-              nameVars: {
-                count: matrixLinks.length,
+              {
+                nameKey: "commands.tool.status.field_autoch_threshold",
+                value: autochModeValue,
+                inline: true,
               },
-              value: matrixLinksValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_hidden_notice_embeds_with_count",
-              nameVars: {
-                count: hiddenNoticeKeys.length,
+              {
+                nameKey: "commands.tool.status.field_deliberate_trigger",
+                value: formatBooleanLocalized(config.deliberate_trigger_mode ?? false, locale),
+                inline: true,
               },
-              value: hiddenNoticeEmbedsValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_st_preset_active",
-              value: activeStPresetValue,
-              inline: false,
-            },
-            {
-              nameKey: "commands.tool.status.field_st_preset_library",
-              value: stPresetLibraryValue,
-              inline: true,
-            },
-            {
-              nameKey: "commands.tool.status.field_st_preset_nodes",
-              value: stPresetNodeSummaryValue,
-              inline: true,
-            },
-          ],
-        };
+              {
+                nameKey: "commands.tool.status.field_user_byok",
+                value: userByokValue,
+                inline: false,
+              },
+            ],
+          };
 
-        await replyPaginatedStatusPages(
-          interaction,
-          locale,
-          [
-            serverPage1,
-            serverPage2,
-            serverPage3,
-            serverPage4,
-            serverPage5,
-            serverPage6,
-            serverPage7,
-            serverPage8,
-            serverPage9,
-          ],
-          MessageFlags.Ephemeral,
-        );
+          // ── Page 2: Features & Moderation ──────────────────────────────
+          const configPage2: SummaryEmbedOptions = {
+            titleKey: "commands.tool.status.server_page4_title",
+            descriptionKey: "commands.tool.status.server_page4_description",
+            color: ColorCode.INFO,
+            fields: [
+              {
+                nameKey: "commands.tool.status.field_personalization",
+                value: formatBooleanLocalized(config.personal_memories_enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_self_teach",
+                value: formatBooleanLocalized(config.self_teaching_enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_image_generation",
+                value: formatBooleanLocalized(config.imagegen_enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_videogen",
+                value: formatBooleanLocalized(config.videogen_enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_web_search",
+                value: formatBooleanLocalized(config.web_search_enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_manage_message",
+                value: formatBooleanLocalized(config.manage_message_enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_emoji_usage",
+                value: formatBooleanLocalized(config.emoji_usage_enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_sticker_usage",
+                value: formatBooleanLocalized(config.sticker_usage_enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_api_key_set",
+                value: formatBooleanLocalized(!!config.api_key, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_brave_api_key_set",
+                value: formatBooleanLocalized(braveApiKeySet, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_server_memteaching",
+                value: formatBooleanLocalized(config.server_memteaching_enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_attribute_memteaching",
+                value: formatBooleanLocalized(config.attribute_memteaching_enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_sampledialogue_memteaching",
+                value: formatBooleanLocalized(config.sampledialogue_memteaching_enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_hide_impersonation",
+                value: formatBooleanLocalized(!isNoticeEmbedVisible(config, "impersonation_notice"), locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_hide_respond_embed",
+                value: formatBooleanLocalized(!isNoticeEmbedVisible(config, "respond_embed"), locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_self_debug",
+                value: formatBooleanLocalized(config.self_debug_enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_uncensor_injection",
+                value: formatBooleanLocalized(config.uncensor_injection_enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_uncensor_unicode",
+                value: formatBooleanLocalized(config.uncensor_unicode_space_enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_uncensor_sanitize",
+                value: formatBooleanLocalized(config.uncensor_sanitize_enabled, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_tool_use",
+                value: formatBooleanLocalized(config.tool_use_enabled ?? true, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_prompt_snapshot",
+                value: formatBooleanLocalized(config.prompt_snapshot_enabled ?? false, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_stm_privacy_bypass",
+                value: formatBooleanLocalized(config.stm_privacy_bypass ?? false, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_voice_messages",
+                value: formatBooleanLocalized(config.voice_message_enabled ?? true, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_voice_transcript_mode",
+                value: formatBooleanLocalized(config.voice_transcript_chat_mode ?? false, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_nai_exclusive_imggen",
+                value: formatBooleanLocalized(config.nai_exclusive_imggen ?? false, locale),
+                inline: true,
+              },
+            ],
+          };
+
+          // ── Page 3: System Prompt & Author's Note ───────────────────────
+          const configPage3: SummaryEmbedOptions = {
+            titleKey: "commands.tool.status.server_page5_title",
+            descriptionKey: "commands.tool.status.server_page5_description",
+            color: ColorCode.INFO,
+            footerKey: "commands.tool.status.export_footer_server_config",
+            fields: [
+              {
+                nameKey: "commands.tool.status.field_system_prompt",
+                value: systemPromptValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_context_note",
+                value: contextNoteValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_context_note_depth",
+                value: String(config.context_note_depth ?? 0),
+                inline: true,
+              },
+            ],
+          };
+
+          // ── Page 4: Integrations & Access ───────────────────────────────
+          const configPage4: SummaryEmbedOptions = {
+            titleKey: "commands.tool.status.server_page9_title",
+            descriptionKey: "commands.tool.status.server_page9_description",
+            color: ColorCode.INFO,
+            fields: [
+              {
+                nameKey: "commands.tool.status.field_api_key_rotation_status",
+                value: rotationStatusValue,
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_api_key_rotation_pool",
+                value: rotationPoolValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_optional_api_keys_with_count",
+                nameVars: { count: optionalApiKeyCount },
+                value: optionalApiKeysValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_saved_provider_configs_with_count",
+                nameVars: { count: savedProviderConfigCount },
+                value: savedProviderConfigsValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_server_custom_endpoints_with_count",
+                nameVars: { count: serverCustomEndpoints.length },
+                value: serverCustomEndpointsValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_mcp_servers_with_count",
+                nameVars: { count: guildMcpServers.length },
+                value: mcpServersValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_matrix_links_with_count",
+                nameVars: { count: matrixLinks.length },
+                value: matrixLinksValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_hidden_notice_embeds_with_count",
+                nameVars: { count: hiddenNoticeKeys.length },
+                value: hiddenNoticeEmbedsValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_st_preset_active",
+                value: activeStPresetValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_st_preset_library",
+                value: stPresetLibraryValue,
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_st_preset_nodes",
+                value: stPresetNodeSummaryValue,
+                inline: true,
+              },
+            ],
+          };
+
+          await replyPaginatedStatusPages(
+            interaction,
+            locale,
+            [configPage1, configPage2, configPage3, configPage4],
+            MessageFlags.Ephemeral,
+          );
+          break;
+        }
+
+        // ── server_channels: single page (Channels & Automation) ────────
+        if (scope === "server_channels") {
+          // 2. Load channel-related data in parallel
+          const [
+            blacklistedMemberIds,
+            whitelistPersonas,
+            whitelistChannels,
+            whitelistRoles,
+            randomTriggers,
+            allPersonas,
+          ] = await Promise.all([
+            getBlacklistedMemberIds(tomoriState.server_id),
+            getAllWhitelistPersonas(tomoriState.server_id),
+            getAllWhitelistChannels(tomoriState.server_id),
+            getAllWhitelistRoles(tomoriState.server_id),
+            getServerRandomTriggers(tomoriState.server_id),
+            loadAllPersonasForServer(serverDiscId),
+          ]);
+
+          // 3. Build persona name map for autochat / welcome / trigger display
+          const personaNameMap = new Map<number, string>();
+          for (const persona of allPersonas) {
+            if (persona.tomori_id) {
+              personaNameMap.set(persona.tomori_id, persona.tomori_nickname);
+            }
+          }
+          const mainPersonaName =
+            allPersonas.find((persona) => !persona.is_alter)?.tomori_nickname ??
+            localizer(locale, "commands.choices.none");
+
+          // 4. Format blacklisted members
+          const blacklistedCount = blacklistedMemberIds.length;
+          const blacklistedValue =
+            blacklistedCount === 0
+              ? localizer(locale, "commands.choices.none")
+              : blacklistedCount <= MAX_ITEMS_DISPLAY
+                ? blacklistedMemberIds.map((id) => `<@${id}>`).join(", ")
+                : localizer(locale, "commands.tool.status.field_blacklisted_members_with_count", {
+                    current: blacklistedCount,
+                  });
+
+          // 5. Format all channel / whitelist / trigger values
+          const [
+            autoChannelsValue,
+            rpChannelsValue,
+            privateChannelsValue,
+            crosschannelBlocklistValue,
+            welcomeChannelValue,
+            thoughtLogChannelValue,
+            whitelistPersonasValue,
+            whitelistValue,
+            whitelistRolesValue,
+            randomTriggersValue,
+          ] = await Promise.all([
+            formatAutochatChannels(client, config, personaNameMap, mainPersonaName, locale),
+            formatChannelList(client, config.rp_channel_ids, locale),
+            formatChannelList(client, config.private_channel_ids, locale),
+            formatChannelList(client, config.crosschannel_blocklist_ids ?? [], locale),
+            formatWelcomeChannel(client, config, personaNameMap, locale),
+            formatChannelList(
+              client,
+              config.thought_log_channel_disc_id ? [config.thought_log_channel_disc_id] : [],
+              locale,
+            ),
+            formatWhitelistPersonaEntries(client, whitelistPersonas, personaNameMap, locale),
+            formatWhitelistEntries(client, whitelistChannels, locale),
+            formatWhitelistRolesEntries(whitelistRoles, locale),
+            formatRandomTriggers(client, randomTriggers, personaNameMap, locale),
+          ]);
+          const welcomePromptConfiguredValue = formatBooleanLocalized(!!config.welcome_prompt?.trim(), locale);
+
+          // ── Page 1: Channels & Automation ──────────────────────────────
+          const channelsPage: SummaryEmbedOptions = {
+            titleKey: "commands.tool.status.server_page3_title",
+            descriptionKey: "commands.tool.status.server_page3_description",
+            color: ColorCode.INFO,
+            fields: [
+              {
+                nameKey: "commands.tool.status.field_autoch_channels",
+                value: autoChannelsValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_rp_channels",
+                value: rpChannelsValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_private_channels",
+                value: privateChannelsValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_crosschannel_blocklist",
+                value: crosschannelBlocklistValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_welcome_channel",
+                value: welcomeChannelValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_welcome_prompt",
+                value: welcomePromptConfiguredValue,
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_thought_logs_channel",
+                value: thoughtLogChannelValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_whitelist_personas",
+                value: whitelistPersonasValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_whitelist_channels",
+                value: whitelistValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_whitelist_roles",
+                value: whitelistRolesValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_random_triggers",
+                value: randomTriggersValue,
+                inline: false,
+              },
+              {
+                nameKey: "commands.tool.status.field_blacklisted_members",
+                value: blacklistedValue,
+                inline: blacklistedCount <= MAX_ITEMS_DISPLAY,
+              },
+            ],
+          };
+
+          await replyPaginatedStatusPages(interaction, locale, [channelsPage], MessageFlags.Ephemeral);
+          break;
+        }
         break;
       }
 
