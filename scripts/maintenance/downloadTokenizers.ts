@@ -36,8 +36,8 @@ type FamilyResult = "ok" | "skipped" | "access-denied" | "error";
 
 // ─── Config ─────────────────────────────────────────────────────────────────
 
-const MANIFEST_PATH = path.join(import.meta.dir, "..", "tokenizers", "manifest.json");
-const TOKENIZER_BASE_DIR = path.join(import.meta.dir, "..", "tokenizers");
+const MANIFEST_PATH = path.join(import.meta.dir, "..", "..", "tokenizers", "manifest.json");
+const TOKENIZER_BASE_DIR = path.join(import.meta.dir, "..", "..", "tokenizers");
 const HF_BASE_URL = "https://huggingface.co";
 
 // ─── CLI args ───────────────────────────────────────────────────────────────
