@@ -23,6 +23,9 @@ import {
   getAllChannelLlmOverridesForServer,
   loadEmbeddingModelById,
   loadSavedProviderConfigs,
+  loadCustomEndpointsForServer,
+  loadCustomEndpointsForUser,
+  loadUserSavedProviderConfigs,
 } from "../../utils/db/dbRead";
 import { getDiffusionModelById } from "@/utils/image/naiDiffusionModels";
 import { sql } from "@/utils/db/client";
@@ -44,6 +47,9 @@ import type {
   SavedProviderConfigRow,
   StPresetNodeRow,
   StPresetRow,
+  FallbackEntry,
+  CustomEndpointRow,
+  UserSavedProviderConfigRow,
 } from "../../types/db/schema";
 import type { SummaryEmbedOptions } from "../../types/discord/embed";
 import { CooldownType, PrivacyLevel, type TomoriState } from "../../types/db/schema";
@@ -639,6 +645,99 @@ async function formatMatrixLinks(client: Client, links: MatrixLinkStatusRow[], l
   return mentions.map((mention, index) => `${index + 1}. ${mention}`).join("\n");
 }
 
+/**
+ * Formats an ordered fallback chain (LLM + custom endpoint entries) as a numbered list.
+ * Falls back gracefully to the legacy `fallback_llms` array when `fallback_chain` is empty.
+ * @param fallbackChain - Resolved fallback entries from TomoriState.fallback_chain
+ * @param fallbackLlms - Legacy resolved LLM rows from TomoriState.fallback_llms
+ * @param locale - User locale
+ * @param customModelName - Optional custom model name for label override
+ * @param otherModelCodename - Optional other-model codename for label override
+ * @returns Formatted numbered list, or localized "None" if empty
+ */
+function formatFallbackChain(
+  fallbackChain: FallbackEntry[] | undefined,
+  fallbackLlms: LlmRow[] | undefined,
+  locale: string,
+  customModelName?: string | null,
+  otherModelCodename?: string | null,
+): string {
+  // 1. Prefer the typed fallback_chain; fall back to legacy fallback_llms list
+  const hasChain = (fallbackChain?.length ?? 0) > 0;
+  const hasLegacy = (fallbackLlms?.length ?? 0) > 0;
+
+  if (!hasChain && !hasLegacy) {
+    return localizer(locale, "commands.choices.none");
+  }
+
+  if (hasChain && fallbackChain) {
+    return fallbackChain
+      .map((entry, index) => {
+        const label =
+          entry.kind === "llm"
+            ? formatLlmDisplayLabel(entry.model, customModelName, otherModelCodename)
+            : `\`${truncateText(entry.endpoint.display_name, 48)}\` (${localizer(locale, "commands.tool.status.custom_endpoint_capability_label", { capability: entry.endpoint.capability })})`;
+        return `${index + 1}. ${label}`;
+      })
+      .join("\n");
+  }
+
+  // 2. Legacy path: plain LLM array
+  return (fallbackLlms ?? [])
+    .map((m, i) => `${i + 1}. ${formatLlmDisplayLabel(m, customModelName, otherModelCodename)}`)
+    .join("\n");
+}
+
+/**
+ * Formats the list of server or user custom endpoints as a numbered list.
+ * URL is never shown per privacy rules; shows label, capability, api_style, and auth status.
+ * @param endpoints - Array of custom endpoint rows
+ * @param locale - User locale
+ * @returns Formatted list, or localized "None" if empty
+ */
+function formatCustomEndpoints(endpoints: CustomEndpointRow[], locale: string): string {
+  if (endpoints.length === 0) {
+    return localizer(locale, "commands.choices.none");
+  }
+
+  return endpoints
+    .map((ep, index) => {
+      const authLabel = ep.requires_auth
+        ? localizer(locale, "commands.tool.status.mcp_server_auth_present")
+        : localizer(locale, "commands.tool.status.mcp_server_auth_absent");
+      return `${index + 1}. **${truncateText(ep.display_name, 32)}** · ${ep.capability} · ${ep.api_style} · ${authLabel}`;
+    })
+    .join("\n");
+}
+
+/**
+ * Formats the list of personal saved provider configs as a detailed numbered list.
+ * Shows provider name, enabled capabilities, and whether an API key is present.
+ * Raw key bytes are never shown per privacy rules.
+ * @param configs - User's saved provider config rows
+ * @param locale - User locale
+ * @returns Formatted numbered list, or localized "None" if empty
+ */
+function formatUserSavedProviders(configs: UserSavedProviderConfigRow[], locale: string): string {
+  if (configs.length === 0) {
+    return localizer(locale, "commands.choices.none");
+  }
+
+  return configs
+    .map((config, index) => {
+      const providerLabel = getProviderDisplayName(config.provider);
+      const capabilities =
+        config.enabled_capabilities.length > 0
+          ? config.enabled_capabilities.join(", ")
+          : localizer(locale, "commands.tool.status.personal_provider_no_capabilities");
+      const keyLabel = config.api_key
+        ? localizer(locale, "commands.tool.status.mcp_server_auth_present")
+        : localizer(locale, "commands.tool.status.mcp_server_auth_absent");
+      return `${index + 1}. **${providerLabel}** · ${capabilities} · ${keyLabel}`;
+    })
+    .join("\n");
+}
+
 function formatRotationPoolValue(keys: TomoriState["rotation_keys"], locale: string): string {
   const rotationKeys = keys ?? [];
   const totalEntries = rotationKeys.length;
@@ -721,11 +820,18 @@ export async function execute(
   try {
     switch (scope) {
       case "personal": {
-        // 1. Load global personal memories (lineage 0 only)
+        // 1. Load global personal memories, personal provider configs, and custom endpoints in parallel
         let globalPersonalMemoryList: string[] = [];
+        let userSavedProviderConfigs: UserSavedProviderConfigRow[] = [];
+        let userCustomEndpoints: CustomEndpointRow[] = [];
         if (userData.user_id) {
-          const personalMemoryRows = await loadPersonalMemoriesForUserLineage(userData.user_id, 0, false);
-          globalPersonalMemoryList = personalMemoryRows.map((row) => row.content);
+          [globalPersonalMemoryList, userSavedProviderConfigs, userCustomEndpoints] = await Promise.all([
+            loadPersonalMemoriesForUserLineage(userData.user_id, 0, false).then((rows) =>
+              rows.map((row) => row.content),
+            ),
+            loadUserSavedProviderConfigs(userData.user_id),
+            loadCustomEndpointsForUser(userData.user_id),
+          ]);
         }
 
         // 2. Format global personal memories (all shown, 100-char truncation each)
@@ -747,7 +853,11 @@ export async function execute(
             }\n\`\`\``
           : localizer(locale, "commands.tool.status.field_impersonation_prompt_not_set");
 
-        // 4. Build the single personal status page
+        // 4. Format personal provider and endpoint data
+        const userSavedProvidersValue = formatUserSavedProviders(userSavedProviderConfigs, locale);
+        const userCustomEndpointsValue = formatCustomEndpoints(userCustomEndpoints, locale);
+
+        // 5. Build Page 1: personal settings and global personal memory
         const personalPage: SummaryEmbedOptions = {
           titleKey: "commands.tool.status.personal_title",
           descriptionKey: "commands.tool.status.personal_description",
@@ -817,7 +927,33 @@ export async function execute(
           ],
         };
 
-        await replyPaginatedStatusPages(interaction, locale, [personalPage], MessageFlags.Ephemeral);
+        // 6. Build Page 2: personal providers and custom endpoints
+        const personalProvidersPage: SummaryEmbedOptions = {
+          titleKey: "commands.tool.status.personal_page2_title",
+          descriptionKey: "commands.tool.status.personal_page2_description",
+          color: ColorCode.INFO,
+          fields: [
+            {
+              nameKey: "commands.tool.status.field_personal_providers_with_count",
+              nameVars: { count: userSavedProviderConfigs.length },
+              value: userSavedProvidersValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_personal_custom_endpoints_with_count",
+              nameVars: { count: userCustomEndpoints.length },
+              value: userCustomEndpointsValue,
+              inline: false,
+            },
+          ],
+        };
+
+        await replyPaginatedStatusPages(
+          interaction,
+          locale,
+          [personalPage, personalProvidersPage],
+          MessageFlags.Ephemeral,
+        );
         break;
       }
 
@@ -858,6 +994,7 @@ export async function execute(
           guildMcpServers,
           matrixLinks,
           stPresets,
+          serverCustomEndpoints,
         ] = await Promise.all([
           sql<OptApiKeyStatusRow[]>`
             SELECT service_name
@@ -890,6 +1027,7 @@ export async function execute(
             ORDER BY created_at ASC
           `,
           loadPresetsForServer(tomoriState.server_id),
+          loadCustomEndpointsForServer(tomoriState.server_id),
         ]);
 
         const activeStPreset = stPresets.find((preset) => preset.is_active) ?? null;
@@ -1009,15 +1147,13 @@ export async function execute(
         const visionModelValue = tomoriState.vision_llm
           ? formatLlmDisplayLabel(tomoriState.vision_llm, config.custom_model_name, config.other_model_codename)
           : localizer(locale, "commands.choices.none");
-        const fallbackModelsValue =
-          (tomoriState.fallback_llms?.length ?? 0) > 0
-            ? tomoriState.fallback_llms
-                ?.map(
-                  (m, i) =>
-                    `${i + 1}. ${formatLlmDisplayLabel(m, config.custom_model_name, config.other_model_codename)}`,
-                )
-                .join("\n")
-            : localizer(locale, "commands.choices.none");
+        const fallbackModelsValue = formatFallbackChain(
+          tomoriState.fallback_chain,
+          tomoriState.fallback_llms,
+          locale,
+          config.custom_model_name,
+          config.other_model_codename,
+        );
 
         // 11. Format logit biases count
         const logitBiasesValue =
@@ -1061,6 +1197,7 @@ export async function execute(
         const activeStPresetValue = formatActiveStPresetValue(activeStPreset, locale);
         const stPresetNodeSummaryValue = formatStPresetNodeSummary(activeStPresetNodes, locale);
         const mcpServersValue = formatMcpServers(guildMcpServers, locale);
+        const serverCustomEndpointsValue = formatCustomEndpoints(serverCustomEndpoints, locale);
         const serverUserByokToggleMention = commandRegistry.getCommandMention("server", "user-byok", "toggle");
         const modelValue = config.llm_id
           ? formatLlmDisplayLabel(llm, config.custom_model_name, config.other_model_codename)
@@ -1406,6 +1543,16 @@ export async function execute(
               inline: true,
             },
             {
+              nameKey: "commands.tool.status.field_tool_use",
+              value: formatBooleanLocalized(config.tool_use_enabled ?? true, locale),
+              inline: true,
+            },
+            {
+              nameKey: "commands.tool.status.field_prompt_snapshot",
+              value: formatBooleanLocalized(config.prompt_snapshot_enabled ?? false, locale),
+              inline: true,
+            },
+            {
               nameKey: "commands.tool.status.field_stm_privacy_bypass",
               value: formatBooleanLocalized(config.stm_privacy_bypass ?? false, locale),
               inline: true,
@@ -1652,6 +1799,14 @@ export async function execute(
                 count: savedProviderConfigCount,
               },
               value: savedProviderConfigsValue,
+              inline: false,
+            },
+            {
+              nameKey: "commands.tool.status.field_server_custom_endpoints_with_count",
+              nameVars: {
+                count: serverCustomEndpoints.length,
+              },
+              value: serverCustomEndpointsValue,
               inline: false,
             },
             {
@@ -1905,7 +2060,10 @@ export async function execute(
             },
             {
               nameKey: "commands.tool.status.field_voice",
-              value: selectedPersona.elevenlabs_voice_name ?? localizer(locale, "commands.choices.none"),
+              value:
+                selectedPersona.speech_voice_name ??
+                selectedPersona.elevenlabs_voice_name ??
+                localizer(locale, "commands.choices.none"),
               inline: true,
             },
             {

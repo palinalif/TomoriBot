@@ -2,6 +2,7 @@ nul
 .venv*
 *.backup
 .tmp
+__pycache__/
 
 # Script outputs
 backups/*

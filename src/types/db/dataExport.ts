@@ -3,6 +3,7 @@ import { SUPPORTED_PARAM_VALUES } from "@/constants/supportedParams";
 import { DEFAULT_THINKING_LEVEL, THINKING_LEVEL_VALUES } from "@/constants/thinkingLevels";
 import { getMemoryLimits } from "@/utils/db/memoryLimits";
 import { logitBiasEntrySchema } from "@/types/provider/logitBias";
+import { PrivacyLevel } from "@/types/db/schema";
 
 /**
  * Version identifier for export/import format
@@ -52,6 +53,10 @@ export const personalSettingsExportDataSchema = z.object({
   impersonation_prompt: z.string().nullable().optional(),
   nai_char_tags: z.array(z.string()).default([]),
   nai_char_ref_url: z.string().nullable().optional(),
+  // Behavioral preferences (added since initial schema)
+  privacy_level: z.nativeEnum(PrivacyLevel).optional(),
+  personal_dtm: z.enum(["off", "follow", "on"]).optional(),
+  shortterm_cache_crossserver_opt_in: z.boolean().optional(),
 });
 
 export type PersonalSettingsExportData = z.infer<typeof personalSettingsExportDataSchema>;
@@ -122,6 +127,29 @@ export const serverConfigExportSchema = z.object({
   nai_noise_schedule: z.string().nullable().optional(),
   nai_cfg_rescale: z.number().min(0.0).max(1.0).nullable().optional(),
   nai_exclusive_imggen: z.boolean().default(false),
+  nai_preset_name: z.string().nullable().optional(),
+  // Behavior settings (added since initial schema)
+  cascade_limit: z.number().int().min(0).max(10).optional(),
+  match_limit: z.number().int().min(1).max(10).optional(),
+  send_message_limit: z.number().int().min(0).max(40).optional(),
+  always_reply_enabled: z.boolean().optional(),
+  deliberate_trigger_mode: z.boolean().optional(),
+  cooldown_type: z.number().int().min(0).max(4).optional(),
+  cooldown_length: z.number().int().min(1).max(86400).optional(),
+  stm_privacy_bypass: z.boolean().optional(),
+  user_byok_mode: z.boolean().optional(),
+  context_note: z.string().nullable().optional(),
+  context_note_depth: z.number().int().min(0).max(100).optional(),
+  // Feature toggles (added since initial schema)
+  manage_message_enabled: z.boolean().optional(),
+  videogen_enabled: z.boolean().optional(),
+  voice_message_enabled: z.boolean().optional(),
+  voice_transcript_chat_mode: z.boolean().optional(),
+  uncensor_injection_enabled: z.boolean().optional(),
+  uncensor_unicode_space_enabled: z.boolean().optional(),
+  uncensor_sanitize_enabled: z.boolean().optional(),
+  tool_use_enabled: z.boolean().optional(),
+  prompt_snapshot_enabled: z.boolean().optional(),
 });
 
 export type ServerConfigExport = z.infer<typeof serverConfigExportSchema>;

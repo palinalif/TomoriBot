@@ -190,7 +190,7 @@ export async function importPersonalSettings(
     const naiCharRefUrl = importData.nai_char_ref_url ?? null;
     const impersonationPrompt = importData.impersonation_prompt ?? null;
 
-    // 2. Upsert user row with settings and NovelAI character fields
+    // 2. Upsert user row with settings, NovelAI character fields, and behavioral preferences
     const updateResult = await sql`
 			INSERT INTO users (
 				user_disc_id,
@@ -213,7 +213,10 @@ export async function importPersonalSettings(
 				language_pref = EXCLUDED.language_pref,
 				impersonation_prompt = EXCLUDED.impersonation_prompt,
 				nai_char_tags = EXCLUDED.nai_char_tags,
-				nai_char_ref_url = EXCLUDED.nai_char_ref_url
+				nai_char_ref_url = EXCLUDED.nai_char_ref_url,
+				privacy_level = COALESCE(${importData.privacy_level ?? null}, users.privacy_level),
+				personal_dtm = COALESCE(${importData.personal_dtm ?? null}, users.personal_dtm),
+				shortterm_cache_crossserver_opt_in = COALESCE(${importData.shortterm_cache_crossserver_opt_in ?? null}, users.shortterm_cache_crossserver_opt_in)
 			RETURNING user_id
 		`;
 
@@ -226,11 +229,14 @@ export async function importPersonalSettings(
 
     invalidateUserCache(userDiscId);
 
-    // 3. Count imported fields (base 2 + optional impersonation/NAI fields)
+    // 3. Count imported fields (base 2 + optional impersonation/NAI/behavioral fields)
     let fieldsCount = 2;
     if (impersonationPrompt) fieldsCount++;
     if (naiCharTags.length > 0) fieldsCount++;
     if (naiCharRefUrl) fieldsCount++;
+    if (importData.privacy_level !== undefined) fieldsCount++;
+    if (importData.personal_dtm !== undefined) fieldsCount++;
+    if (importData.shortterm_cache_crossserver_opt_in !== undefined) fieldsCount++;
 
     return {
       success: true,
@@ -317,7 +323,28 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 				nai_scale = COALESCE(${config.nai_scale ?? null}, nai_scale),
 				nai_noise_schedule = COALESCE(${config.nai_noise_schedule ?? null}, nai_noise_schedule),
 				nai_cfg_rescale = COALESCE(${config.nai_cfg_rescale ?? null}, nai_cfg_rescale),
-				nai_exclusive_imggen = ${config.nai_exclusive_imggen ?? false}
+				nai_exclusive_imggen = ${config.nai_exclusive_imggen ?? false},
+				nai_preset_name = COALESCE(${config.nai_preset_name ?? null}, nai_preset_name),
+				cascade_limit = COALESCE(${config.cascade_limit ?? null}, cascade_limit),
+				match_limit = COALESCE(${config.match_limit ?? null}, match_limit),
+				send_message_limit = COALESCE(${config.send_message_limit ?? null}, send_message_limit),
+				always_reply_enabled = COALESCE(${config.always_reply_enabled ?? null}, always_reply_enabled),
+				deliberate_trigger_mode = COALESCE(${config.deliberate_trigger_mode ?? null}, deliberate_trigger_mode),
+				cooldown_type = COALESCE(${config.cooldown_type ?? null}, cooldown_type),
+				cooldown_length = COALESCE(${config.cooldown_length ?? null}, cooldown_length),
+				stm_privacy_bypass = COALESCE(${config.stm_privacy_bypass ?? null}, stm_privacy_bypass),
+				user_byok_mode = COALESCE(${config.user_byok_mode ?? null}, user_byok_mode),
+				context_note = COALESCE(${config.context_note ?? null}, context_note),
+				context_note_depth = COALESCE(${config.context_note_depth ?? null}, context_note_depth),
+				manage_message_enabled = COALESCE(${config.manage_message_enabled ?? null}, manage_message_enabled),
+				videogen_enabled = COALESCE(${config.videogen_enabled ?? null}, videogen_enabled),
+				voice_message_enabled = COALESCE(${config.voice_message_enabled ?? null}, voice_message_enabled),
+				voice_transcript_chat_mode = COALESCE(${config.voice_transcript_chat_mode ?? null}, voice_transcript_chat_mode),
+				uncensor_injection_enabled = COALESCE(${config.uncensor_injection_enabled ?? null}, uncensor_injection_enabled),
+				uncensor_unicode_space_enabled = COALESCE(${config.uncensor_unicode_space_enabled ?? null}, uncensor_unicode_space_enabled),
+				uncensor_sanitize_enabled = COALESCE(${config.uncensor_sanitize_enabled ?? null}, uncensor_sanitize_enabled),
+				tool_use_enabled = COALESCE(${config.tool_use_enabled ?? null}, tool_use_enabled),
+				prompt_snapshot_enabled = COALESCE(${config.prompt_snapshot_enabled ?? null}, prompt_snapshot_enabled)
 			WHERE server_id = ${serverId}
 			RETURNING tomori_config_id
 		`;
@@ -359,7 +386,28 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 						nai_scale = COALESCE(${config.nai_scale ?? null}, nai_scale),
 						nai_noise_schedule = COALESCE(${config.nai_noise_schedule ?? null}, nai_noise_schedule),
 						nai_cfg_rescale = COALESCE(${config.nai_cfg_rescale ?? null}, nai_cfg_rescale),
-						nai_exclusive_imggen = ${config.nai_exclusive_imggen ?? false}
+						nai_exclusive_imggen = ${config.nai_exclusive_imggen ?? false},
+						nai_preset_name = COALESCE(${config.nai_preset_name ?? null}, nai_preset_name),
+						cascade_limit = COALESCE(${config.cascade_limit ?? null}, cascade_limit),
+						match_limit = COALESCE(${config.match_limit ?? null}, match_limit),
+						send_message_limit = COALESCE(${config.send_message_limit ?? null}, send_message_limit),
+						always_reply_enabled = COALESCE(${config.always_reply_enabled ?? null}, always_reply_enabled),
+						deliberate_trigger_mode = COALESCE(${config.deliberate_trigger_mode ?? null}, deliberate_trigger_mode),
+						cooldown_type = COALESCE(${config.cooldown_type ?? null}, cooldown_type),
+						cooldown_length = COALESCE(${config.cooldown_length ?? null}, cooldown_length),
+						stm_privacy_bypass = COALESCE(${config.stm_privacy_bypass ?? null}, stm_privacy_bypass),
+						user_byok_mode = COALESCE(${config.user_byok_mode ?? null}, user_byok_mode),
+						context_note = COALESCE(${config.context_note ?? null}, context_note),
+						context_note_depth = COALESCE(${config.context_note_depth ?? null}, context_note_depth),
+						manage_message_enabled = COALESCE(${config.manage_message_enabled ?? null}, manage_message_enabled),
+						videogen_enabled = COALESCE(${config.videogen_enabled ?? null}, videogen_enabled),
+						voice_message_enabled = COALESCE(${config.voice_message_enabled ?? null}, voice_message_enabled),
+						voice_transcript_chat_mode = COALESCE(${config.voice_transcript_chat_mode ?? null}, voice_transcript_chat_mode),
+						uncensor_injection_enabled = COALESCE(${config.uncensor_injection_enabled ?? null}, uncensor_injection_enabled),
+						uncensor_unicode_space_enabled = COALESCE(${config.uncensor_unicode_space_enabled ?? null}, uncensor_unicode_space_enabled),
+						uncensor_sanitize_enabled = COALESCE(${config.uncensor_sanitize_enabled ?? null}, uncensor_sanitize_enabled),
+						tool_use_enabled = COALESCE(${config.tool_use_enabled ?? null}, tool_use_enabled),
+						prompt_snapshot_enabled = COALESCE(${config.prompt_snapshot_enabled ?? null}, prompt_snapshot_enabled)
 					WHERE tomori_id = ${mainTomoriId}
 					RETURNING tomori_config_id
 				`;

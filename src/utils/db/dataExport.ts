@@ -218,7 +218,28 @@ export async function exportServerData(serverDiscId: string, tomoriId?: number):
 				COALESCE(tc_server.nai_scale, tc_legacy.nai_scale) as nai_scale,
 				COALESCE(tc_server.nai_noise_schedule, tc_legacy.nai_noise_schedule) as nai_noise_schedule,
 				COALESCE(tc_server.nai_cfg_rescale, tc_legacy.nai_cfg_rescale) as nai_cfg_rescale,
-				COALESCE(tc_server.nai_exclusive_imggen, tc_legacy.nai_exclusive_imggen, false) as nai_exclusive_imggen
+				COALESCE(tc_server.nai_exclusive_imggen, tc_legacy.nai_exclusive_imggen, false) as nai_exclusive_imggen,
+				COALESCE(tc_server.nai_preset_name, tc_legacy.nai_preset_name) as nai_preset_name,
+				COALESCE(tc_server.cascade_limit, tc_legacy.cascade_limit, 3) as cascade_limit,
+				COALESCE(tc_server.match_limit, tc_legacy.match_limit, 3) as match_limit,
+				COALESCE(tc_server.send_message_limit, tc_legacy.send_message_limit, 0) as send_message_limit,
+				COALESCE(tc_server.always_reply_enabled, tc_legacy.always_reply_enabled, false) as always_reply_enabled,
+				COALESCE(tc_server.deliberate_trigger_mode, tc_legacy.deliberate_trigger_mode, false) as deliberate_trigger_mode,
+				COALESCE(tc_server.cooldown_type, tc_legacy.cooldown_type, 0) as cooldown_type,
+				COALESCE(tc_server.cooldown_length, tc_legacy.cooldown_length, 5) as cooldown_length,
+				COALESCE(tc_server.stm_privacy_bypass, tc_legacy.stm_privacy_bypass, false) as stm_privacy_bypass,
+				COALESCE(tc_server.user_byok_mode, tc_legacy.user_byok_mode, false) as user_byok_mode,
+				COALESCE(tc_server.context_note, tc_legacy.context_note) as context_note,
+				COALESCE(tc_server.context_note_depth, tc_legacy.context_note_depth, 0) as context_note_depth,
+				COALESCE(tc_server.manage_message_enabled, tc_legacy.manage_message_enabled, true) as manage_message_enabled,
+				COALESCE(tc_server.videogen_enabled, tc_legacy.videogen_enabled, false) as videogen_enabled,
+				COALESCE(tc_server.voice_message_enabled, tc_legacy.voice_message_enabled, true) as voice_message_enabled,
+				COALESCE(tc_server.voice_transcript_chat_mode, tc_legacy.voice_transcript_chat_mode, false) as voice_transcript_chat_mode,
+				COALESCE(tc_server.uncensor_injection_enabled, tc_legacy.uncensor_injection_enabled, false) as uncensor_injection_enabled,
+				COALESCE(tc_server.uncensor_unicode_space_enabled, tc_legacy.uncensor_unicode_space_enabled, false) as uncensor_unicode_space_enabled,
+				COALESCE(tc_server.uncensor_sanitize_enabled, tc_legacy.uncensor_sanitize_enabled, false) as uncensor_sanitize_enabled,
+				COALESCE(tc_server.tool_use_enabled, tc_legacy.tool_use_enabled, true) as tool_use_enabled,
+				COALESCE(tc_server.prompt_snapshot_enabled, tc_legacy.prompt_snapshot_enabled, false) as prompt_snapshot_enabled
 			FROM tomoris t
 			LEFT JOIN tomori_configs tc_server ON tc_server.server_id = t.server_id
 			LEFT JOIN tomori_configs tc_legacy ON tc_legacy.tomori_id = t.tomori_id
@@ -349,6 +370,27 @@ export async function exportServerData(serverDiscId: string, tomoriId?: number):
           nai_noise_schedule: configData.nai_noise_schedule ?? null,
           nai_cfg_rescale: configData.nai_cfg_rescale ?? null,
           nai_exclusive_imggen: configData.nai_exclusive_imggen ?? false,
+          nai_preset_name: configData.nai_preset_name ?? null,
+          cascade_limit: configData.cascade_limit,
+          match_limit: configData.match_limit,
+          send_message_limit: configData.send_message_limit,
+          always_reply_enabled: configData.always_reply_enabled,
+          deliberate_trigger_mode: configData.deliberate_trigger_mode,
+          cooldown_type: configData.cooldown_type,
+          cooldown_length: configData.cooldown_length,
+          stm_privacy_bypass: configData.stm_privacy_bypass,
+          user_byok_mode: configData.user_byok_mode,
+          context_note: configData.context_note ?? null,
+          context_note_depth: configData.context_note_depth,
+          manage_message_enabled: configData.manage_message_enabled,
+          videogen_enabled: configData.videogen_enabled,
+          voice_message_enabled: configData.voice_message_enabled,
+          voice_transcript_chat_mode: configData.voice_transcript_chat_mode,
+          uncensor_injection_enabled: configData.uncensor_injection_enabled,
+          uncensor_unicode_space_enabled: configData.uncensor_unicode_space_enabled,
+          uncensor_sanitize_enabled: configData.uncensor_sanitize_enabled,
+          tool_use_enabled: configData.tool_use_enabled,
+          prompt_snapshot_enabled: configData.prompt_snapshot_enabled,
         },
         server_memories: sanitizedServerMemories,
       },
@@ -461,9 +503,10 @@ export async function exportGlobalPersonalMemories(userDiscId: string): Promise<
  */
 export async function exportPersonalSettings(userDiscId: string): Promise<ExportResult> {
   try {
-    // 1. Query user settings including NovelAI character fields
+    // 1. Query user settings including NovelAI character fields and behavioral preferences
     const rows = await sql`
-			SELECT user_nickname, language_pref, impersonation_prompt, nai_char_tags, nai_char_ref_url
+			SELECT user_nickname, language_pref, impersonation_prompt, nai_char_tags, nai_char_ref_url,
+			       privacy_level, personal_dtm, shortterm_cache_crossserver_opt_in
 			FROM users
 			WHERE user_disc_id = ${userDiscId}
 			LIMIT 1
@@ -478,7 +521,7 @@ export async function exportPersonalSettings(userDiscId: string): Promise<Export
 
     const userData = rows[0];
 
-    // 2. Build export object with NAI character fields
+    // 2. Build export object with NAI character fields and behavioral preferences
     const exportData: PersonalSettingsExport = {
       version: EXPORT_VERSION,
       type: "personal_settings",
@@ -489,6 +532,9 @@ export async function exportPersonalSettings(userDiscId: string): Promise<Export
         impersonation_prompt: userData.impersonation_prompt ?? null,
         nai_char_tags: userData.nai_char_tags ?? [],
         nai_char_ref_url: userData.nai_char_ref_url ?? null,
+        privacy_level: userData.privacy_level ?? undefined,
+        personal_dtm: userData.personal_dtm ?? undefined,
+        shortterm_cache_crossserver_opt_in: userData.shortterm_cache_crossserver_opt_in ?? undefined,
       },
     };
 
