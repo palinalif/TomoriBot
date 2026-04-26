@@ -1424,7 +1424,7 @@ export default {
         labels_field: `ラベルと削除`,
         labels_value: `1つのラベルは対応する全機能をまとめたカスタムプロバイダーバンドルです。{server_remove_command} と {personal_remove_command} はチェックを外した機能だけ削除します。{server_provider_remove_command} と {personal_provider_remove_command} はそのラベル全体を削除します。`,
         comfyui_page1_title: `ComfyUI セットアップ`,
-        comfyui_page1_description: `このガイドでは、ComfyUI がすでにインストール済みかつ起動中である前提で進めます。1ページ目では、\`/config custom-endpoint add\` または \`/personal custom-endpoint add\` まで到達する最小構成を説明します。`,
+        comfyui_page1_description: `このガイドでは、ComfyUI がすでにインストール済みかつ起動中である前提で進めます。1ページ目では、\`/config custom-endpoint add\` または \`/personal custom-endpoint add\` まで到達する最小構成を説明します。または、GitHubリポジトリにあるそのまま使える[ComfyUIワークフロー](https://github.com/Bredrumb/TomoriBot/tree/main/scripts/comfyui-workflows)を使用することもできます。`,
         comfyui_page1_workflow_field: `1. ワークフローを作る`,
         comfyui_page1_workflow_value: `まず ComfyUI 側でワークフローを作成し、正常に動くことを確認してください。画像用 MVP では、TomoriBot が完成ファイルを取得できるよう最後を \`SaveImage\` で終える必要があります。最小構成の画像グラフは通常、\`CheckpointLoaderSimple\` -> positive/negative \`CLIPTextEncode\` -> \`EmptyLatentImage\` -> \`KSampler\` -> \`VAEDecode\` -> \`SaveImage\` です。`,
         comfyui_page1_placeholders_field: `2. プレースホルダーを入れる`,
@@ -1462,7 +1462,7 @@ export default {
         description: `音声生成の設定方法を確認します。`,
         engine_description: `音声エンジンのガイドを選択します。`,
         docs_title: `詳細ドキュメント`,
-        docs_description: `コピー用のセットアップ手順とラッパーの注意点は \`docs/integrations/tts/\` と \`scripts/tts/README.md\` を確認してください。`,
+        docs_description: `コピー用のセットアップ手順とラッパーの注意点については、GitHub上の[TTSドキュメント](https://github.com/Bredrumb/TomoriBot/tree/main/docs/integrations/tts)と[スクリプトのREADME](https://github.com/Bredrumb/TomoriBot/blob/main/scripts/tts/README.md)を確認してください。`,
         overview: {
           title: `音声生成の概要`,
           description: `音声エンドポイントを使うと、ローカル音声クローンまたはElevenLabsでDiscordボイスメッセージを送信できます。ローカルクローンの場合、どの音声形式でも自動でモノラルWAVに変換されます。BGMなしの10〜20秒のクリップを推奨します。`,
@@ -1471,21 +1471,52 @@ export default {
         },
         chatterbox: {
           title: `Chatterbox-Turbo 音声`,
-          description: `Chatterbox-Turbo は高速・軽量な英語専用の音声クローンサーバーです。\`[excited]\`・\`[whisper]\` のような角括弧デリバリータグで発話スタイルを制御できます。登録時は \`script_markup = bracket-tags\` を指定してください。`,
+          description: `Chatterbox-Turbo は高速・軽量な英語専用の音声クローンサーバーです。\`[excited]\`・\`[whisper]\` のような角括弧デリバリータグで発話スタイルを制御できます。TomoriBotがこれらのタグをそのまま送信できるように、登録時は **Script Markup（スクリプトマークアップ）** を **Bracket Tags（角括弧タグ）** に設定してください。`,
           steps_title: `設定手順`,
-          steps_description: `**前提条件**: Python 3.10+、CUDA 12.x + ドライバー（任意、GPU 用）\n\n1. \`scripts/tts/chatterbox\` で Python \`.venv\` を作成して有効化します。\n2. numpy を先にインストールします: \`pip install numpy\`、その後 \`requirements.txt\` をインストールします。\n3. *(GPU のみ)* PyTorch を再インストールします: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`\n4. \`scripts/tts/chatterbox/server.py\` を起動します。\n5. {custom_endpoint_add} で capability \`speech\`、api_style \`tts-clone\`、script_markup \`bracket-tags\` として登録します。\n6. {model_speech} で選択し、{voice_add} と {voice_assign} を実行します。`,
+          steps_description: `**前提条件**: Python 3.10+、CUDA 12.x + ドライバー（任意、GPU 用）
+
+1. GitHubリポジトリからマシンに [TTSスクリプト](https://github.com/Bredrumb/TomoriBot/tree/main/scripts/tts) をダウンロードします。
+2. ダウンロードした \`chatterbox\` フォルダに移動し、Python \`.venv\` を作成して有効化します。
+3. numpy を先にインストールします: \`pip install numpy\`、その後 \`requirements.txt\` をインストールします。
+4. *(GPU のみ)* PyTorch を再インストールします: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
+5. \`server.py\` を起動します。
+6. {custom_endpoint_add} で登録します。Capability（機能）は \`Speech\`、API Style（API スタイル）は \`TTS-Clone\`、Script Markup（スクリプトマークアップ）は \`Bracket Tags\` を選択します。
+7. {model_speech} で選択し、{voice_add} と {voice_assign} を実行します。`,
         },
         qwen3tts: {
           title: `Qwen3-TTS 音声`,
-          description: `Qwen3-TTS 12Hz Base は中国語・英語・日本語・韓国語・ドイツ語・フランス語・ロシア語・ポルトガル語・スペイン語・イタリア語の 10 言語に対応した多言語音声クローンサーバーです。感情マークアップなしのプレーンテキストのみ受け付けます。登録時は \`script_markup = plain\` を指定してください。`,
+          description: `Qwen3-TTS 12Hz Base は中国語・英語・日本語・韓国語・ドイツ語・フランス語・ロシア語・ポルトガル語・スペイン語・イタリア語の 10 言語に対応した多言語音声クローンサーバーです。感情マークアップなしのプレーンテキストのみ受け付けます。登録時は **Script Markup（スクリプトマークアップ）** を **Plain（通常テキスト）** に設定してください。`,
           steps_title: `設定手順`,
-          steps_description: `**前提条件**\n• Python 3.10+\n• SoX をシステムにインストール（必須 — Windows: \`scoop install sox\` または sourceforge.net/projects/sox/ から手動インストール、macOS: \`brew install sox\`）\n• CUDA 12.x + ドライバー（任意、GPU 用）\n\n1. \`scripts/tts/qwen3tts\` で Python \`.venv\` を作成して有効化します。\n2. \`requirements.txt\` をインストールします。\n3. *(GPU のみ)* PyTorch を再インストールします: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`\n4. *(任意、GPU + Ampere/RTX 30xx+ のみ)* flash-attn で Attention を高速化 — 手順 3 の CUDA torch が必要。\`pip install wheel\` 後に \`pip install flash-attn --no-build-isolation\`。Windows ではソースから 20〜40 分かけてコンパイルされます。初回セットアップ時はスキップ推奨。\n5. \`scripts/tts/qwen3tts/server.py\` を起動します。\n6. {custom_endpoint_add} で capability \`speech\`、api_style \`tts-clone\`、script_markup \`plain\` として登録します。\n7. {model_speech} で選択し、{voice_add} と {voice_assign} を実行します。`,
+          steps_description: `**前提条件**
+• Python 3.10+
+• SoX をシステムにインストール（Windows: \`scoop install sox\`、macOS: \`brew install sox\`）
+• CUDA 12.x + ドライバー（任意、GPU 用）
+
+1. GitHubからマシンに [TTSスクリプト](https://github.com/Bredrumb/TomoriBot/tree/main/scripts/tts) をダウンロードします。
+2. ダウンロードした \`qwen3tts\` フォルダに移動し、Python \`.venv\` を作成して有効化します。
+3. \`requirements.txt\` をインストールします。
+4. *(GPU)* PyTorch を再インストール: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
+5. *(任意)* 高速化のため flash-attn をインストール — 手順 4 の後 \`pip install wheel\`、次に \`pip install flash-attn --no-build-isolation\` (Winは20-40分)。初回はスキップ。
+6. \`server.py\` を起動します。
+7. {custom_endpoint_add} で登録: Capability（機能）は \`Speech\`、API Style（API スタイル）は \`TTS-Clone\`、Script Markup（スクリプトマークアップ）は \`Plain\` を選択。
+8. {model_speech} で選択し、{voice_add} と {voice_assign} を実行します。`,
         },
         irodoritts: {
           title: `IrodoriTTS 音声`,
-          description: `IrodoriTTS は日本語特化の音声クローンサーバーです。テキスト中に埋め込んだ絵文字（例: 😊 = 喜び、😢 = 悲しみ）を感情キューとして読み取ります。登録時は \`script_markup = plain\` を指定してください。TomoriBot が角括弧タグを除去し、モデルが期待する絵文字マーカーだけを残します。`,
+          description: `IrodoriTTS は日本語特化の音声クローンサーバーです。テキスト中に埋め込んだ絵文字（例: 😊 = 喜び、😢 = 悲しみ）を感情キューとして読み取ります。登録時は **Script Markup（スクリプトマークアップ）** を **Emoji Markers（絵文字マーカー）** に設定してください。TomoriBot が角括弧タグを除去し、モデルが期待する絵文字マーカーだけを残します。`,
           steps_title: `設定手順`,
-          steps_description: `**前提条件**: Python 3.10+、CUDA 12.x + ドライバー（任意、GPU 用）\n\n1. \`scripts/tts/irodoritts\` で Python \`.venv\` を作成して有効化します。\n2. \`requirements.txt\` をインストールします。\n3. パッチスクリプトで irodori-tts をインストールします（上流のパッケージングバグへの対処）:\nWindows: \`scripts/tts/irodoritts/install-irodori.ps1\`\nLinux/macOS: \`bash scripts/tts/irodoritts/install-irodori.sh\`\n4. *(GPU のみ)* PyTorch を再インストールします: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`\n5. \`scripts/tts/irodoritts/server.py\` を起動します。\n6. {custom_endpoint_add} で capability \`speech\`、api_style \`tts-clone\`、script_markup \`plain\` として登録します。\n7. {model_speech} で選択し、{voice_add} と {voice_assign} を実行します。`,
+          steps_description: `**前提条件**: Python 3.10+、CUDA 12.x + ドライバー（任意、GPU 用）
+
+1. GitHubからマシンに [TTSスクリプト](https://github.com/Bredrumb/TomoriBot/tree/main/scripts/tts) をダウンロードします。
+2. ダウンロードした \`irodoritts\` フォルダに移動し、Python \`.venv\` を作成して有効化します。
+3. \`requirements.txt\` をインストールします。
+4. パッチスクリプトで irodori-tts をインストール（上流のバグ対処）:
+Windows: \`install-irodori.ps1\`
+Linux/macOS: \`bash install-irodori.sh\`
+5. *(GPU)* PyTorch を再インストール: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
+6. \`server.py\` を起動します。
+7. {custom_endpoint_add} で登録: Capability（機能）は \`Speech\`、API Style（API スタイル）は \`TTS-Clone\`、Script Markup（スクリプトマークアップ）は \`Emoji Markers\` を選択。
+8. {model_speech} で選択し、{voice_add} と {voice_assign} を実行します。`,
         },
         elevenlabs: {
           title: `ElevenLabs 音声`,
@@ -1498,7 +1529,7 @@ export default {
         description: `音声文字起こしの設定方法を確認します。`,
         engine_description: `文字起こしエンジンのガイドを選択します。`,
         docs_title: `詳細ドキュメント`,
-        docs_description: `ローカルサーバー設定の詳細は \`docs/integrations/transcription/\` と \`scripts/stt/README.md\` を確認してください。`,
+        docs_description: `ローカルサーバー設定の詳細については、GitHub上の[Transcriptionドキュメント](https://github.com/Bredrumb/TomoriBot/tree/main/docs/integrations/transcription)と[STTのREADME](https://github.com/Bredrumb/TomoriBot/blob/main/scripts/stt/README.md)を確認してください。`,
         overview: {
           title: `文字起こしの概要`,
           description: `文字起こしエンドポイントは、音声添付を内部会話コンテキスト用のテキストに変換します。見える形で投稿する字幕は {speech_transcripts} で別途制御します。`,
@@ -1509,7 +1540,19 @@ export default {
           title: `WhisperX 文字起こし`,
           description: `WhisperX は推奨ローカルSTT経路です。FFmpeg のシステムインストールが必要で、CUDA による GPU 高速化にも対応しています。`,
           steps_title: `設定手順`,
-          steps_description: `**前提条件**\n• Python 3.10+\n• FFmpeg をシステムにインストール（音声デコードに必須）\n• CUDA 12.x + ドライバー（任意、GPU 高速化用）\n\n1. \`scripts/stt\` で Python \`.venv\` を作成して有効化します。\n2. \`requirements-whisperx.txt\` をインストールします。\n3. *(GPU のみ)* CUDA 対応 PyTorch を再インストールします:\n\`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`\n4. \`whisperx_server.py\` を起動します。\n5. {custom_endpoint_add} で capability \`transcription\`、api_style \`openai-compatible-transcription\`、選択したサイズのモデル名を指定して登録します。\n6. {model_transcription} で選択します。`,
+          steps_description: `**前提条件**
+• Python 3.10+
+• FFmpeg をシステムにインストール（必須）
+• CUDA 12.x + ドライバー（任意、GPU 高速化用）
+
+1. GitHubからマシンに [STTスクリプト](https://github.com/Bredrumb/TomoriBot/tree/main/scripts/stt) をダウンロードします。
+2. ダウンロードした \`stt\` フォルダに移動し、Python \`.venv\` を作成して有効化します。
+3. \`requirements-whisperx.txt\` をインストールします。
+4. *(GPU)* CUDA 対応 PyTorch を再インストール:
+\`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
+5. \`whisperx_server.py\` を起動します。
+6. {custom_endpoint_add} で登録: Capability（機能）は \`Transcription\`、API Style（API スタイル）は \`OpenAI Compatible\` を選び、選択したサイズのモデル名を指定します。
+7. {model_transcription} で選択します。`,
           models_title: `利用可能なモデル`,
           models_description: `サーバー起動前に \`WHISPERX_MODEL\` を指定し、登録時も同じ名前を使います。\nGPU は **float16** · CPU は **int8**（バイト数が半分なので CPU RAM < GPU VRAM）\n\n\`tiny\` — VRAM 約0.5 GB / RAM 約200 MB\n\`base\` — VRAM 約0.5 GB / RAM 約300 MB\n\`small\` — VRAM 約1 GB / RAM 約600 MB\n\`medium\` — VRAM 約2 GB / RAM 約1.5 GB\n\`large-v3\` — VRAM 約4–5 GB / RAM 約2.5 GB *(デフォルト、最高精度)*\n\`large-v3-turbo\` — VRAM 約2–3 GB / RAM 約1.5 GB *(VRAM が少ない場合に推奨)*\n\n文字起こしは約100言語に対応（自動検出）。`,
         },
@@ -5314,7 +5357,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
           scope_choice_automatic: `自動`,
           scope_choice_global: `グローバル`,
           rag_disabled_title: `ドキュメントRAGが無効です`,
-          rag_disabled_description: `文書の参照には [pgvector](https://github.com/pgvector/pgvector) PostgreSQL拡張が必要です。pgvector をインストールして TomoriBot を再起動してください（README.md を参照）。`,
+          rag_disabled_description: `文書の参照にはデータベースに [pgvector](https://github.com/pgvector/pgvector) PostgreSQL拡張が必要です。pgvector をインストールして TomoriBot を再起動してください（[セットアップガイド](https://github.com/Bredrumb/TomoriBot#readme)を参照）。`,
           no_permission_title: `権限がありません`,
           no_permission_description: `チャンネル履歴を抽出するには**サーバー管理**権限が必要です。`,
           model_incompatible_title: `モデルが非対応です`,
@@ -5356,7 +5399,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
           select_description: `削除する履歴ドキュメントを選択してください`,
           select_placeholder: `ドキュメントを選択...`,
           rag_disabled_title: `ドキュメントRAGが無効です`,
-          rag_disabled_description: `文書の参照には [pgvector](https://github.com/pgvector/pgvector) PostgreSQL拡張が必要です。pgvector をインストールして TomoriBot を再起動してください（README.md を参照）。`,
+          rag_disabled_description: `文書の参照にはデータベースに [pgvector](https://github.com/pgvector/pgvector) PostgreSQL拡張が必要です。pgvector をインストールして TomoriBot を再起動してください（[セットアップガイド](https://github.com/Bredrumb/TomoriBot#readme)を参照）。`,
           none_title: `履歴ドキュメントがありません`,
           none_description: `このスコープには削除できる履歴ドキュメントがありません。\`/memory history import\`で抽出してください。`,
           success_title: `履歴ドキュメントが削除されました`,
@@ -5553,7 +5596,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
         main_persona_description: `メインペルソナ`,
         alter_persona_description: `オルタペルソナ`,
         rag_disabled_title: `ドキュメントRAGが無効です`,
-        rag_disabled_description: `文書の参照には [pgvector](https://github.com/pgvector/pgvector) PostgreSQL拡張が必要です。pgvector をインストールして TomoriBot を再起動してください（README.md を参照）。`,
+        rag_disabled_description: `文書の参照にはデータベースに [pgvector](https://github.com/pgvector/pgvector) PostgreSQL拡張が必要です。pgvector をインストールして TomoriBot を再起動してください（[セットアップガイド](https://github.com/Bredrumb/TomoriBot#readme)を参照）。`,
         teaching_disabled_title: `ドキュメントの教育が無効です`,
         teaching_disabled_description: `現在、このサーバーではメンバーが文書を教える・削除することは許可されていません。\`サーバー管理\`権限を持つメンバーが\`/server member-permissions\`で有効にできます。`,
         no_embedding_model_title: `埋め込みモデルが設定されていません`,
@@ -5720,7 +5763,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
         select_description: `削除する文書を選択してください`,
         select_placeholder: `文書を選択...`,
         rag_disabled_title: `ドキュメントRAGが無効です`,
-        rag_disabled_description: `文書の参照には [pgvector](https://github.com/pgvector/pgvector) PostgreSQL拡張が必要です。pgvector をインストールして TomoriBot を再起動してください（README.md を参照）。`,
+        rag_disabled_description: `文書の参照にはデータベースに [pgvector](https://github.com/pgvector/pgvector) PostgreSQL拡張が必要です。pgvector をインストールして TomoriBot を再起動してください（[セットアップガイド](https://github.com/Bredrumb/TomoriBot#readme)を参照）。`,
         none_title: `文書がありません`,
         none_description: `このスコープには削除できる文書がありません。\`/memory document add\`で追加してください。`,
         success_title: `文書が削除されました`,

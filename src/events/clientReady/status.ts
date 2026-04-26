@@ -163,7 +163,7 @@ const handler = async (client: Client): Promise<void> => {
       // 5. Build normal status options with current server count
       const normalStatus: ActivityOptions[] = [
         {
-          name: `Summer Update! /updates`,
+          name: `Mix-and-Match Update! /updates`,
           type: ActivityType.Playing,
         },
         {
