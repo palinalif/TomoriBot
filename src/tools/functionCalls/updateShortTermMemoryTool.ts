@@ -149,6 +149,13 @@ export class UpdateShortTermMemoryTool extends BaseTool {
       const serverId = context.guildId || "DM";
       const serverName = "guild" in context.channel ? context.channel.guild?.name : undefined;
       const channelName = "name" in context.channel ? context.channel.name : undefined;
+      const parentChannelId =
+        "isThread" in context.channel &&
+        typeof context.channel.isThread === "function" &&
+        context.channel.isThread() &&
+        "parentId" in context.channel
+          ? (context.channel.parentId ?? null)
+          : null;
 
       // 5. Update both the user-scoped STM and, in guilds, the shared server STM
       const tomoriId = context.tomoriState?.tomori_id ?? null;
@@ -175,6 +182,7 @@ export class UpdateShortTermMemoryTool extends BaseTool {
         channelName,
         tomoriId,
         personaLineageId,
+        parentChannelId,
       );
 
       log.success(

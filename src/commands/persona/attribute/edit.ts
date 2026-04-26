@@ -24,13 +24,16 @@ import {
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { isBlacklisted, loadAllPersonasForServer } from "@/utils/db/dbRead";
 import { getMemoryLimits, validateAttribute } from "@/utils/db/memoryLimits";
+import { splitPromptIntoModalParts, combineModalPromptParts } from "@/utils/text/modalPromptParts";
 import type { SelectOption } from "@/types/discord/modal";
 import { tomoriSchema, type ErrorContext, type TomoriState, type UserRow } from "@/types/db/schema";
 
 const SELECT_MODAL_CUSTOM_ID = "persona_attribute_edit_select_modal";
 const EDIT_MODAL_CUSTOM_ID = "persona_attribute_edit_value_modal";
 const ATTRIBUTE_SELECT_ID = "attribute_select";
-const ATTRIBUTE_INPUT_ID = "attribute_input";
+const ATTRIBUTE_PART1_ID = "attribute_part1";
+const ATTRIBUTE_PART2_ID = "attribute_part2";
+const ATTRIBUTE_PART_MAX_LENGTH = 4000; // Discord text input character limit
 
 const memoryLimits = getMemoryLimits();
 
@@ -281,7 +284,7 @@ export async function execute(
         embedTitleKey: "commands.persona.attribute.edit.confirm_title",
         embedDescriptionKey: "commands.persona.attribute.edit.confirm_description",
         embedDescriptionVars: {
-          attribute: selectedAttribute,
+          attribute: formatAttributePreview(selectedAttribute, 4000),
         },
         embedColor: ColorCode.INFO,
         useComponentsV2: true,
@@ -302,19 +305,29 @@ export async function execute(
         continue;
       }
 
+      const attributeParts = splitPromptIntoModalParts(selectedAttribute, 2, ATTRIBUTE_PART_MAX_LENGTH);
+
       const editModalResult = await promptWithRawModal(confirmationResult.interaction, locale, {
         modalCustomId: EDIT_MODAL_CUSTOM_ID,
         modalTitleKey: "commands.persona.attribute.edit.modal_title",
         components: [
           {
-            customId: ATTRIBUTE_INPUT_ID,
+            customId: ATTRIBUTE_PART1_ID,
             labelKey: "commands.persona.attribute.edit.attribute_input_label",
             descriptionKey: "commands.persona.attribute.edit.attribute_input_description",
             placeholder: "commands.persona.attribute.edit.attribute_input_placeholder",
             style: TextInputStyle.Paragraph,
             required: true,
-            maxLength: memoryLimits.maxAttributeLength,
-            value: selectedAttribute,
+            maxLength: ATTRIBUTE_PART_MAX_LENGTH,
+            value: attributeParts[0] || undefined,
+          },
+          {
+            customId: ATTRIBUTE_PART2_ID,
+            labelKey: "commands.persona.attribute.edit.attribute_input_part2_label",
+            style: TextInputStyle.Paragraph,
+            required: false,
+            maxLength: ATTRIBUTE_PART_MAX_LENGTH,
+            value: attributeParts[1] || undefined,
           },
         ],
       });
@@ -332,7 +345,9 @@ export async function execute(
       }
 
       const editModalInteraction = editModalResult.interaction;
-      const editedAttribute = editModalResult.values?.[ATTRIBUTE_INPUT_ID]?.trim() ?? "";
+      const editedPart1 = editModalResult.values?.[ATTRIBUTE_PART1_ID]?.trim() ?? "";
+      const editedPart2 = editModalResult.values?.[ATTRIBUTE_PART2_ID]?.trim() ?? "";
+      const editedAttribute = combineModalPromptParts([editedPart1, editedPart2], ATTRIBUTE_PART_MAX_LENGTH);
       if (!editModalInteraction) {
         log.error("Attribute edit modal unexpectedly missing interaction");
         return;

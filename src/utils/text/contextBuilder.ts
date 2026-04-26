@@ -680,7 +680,11 @@ async function buildShortTermMemoryContext(
       privateChannelIds.includes(currentChannelId) ||
       (currentParentChannelId != null && privateChannelIds.includes(currentParentChannelId));
     if (!stmPrivacyBypass && !isCurrentChannelPrivate && privateChannelIds.length > 0) {
-      otherChannelMemories = otherChannelMemories.filter((memory) => !privateChannelIds.includes(memory.channelId));
+      otherChannelMemories = otherChannelMemories.filter(
+        (memory) =>
+          !privateChannelIds.includes(memory.channelId) &&
+          !(memory.parentChannelId != null && privateChannelIds.includes(memory.parentChannelId)),
+      );
     }
 
     otherChannelMemories.sort((a, b) => b.lastUpdated - a.lastUpdated);

@@ -84,8 +84,16 @@ function unwrapInlineCodeDelimiters(value: string): string {
   return normalized;
 }
 
+function stripEmoji(text: string): string {
+  // Remove emoji characters and variation selectors
+  return text
+    .replace(/[\p{Emoji}]/gu, "") // Unicode emoji
+    .replace(/\uFE0E|\uFE0F|\u200D|\u200C/g, "") // Variation selectors and zero-width joiners
+    .trim();
+}
+
 export function normalizeChannelTargetInput(value: string): string {
-  return normalizeLookupValue(unwrapInlineCodeDelimiters(value), "#");
+  return normalizeLookupValue(stripEmoji(unwrapInlineCodeDelimiters(value)), "#");
 }
 
 function extractExplicitChannelId(value: string): {

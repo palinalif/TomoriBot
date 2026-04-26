@@ -5332,6 +5332,14 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           `Starting response ${personaIndex + 1}/${personasToRespond.length} from persona "${currentPersona.tomori_nickname}" (${currentPersona.is_alter ? "alter" : "main"})`,
         );
 
+        // DEBUG: LLM selection tracing
+        log.info(
+          `[LLM-DEBUG] textCredentialSource=${textCredentialSource}, isUserImpersonation=${isUserImpersonation}`,
+        );
+        log.info(
+          `[LLM-DEBUG] personaBaseState.llm=${personaBaseState.llm.llm_codename}, persona_llm=${personaBaseState.persona_llm?.llm_codename ?? "null"}`,
+        );
+
         // Track active persona on lock entry so follow-up messages inherit the correct persona
         // instead of falling back to main. Also reset tool-call chain flag for this persona turn.
         if (lockEntry) {
@@ -5359,6 +5367,12 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
             : isUserImpersonation
               ? personaBaseState.llm
               : (personaBaseState.persona_llm ?? channelLlmOverride ?? personaBaseState.llm);
+
+        // DEBUG: Log which LLM was selected and why
+        log.info(
+          `[LLM-DEBUG] effectiveLlm=${effectiveLlm.llm_codename} (persona_override=${personaBaseState.persona_llm?.llm_codename ?? "null"}, channelOverride=${channelLlmOverride?.llm_codename ?? "null"})`,
+        );
+
         if (effectiveLlm !== personaBaseState.llm) {
           // Shallow-copy so the cached TomoriState is never mutated
           tomoriState = { ...tomoriState, llm: effectiveLlm };
@@ -6490,6 +6504,14 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 // Snapshot the original effective state to restore if all fallbacks fail
                 const primaryEffectiveTomoriState = effectiveTomoriState;
                 const primaryProvider = primaryEffectiveTomoriState.llm.llm_provider.toLowerCase();
+
+                // DEBUG: Log what primary model is being used
+                log.info(
+                  `[LLM-DEBUG] PRIMARY MODEL in runWithFallbackModels: ${primaryEffectiveTomoriState.llm.llm_codename} (provider=${primaryProvider})`,
+                );
+                log.info(
+                  `[LLM-DEBUG] tomoriState.llm=${tomoriState.llm.llm_codename}, effectiveTomoriState.llm=${effectiveTomoriState.llm.llm_codename}`,
+                );
 
                 // 1. Attempt with the primary model
                 streamingContext.forceModelFallback = fallbackChain.length > 0;
@@ -8443,6 +8465,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                   channelName,
                   tomoriId,
                   personaLineageId,
+                  channel.isThread() ? channel.parentId : null,
                 );
               }
             } else {
@@ -8454,6 +8477,9 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 isDMChannel ? "DM" : serverDiscId,
                 serverName,
                 channelName,
+                null,
+                null,
+                channel.isThread() ? channel.parentId : null,
               );
             }
           }

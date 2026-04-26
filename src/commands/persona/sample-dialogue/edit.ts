@@ -24,14 +24,18 @@ import {
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { isBlacklisted, loadAllPersonasForServer } from "@/utils/db/dbRead";
 import { getMemoryLimits, validateSampleDialogue } from "@/utils/db/memoryLimits";
+import { splitPromptIntoModalParts, combineModalPromptParts } from "@/utils/text/modalPromptParts";
 import type { SelectOption } from "@/types/discord/modal";
 import { tomoriSchema, type ErrorContext, type TomoriState, type UserRow } from "@/types/db/schema";
 
 const SELECT_MODAL_CUSTOM_ID = "persona_sampledialogue_edit_select_modal";
 const EDIT_MODAL_CUSTOM_ID = "persona_sampledialogue_edit_value_modal";
 const DIALOGUE_SELECT_ID = "dialogue_select";
-const USER_INPUT_ID = "user_input";
-const BOT_INPUT_ID = "bot_input";
+const USER_INPUT_PART1_ID = "user_input_part1";
+const USER_INPUT_PART2_ID = "user_input_part2";
+const BOT_INPUT_PART1_ID = "bot_input_part1";
+const BOT_INPUT_PART2_ID = "bot_input_part2";
+const DIALOGUE_PART_MAX_LENGTH = 4000; // Discord text input character limit
 
 const memoryLimits = getMemoryLimits();
 
@@ -344,8 +348,8 @@ export async function execute(
         embedTitleKey: "commands.persona.sample-dialogue.edit.confirm_title",
         embedDescriptionKey: "commands.persona.sample-dialogue.edit.confirm_description",
         embedDescriptionVars: {
-          input: selectedUserInput,
-          output: selectedBotInput,
+          input: formatDialoguePreview(selectedUserInput, 1950),
+          output: formatDialoguePreview(selectedBotInput, 1950),
         },
         embedColor: ColorCode.INFO,
         useComponentsV2: true,
@@ -366,29 +370,48 @@ export async function execute(
         continue;
       }
 
+      const userInputParts = splitPromptIntoModalParts(selectedUserInput, 2, DIALOGUE_PART_MAX_LENGTH);
+      const botInputParts = splitPromptIntoModalParts(selectedBotInput, 2, DIALOGUE_PART_MAX_LENGTH);
+
       const editModalResult = await promptWithRawModal(confirmationResult.interaction, locale, {
         modalCustomId: EDIT_MODAL_CUSTOM_ID,
         modalTitleKey: "commands.persona.sample-dialogue.edit.modal_title",
         components: [
           {
-            customId: USER_INPUT_ID,
+            customId: USER_INPUT_PART1_ID,
             labelKey: "commands.persona.sample-dialogue.edit.user_input_label",
             descriptionKey: "commands.persona.sample-dialogue.edit.user_input_description",
             placeholder: "commands.persona.sample-dialogue.edit.user_input_placeholder",
             style: TextInputStyle.Paragraph,
             required: true,
-            maxLength: memoryLimits.maxSampleDialogueLength,
-            value: selectedUserInput,
+            maxLength: DIALOGUE_PART_MAX_LENGTH,
+            value: userInputParts[0] || undefined,
           },
           {
-            customId: BOT_INPUT_ID,
+            customId: USER_INPUT_PART2_ID,
+            labelKey: "commands.persona.sample-dialogue.edit.user_input_part2_label",
+            style: TextInputStyle.Paragraph,
+            required: false,
+            maxLength: DIALOGUE_PART_MAX_LENGTH,
+            value: userInputParts[1] || undefined,
+          },
+          {
+            customId: BOT_INPUT_PART1_ID,
             labelKey: "commands.persona.sample-dialogue.edit.bot_input_label",
             descriptionKey: "commands.persona.sample-dialogue.edit.bot_input_description",
             placeholder: "commands.persona.sample-dialogue.edit.bot_input_placeholder",
             style: TextInputStyle.Paragraph,
             required: true,
-            maxLength: memoryLimits.maxSampleDialogueLength,
-            value: selectedBotInput,
+            maxLength: DIALOGUE_PART_MAX_LENGTH,
+            value: botInputParts[0] || undefined,
+          },
+          {
+            customId: BOT_INPUT_PART2_ID,
+            labelKey: "commands.persona.sample-dialogue.edit.bot_input_part2_label",
+            style: TextInputStyle.Paragraph,
+            required: false,
+            maxLength: DIALOGUE_PART_MAX_LENGTH,
+            value: botInputParts[1] || undefined,
           },
         ],
       });
@@ -406,8 +429,20 @@ export async function execute(
       }
 
       const editModalInteraction = editModalResult.interaction;
-      const editedUserInput = editModalResult.values?.[USER_INPUT_ID]?.trim() ?? "";
-      const editedBotInput = editModalResult.values?.[BOT_INPUT_ID]?.trim() ?? "";
+      const editedUserInput = combineModalPromptParts(
+        [
+          editModalResult.values?.[USER_INPUT_PART1_ID]?.trim() ?? "",
+          editModalResult.values?.[USER_INPUT_PART2_ID]?.trim() ?? "",
+        ],
+        DIALOGUE_PART_MAX_LENGTH,
+      );
+      const editedBotInput = combineModalPromptParts(
+        [
+          editModalResult.values?.[BOT_INPUT_PART1_ID]?.trim() ?? "",
+          editModalResult.values?.[BOT_INPUT_PART2_ID]?.trim() ?? "",
+        ],
+        DIALOGUE_PART_MAX_LENGTH,
+      );
       if (!editModalInteraction) {
         log.error("Sample dialogue edit modal unexpectedly missing interaction");
         return;

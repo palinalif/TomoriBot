@@ -35,6 +35,7 @@ const PRESET_LINEAGE_BY_AVATAR: Record<string, number> = {
   "bratty.png": 716,
   "gloomy.png": 1770,
   "shy.png": 3585,
+  "blind.png": 50, // Nerine (Discontinued Model)
 };
 
 type PersonaDefaultTargetType = "default" | "alter";
@@ -117,6 +118,7 @@ function resolvePresetLineageId(preset: TomoriPresetRow): number | null {
   if (normalizedName.includes("bratty")) return 716;
   if (normalizedName.includes("gloomy")) return 1770;
   if (normalizedName.includes("shy")) return 3585;
+  if (normalizedName.includes("professional")) return 50;
   if (normalizedName.includes("default") || normalizedName.includes("boyish")) return 4;
   return null;
 }
