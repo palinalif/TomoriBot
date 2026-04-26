@@ -85,6 +85,7 @@ export interface StreamingContext {
   forceModelFallback?: boolean; // Force suppress errors regardless of key availability (model fallback retries)
   rotationKeyRetriesUsed?: boolean; // True if one or more rotation-key retries were attempted
   disableAllTools?: boolean; // Flag to disable all tool calling (e.g., during user impersonation)
+  disableReminderTool?: boolean; // Flag to prevent create_task from being called during a reminder-triggered turn
   outputPrefill?: string; // Optional prefill to output before streaming (hybrid prefix)
   outputPrefillState?: { sent: boolean }; // Tracks if prefill was already output (avoid duplicates on retry)
   replyNoticeState?: { attempted: boolean; sent: boolean }; // Tracks the standalone alter reply notice across tool-call stream retries

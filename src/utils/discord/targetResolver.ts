@@ -48,8 +48,10 @@ export type AmbiguousChannelTarget = {
   candidates: Array<{
     label: string;
     channelName: string;
-    channelId?: string;
+    channelId: string;
   }>;
+  /** Total matches found before capping candidates at 3 */
+  totalCount: number;
 };
 
 export type NotFoundChannelTarget = {
@@ -545,18 +547,15 @@ function buildAmbiguousChannelCandidates(
     channelName: string;
     channel: GuildTextBasedChannel;
   }>,
-): Array<{
-  label: string;
-  channelName: string;
-  channelId?: string;
-}> {
-  return candidates.slice(0, 3).map((candidate) => {
-    return {
+): Pick<AmbiguousChannelTarget, "candidates" | "totalCount"> {
+  return {
+    candidates: candidates.slice(0, 3).map((candidate) => ({
       label: formatCopyableChannelCandidateLabel(candidate.channel),
       channelName: candidate.channelName,
       channelId: candidate.channel.id,
-    };
-  });
+    })),
+    totalCount: candidates.length,
+  };
 }
 
 async function getActiveThreadTargets(guild: Guild): Promise<GuildTextBasedChannel[]> {
@@ -646,7 +645,7 @@ export async function resolveChannelTarget(input: string, context: ToolContext):
       return {
         status: "ambiguous",
         input: rawInput,
-        candidates: buildAmbiguousChannelCandidates(qualifiedThreadMatches),
+        ...buildAmbiguousChannelCandidates(qualifiedThreadMatches),
       };
     }
 
@@ -690,7 +689,7 @@ export async function resolveChannelTarget(input: string, context: ToolContext):
       return {
         status: "ambiguous",
         input: rawInput,
-        candidates: buildAmbiguousChannelCandidates(combinedForumCandidates),
+        ...buildAmbiguousChannelCandidates(combinedForumCandidates),
       };
     }
 
@@ -720,7 +719,7 @@ export async function resolveChannelTarget(input: string, context: ToolContext):
       return {
         status: "ambiguous",
         input: rawInput,
-        candidates: buildAmbiguousChannelCandidates(combinedExactMatches),
+        ...buildAmbiguousChannelCandidates(combinedExactMatches),
       };
     }
 
@@ -748,7 +747,7 @@ export async function resolveChannelTarget(input: string, context: ToolContext):
       return {
         status: "ambiguous",
         input: rawInput,
-        candidates: buildAmbiguousChannelCandidates(normalizedMatches),
+        ...buildAmbiguousChannelCandidates(normalizedMatches),
       };
     }
 

@@ -308,333 +308,311 @@ export async function execute(
     const timezoneOffset = tomoriState.config.timezone_offset ?? 0;
     const state = tomoriState;
 
-    while (true) {
-      // 1. Load all reminders for this server, tagged with their owning persona name
-      let remindersQuery = sql<ReminderSelectionRow[]>`
-        SELECT
-          r.reminder_id,
-          r.reminder_purpose,
-          r.reminder_time,
-          r.repetition_interval_hours,
-          r.self_reminder,
-          r.channel_disc_id,
-          r.created_by_user_id,
-          r.user_discord_id,
-          r.user_nickname,
-          u.user_nickname AS created_by_nickname,
-          t.tomori_nickname AS persona_nickname
-        FROM reminders r
-        LEFT JOIN users u ON r.created_by_user_id = u.user_id
-        LEFT JOIN tomoris t ON r.persona_id = t.tomori_id
-        WHERE r.server_id = ${tomoriState.server_id}
-      `;
+    // 1. Load all reminders for this server, tagged with their owning persona name
+    let remindersQuery = sql<ReminderSelectionRow[]>`
+      SELECT
+        r.reminder_id,
+        r.reminder_purpose,
+        r.reminder_time,
+        r.repetition_interval_hours,
+        r.self_reminder,
+        r.channel_disc_id,
+        r.created_by_user_id,
+        r.user_discord_id,
+        r.user_nickname,
+        u.user_nickname AS created_by_nickname,
+        t.tomori_nickname AS persona_nickname
+      FROM reminders r
+      LEFT JOIN users u ON r.created_by_user_id = u.user_id
+      LEFT JOIN tomoris t ON r.persona_id = t.tomori_id
+      WHERE r.server_id = ${tomoriState.server_id}
+    `;
 
-      if (!hasManagePermission) {
-        remindersQuery = sql`${remindersQuery} AND r.created_by_user_id = ${userData.user_id}`;
-      }
-
-      remindersQuery = sql`${remindersQuery} ORDER BY r.reminder_time ASC`;
-      const reminders = await remindersQuery;
-
-      if (!reminders || reminders.length === 0) {
-        await replyInfoEmbed(interaction, locale, {
-          titleKey: "commands.scheduled-task.edit.no_entries_title",
-          descriptionKey: "commands.scheduled-task.edit.no_entries",
-          color: ColorCode.WARN,
-          flags: MessageFlags.Ephemeral,
-        });
-        return;
-      }
-
-      // 2. Build select options — persona_id NULL means the main persona owns the reminder
-      const reminderSelectOptions: SelectOption[] = reminders.map((reminder, index) => {
-        const personaName = reminder.persona_nickname ?? state.tomori_nickname;
-        const formattedTime = formatTimeWithOffset(new Date(reminder.reminder_time), timezoneOffset, {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        const repeatText =
-          typeof reminder.repetition_interval_hours === "number" && reminder.repetition_interval_hours >= 1
-            ? localizer(locale, "commands.scheduled-task.edit.select_repeat_text", {
-                hours: reminder.repetition_interval_hours,
-              })
-            : "";
-        const typeText = reminder.self_reminder
-          ? localizer(locale, "commands.scheduled-task.edit.select_type_task")
-          : localizer(locale, "commands.scheduled-task.edit.select_type_reminder", {
-              user_nickname: reminder.user_nickname,
-            });
-        const isMatrixReminder = reminder.created_by_user_id === null && isBridgeUserId(reminder.user_discord_id);
-        const creatorName = isMatrixReminder
-          ? `${reminder.user_nickname} (Matrix)`
-          : (reminder.created_by_nickname ??
-            (reminder.created_by_user_id ? `user #${reminder.created_by_user_id}` : "unknown"));
-        const managerCreatedByText =
-          hasManagePermission && reminder.created_by_user_id !== userData.user_id
-            ? localizer(locale, "commands.scheduled-task.edit.select_manager_created_by_text", {
-                creator_name: creatorName,
-              })
-            : "";
-        const description = localizer(locale, "commands.scheduled-task.edit.select_option_description", {
-          persona_name: personaName,
-          reminder_time: formattedTime,
-          timezone: formatUTCOffset(timezoneOffset),
-          target_channel: getChannelDisplay(interaction, reminder.channel_disc_id),
-          reminder_type: typeText,
-          repeat_text: repeatText,
-          manager_created_by_text: managerCreatedByText,
-        });
-
-        return {
-          label: safeSelectOptionText(reminder.reminder_purpose, 40),
-          value: index.toString(),
-          description: safeSelectOptionText(description),
-        };
-      });
-
-      // 3. Prompt user to pick a reminder
-      const selectModalResult = await promptWithPaginatedModal(interaction, locale, {
-        modalCustomId: SELECT_MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.scheduled-task.edit.select_modal_title",
-        components: [
-          {
-            customId: REMINDER_SELECT_ID,
-            labelKey: "commands.scheduled-task.edit.select_label",
-            descriptionKey: "commands.scheduled-task.edit.select_description",
-            placeholder: "commands.scheduled-task.edit.select_placeholder",
-            required: true,
-            options: reminderSelectOptions,
-          },
-        ],
-      });
-
-      if (selectModalResult.outcome !== "submit") {
-        log.info(`Reminder edit selection modal ${selectModalResult.outcome} for user ${userData.user_id}`);
-        await replyComponentsV2Status(
-          interaction,
-          locale,
-          "commands.scheduled-task.edit.select_modal_title",
-          "commands.scheduled-task.edit.select_description",
-          ColorCode.INFO,
-        );
-        continue;
-      }
-
-      const selectModalInteraction = selectModalResult.interaction;
-      const selectedIndexRaw = selectModalResult.values?.[REMINDER_SELECT_ID];
-      if (!selectModalInteraction || !selectedIndexRaw) {
-        log.error("Reminder edit selection unexpectedly missing interaction or values");
-        return;
-      }
-
-      const selectedReminder = reminders[Number.parseInt(selectedIndexRaw, 10)];
-      if (!selectedReminder) {
-        await replyInfoEmbed(selectModalInteraction, locale, {
-          titleKey: "general.errors.operation_failed_title",
-          descriptionKey: "general.errors.operation_failed_description",
-          color: ColorCode.ERROR,
-        });
-        return;
-      }
-
-      await acknowledgeModalSubmitForRefresh(selectModalInteraction);
-
-      // 4. Confirm which reminder will be edited
-      const confirmationResult = await promptWithUnacknowledgedConfirmation(interaction, locale, {
-        embedTitleKey: "commands.scheduled-task.edit.confirm_title",
-        embedDescriptionKey: "commands.scheduled-task.edit.confirm_description",
-        embedDescriptionVars: formatReminderDetails(interaction, selectedReminder, timezoneOffset, locale),
-        embedColor: ColorCode.INFO,
-        useComponentsV2: true,
-        continueLabelKey: "general.confirm",
-        cancelLabelKey: "general.pagination.cancel",
-        continueCustomId: `scheduled_task_edit_confirm_${selectModalInteraction.id}`,
-        cancelCustomId: `scheduled_task_edit_cancel_${selectModalInteraction.id}`,
-      });
-
-      if (confirmationResult.outcome !== "continue" || !confirmationResult.interaction) {
-        await replyComponentsV2Status(
-          interaction,
-          locale,
-          "commands.scheduled-task.edit.select_modal_title",
-          "commands.scheduled-task.edit.select_description",
-          ColorCode.INFO,
-        );
-        continue;
-      }
-
-      // 5. Open the edit modal pre-filled with current values (times in server timezone)
-      const reminderForInvoker =
-        selectedReminder.self_reminder !== true && selectedReminder.user_discord_id === userData.user_disc_id;
-      const editModalResult = await promptWithRawModal(confirmationResult.interaction, locale, {
-        modalCustomId: EDIT_MODAL_CUSTOM_ID,
-        modalTitleKey: "commands.scheduled-task.edit.modal_title",
-        components: [
-          {
-            customId: PURPOSE_INPUT_ID,
-            labelKey: "commands.scheduled-task.edit.purpose_input_label",
-            descriptionKey: "commands.scheduled-task.edit.purpose_input_description",
-            placeholder: "commands.scheduled-task.edit.purpose_input_placeholder",
-            style: TextInputStyle.Paragraph,
-            required: true,
-            maxLength: REMINDER_PURPOSE_MAX_LENGTH,
-            value: selectedReminder.reminder_purpose.slice(0, REMINDER_PURPOSE_MAX_LENGTH),
-          },
-          {
-            customId: TIME_INPUT_ID,
-            labelKey: "commands.scheduled-task.edit.time_input_label",
-            descriptionKey: "commands.scheduled-task.edit.time_input_description",
-            placeholder: "commands.scheduled-task.edit.time_input_placeholder",
-            style: TextInputStyle.Short,
-            required: true,
-            maxLength: 5,
-            value: formatTimeInput(new Date(selectedReminder.reminder_time), timezoneOffset),
-          },
-          {
-            customId: INTERVAL_INPUT_ID,
-            labelKey: "commands.scheduled-task.edit.interval_input_label",
-            descriptionKey: "commands.scheduled-task.edit.interval_input_description",
-            placeholder: "commands.scheduled-task.edit.interval_input_placeholder",
-            style: TextInputStyle.Short,
-            required: true,
-            maxLength: 6,
-            value: (selectedReminder.repetition_interval_hours ?? 0).toString(),
-          },
-          {
-            kind: "checkbox",
-            customId: REMINDER_FOR_ME_ID,
-            labelKey: "commands.scheduled-task.edit.reminder_checkbox_label",
-            descriptionKey: "commands.scheduled-task.edit.reminder_checkbox_description",
-            default: reminderForInvoker,
-          },
-        ],
-      });
-
-      if (editModalResult.outcome !== "submit") {
-        log.info(`Reminder edit modal ${editModalResult.outcome} for user ${userData.user_id}`);
-        await replyComponentsV2Status(
-          interaction,
-          locale,
-          "commands.scheduled-task.edit.select_modal_title",
-          "commands.scheduled-task.edit.select_description",
-          ColorCode.INFO,
-        );
-        continue;
-      }
-
-      const editModalInteraction = editModalResult.interaction;
-      if (!editModalInteraction) {
-        log.error("Reminder edit modal unexpectedly missing interaction");
-        return;
-      }
-
-      // 6. Validate all edited fields before saving
-      const editedPurpose = editModalResult.values?.[PURPOSE_INPUT_ID]?.trim() ?? "";
-      const editedTimeInput = editModalResult.values?.[TIME_INPUT_ID]?.trim() ?? "";
-      const editedIntervalInput = editModalResult.values?.[INTERVAL_INPUT_ID]?.trim() ?? "";
-      const editedReminderForInvoker = editModalResult.values?.[REMINDER_FOR_ME_ID] === "true";
-
-      if (!editedPurpose) {
-        await replyInfoEmbed(editModalInteraction, locale, {
-          titleKey: "commands.scheduled-task.edit.invalid_content_title",
-          descriptionKey: "commands.scheduled-task.edit.invalid_content_description",
-          color: ColorCode.ERROR,
-        });
-        continue;
-      }
-
-      const editedReminderTime = buildEditedReminderTime(
-        new Date(selectedReminder.reminder_time),
-        editedTimeInput,
-        timezoneOffset,
-      );
-      if (!editedReminderTime) {
-        await replyInfoEmbed(editModalInteraction, locale, {
-          titleKey: "commands.scheduled-task.edit.invalid_time_title",
-          descriptionKey: "commands.scheduled-task.edit.invalid_time_description",
-          color: ColorCode.ERROR,
-        });
-        continue;
-      }
-
-      const editedIntervalHours = parseIntervalHours(editedIntervalInput);
-      if (editedIntervalHours === null) {
-        await replyInfoEmbed(editModalInteraction, locale, {
-          titleKey: "commands.scheduled-task.edit.invalid_interval_title",
-          descriptionKey: "commands.scheduled-task.edit.invalid_interval_description",
-          color: ColorCode.ERROR,
-        });
-        continue;
-      }
-
-      const currentIntervalHours = selectedReminder.repetition_interval_hours ?? 0;
-      const noChanges =
-        editedPurpose === selectedReminder.reminder_purpose.trim() &&
-        editedReminderTime.getTime() === new Date(selectedReminder.reminder_time).getTime() &&
-        editedIntervalHours === currentIntervalHours &&
-        editedReminderForInvoker === reminderForInvoker;
-
-      if (noChanges) {
-        await replyInfoEmbed(editModalInteraction, locale, {
-          titleKey: "commands.scheduled-task.edit.no_changes_title",
-          descriptionKey: "commands.scheduled-task.edit.no_changes_description",
-          color: ColorCode.WARN,
-        });
-        continue;
-      }
-
-      // 7. Save and show updated details
-      const editSucceeded = await performReminderEdit(
-        selectedReminder,
-        editedPurpose,
-        editedReminderTime,
-        editedIntervalHours,
-        editedReminderForInvoker,
-        client,
-        tomoriState,
-        userData,
-        hasManagePermission,
-        editModalInteraction,
-        locale,
-        true,
-      );
-      if (!editSucceeded) {
-        return;
-      }
-
-      const updatedDetails = {
-        reminder_purpose: formatReminderPreview(editedPurpose, 240),
-        reminder_time: `${formatTimeWithOffset(editedReminderTime, timezoneOffset, {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        })} (${formatUTCOffset(timezoneOffset)})`,
-        repetition_interval_hours: editedIntervalHours.toString(),
-        reminder_type: editedReminderForInvoker
-          ? localizer(locale, "commands.scheduled-task.edit.type_reminder")
-          : localizer(locale, "commands.scheduled-task.edit.type_task"),
-        target_user: editedReminderForInvoker
-          ? userData.user_nickname
-          : localizer(locale, "commands.scheduled-task.edit.target_none"),
-        target_channel: getChannelDisplay(interaction, selectedReminder.channel_disc_id),
-      };
-
-      await acknowledgeModalSubmitForRefresh(editModalInteraction);
-      await replyComponentsV2Status(
-        interaction,
-        locale,
-        "commands.scheduled-task.edit.success_title",
-        "commands.scheduled-task.edit.success_description",
-        ColorCode.SUCCESS,
-        updatedDetails,
-        "commands.scheduled-task.edit.select_description",
-      );
+    if (!hasManagePermission) {
+      remindersQuery = sql`${remindersQuery} AND r.created_by_user_id = ${userData.user_id}`;
     }
+
+    remindersQuery = sql`${remindersQuery} ORDER BY r.reminder_time ASC`;
+    const reminders = await remindersQuery;
+
+    if (!reminders || reminders.length === 0) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.scheduled-task.edit.no_entries_title",
+        descriptionKey: "commands.scheduled-task.edit.no_entries",
+        color: ColorCode.WARN,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    // 2. Build select options — persona_id NULL means the main persona owns the reminder
+    const reminderSelectOptions: SelectOption[] = reminders.map((reminder, index) => {
+      const personaName = reminder.persona_nickname ?? state.tomori_nickname;
+      const formattedTime = formatTimeWithOffset(new Date(reminder.reminder_time), timezoneOffset, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const repeatText =
+        typeof reminder.repetition_interval_hours === "number" && reminder.repetition_interval_hours >= 1
+          ? localizer(locale, "commands.scheduled-task.edit.select_repeat_text", {
+              hours: reminder.repetition_interval_hours,
+            })
+          : "";
+      const typeText = reminder.self_reminder
+        ? localizer(locale, "commands.scheduled-task.edit.select_type_task")
+        : localizer(locale, "commands.scheduled-task.edit.select_type_reminder", {
+            user_nickname: reminder.user_nickname,
+          });
+      const isMatrixReminder = reminder.created_by_user_id === null && isBridgeUserId(reminder.user_discord_id);
+      const creatorName = isMatrixReminder
+        ? `${reminder.user_nickname} (Matrix)`
+        : (reminder.created_by_nickname ??
+          (reminder.created_by_user_id ? `user #${reminder.created_by_user_id}` : "unknown"));
+      const managerCreatedByText =
+        hasManagePermission && reminder.created_by_user_id !== userData.user_id
+          ? localizer(locale, "commands.scheduled-task.edit.select_manager_created_by_text", {
+              creator_name: creatorName,
+            })
+          : "";
+      const description = localizer(locale, "commands.scheduled-task.edit.select_option_description", {
+        persona_name: personaName,
+        reminder_time: formattedTime,
+        timezone: formatUTCOffset(timezoneOffset),
+        target_channel: getChannelDisplay(interaction, reminder.channel_disc_id),
+        reminder_type: typeText,
+        repeat_text: repeatText,
+        manager_created_by_text: managerCreatedByText,
+      });
+
+      return {
+        label: safeSelectOptionText(reminder.reminder_purpose, 40),
+        value: index.toString(),
+        description: safeSelectOptionText(description),
+      };
+    });
+
+    // 3. Prompt user to pick a reminder
+    const selectModalResult = await promptWithPaginatedModal(interaction, locale, {
+      modalCustomId: SELECT_MODAL_CUSTOM_ID,
+      modalTitleKey: "commands.scheduled-task.edit.select_modal_title",
+      components: [
+        {
+          customId: REMINDER_SELECT_ID,
+          labelKey: "commands.scheduled-task.edit.select_label",
+          descriptionKey: "commands.scheduled-task.edit.select_description",
+          placeholder: "commands.scheduled-task.edit.select_placeholder",
+          required: true,
+          options: reminderSelectOptions,
+        },
+      ],
+    });
+
+    if (selectModalResult.outcome !== "submit") {
+      log.info(`Reminder edit selection modal ${selectModalResult.outcome} for user ${userData.user_id}`);
+      return;
+    }
+
+    const selectModalInteraction = selectModalResult.interaction;
+    const selectedIndexRaw = selectModalResult.values?.[REMINDER_SELECT_ID];
+    if (!selectModalInteraction || !selectedIndexRaw) {
+      log.error("Reminder edit selection unexpectedly missing interaction or values");
+      return;
+    }
+
+    const selectedReminder = reminders[Number.parseInt(selectedIndexRaw, 10)];
+    if (!selectedReminder) {
+      await replyInfoEmbed(selectModalInteraction, locale, {
+        titleKey: "general.errors.operation_failed_title",
+        descriptionKey: "general.errors.operation_failed_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    // 4. Confirm which reminder will be edited.
+    // Pass selectModalInteraction directly (unacknowledged) so the confirmation becomes
+    // the one ephemeral message for this whole flow — success will update it in-place.
+    const confirmationResult = await promptWithUnacknowledgedConfirmation(selectModalInteraction, locale, {
+      embedTitleKey: "commands.scheduled-task.edit.confirm_title",
+      embedDescriptionKey: "commands.scheduled-task.edit.confirm_description",
+      embedDescriptionVars: formatReminderDetails(interaction, selectedReminder, timezoneOffset, locale),
+      embedColor: ColorCode.INFO,
+      useComponentsV2: true,
+      continueLabelKey: "general.confirm",
+      cancelLabelKey: "general.pagination.cancel",
+      continueCustomId: `scheduled_task_edit_confirm_${selectModalInteraction.id}`,
+      cancelCustomId: `scheduled_task_edit_cancel_${selectModalInteraction.id}`,
+    });
+
+    if (confirmationResult.outcome !== "continue" || !confirmationResult.interaction) {
+      return;
+    }
+
+    // 5. Open the edit modal pre-filled with current values (times in server timezone)
+    const reminderForInvoker =
+      selectedReminder.self_reminder !== true && selectedReminder.user_discord_id === userData.user_disc_id;
+    const editModalResult = await promptWithRawModal(confirmationResult.interaction, locale, {
+      modalCustomId: EDIT_MODAL_CUSTOM_ID,
+      modalTitleKey: "commands.scheduled-task.edit.modal_title",
+      components: [
+        {
+          customId: PURPOSE_INPUT_ID,
+          labelKey: "commands.scheduled-task.edit.purpose_input_label",
+          descriptionKey: "commands.scheduled-task.edit.purpose_input_description",
+          placeholder: "commands.scheduled-task.edit.purpose_input_placeholder",
+          style: TextInputStyle.Paragraph,
+          required: true,
+          maxLength: REMINDER_PURPOSE_MAX_LENGTH,
+          value: selectedReminder.reminder_purpose.slice(0, REMINDER_PURPOSE_MAX_LENGTH),
+        },
+        {
+          customId: TIME_INPUT_ID,
+          labelKey: "commands.scheduled-task.edit.time_input_label",
+          descriptionKey: "commands.scheduled-task.edit.time_input_description",
+          placeholder: "commands.scheduled-task.edit.time_input_placeholder",
+          style: TextInputStyle.Short,
+          required: true,
+          maxLength: 5,
+          value: formatTimeInput(new Date(selectedReminder.reminder_time), timezoneOffset),
+        },
+        {
+          customId: INTERVAL_INPUT_ID,
+          labelKey: "commands.scheduled-task.edit.interval_input_label",
+          descriptionKey: "commands.scheduled-task.edit.interval_input_description",
+          placeholder: "commands.scheduled-task.edit.interval_input_placeholder",
+          style: TextInputStyle.Short,
+          required: true,
+          maxLength: 6,
+          value: (selectedReminder.repetition_interval_hours ?? 0).toString(),
+        },
+        {
+          kind: "checkbox",
+          customId: REMINDER_FOR_ME_ID,
+          labelKey: "commands.scheduled-task.edit.reminder_checkbox_label",
+          descriptionKey: "commands.scheduled-task.edit.reminder_checkbox_description",
+          default: reminderForInvoker,
+        },
+      ],
+    });
+
+    if (editModalResult.outcome !== "submit") {
+      log.info(`Reminder edit modal ${editModalResult.outcome} for user ${userData.user_id}`);
+      return;
+    }
+
+    const editModalInteraction = editModalResult.interaction;
+    if (!editModalInteraction) {
+      log.error("Reminder edit modal unexpectedly missing interaction");
+      return;
+    }
+
+    // 6. Validate all edited fields before saving
+    const editedPurpose = editModalResult.values?.[PURPOSE_INPUT_ID]?.trim() ?? "";
+    const editedTimeInput = editModalResult.values?.[TIME_INPUT_ID]?.trim() ?? "";
+    const editedIntervalInput = editModalResult.values?.[INTERVAL_INPUT_ID]?.trim() ?? "";
+    const editedReminderForInvoker = editModalResult.values?.[REMINDER_FOR_ME_ID] === "true";
+
+    if (!editedPurpose) {
+      await replyInfoEmbed(editModalInteraction, locale, {
+        titleKey: "commands.scheduled-task.edit.invalid_content_title",
+        descriptionKey: "commands.scheduled-task.edit.invalid_content_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const editedReminderTime = buildEditedReminderTime(
+      new Date(selectedReminder.reminder_time),
+      editedTimeInput,
+      timezoneOffset,
+    );
+    if (!editedReminderTime) {
+      await replyInfoEmbed(editModalInteraction, locale, {
+        titleKey: "commands.scheduled-task.edit.invalid_time_title",
+        descriptionKey: "commands.scheduled-task.edit.invalid_time_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const editedIntervalHours = parseIntervalHours(editedIntervalInput);
+    if (editedIntervalHours === null) {
+      await replyInfoEmbed(editModalInteraction, locale, {
+        titleKey: "commands.scheduled-task.edit.invalid_interval_title",
+        descriptionKey: "commands.scheduled-task.edit.invalid_interval_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    const currentIntervalHours = selectedReminder.repetition_interval_hours ?? 0;
+    const noChanges =
+      editedPurpose === selectedReminder.reminder_purpose.trim() &&
+      editedReminderTime.getTime() === new Date(selectedReminder.reminder_time).getTime() &&
+      editedIntervalHours === currentIntervalHours &&
+      editedReminderForInvoker === reminderForInvoker;
+
+    if (noChanges) {
+      await replyInfoEmbed(editModalInteraction, locale, {
+        titleKey: "commands.scheduled-task.edit.no_changes_title",
+        descriptionKey: "commands.scheduled-task.edit.no_changes_description",
+        color: ColorCode.WARN,
+      });
+      return;
+    }
+
+    // 7. Save and update the confirmation message in-place with the result
+    const editSucceeded = await performReminderEdit(
+      selectedReminder,
+      editedPurpose,
+      editedReminderTime,
+      editedIntervalHours,
+      editedReminderForInvoker,
+      client,
+      tomoriState,
+      userData,
+      hasManagePermission,
+      editModalInteraction,
+      locale,
+      true,
+    );
+    if (!editSucceeded) {
+      return;
+    }
+
+    const updatedDetails = {
+      reminder_purpose: formatReminderPreview(editedPurpose, 240),
+      reminder_time: `${formatTimeWithOffset(editedReminderTime, timezoneOffset, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })} (${formatUTCOffset(timezoneOffset)})`,
+      repetition_interval_hours: editedIntervalHours.toString(),
+      reminder_type: editedReminderForInvoker
+        ? localizer(locale, "commands.scheduled-task.edit.type_reminder")
+        : localizer(locale, "commands.scheduled-task.edit.type_task"),
+      target_user: editedReminderForInvoker
+        ? userData.user_nickname
+        : localizer(locale, "commands.scheduled-task.edit.target_none"),
+      target_channel: getChannelDisplay(interaction, selectedReminder.channel_disc_id),
+    };
+
+    // deferUpdate on the edit modal submit targets the button's message (the confirmation),
+    // so replyComponentsV2Status will editReply into that same ephemeral message.
+    await acknowledgeModalSubmitForRefresh(editModalInteraction);
+    await replyComponentsV2Status(
+      editModalInteraction,
+      locale,
+      "commands.scheduled-task.edit.success_title",
+      "commands.scheduled-task.edit.success_description",
+      ColorCode.SUCCESS,
+      updatedDetails,
+    );
   } catch (error) {
     const context: ErrorContext = {
       userId: userData.user_id,

@@ -619,10 +619,23 @@ export async function execute(
       userData,
       editModalInteraction,
       locale,
+      true,
     );
     if (!editSucceeded) {
       return;
     }
+
+    // deferUpdate on the edit modal submit targets the button's message (the confirmation),
+    // so editReply in replyInfoEmbed will update that same ephemeral message in-place.
+    await acknowledgeModalSubmitForRefresh(editModalInteraction);
+    await replyInfoEmbed(editModalInteraction, locale, {
+      titleKey: "commands.memory.personal.edit.success_title",
+      descriptionKey: "commands.memory.personal.edit.success_description",
+      descriptionVars: {
+        memory: formatMemoryPreview(editedMemory, 96),
+      },
+      color: ColorCode.SUCCESS,
+    });
 
     if (personalizationDisabledWarning) {
       await editModalInteraction.followUp({

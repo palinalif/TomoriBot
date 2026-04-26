@@ -145,6 +145,17 @@ export class ReminderProcessor {
         false,
         undefined,
         "system",
+        undefined, // textQuotaTriggerKey
+        undefined, // textQuotaUserDiscId
+        undefined, // manualSystemPrompt
+        undefined, // manualPrefill
+        undefined, // naiContinuationPrefill
+        undefined, // emptyResponseFinishReason
+        undefined, // injectedContextItems
+        undefined, // forcedMentions
+        undefined, // manualTriggerInvoker
+        // Tasks (self_reminder) may spawn follow-up tasks; user reminders block create_task to prevent loops
+        isSelfReminder ? undefined : { disableReminderTool: true },
       );
 
       log.info(`tomoriChat call completed for reminder ${reminder.reminder_id}`);

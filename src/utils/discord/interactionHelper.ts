@@ -508,6 +508,8 @@ export async function promptWithUnacknowledgedConfirmation(
 
   let message: Message;
   try {
+    const wasRawModalAcked =
+      rawModalAcknowledged.get(interaction as ChatInputCommandInteraction | ButtonInteraction) ?? false;
     if (interaction.deferred || interaction.replied) {
       message = await interaction.editReply(
         useComponentsV2
@@ -520,6 +522,22 @@ export async function promptWithUnacknowledgedConfirmation(
               components: [buttonRow],
             },
       );
+    } else if (wasRawModalAcked) {
+      // Raw REST modal consumed the initial response without creating a reply message.
+      // editReply() has nothing to target; Discord.js followUp() guard also blocks
+      // (requires replied||deferred). Use webhook.send() to bypass both.
+      message = (await interaction.webhook.send(
+        useComponentsV2
+          ? {
+              components: v2Components ?? [],
+              flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
+            }
+          : {
+              embeds: [embed],
+              components: [buttonRow],
+              flags: MessageFlags.Ephemeral,
+            },
+      )) as Message;
     } else {
       await interaction.reply(
         useComponentsV2
@@ -1077,7 +1095,7 @@ function buildV2ConfirmationComponents(
     components: [
       {
         type: ComponentType.TextDisplay,
-        content: `## ${title}`,
+        content: `**${title}**`,
       },
       {
         type: ComponentType.TextDisplay,
@@ -1091,7 +1109,7 @@ function buildV2ConfirmationComponents(
 }
 
 export async function replyComponentsV2Status(
-  interaction: ChatInputCommandInteraction | ButtonInteraction,
+  interaction: ChatInputCommandInteraction | ButtonInteraction | ModalSubmitInteraction,
   locale: string,
   titleKey: string,
   descriptionKey: string,
@@ -1110,11 +1128,18 @@ export async function replyComponentsV2Status(
     secondaryDescriptionVars,
   );
 
+  const wasRawModalSent = rawModalAcknowledged.get(interaction as ChatInputCommandInteraction | ButtonInteraction);
   try {
     if (interaction.replied || interaction.deferred) {
       await interaction.editReply({
         components,
         flags: MessageFlags.IsComponentsV2,
+      });
+    } else if (wasRawModalSent) {
+      // Raw REST modal consumed the initial response — use webhook.send() directly.
+      await interaction.webhook.send({
+        components,
+        flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2,
       });
     } else {
       await interaction.reply({
@@ -2496,8 +2521,16 @@ export async function promptWithPaginatedModal(
     (comp): comp is ModalSelectField => "options" in comp && Array.isArray(comp.options),
   );
 
-  // If no select component or ≤25 options, use direct modal
-  if (!selectComponent || selectComponent.options.length <= 25) {
+  // If no select component or (≤25 options and interaction not yet acknowledged), use direct modal.
+  // On loop re-entry the original slash interaction is already acknowledged — either via Discord.js
+  // (interaction.replied) or via raw REST modal (rawModalAcknowledged) which bypasses Discord.js
+  // state tracking. In that case fall through to the paginated path, which uses editReply + a
+  // fresh button interaction to open the modal.
+  const wasRawModalAcked = rawModalAcknowledged.get(interaction) ?? false;
+  if (
+    !selectComponent ||
+    (selectComponent.options.length <= 25 && !interaction.deferred && !interaction.replied && !wasRawModalAcked)
+  ) {
     return promptWithRawModal(interaction, locale, options);
   }
 
@@ -2534,6 +2567,14 @@ export async function promptWithPaginatedModal(
       embeds: [pageSelectEmbed],
       components: [actionRow],
     });
+  } else if (wasRawModalAcked) {
+    // Raw REST modal consumed the initial response — no reply to edit, followUp()
+    // guard blocks. Use webhook.send() directly to send the page picker.
+    pageSelectMessage = (await interaction.webhook.send({
+      embeds: [pageSelectEmbed],
+      components: [actionRow],
+      flags: MessageFlags.Ephemeral,
+    })) as Message;
   } else {
     await interaction.reply({
       embeds: [pageSelectEmbed],

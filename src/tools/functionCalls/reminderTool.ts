@@ -82,7 +82,18 @@ export class ReminderTool extends BaseTool {
    * @returns True if provider supports reminder functionality
    */
   isAvailableFor(_provider: string): boolean {
-    // Reminder functionality works with all providers
+    return true;
+  }
+
+  /**
+   * Context-aware availability check — disabled during non-task reminder-triggered turns
+   * to prevent the AI from scheduling new reminders while executing an existing one.
+   * Self-reminder (task) turns are exempt so tasks can spawn follow-up tasks.
+   * @param _provider - LLM provider name (unused)
+   * @param context - Optional tool context containing streaming flags
+   */
+  isAvailableForContext(_provider: string, context?: ToolContext): boolean {
+    if (context?.streamContext?.disableReminderTool) return false;
     return true;
   }
 
@@ -282,16 +293,18 @@ export class ReminderTool extends BaseTool {
 
       const channelResolution = await resolveChannelTarget(requestedTargetChannel, context);
       if (channelResolution.status === "ambiguous") {
-        const clarificationHint = channelResolution.candidates.some((candidate) => candidate.channelId)
-          ? " Retry with the exact inline-code label, or with the raw channel/thread ID, if needed."
-          : "";
+        const shownCount = channelResolution.candidates.length;
+        const overflowCount = channelResolution.totalCount - shownCount;
+        const overflowNote = overflowCount > 0 ? ` (and ${overflowCount} more — use a raw channel ID for others)` : "";
+        const candidateLabels = channelResolution.candidates.map((c) => c.label).join(", ");
         return {
           success: false,
-          error: `Multiple channels or threads match "${requestedTargetChannel}". Please clarify which one you mean.${clarificationHint} ${channelResolution.candidates.map((candidate) => candidate.label).join(", ")}.`,
+          error: `Multiple channels or threads match "${requestedTargetChannel}". Please clarify using the exact inline-code label or raw ID:\n${candidateLabels}${overflowNote}`,
           data: {
             status: "reminder_creation_failed_ambiguous_channel",
             reason: "Multiple channels or threads matched the requested target.",
-            candidates: channelResolution.candidates.map((candidate) => candidate.label),
+            candidates: channelResolution.candidates.map((c) => c.label),
+            total_matches: channelResolution.totalCount,
           },
         };
       }
