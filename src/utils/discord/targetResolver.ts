@@ -608,6 +608,9 @@ export async function resolveChannelTarget(input: string, context: ToolContext):
     }
   }
 
+  // Ensure guild channels are fetched (not just cached) to avoid missing channels
+  await guild.channels.fetch().catch(() => null);
+
   const textChannels = guild.channels.cache
     .filter((channel) => isGuildTextTarget(channel) && !isThreadLike(channel))
     .map((channel) => channel as GuildTextBasedChannel);
