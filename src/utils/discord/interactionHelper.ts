@@ -253,14 +253,14 @@ import {
 } from "../../types/discord/modal";
 import { createStandardEmbed, createSummaryEmbed } from "./embedHelper";
 
-const PROMPT_TIMEOUT = 15000;
+const PROMPT_TIMEOUT = 60000; // 60 seconds
 const MODAL_DESCRIPTION_MAX_LENGTH = 99; // Discord modal description limit
 const MODAL_TITLE_MAX_LENGTH = 45;
 const MODAL_LABEL_MAX_LENGTH = 45;
 const TEXT_INPUT_PLACEHOLDER_MAX_LENGTH = 100;
 const SELECT_PLACEHOLDER_MAX_LENGTH = 150;
 const SELECT_OPTION_TEXT_MAX_LENGTH = 100;
-const CONFIRMATION_DESCRIPTION_LIMIT = 4096; // Discord embed/TextDisplay description limit
+const CONFIRMATION_DESCRIPTION_LIMIT = 3800; // Budget for description, leaving room for title/buttons in the 4000-char total component limit
 
 /**
  * Safely localizes a string for modal usage, truncating if necessary to prevent Discord API errors

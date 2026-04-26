@@ -1031,7 +1031,7 @@ export default {
           select_placeholder: `属性を選択...`,
           confirm_title: `属性を編集しますか？`,
           confirm_description: `次の属性を選択しました:
-> {attribute}
+{attribute}
 
 **確認** を押すと編集モーダルを開きます。`,
           modal_title: `属性を編集`,
@@ -1072,8 +1072,10 @@ export default {
           select_placeholder: `対話を選択...`,
           confirm_title: `サンプル対話を編集しますか？`,
           confirm_description: `次の対話ペアを選択しました:
-**ユーザー:** {input}
-**私:** {output}
+**ユーザー:**
+{input}
+**私:**
+{output}
 
 **確認** を押すと編集モーダルを開きます。`,
           modal_title: `サンプル対話を編集`,

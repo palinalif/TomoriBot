@@ -348,8 +348,14 @@ export async function execute(
         embedTitleKey: "commands.persona.sample-dialogue.edit.confirm_title",
         embedDescriptionKey: "commands.persona.sample-dialogue.edit.confirm_description",
         embedDescriptionVars: {
-          input: formatDialoguePreview(selectedUserInput, 1950),
-          output: formatDialoguePreview(selectedBotInput, 1950),
+          input: formatDialoguePreview(selectedUserInput, 1500)
+            .split("\n")
+            .map((line) => `> ${line}`)
+            .join("\n"),
+          output: formatDialoguePreview(selectedBotInput, 1500)
+            .split("\n")
+            .map((line) => `> ${line}`)
+            .join("\n"),
         },
         embedColor: ColorCode.INFO,
         useComponentsV2: true,

@@ -284,7 +284,10 @@ export async function execute(
         embedTitleKey: "commands.persona.attribute.edit.confirm_title",
         embedDescriptionKey: "commands.persona.attribute.edit.confirm_description",
         embedDescriptionVars: {
-          attribute: formatAttributePreview(selectedAttribute, 4000),
+          attribute: formatAttributePreview(selectedAttribute, 3000)
+            .split("\n")
+            .map((line) => `> ${line}`)
+            .join("\n"),
         },
         embedColor: ColorCode.INFO,
         useComponentsV2: true,

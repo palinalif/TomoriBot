@@ -616,142 +616,154 @@ export async function resolveChannelTarget(input: string, context: ToolContext):
     }
   }
 
-  // Ensure guild channels are fetched (not just cached) to avoid missing channels
-  await guild.channels.fetch().catch(() => null);
+  const searchChannels = async (fetchFallback: boolean): Promise<ChannelTargetResolution | null> => {
+    const textChannels = guild.channels.cache
+      .filter((channel) => isGuildTextTarget(channel) && !isThreadLike(channel))
+      .map((channel) => channel as GuildTextBasedChannel);
 
-  const textChannels = guild.channels.cache
-    .filter((channel) => isGuildTextTarget(channel) && !isThreadLike(channel))
-    .map((channel) => channel as GuildTextBasedChannel);
+    const activeThreads = await getActiveThreadTargets(guild);
 
-  const activeThreads = await getActiveThreadTargets(guild);
+    const qualifiedThreadMatches = dedupeChannelCandidates(
+      activeThreads
+        .filter((thread) => getQualifiedThreadLookupValues(thread).includes(normalizedInput))
+        .map((thread) => ({
+          label: formatChannelCandidateLabel(thread),
+          channelName: thread.name,
+          channel: thread,
+        })),
+    );
 
-  const qualifiedThreadMatches = dedupeChannelCandidates(
-    activeThreads
-      .filter((thread) => getQualifiedThreadLookupValues(thread).includes(normalizedInput))
-      .map((thread) => ({
-        label: formatChannelCandidateLabel(thread),
-        channelName: thread.name,
-        channel: thread,
-      })),
-  );
+    if (qualifiedThreadMatches.length === 1) {
+      return {
+        status: "resolved",
+        channel: qualifiedThreadMatches[0].channel,
+        displayLabel: qualifiedThreadMatches[0].label,
+        source: "qualified_thread_name",
+      };
+    }
 
-  if (qualifiedThreadMatches.length === 1) {
-    return {
-      status: "resolved",
-      channel: qualifiedThreadMatches[0].channel,
-      displayLabel: qualifiedThreadMatches[0].label,
-      source: "qualified_thread_name",
-    };
-  }
+    if (qualifiedThreadMatches.length > 1) {
+      return {
+        status: "ambiguous",
+        input: rawInput,
+        candidates: buildAmbiguousChannelCandidates(qualifiedThreadMatches),
+      };
+    }
 
-  if (qualifiedThreadMatches.length > 1) {
-    return {
-      status: "ambiguous",
-      input: rawInput,
-      candidates: buildAmbiguousChannelCandidates(qualifiedThreadMatches),
-    };
-  }
+    const exactChannelMatches = dedupeChannelCandidates(
+      textChannels
+        .filter((channel) => normalizeChannelTargetInput(channel.name) === normalizedInput)
+        .map((channel) => ({
+          label: formatChannelCandidateLabel(channel),
+          channelName: channel.name,
+          channel,
+        })),
+    );
 
-  const exactChannelMatches = dedupeChannelCandidates(
-    textChannels
-      .filter((channel) => normalizeChannelTargetInput(channel.name) === normalizedInput)
-      .map((channel) => ({
-        label: formatChannelCandidateLabel(channel),
-        channelName: channel.name,
-        channel,
-      })),
-  );
+    const forumParentThreadMatches = dedupeChannelCandidates(
+      activeThreads
+        .filter(
+          (thread) =>
+            "parent" in thread &&
+            !!thread.parent?.name &&
+            isForumOrMediaParent(thread.parent) &&
+            normalizeChannelTargetInput(thread.parent.name) === normalizedInput,
+        )
+        .map((thread) => ({
+          label: formatChannelCandidateLabel(thread),
+          channelName: thread.name,
+          channel: thread,
+        })),
+    );
 
-  const forumParentThreadMatches = dedupeChannelCandidates(
-    activeThreads
-      .filter(
-        (thread) =>
-          "parent" in thread &&
-          !!thread.parent?.name &&
-          isForumOrMediaParent(thread.parent) &&
-          normalizeChannelTargetInput(thread.parent.name) === normalizedInput,
-      )
-      .map((thread) => ({
-        label: formatChannelCandidateLabel(thread),
-        channelName: thread.name,
-        channel: thread,
-      })),
-  );
+    if (forumParentThreadMatches.length === 1 && exactChannelMatches.length === 0) {
+      return {
+        status: "resolved",
+        channel: forumParentThreadMatches[0].channel,
+        displayLabel: forumParentThreadMatches[0].label,
+        source: "forum_parent_name",
+      };
+    }
 
-  if (forumParentThreadMatches.length === 1 && exactChannelMatches.length === 0) {
-    return {
-      status: "resolved",
-      channel: forumParentThreadMatches[0].channel,
-      displayLabel: forumParentThreadMatches[0].label,
-      source: "forum_parent_name",
-    };
-  }
+    if (forumParentThreadMatches.length > 0) {
+      const combinedForumCandidates = dedupeChannelCandidates([...exactChannelMatches, ...forumParentThreadMatches]);
+      return {
+        status: "ambiguous",
+        input: rawInput,
+        candidates: buildAmbiguousChannelCandidates(combinedForumCandidates),
+      };
+    }
 
-  if (forumParentThreadMatches.length > 0) {
-    const combinedForumCandidates = dedupeChannelCandidates([...exactChannelMatches, ...forumParentThreadMatches]);
-    return {
-      status: "ambiguous",
-      input: rawInput,
-      candidates: buildAmbiguousChannelCandidates(combinedForumCandidates),
-    };
-  }
+    const exactThreadMatches = dedupeChannelCandidates(
+      activeThreads
+        .filter((thread) => normalizeChannelTargetInput(thread.name) === normalizedInput)
+        .map((thread) => ({
+          label: formatChannelCandidateLabel(thread),
+          channelName: thread.name,
+          channel: thread,
+        })),
+    );
 
-  const exactThreadMatches = dedupeChannelCandidates(
-    activeThreads
-      .filter((thread) => normalizeChannelTargetInput(thread.name) === normalizedInput)
-      .map((thread) => ({
-        label: formatChannelCandidateLabel(thread),
-        channelName: thread.name,
-        channel: thread,
-      })),
-  );
+    const combinedExactMatches = dedupeChannelCandidates([...exactChannelMatches, ...exactThreadMatches]);
 
-  const combinedExactMatches = dedupeChannelCandidates([...exactChannelMatches, ...exactThreadMatches]);
+    if (combinedExactMatches.length === 1) {
+      const match = combinedExactMatches[0];
+      return {
+        status: "resolved",
+        channel: match.channel,
+        displayLabel: match.label,
+        source: isThreadLike(match.channel) ? "thread_name" : "channel_name",
+      };
+    }
 
-  if (combinedExactMatches.length === 1) {
-    const match = combinedExactMatches[0];
-    return {
-      status: "resolved",
-      channel: match.channel,
-      displayLabel: match.label,
-      source: isThreadLike(match.channel) ? "thread_name" : "channel_name",
-    };
-  }
+    if (combinedExactMatches.length > 1) {
+      return {
+        status: "ambiguous",
+        input: rawInput,
+        candidates: buildAmbiguousChannelCandidates(combinedExactMatches),
+      };
+    }
 
-  if (combinedExactMatches.length > 1) {
-    return {
-      status: "ambiguous",
-      input: rawInput,
-      candidates: buildAmbiguousChannelCandidates(combinedExactMatches),
-    };
-  }
+    const normalizedMatches = dedupeChannelCandidates(
+      activeThreads
+        .concat(textChannels)
+        .filter((channel) => normalizeChannelTargetInput(channel.name) === normalizedInput)
+        .map((thread) => ({
+          label: formatChannelCandidateLabel(thread),
+          channelName: thread.name,
+          channel: thread,
+        })),
+    );
 
-  const normalizedMatches = dedupeChannelCandidates(
-    activeThreads
-      .concat(textChannels)
-      .filter((channel) => normalizeChannelTargetInput(channel.name) === normalizedInput)
-      .map((thread) => ({
-        label: formatChannelCandidateLabel(thread),
-        channelName: thread.name,
-        channel: thread,
-      })),
-  );
+    if (normalizedMatches.length === 1) {
+      return {
+        status: "resolved",
+        channel: normalizedMatches[0].channel,
+        displayLabel: normalizedMatches[0].label,
+        source: "normalized_name",
+      };
+    }
 
-  if (normalizedMatches.length === 1) {
-    return {
-      status: "resolved",
-      channel: normalizedMatches[0].channel,
-      displayLabel: normalizedMatches[0].label,
-      source: "normalized_name",
-    };
-  }
+    if (normalizedMatches.length > 1) {
+      return {
+        status: "ambiguous",
+        input: rawInput,
+        candidates: buildAmbiguousChannelCandidates(normalizedMatches),
+      };
+    }
 
-  if (normalizedMatches.length > 1) {
-    return {
-      status: "ambiguous",
-      input: rawInput,
-      candidates: buildAmbiguousChannelCandidates(normalizedMatches),
-    };
+    // Nothing found in cache — fetch all guild channels once and retry
+    if (fetchFallback) {
+      await guild.channels.fetch().catch(() => null);
+      return searchChannels(false);
+    }
+
+    return null;
+  };
+
+  const searchResult = await searchChannels(true);
+  if (searchResult) {
+    return searchResult;
   }
 
   return {

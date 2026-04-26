@@ -104,12 +104,30 @@ export async function applyPersonalProviderSelectionsToTomoriState(
     }
   }
 
+  // Load personal fallback LLMs for text capability (isolate personal provider fallback chain)
+  let nextFallbackLlms: typeof tomoriState.fallback_llms;
+  if (activeConfigs.text?.fallback_llm_ids && activeConfigs.text.fallback_llm_ids.length > 0) {
+    const personalFallbacks: typeof tomoriState.fallback_llms = [];
+    for (const llmId of activeConfigs.text.fallback_llm_ids) {
+      const fallbackLlm = await loadLlmById(llmId);
+      if (fallbackLlm) {
+        personalFallbacks.push(fallbackLlm);
+      }
+    }
+    if (personalFallbacks.length > 0) {
+      nextFallbackLlms = personalFallbacks;
+    }
+  }
+
   return {
     tomoriState: {
       ...tomoriState,
       config: nextConfig,
       llm: nextLlm,
       vision_llm: nextVisionLlm,
+      // Personal provider has isolated fallback chain; don't use server fallbacks
+      fallback_llms: nextFallbackLlms,
+      fallback_chain: undefined,
       rotation_keys: activeConfigs.text ? undefined : tomoriState.rotation_keys,
     },
     activeConfigs,

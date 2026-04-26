@@ -1031,7 +1031,7 @@ Memories imported: {memories_count}
           select_placeholder: `Select an attribute...`,
           confirm_title: `Edit Attribute?`,
           confirm_description: `You selected this attribute:
-> {attribute}
+{attribute}
 
 Click **Confirm** to edit it.`,
           modal_title: `Edit Attribute`,
@@ -1072,8 +1072,10 @@ Click **Confirm** to edit it.`,
           select_placeholder: `Select a dialogue...`,
           confirm_title: `Edit Sample Dialogue?`,
           confirm_description: `You selected this dialogue pair:
-**User:** {input}
-**Me:** {output}
+**User:**
+{input}
+**Me:**
+{output}
 
 Click **Confirm** to edit it.`,
           modal_title: `Edit Sample Dialogue`,

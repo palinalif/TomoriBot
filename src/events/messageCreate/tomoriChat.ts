@@ -5332,14 +5332,6 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           `Starting response ${personaIndex + 1}/${personasToRespond.length} from persona "${currentPersona.tomori_nickname}" (${currentPersona.is_alter ? "alter" : "main"})`,
         );
 
-        // DEBUG: LLM selection tracing
-        log.info(
-          `[LLM-DEBUG] textCredentialSource=${textCredentialSource}, isUserImpersonation=${isUserImpersonation}`,
-        );
-        log.info(
-          `[LLM-DEBUG] personaBaseState.llm=${personaBaseState.llm.llm_codename}, persona_llm=${personaBaseState.persona_llm?.llm_codename ?? "null"}`,
-        );
-
         // Track active persona on lock entry so follow-up messages inherit the correct persona
         // instead of falling back to main. Also reset tool-call chain flag for this persona turn.
         if (lockEntry) {
@@ -5367,11 +5359,6 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
             : isUserImpersonation
               ? personaBaseState.llm
               : (personaBaseState.persona_llm ?? channelLlmOverride ?? personaBaseState.llm);
-
-        // DEBUG: Log which LLM was selected and why
-        log.info(
-          `[LLM-DEBUG] effectiveLlm=${effectiveLlm.llm_codename} (persona_override=${personaBaseState.persona_llm?.llm_codename ?? "null"}, channelOverride=${channelLlmOverride?.llm_codename ?? "null"})`,
-        );
 
         if (effectiveLlm !== personaBaseState.llm) {
           // Shallow-copy so the cached TomoriState is never mutated
@@ -6495,23 +6482,52 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                * provider, serverDiscId (for NovelAI context limit re-application).
                */
               const runWithFallbackModels = async (): Promise<FallbackRunResult> => {
-                // Prefer the typed fallback_chain (supports mixed providers + custom endpoints).
-                // Fall back to legacy fallback_llms for servers not yet migrated.
-                const fallbackChain: FallbackEntry[] =
-                  tomoriState?.fallback_chain ??
-                  (tomoriState?.fallback_llms ?? []).map((m) => ({ kind: "llm" as const, model: m }));
-
-                // Snapshot the original effective state to restore if all fallbacks fail
+                // Snapshot the original effective state to restore after the function completes
+                // (prevents mutations from persisting to subsequent function calls)
+                const originalEffectiveTomoriState = effectiveTomoriState;
                 const primaryEffectiveTomoriState = effectiveTomoriState;
                 const primaryProvider = primaryEffectiveTomoriState.llm.llm_provider.toLowerCase();
 
-                // DEBUG: Log what primary model is being used
-                log.info(
-                  `[LLM-DEBUG] PRIMARY MODEL in runWithFallbackModels: ${primaryEffectiveTomoriState.llm.llm_codename} (provider=${primaryProvider})`,
-                );
-                log.info(
-                  `[LLM-DEBUG] tomoriState.llm=${tomoriState.llm.llm_codename}, effectiveTomoriState.llm=${effectiveTomoriState.llm.llm_codename}`,
-                );
+                // Build fallback chain: personal provider uses isolated chain, others use hierarchy
+                const configuredFallbacks: FallbackEntry[] =
+                  tomoriState?.fallback_chain ??
+                  (tomoriState?.fallback_llms ?? []).map((m) => ({ kind: "llm" as const, model: m }));
+
+                const seenLlmIds = new Set<number>();
+                seenLlmIds.add(primaryEffectiveTomoriState.llm.llm_id ?? -1);
+
+                let fallbackChain: FallbackEntry[];
+
+                if (textCredentialSource === "personal") {
+                  // Personal provider: use only personal fallback chain (no server hierarchy)
+                  fallbackChain = configuredFallbacks;
+                } else {
+                  // Server provider: build hierarchy chain (persona → channel → server → configured)
+                  const hierarchyFallbacks: FallbackEntry[] = [];
+
+                  // 1. Add channel override if it exists and differs from primary
+                  if (channelLlmOverride && channelLlmOverride.llm_id !== primaryEffectiveTomoriState.llm.llm_id) {
+                    hierarchyFallbacks.push({ kind: "llm" as const, model: channelLlmOverride });
+                    seenLlmIds.add(channelLlmOverride.llm_id ?? -1);
+                  }
+
+                  // 2. Add server global model if it differs from primary
+                  if (personaBaseState.llm.llm_id !== primaryEffectiveTomoriState.llm.llm_id) {
+                    hierarchyFallbacks.push({ kind: "llm" as const, model: personaBaseState.llm });
+                    seenLlmIds.add(personaBaseState.llm.llm_id ?? -1);
+                  }
+
+                  // 3. Add configured fallbacks (excluding duplicates from hierarchy)
+                  fallbackChain = [
+                    ...hierarchyFallbacks,
+                    ...configuredFallbacks.filter((entry) => {
+                      if (entry.kind === "llm") {
+                        return !seenLlmIds.has(entry.model.llm_id ?? -1);
+                      }
+                      return true; // Always include custom endpoints
+                    }),
+                  ];
+                }
 
                 // 1. Attempt with the primary model
                 streamingContext.forceModelFallback = fallbackChain.length > 0;
@@ -6519,6 +6535,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
                 if (primaryResult.abort) {
                   streamingContext.forceModelFallback = false;
+                  effectiveTomoriState = originalEffectiveTomoriState;
                   return {
                     streamResult: null,
                     abort: true,
@@ -6530,6 +6547,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                 if (!primaryResult.streamResult || primaryResult.streamResult.status !== "error") {
                   // Primary succeeded (or returned a non-error status)
                   streamingContext.forceModelFallback = false;
+                  effectiveTomoriState = originalEffectiveTomoriState;
                   return {
                     ...primaryResult,
                     fallbackUsed: null,
@@ -6653,7 +6671,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       errorType: "ApiKeyError",
                     });
                     streamingContext.forceModelFallback = false;
-                    effectiveTomoriState = primaryEffectiveTomoriState;
+                    effectiveTomoriState = originalEffectiveTomoriState;
                     return {
                       streamResult: lastResult.streamResult,
                       abort: false,
@@ -6670,7 +6688,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
                   if (fallbackResult.abort) {
                     streamingContext.forceModelFallback = false;
-                    effectiveTomoriState = primaryEffectiveTomoriState;
+                    effectiveTomoriState = originalEffectiveTomoriState;
                     return {
                       streamResult: null,
                       abort: true,
@@ -6682,11 +6700,13 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                   if (!fallbackResult.streamResult || fallbackResult.streamResult.status !== "error") {
                     // This fallback succeeded
                     streamingContext.forceModelFallback = false;
+                    const successModel = entry.kind === "llm" ? entry.model : effectiveTomoriState.llm;
+                    effectiveTomoriState = originalEffectiveTomoriState;
                     return {
                       streamResult: fallbackResult.streamResult,
                       abort: false,
                       fallbackUsed: failures,
-                      successModel: entry.kind === "llm" ? entry.model : effectiveTomoriState.llm,
+                      successModel: successModel,
                     };
                   }
 
@@ -6698,7 +6718,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
 
                 // 3. All models failed — restore primary state for clean teardown
                 streamingContext.forceModelFallback = false;
-                effectiveTomoriState = primaryEffectiveTomoriState;
+                effectiveTomoriState = originalEffectiveTomoriState;
                 return {
                   streamResult: lastResult.streamResult,
                   abort: false,
