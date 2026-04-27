@@ -3276,7 +3276,10 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
         return;
       }
 
-      const personalRoutingUserId = isSelfMessage && !isPersonaJob ? null : (userRow?.user_id ?? null);
+      const personalRoutingUserId =
+        isSelfMessage && !isPersonaJob && !isManuallyTriggered && !isUserImpersonation
+          ? null
+          : (userRow?.user_id ?? null);
       let textCredentialSource: "server" | "personal" = "server";
       let personalTextProvider: string | null = null;
 

@@ -21,8 +21,7 @@ RUN apk update && apk upgrade && \
     py3-pip \
     nodejs \
     npm && \
-    ln -sf /usr/bin/python3 /usr/bin/python && \
-    npm install -g @mozilla/readability jsdom turndown
+    ln -sf /usr/bin/python3 /usr/bin/python
 
 # Note: DuckDuckGo MCP server is run via bunx (see pre-cache step below as tomori user)
 # No global npm install needed - bunx handles package resolution at runtime
@@ -41,7 +40,7 @@ USER tomori
 # Add user's local bin directory to PATH for pip installed scripts
 # Add NODE_PATH so mcp-server-fetch can find globally installed npm packages
 ENV PATH="/home/tomori/.local/bin:$PATH"
-ENV NODE_PATH="/usr/lib/node_modules"
+ENV NODE_PATH="/app/node_modules"
 
 # Copy pre-downloaded Python packages (downloaded by GitHub Actions runner)
 # This avoids network issues during Docker build in CI/CD
