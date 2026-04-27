@@ -58,6 +58,12 @@ RUN if [ "$(ls /tmp/pip-packages/*.whl 2>/dev/null)" ]; then \
     fi && \
     rm -rf /tmp/pip-packages
 
+# Fix readabilipy's ESM issues with Node 20 by using the project's native dependencies
+RUN echo "Linking readabilipy to root dependencies..." && \
+    READABILIPY_DIR=$(python3 -c "import readabilipy, os; print(os.path.dirname(readabilipy.__file__))") && \
+    rm -rf "$READABILIPY_DIR/javascript/node_modules" "$READABILIPY_DIR/javascript/package-lock.json" && \
+    ln -s /app/node_modules "$READABILIPY_DIR/javascript/node_modules"
+
 # Pre-cache npm-based MCP servers by running bunx once as tomori user
 # This warms Bun's package cache, preventing timeout during bot startup
 RUN echo "Pre-caching npm MCP servers for tomori user..." && \
