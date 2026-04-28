@@ -67,7 +67,7 @@ RUN echo "Linking readabilipy to root dependencies..." && \
 # Pre-cache npm-based MCP servers by running bunx once as tomori user
 # This warms Bun's package cache, preventing timeout during bot startup
 RUN echo "Pre-caching npm MCP servers for tomori user..." && \
-    timeout 60 bunx @oevortex/ddg_search@latest --help > /dev/null 2>&1 || true && \
+    timeout 60 bunx @oevortex/ddg_search@1.3.0 --help > /dev/null 2>&1 || true && \
     echo "DuckDuckGo MCP server cached successfully"
 
 # Copy package files first for better Docker layer caching

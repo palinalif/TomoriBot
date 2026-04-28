@@ -196,6 +196,13 @@ jobs:
           echo "Packages downloaded to docker/pip-cache/"
           ls -lah docker/pip-cache/
 
+      - name: Verify Python package checksums
+        run: |
+          echo "Verifying cryptographic hashes of downloaded Python wheels..."
+          cd docker
+          sha256sum -c pip-checksums.txt
+          echo "All Python wheel checksums verified successfully!"
+
       - name: Build Docker image
         run: |
           echo "Building TomoriBot Docker image..."
