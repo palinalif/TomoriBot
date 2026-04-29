@@ -195,11 +195,11 @@ If the active user sends follow-up messages while a tool-call chain is running, 
 Provider adapter safeguards:
 - Google/OpenRouter/Custom adapters split mixed chunks (`text` + tool-call signal) into two raw chunks so text is processed first, then `function_call`.
 - Speaker-boundary holdback tails are force-flushed before non-text chunks (tool call/error/finish) to prevent truncated text when a stream exits early on tool execution.
-- Adapter-level speaker fallback only runs when `/config stop-strings manage` enables the server-wide `\n{Name}:` speaker-pattern checkbox. When enabled, it stops on registered speaker labels already present in context, plus reserved `Assistant:` labels, while ignoring speaker-like lines inside fenced or inline backtick code.
+- Adapter-level speaker fallback only runs when `/config stop-strings manage` enables the server-wide `\n{Name}:` speaker-pattern checkbox. When enabled, it stops on newline-prefixed speaker-like labels such as `\nName:` while ignoring speaker-like lines inside fenced or inline backtick code.
 - Shared stop-string rules live in `src/providers/utils/stopStrings.ts`. That registry handles universal stop strings, provider/model-specific stop strings, server-configured stop strings, and the opt-in persona speaker stop.
 
 Stream-level safeguard:
-- When the server's speaker-pattern checkbox is enabled, `StreamOrchestrator` truncates any flushed segment at the first line that starts with a registered non-active speaker label (`Name:`) or reserved `Assistant:` label, then stops the stream. The same guard is skipped by default.
+- When the server's speaker-pattern checkbox is enabled, `StreamOrchestrator` truncates any flushed segment at the first newline-prefixed speaker-like label (`Name:`), then stops the stream. The same guard is skipped by default.
 
 Loop control and max iterations are managed by `tomoriChat` (function-call safety loop). Two distinct guards protect the turn:
 

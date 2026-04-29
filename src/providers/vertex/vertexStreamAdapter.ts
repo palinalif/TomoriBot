@@ -28,8 +28,8 @@ import type { FunctionCall, ThoughtLogEntry } from "../../types/provider/interfa
 import { ContextItemTag, type StructuredContextItem } from "../../types/misc/context";
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
-import { isRegisteredOrReservedSpeakerLabel } from "../../utils/text/stringHelper";
-import { buildPersonaSpeakerStopString, buildProviderStopStrings } from "../utils/stopStrings";
+import { truncateBeforeGenericSpeakerLine } from "../../utils/text/stringHelper";
+import { buildProviderStopStrings } from "../utils/stopStrings";
 import type {
   ProcessedChunk,
   ProviderError,
@@ -95,8 +95,6 @@ export class VertexStreamAdapter implements StreamProvider {
   private speakerGuardPendingTail = "";
   private streamedTextTail = "";
   private speakerGuardEnabled = false;
-  private activePersonaNameLower = "";
-  private knownSpeakerNamesLower = new Set<string>();
   protected readonly providerName: string;
   private readonly clientFactory: (apiKey: string) => GoogleGenAI;
 
@@ -180,13 +178,7 @@ export class VertexStreamAdapter implements StreamProvider {
     this.speakerGuardPendingTail = "";
     this.streamedTextTail = "";
     const speakerStopPatternEnabled = context.tomoriState.config.llm_stop_speaker_pattern_enabled ?? false;
-    this.speakerGuardEnabled =
-      speakerStopPatternEnabled && Boolean(buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname));
-    this.activePersonaNameLower = (context.tomoriState.tomori_nickname ?? "").toLowerCase();
-    this.knownSpeakerNamesLower = this.collectKnownSpeakerNames(context.contextItems);
-    if (this.activePersonaNameLower) {
-      this.knownSpeakerNamesLower.add(this.activePersonaNameLower);
-    }
+    this.speakerGuardEnabled = speakerStopPatternEnabled;
     const mergedStopSequences = buildProviderStopStrings({
       existingStops: requestConfig.stopSequences,
       providerName: this.providerName,
@@ -612,32 +604,6 @@ export class VertexStreamAdapter implements StreamProvider {
     return Boolean(chunk.candidates?.[0]?.finishReason);
   }
 
-  private collectKnownSpeakerNames(contextItems: StructuredContextItem[]): Set<string> {
-    const names = new Set<string>();
-
-    for (const item of contextItems) {
-      if (item.role !== "user" && item.role !== "model") continue;
-
-      for (const part of item.parts) {
-        if (part.type !== "text") continue;
-
-        const lines = part.text.split("\n");
-        for (const line of lines) {
-          const match = line.match(/^\s*([^\n:]{1,64}):\s*/);
-          if (!match) continue;
-
-          const rawName = match[1].trim();
-          if (!rawName) continue;
-          if (rawName.startsWith("[") || rawName.startsWith("<")) continue;
-
-          names.add(rawName.toLowerCase());
-        }
-      }
-    }
-
-    return names;
-  }
-
   private applySpeakerBoundaryFallbackGuard(chunk: VertexStreamChunk): {
     chunk: VertexStreamChunk;
     stopTriggered: boolean;
@@ -653,29 +619,8 @@ export class VertexStreamAdapter implements StreamProvider {
     }
 
     const combined = `${this.speakerGuardPendingTail}${chunkText}`;
-    const speakerPattern = /\n+([^\n:]{1,64}):\s*/g;
-    let match: RegExpExecArray | null = null;
-    let matchedSpeaker: string | undefined;
-    let transitionIndex = -1;
-
-    while (true) {
-      match = speakerPattern.exec(combined);
-      if (!match) break;
-
-      const rawLabel = match[1].trim();
-      if (!isRegisteredOrReservedSpeakerLabel(rawLabel, this.knownSpeakerNamesLower)) {
-        continue;
-      }
-
-      const normalizedLabel = rawLabel.toLowerCase();
-      if (this.activePersonaNameLower && normalizedLabel === this.activePersonaNameLower) {
-        continue;
-      }
-
-      transitionIndex = match.index;
-      matchedSpeaker = rawLabel;
-      break;
-    }
+    const speakerGuardResult = truncateBeforeGenericSpeakerLine(combined);
+    const transitionIndex = speakerGuardResult.stopTriggered ? speakerGuardResult.text.length : -1;
 
     if (transitionIndex === -1) {
       const holdback = VertexStreamAdapter.SPEAKER_GUARD_HOLDBACK_CHARS;
@@ -699,7 +644,7 @@ export class VertexStreamAdapter implements StreamProvider {
     return {
       chunk: this.cloneChunkWithText(chunk, combined.slice(0, transitionIndex)),
       stopTriggered: true,
-      matchedSpeaker,
+      matchedSpeaker: speakerGuardResult.matchedSpeaker,
     };
   }
 

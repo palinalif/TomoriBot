@@ -4,6 +4,7 @@ import { voiceSampleSchema } from "@/types/db/schema";
 import type { CustomEndpointRow } from "@/types/db/schema";
 import { stripElevenLabsExpressionTags } from "@/utils/audio/elevenLabsShared";
 import { loadStoredVoiceSampleBuffer } from "@/utils/storage/voiceSampleStorage";
+import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 
 /** Timeout for /synthesize requests, configurable via env. */
 const TTS_CLONE_TIMEOUT_MS =
@@ -196,7 +197,7 @@ export async function synthesizeSpeechViaTtsClone(request: TtsCloneRequest): Pro
     const abortController = new AbortController();
     const timer = setTimeout(() => abortController.abort(), TTS_CLONE_TIMEOUT_MS);
     try {
-      response = await fetch(`${endpointUrl}/synthesize`, {
+      response = await fetchUserRemoteUrl(`${endpointUrl}/synthesize`, {
         method: "POST",
         headers,
         body: JSON.stringify(body),
