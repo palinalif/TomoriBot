@@ -196,7 +196,9 @@ Controls include:
 
 TomoriBot implements several controls to mitigate supply chain risks during development and deployment:
 
-- **Lockfiles and Pinning:** Always use `--frozen-lockfile` (or `bun install --frozen-lockfile` in CI) to ensure deterministic builds. Never use floating tags like `@latest` in the `Dockerfile`.
+- **Lockfiles and Pinning:** Always use `--frozen-lockfile` (or `bun install --frozen-lockfile` in CI) to ensure deterministic builds. Never use floating tags like `@latest` in the `Dockerfile`, workflow actions, dependency overrides, or bundled MCP server configs.
+- **Pinned Runtime Images and Actions:** Production Docker builds pin the Bun base image by digest, and deployment workflows pin third-party GitHub Actions by commit SHA.
+- **Bundled MCP Packages:** Built-in npm MCP servers are pinned in `package.json`/`bun.lock`; production uses installed binaries instead of runtime `bunx` package resolution.
 - **Dependency Auditing:** The CI/CD pipeline enforces `bun audit` (failing on high/critical) and container scanning (Trivy).
 - **Asset Checksums:** External dependencies downloaded outside the primary package manager (e.g., Python wheels for Alpine) must be verified against cryptographic hashes (`pip-checksums.txt`) before the Docker image is built.
 - **Dependency Patches:** Patches and overrides are tracked in `patches/README.md`. When updating dependencies, always refer to this document to check if a patch can be reverted.
