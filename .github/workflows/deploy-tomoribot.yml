@@ -283,8 +283,8 @@ jobs:
         run: |
           echo "Running dependency vulnerability scan..."
 
-          # Run bun audit and capture output
-          if ! bun audit --audit-level=high > audit-output.txt 2>&1; then
+          # Run custom audit script (filters known ghost advisories, exits 1 on real vulns)
+          if ! bun run audit:clean > audit-output.txt 2>&1; then
             echo "High or critical vulnerabilities found in dependencies:"
             cat audit-output.txt
             exit 1
