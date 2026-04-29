@@ -101,7 +101,7 @@ Also requires pgvector (`CREATE EXTENSION IF NOT EXISTS vector`).
 - `tomori_configs.tomori_id` remains as a nullable legacy pointer.
 - `tomori_configs.message_fetch_limit` stores the per-server context fetch cap (default `80`, configurable via `/config message-fetch-limit`).
 - `tomori_configs.thinking_level` stores the active text provider's mirrored reasoning preference (`auto`, `none`, `low`, `medium`, `high`) as managed through `/config samplers`.
-- `tomori_configs.llm_stop_strings` and `tomori_configs.llm_stop_speaker_pattern_enabled` mirror the active text provider's saved stop-string settings. The speaker-pattern flag defaults to `false`, so `\n{Name}:` generation stops are opt-in.
+- `tomori_configs.llm_stop_strings` and `tomori_configs.llm_stop_speaker_pattern_enabled` store server-wide stop-string settings applied to every text provider. The speaker-pattern flag defaults to `false`, so `\n{Name}:` generation stops are opt-in.
 - `tomori_configs.welcome_channel_disc_id` stores the single configured join-welcome channel per server.
 - `tomori_configs.thought_log_channel_disc_id` stores the optional server-scoped channel where provider reasoning summaries are posted after successful streamed chat turns.
 - `tomori_configs.autoch_persona_overrides` stores optional per-channel persona assignments for configured auto-trigger channels. Each entry is a JSON object with `channel_disc_id` and `tomori_id`; missing entries fall back to the main persona.
@@ -187,7 +187,6 @@ Encrypted columns are stored as `BYTEA` with key version tracking:
 - `api_key_rotation.api_key` + `api_key_rotation.key_version`
 - `saved_provider_configs.api_key` + `saved_provider_configs.key_version`
 - `saved_provider_configs.thinking_level` mirrors `tomori_configs.thinking_level` so provider switching can restore the previous provider-specific reasoning preference.
-- `saved_provider_configs.llm_stop_strings` and `saved_provider_configs.llm_stop_speaker_pattern_enabled` store provider-scoped stop-string preferences managed through `/config stop-strings add` and `/config stop-strings manage`.
 - `saved_provider_configs.fallback_model_refs` and `user_saved_provider_configs.fallback_model_refs` store ordered polymorphic fallback references as JSON objects shaped like `{type: "llm" | "custom_endpoint", id: number}`. The legacy `fallback_llm_ids` arrays remain during rollout for backward compatibility.
 - `custom_endpoints` stores labeled self-hosted or proxy-backed endpoint registrations. Rows are scoped either to `server_id` or `user_id`, keyed by `(scope, label, capability)` through scoped partial unique indexes, and carry adapter metadata such as `api_style`, `endpoint_url`, `model_name`, capability flags, workflow JSON or speech/STT adapter options (`extra_config`), `is_default`, and whether auth is required.
 - `voice_samples` stores server-scoped reference audio metadata for local speech cloning. `file_path` is a production S3/CloudFront URL or a local `data/voice-samples/` path. Phase 4 allows one uploaded local sample per server.

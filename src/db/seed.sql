@@ -21,13 +21,9 @@ SELECT add_column_if_not_exists('tomori_configs', 'llm_stop_speaker_pattern_enab
 
 -- Ensure all required columns exist in saved_provider_configs table
 SELECT add_column_if_not_exists('saved_provider_configs', 'fallback_model_refs', 'JSONB', '''[]''::JSONB');
-SELECT add_column_if_not_exists('saved_provider_configs', 'llm_stop_strings', 'TEXT[]', 'ARRAY[]::TEXT[]');
-SELECT add_column_if_not_exists('saved_provider_configs', 'llm_stop_speaker_pattern_enabled', 'BOOLEAN', 'false');
 
 -- Ensure all required columns exist in user_saved_provider_configs table
 SELECT add_column_if_not_exists('user_saved_provider_configs', 'fallback_model_refs', 'JSONB', '''[]''::JSONB');
-SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_stop_strings', 'TEXT[]', 'ARRAY[]::TEXT[]');
-SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_stop_speaker_pattern_enabled', 'BOOLEAN', 'false');
 
 -- Phase 3: labeled custom endpoints live in a dedicated registry table.
 CREATE TABLE IF NOT EXISTS custom_endpoints (

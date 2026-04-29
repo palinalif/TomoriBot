@@ -1,6 +1,5 @@
 import {
   MessageFlags,
-  type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Client,
   type ModalSubmitInteraction,
@@ -10,15 +9,10 @@ import type { CheckboxGroupOption, ModalCheckboxGroupField, ModalComponent } fro
 import type { ErrorContext, UserRow } from "@/types/db/schema";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { sql } from "@/utils/db/client";
-import { upsertSavedProviderConfig } from "@/utils/db/dbWrite";
-import { createStandardEmbed } from "@/utils/discord/embedHelper";
 import { promptWithRawModal, replyInfoEmbed, safeSelectOptionText } from "@/utils/discord/interactionHelper";
 import { ColorCode, log } from "@/utils/misc/logger";
-import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
-import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
-import { formatStopStringForDisplay, MAX_STOP_STRINGS_PER_PROVIDER } from "@/utils/provider/stopStringConfig";
+import { formatStopStringForDisplay, MAX_STOP_STRINGS_PER_SERVER } from "@/utils/provider/stopStringConfig";
 import { localizer } from "@/utils/text/localizer";
-import { promptForSavedProvider } from "@/commands/config/model/providerPicker";
 
 const STOP_STRING_OPTIONS_PER_GROUP = 10;
 const MAX_STOP_STRING_GROUPS_PER_MODAL = 4;
@@ -59,46 +53,33 @@ export async function execute(
   let modalInteraction: ModalSubmitInteraction | null = null;
 
   try {
-    const savedProviders = await loadSavedProvidersForCapability(tomoriState.server_id, "text");
-    const providerSelection = await promptForSavedProvider(interaction, locale, savedProviders, {
-      descriptionKey: "commands.config.stop-strings.manage.picker_description",
-    });
-    if (!providerSelection) return;
-
-    const selectedProvider = providerSelection.provider;
-    const responseInteraction = providerSelection.interaction;
-    const savedConfig = savedProviders.find((provider) => provider.provider.toLowerCase() === selectedProvider) ?? null;
-    if (!savedConfig) {
-      await replyWithResult(interaction, responseInteraction, Boolean(providerSelection.pickerInteraction), locale, {
-        titleKey: "general.errors.operation_failed_title",
-        descriptionKey: "general.errors.unknown_error_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
-
-    const stopStrings = savedConfig.llm_stop_strings ?? [];
+    const stopStrings = tomoriState.config.llm_stop_strings ?? [];
     const maxEntries = STOP_STRING_OPTIONS_PER_GROUP * MAX_STOP_STRING_GROUPS_PER_MODAL;
-    if (stopStrings.length > maxEntries || stopStrings.length > MAX_STOP_STRINGS_PER_PROVIDER) {
-      await replyWithResult(interaction, responseInteraction, Boolean(providerSelection.pickerInteraction), locale, {
+    if (stopStrings.length > maxEntries || stopStrings.length > MAX_STOP_STRINGS_PER_SERVER) {
+      await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.stop-strings.manage.too_many_title",
         descriptionKey: "commands.config.stop-strings.manage.too_many_description",
         descriptionVars: {
           count: stopStrings.length.toString(),
-          max_entries: Math.min(maxEntries, MAX_STOP_STRINGS_PER_PROVIDER).toString(),
+          max_entries: Math.min(maxEntries, MAX_STOP_STRINGS_PER_SERVER).toString(),
         },
         color: ColorCode.WARN,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
     const modalResult = await promptWithRawModal(
-      responseInteraction,
+      interaction,
       locale,
       {
         modalCustomId: `config_stop_strings_manage_modal_${interaction.id}`,
         modalTitleKey: "commands.config.stop-strings.manage.modal_title",
-        components: buildModalComponents(stopStrings, savedConfig.llm_stop_speaker_pattern_enabled ?? false, locale),
+        components: buildModalComponents(
+          stopStrings,
+          tomoriState.config.llm_stop_speaker_pattern_enabled ?? false,
+          locale,
+        ),
       },
       MessageFlags.Ephemeral,
     );
@@ -113,7 +94,8 @@ export async function execute(
     const nextStopStrings = stopStrings.filter((_stop, index) => checkedStopIndexes.has(index));
     const removedStops = stopStrings.filter((_stop, index) => !checkedStopIndexes.has(index));
 
-    const speakerPatternChanged = speakerPatternEnabled !== (savedConfig.llm_stop_speaker_pattern_enabled ?? false);
+    const speakerPatternChanged =
+      speakerPatternEnabled !== (tomoriState.config.llm_stop_speaker_pattern_enabled ?? false);
     const stopStringsChanged = removedStops.length > 0;
 
     if (!speakerPatternChanged && !stopStringsChanged) {
@@ -125,29 +107,12 @@ export async function execute(
       return;
     }
 
-    const nextConfig = {
-      ...savedConfig,
-      llm_stop_strings: nextStopStrings,
-      llm_stop_speaker_pattern_enabled: speakerPatternEnabled,
-    };
-    const upserted = await upsertSavedProviderConfig(tomoriState.server_id, nextConfig);
-    if (!upserted) {
-      await replyInfoEmbed(modalInteraction, locale, {
-        titleKey: "general.errors.update_failed_title",
-        descriptionKey: "general.errors.update_failed_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
-
-    if (selectedProvider === tomoriState.llm.llm_provider.toLowerCase()) {
-      await sql`
-        UPDATE tomori_configs
-        SET llm_stop_strings = ${toPostgresTextArrayLiteral(nextStopStrings)}::text[],
-            llm_stop_speaker_pattern_enabled = ${speakerPatternEnabled}
-        WHERE server_id = ${tomoriState.server_id}
-      `;
-    }
+    await sql`
+      UPDATE tomori_configs
+      SET llm_stop_strings = ${toPostgresTextArrayLiteral(nextStopStrings)}::text[],
+          llm_stop_speaker_pattern_enabled = ${speakerPatternEnabled}
+      WHERE server_id = ${tomoriState.server_id}
+    `;
 
     invalidateTomoriStateCache(guildKey);
 
@@ -155,7 +120,6 @@ export async function execute(
       titleKey: "commands.config.stop-strings.manage.success_title",
       descriptionKey: "commands.config.stop-strings.manage.success_description",
       descriptionVars: {
-        provider: getProviderDisplayName(selectedProvider),
         removed_count: removedStops.length.toString(),
         removed_stop_strings:
           removedStops.length > 0 ? formatStopStringList(removedStops, locale) : localizer(locale, "general.none"),
@@ -283,22 +247,4 @@ function formatStopStringList(stops: readonly string[], locale: string): string 
     );
   }
   return visibleStops.join(", ");
-}
-
-async function replyWithResult(
-  interaction: ChatInputCommandInteraction,
-  responseInteraction: ChatInputCommandInteraction | ButtonInteraction,
-  usedPicker: boolean,
-  locale: string,
-  options: Parameters<typeof replyInfoEmbed>[2],
-): Promise<void> {
-  if (usedPicker) {
-    await (responseInteraction as ButtonInteraction).update({
-      embeds: [createStandardEmbed(locale, options)],
-      components: [],
-    });
-    return;
-  }
-
-  await replyInfoEmbed(interaction, locale, { ...options, flags: MessageFlags.Ephemeral });
 }

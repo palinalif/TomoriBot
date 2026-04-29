@@ -159,7 +159,7 @@ export interface ProviderStopStringArgs {
  * 1. Any adapter-specific existing stops
  * 2. Universal rules from this module
  * 3. Specialized provider/model rules from this module
- * 4. User-configured exact provider stop strings
+ * 4. Server-configured exact stop strings
  * 5. The active persona's newline-prefixed speaker stop, when enabled
  */
 export function buildProviderStopStrings(args: ProviderStopStringArgs): string[] | undefined {

@@ -881,16 +881,16 @@ async function resolveImpersonatedIdentity(
 }
 
 /**
- * Normalizes the `@` prefix from any persona trigger word found in text.
+ * Strips the `@` prefix from any persona trigger word found in text.
  *
  * When a user types `@{trigger}` to directly invoke an alter persona (which cannot be
- * Discord-mentioned because alters are webhooks), keep the `@` marker so the LLM
- * can distinguish the addressed alter from the active/main bot persona. Main persona
- * triggers still drop the marker to match normal bot-addressing behavior.
+ * Discord-mentioned because alters are webhooks), the raw `@` appears in the LLM context.
+ * This function replaces `@{trigger}` with `{trigger}` so the context reads cleanly,
+ * matching the behavior of Discord user mentions where `<@userId>` is resolved to a plain name.
  *
  * @param content - The message content to process.
  * @param allPersonas - All loaded persona states for this server (main + alters).
- * @returns Content with alter `@{trigger}` patterns preserved and main trigger markers stripped.
+ * @returns Content with `@{trigger}` patterns replaced by `{trigger}`.
  */
 function stripAtPersonaTriggers(content: string, allPersonas: TomoriState[]): string {
   let result = content;
@@ -904,7 +904,7 @@ function stripAtPersonaTriggers(content: string, allPersonas: TomoriState[]): st
       // Match @{trigger} that is not preceded by a word character (avoids matching emails
       // like user@trigger.com). Replacement preserves the stored trigger casing.
       const pattern = new RegExp(`(?<![\\w])@${trigger.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "gi");
-      result = result.replace(pattern, persona.is_alter ? `@${trigger}` : trigger);
+      result = result.replace(pattern, trigger);
     }
   }
   return result;
@@ -5418,10 +5418,6 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                   llm_disabled_params:
                     overrideSavedConfig.llm_disabled_params ?? tomoriState.config.llm_disabled_params,
                   llm_logit_biases: overrideSavedConfig.llm_logit_biases ?? tomoriState.config.llm_logit_biases,
-                  llm_stop_strings: overrideSavedConfig.llm_stop_strings ?? tomoriState.config.llm_stop_strings,
-                  llm_stop_speaker_pattern_enabled:
-                    overrideSavedConfig.llm_stop_speaker_pattern_enabled ??
-                    tomoriState.config.llm_stop_speaker_pattern_enabled,
                 },
               };
             }

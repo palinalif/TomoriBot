@@ -1,23 +1,18 @@
-import type { ButtonInteraction, ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
+import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import type { ErrorContext, UserRow } from "@/types/db/schema";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
 import { sql } from "@/utils/db/client";
-import { upsertSavedProviderConfig } from "@/utils/db/dbWrite";
-import { createStandardEmbed } from "@/utils/discord/embedHelper";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { ColorCode, log } from "@/utils/misc/logger";
-import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
-import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import {
   formatStopStringForDisplay,
   MAX_STOP_STRING_LENGTH,
-  MAX_STOP_STRINGS_PER_PROVIDER,
+  MAX_STOP_STRINGS_PER_SERVER,
   mergeConfiguredStopStrings,
   parseCommaSeparatedStopStrings,
 } from "@/utils/provider/stopStringConfig";
 import { localizer } from "@/utils/text/localizer";
-import { promptForSavedProvider } from "@/commands/config/model/providerPicker";
 
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
@@ -88,83 +83,51 @@ export async function execute(
       return;
     }
 
-    const savedProviders = await loadSavedProvidersForCapability(tomoriState.server_id, "text");
-    const providerSelection = await promptForSavedProvider(interaction, locale, savedProviders, {
-      descriptionKey: "commands.config.stop-strings.add.picker_description",
-    });
-    if (!providerSelection) return;
-
-    const selectedProvider = providerSelection.provider;
-    const responseInteraction = providerSelection.interaction;
-    const savedConfig = savedProviders.find((provider) => provider.provider.toLowerCase() === selectedProvider) ?? null;
-    if (!savedConfig) {
-      await replyWithResult(interaction, responseInteraction, Boolean(providerSelection.pickerInteraction), locale, {
-        titleKey: "general.errors.operation_failed_title",
-        descriptionKey: "general.errors.unknown_error_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
-
-    const existingStops = savedConfig.llm_stop_strings ?? [];
+    const existingStops = tomoriState.config.llm_stop_strings ?? [];
     const mergedStops = mergeConfiguredStopStrings(existingStops, parsedStops);
-    if (mergedStops.length > MAX_STOP_STRINGS_PER_PROVIDER) {
-      await replyWithResult(interaction, responseInteraction, Boolean(providerSelection.pickerInteraction), locale, {
+    if (mergedStops.length > MAX_STOP_STRINGS_PER_SERVER) {
+      await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.stop-strings.add.too_many_title",
         descriptionKey: "commands.config.stop-strings.add.too_many_description",
         descriptionVars: {
-          max_count: MAX_STOP_STRINGS_PER_PROVIDER.toString(),
+          max_count: MAX_STOP_STRINGS_PER_SERVER.toString(),
           current_count: existingStops.length.toString(),
           added_count: parsedStops.length.toString(),
         },
         color: ColorCode.WARN,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
     const addedStops = mergedStops.filter((stop) => !existingStops.includes(stop));
     if (addedStops.length === 0) {
-      await replyWithResult(interaction, responseInteraction, Boolean(providerSelection.pickerInteraction), locale, {
+      await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.config.stop-strings.add.no_changes_title",
         descriptionKey: "commands.config.stop-strings.add.no_changes_description",
         color: ColorCode.WARN,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
-    const nextConfig = {
-      ...savedConfig,
-      llm_stop_strings: mergedStops,
-    };
-    const upserted = await upsertSavedProviderConfig(tomoriState.server_id, nextConfig);
-    if (!upserted) {
-      await replyWithResult(interaction, responseInteraction, Boolean(providerSelection.pickerInteraction), locale, {
-        titleKey: "general.errors.update_failed_title",
-        descriptionKey: "general.errors.update_failed_description",
-        color: ColorCode.ERROR,
-      });
-      return;
-    }
-
-    if (selectedProvider === tomoriState.llm.llm_provider.toLowerCase()) {
-      await sql`
-        UPDATE tomori_configs
-        SET llm_stop_strings = ${toPostgresTextArrayLiteral(mergedStops)}::text[]
-        WHERE server_id = ${tomoriState.server_id}
-      `;
-    }
+    await sql`
+      UPDATE tomori_configs
+      SET llm_stop_strings = ${toPostgresTextArrayLiteral(mergedStops)}::text[]
+      WHERE server_id = ${tomoriState.server_id}
+    `;
 
     invalidateTomoriStateCache(guildKey);
 
-    await replyWithResult(interaction, responseInteraction, Boolean(providerSelection.pickerInteraction), locale, {
+    await replyInfoEmbed(interaction, locale, {
       titleKey: "commands.config.stop-strings.add.success_title",
       descriptionKey: "commands.config.stop-strings.add.success_description",
       descriptionVars: {
-        provider: getProviderDisplayName(selectedProvider),
         added_count: addedStops.length.toString(),
         stop_strings: formatStopStringList(addedStops, locale),
       },
       color: ColorCode.SUCCESS,
+      flags: MessageFlags.Ephemeral,
     });
   } catch (error) {
     const context: ErrorContext = {
@@ -207,22 +170,4 @@ function formatStopStringList(stops: readonly string[], locale: string): string 
     );
   }
   return visibleStops.join(", ");
-}
-
-async function replyWithResult(
-  interaction: ChatInputCommandInteraction,
-  responseInteraction: ChatInputCommandInteraction | ButtonInteraction,
-  usedPicker: boolean,
-  locale: string,
-  options: Parameters<typeof replyInfoEmbed>[2],
-): Promise<void> {
-  if (usedPicker) {
-    await (responseInteraction as ButtonInteraction).update({
-      embeds: [createStandardEmbed(locale, options)],
-      components: [],
-    });
-    return;
-  }
-
-  await replyInfoEmbed(interaction, locale, { ...options, flags: MessageFlags.Ephemeral });
 }

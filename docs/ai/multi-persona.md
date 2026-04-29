@@ -46,7 +46,7 @@ Reminders are tied to a persona to preserve the identity that set them:
   - Matching is done by webhook `author.username` → persona nickname (case-insensitive).
   - Ensure persona nicknames are unique.
 - **Bot mention** → main persona responds.
-- Direct replies and bot mentions can combine with explicit persona trigger words in the same message. For example, replying to Tomori while using the alter DTM trigger `@Ren` routes the turn to Tomori and Ren.
+- Direct replies and bot mentions can combine with explicit persona trigger words in the same message. For example, replying to Tomori while mentioning `@Ren` routes the turn to Tomori and Ren.
 - **Auto-message threshold** → main persona responds.
 
 ### Trigger words
@@ -269,6 +269,7 @@ Webhook usage differs by environment:
   - `username` = persona nickname
   - `avatarURL` = public URL built from `AVATAR_PUBLIC_BASE_URL` when configured
   - otherwise TomoriBot mutates the shared webhook avatar from the local file immediately before sending
+  - if no alter avatar resolves, TomoriBot resets the shared webhook avatar before sending so a previous local avatar cannot leak onto the next persona
 - **Avatar storage**: Alter avatars are stored locally under `data/avatars/servers/{guildId}/personas/{personaId}/...`
 - **Legacy persona webhooks** (`TomoriBot Persona {id}`) are no longer part of steady-state sending. They remain recovery sources for lazy migration and may be cleaned up manually later.
 

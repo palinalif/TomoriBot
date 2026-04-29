@@ -65,9 +65,6 @@ export async function applyPersonalProviderSelectionsToTomoriState(
     nextConfig.llm_min_p = activeConfigs.text.llm_min_p ?? nextConfig.llm_min_p;
     nextConfig.llm_disabled_params = activeConfigs.text.llm_disabled_params ?? nextConfig.llm_disabled_params;
     nextConfig.llm_logit_biases = activeConfigs.text.llm_logit_biases ?? nextConfig.llm_logit_biases;
-    nextConfig.llm_stop_strings = activeConfigs.text.llm_stop_strings ?? nextConfig.llm_stop_strings;
-    nextConfig.llm_stop_speaker_pattern_enabled =
-      activeConfigs.text.llm_stop_speaker_pattern_enabled ?? nextConfig.llm_stop_speaker_pattern_enabled;
     nextConfig.thinking_level = activeConfigs.text.thinking_level ?? nextConfig.thinking_level;
     nextConfig.fallback_llm_ids = activeConfigs.text.fallback_llm_ids ?? nextConfig.fallback_llm_ids;
     nextConfig.custom_endpoint_url = activeConfigs.text.custom_endpoint_url ?? nextConfig.custom_endpoint_url;

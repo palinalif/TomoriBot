@@ -3,7 +3,7 @@ function parsePositiveIntegerEnv(name: string, fallback: number): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-export const MAX_STOP_STRINGS_PER_PROVIDER = parsePositiveIntegerEnv("BOT_MAX_STOP_STRINGS_PER_PROVIDER", 40);
+export const MAX_STOP_STRINGS_PER_SERVER = parsePositiveIntegerEnv("BOT_MAX_STOP_STRINGS_PER_SERVER", 40);
 export const MAX_STOP_STRING_LENGTH = parsePositiveIntegerEnv("BOT_MAX_STOP_STRING_LENGTH", 200);
 
 export function decodeStopStringEscapes(value: string): string {
