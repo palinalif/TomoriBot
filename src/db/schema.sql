@@ -2571,6 +2571,10 @@ SELECT add_column_if_not_exists('tomori_configs', 'context_note_depth', 'INTEGER
 SELECT add_column_if_not_exists('tomori_configs', 'voice_message_enabled', 'BOOLEAN', 'true');
 -- voice_transcript_chat_mode: Post voice transcripts as webhook chat messages instead of internal cache
 SELECT add_column_if_not_exists('tomori_configs', 'voice_transcript_chat_mode', 'BOOLEAN', 'true');
+-- Chatterbox local TTS controls. CFG/exaggeration apply only when turbo is disabled.
+SELECT add_column_if_not_exists('tomori_configs', 'chatterbox_turbo_enabled', 'BOOLEAN', 'true');
+SELECT add_column_if_not_exists('tomori_configs', 'chatterbox_cfg_weight', 'REAL', '0.5');
+SELECT add_column_if_not_exists('tomori_configs', 'chatterbox_exaggeration', 'REAL', '0.5');
 
 -- ============================================================
 -- Prompt snapshot permission (April 2026)

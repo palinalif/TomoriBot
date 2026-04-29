@@ -17,6 +17,17 @@ const TTS_CLONE_TIMEOUT_MS =
 
 /** Regex matching any bracket-tag in the form [content]. */
 const ANY_BRACKET_TAG_REGEX = /\[([^\]\r\n]{1,40})\]/g;
+const CHATTERBOX_TURBO_TAGS = new Set([
+  "clear throat",
+  "sigh",
+  "shush",
+  "cough",
+  "groan",
+  "sniff",
+  "gasp",
+  "chuckle",
+  "laugh",
+]);
 
 export type TtsCloneErrorKind =
   | "missing_sample"
@@ -43,6 +54,11 @@ export interface TtsCloneRequest {
   script: string;
   /** Empty string for local endpoints that don't require auth. */
   apiKey: string;
+  chatterbox?: {
+    turboEnabled: boolean;
+    cfgWeight: number;
+    exaggeration: number;
+  };
 }
 
 function resolveExtensionFromContentType(contentType: string): string {
@@ -65,6 +81,23 @@ function stripAllBracketTags(text: string): string {
     .trim();
 }
 
+function normalizeTtsWhitespace(text: string): string {
+  return text
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[^\S\n]+/g, " ")
+    .trim();
+}
+
+function stripUnsupportedChatterboxTurboTags(text: string): string {
+  return normalizeTtsWhitespace(
+    text.replace(ANY_BRACKET_TAG_REGEX, (match, rawTag: string) => {
+      const normalizedTag = rawTag.trim().toLowerCase();
+      return CHATTERBOX_TURBO_TAGS.has(normalizedTag) ? match : "";
+    }),
+  );
+}
+
 /**
  * Calls a local TTS clone server that implements the /synthesize spec.
  *
@@ -75,7 +108,7 @@ function stripAllBracketTags(text: string): string {
  * 5. Returns the raw audio buffer and content-type.
  */
 export async function synthesizeSpeechViaTtsClone(request: TtsCloneRequest): Promise<TtsCloneResult> {
-  const { endpoint, voiceSampleId, script, apiKey } = request;
+  const { endpoint, voiceSampleId, script, apiKey, chatterbox } = request;
 
   // 1. Load voice sample metadata from DB.
   const rows = await sql`
@@ -122,13 +155,19 @@ export async function synthesizeSpeechViaTtsClone(request: TtsCloneRequest): Pro
   const scriptMarkup = (endpoint.extra_config.script_markup as string | undefined) ?? "plain";
   const supportsInstruct = Boolean(endpoint.extra_config.supports_instruct);
 
-  // 3. Prepare script: strip all bracket tags for "plain" endpoints.
-  //    For bracket-tags/emoji endpoints, strip only for the caption text.
+  // 3. Prepare script: strip all bracket tags for "plain" endpoints and
+  //    standard Chatterbox, because only Turbo handles bracket descriptors.
+  //    Turbo gets a conservative whitelist so unsupported bracket text is not spoken aloud.
+  //    For other bracket-tags/emoji endpoints, strip only for the caption text.
   let processedScript: string;
   let captionText: string;
-  if (scriptMarkup === "plain") {
+  const shouldStripBracketTagsForTts = scriptMarkup === "plain" || chatterbox?.turboEnabled === false;
+  if (shouldStripBracketTagsForTts) {
     processedScript = stripAllBracketTags(script);
     captionText = processedScript;
+  } else if (chatterbox?.turboEnabled === true) {
+    processedScript = stripUnsupportedChatterboxTurboTags(script);
+    captionText = stripElevenLabsExpressionTags(processedScript);
   } else {
     processedScript = script;
     captionText = stripElevenLabsExpressionTags(script);
@@ -141,6 +180,12 @@ export async function synthesizeSpeechViaTtsClone(request: TtsCloneRequest): Pro
     ref_text: sample.ref_text ?? null,
     language: null,
   };
+
+  if (chatterbox) {
+    body.chatterbox_turbo = chatterbox.turboEnabled;
+    body.cfg_weight = chatterbox.cfgWeight;
+    body.exaggeration = chatterbox.exaggeration;
+  }
 
   if (supportsInstruct) {
     body.instruct = null;

@@ -190,6 +190,8 @@ When model emits `function_call`:
 - returns status `function_call`
 - caller executes tool and continues next stream iteration with updated context
 
+If the active user sends follow-up messages while a tool-call chain is running, TomoriBot preserves the tool progress and keeps only the latest same-user follow-up queued for the channel. That queued follow-up is answered as a direct Discord reply, so tool-sent recent-message replies are disabled for that follow-up turn to prevent duplicate replies to the same message.
+
 Provider adapter safeguards:
 - Google/OpenRouter/Custom adapters split mixed chunks (`text` + tool-call signal) into two raw chunks so text is processed first, then `function_call`.
 - Speaker-boundary holdback tails are force-flushed before non-text chunks (tool call/error/finish) to prevent truncated text when a stream exits early on tool execution.

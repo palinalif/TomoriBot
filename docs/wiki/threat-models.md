@@ -1,4 +1,4 @@
-# TomoriBot Threat Model
+# TomoriBot Threat Models
 
 This document comprehensively outlines the threat model for TomoriBot, analyzed from an adversarial (red team) perspective. We categorize potential threats using the **STRIDE** framework (Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, Elevation of Privilege) and group them by their primary attack vector.
 

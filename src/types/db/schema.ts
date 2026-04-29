@@ -473,6 +473,9 @@ export const tomoriConfigSchema = z.object({
   ), // Added April 2026 - Hidden notice embed types; missing entries remain visible by default
   voice_message_enabled: z.boolean().default(true), // Added March 2026 - Allow Tomori to send ElevenLabs TTS voice messages
   voice_transcript_chat_mode: z.boolean().default(true), // Added March 2026 - Post voice transcripts as webhook chat messages instead of using internal cache
+  chatterbox_turbo_enabled: z.boolean().default(true), // Added April 2026 - Use Chatterbox-Turbo model.generate path for local Chatterbox TTS
+  chatterbox_cfg_weight: z.number().min(0.0).default(0.5), // Added April 2026 - Standard Chatterbox CFG weight; ignored by Turbo
+  chatterbox_exaggeration: z.number().min(0.0).default(0.5), // Added April 2026 - Standard Chatterbox expression strength; ignored by Turbo
   self_debug_enabled: z.boolean().default(false), // Added March 2026 - Include Tomori error embeds in context as [System: ...]
   uncensor_injection_enabled: z.boolean().default(false), // Added February 2026 - Prompt injection mitigation toggle
   uncensor_unicode_space_enabled: z.boolean().default(false), // Added February 2026 - Unicode space replacement toggle

@@ -1,5 +1,8 @@
 -- Ensure all required columns exist in tomori_configs table
 SELECT add_column_if_not_exists('tomori_configs', 'voice_transcript_chat_mode', 'BOOLEAN', 'true');
+SELECT add_column_if_not_exists('tomori_configs', 'chatterbox_turbo_enabled', 'BOOLEAN', 'true');
+SELECT add_column_if_not_exists('tomori_configs', 'chatterbox_cfg_weight', 'REAL', '0.5');
+SELECT add_column_if_not_exists('tomori_configs', 'chatterbox_exaggeration', 'REAL', '0.5');
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_codename', 'TEXT');
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_capabilities', 'JSONB');
 SELECT add_column_if_not_exists('tomori_configs', 'other_model_capabilities_fetched_at', 'TIMESTAMP');

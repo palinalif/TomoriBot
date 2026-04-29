@@ -375,6 +375,21 @@ The selected model requires allowing data for paid model training, but your Open
         success_title: `ElevenLabs Connected`,
         success_description: `ElevenLabs speech and transcription endpoints are connected. Assign a persona voice with \`/config speech voice-assign\`.`,
       },
+      chatterbox: {
+        description: `Manage Chatterbox speech settings.`,
+        parameters: {
+          description: `Tune Chatterbox Turbo and standard-model speech generation.`,
+          cfg_weight_description: `Standard model only: lower values can slow fast voices; higher values follow reference more.`,
+          exaggeration_description: `Standard model only: higher values make delivery more dramatic and may speed speech up.`,
+          turbo_description: `Use Chatterbox-Turbo for faster generation and supported event tags; disable for CFG/exaggeration tuning.`,
+          enabled_label: `enabled`,
+          disabled_label: `disabled`,
+          success_title: `Chatterbox Parameters Updated`,
+          success_description: `Chatterbox Turbo: **{turbo}**\nCFG weight: **{cfg_weight}**\nExaggeration: **{exaggeration}**`,
+          turbo_notice: `Turbo is currently enabled, so CFG weight and exaggeration are saved but ignored. Supported event tags are kept; unsupported bracket descriptors are stripped.`,
+          standard_notice: `Turbo is currently disabled, so CFG weight and exaggeration are active. Bracket descriptors like \`[laugh]\` or \`[whisper]\` will be stripped before speech generation.`,
+        },
+      },
       transcripts: {
         description: `Toggle visible transcript posting for voice messages.`,
         set_description: `Enable or disable visible transcript messages in chat.`,

@@ -46,6 +46,7 @@ Reminders are tied to a persona to preserve the identity that set them:
   - Matching is done by webhook `author.username` → persona nickname (case-insensitive).
   - Ensure persona nicknames are unique.
 - **Bot mention** → main persona responds.
+- Direct replies and bot mentions can combine with explicit persona trigger words in the same message. For example, replying to Tomori while mentioning `@Ren` routes the turn to Tomori and Ren.
 - **Auto-message threshold** → main persona responds.
 
 ### Trigger words

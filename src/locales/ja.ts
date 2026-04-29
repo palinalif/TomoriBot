@@ -375,6 +375,21 @@ export default {
         success_title: `ElevenLabs を接続しました`,
         success_description: `ElevenLabs の音声生成と文字起こしエンドポイントを接続しました。\`/config speech voice-assign\` でペルソナに声を割り当てます。`,
       },
+      chatterbox: {
+        description: `Chatterbox の音声設定を管理します。`,
+        parameters: {
+          description: `Chatterbox Turbo と標準モデルの音声生成を調整します。`,
+          cfg_weight_description: `標準モデルのみ: 下げると速い声のペース調整に役立ち、上げると参照音声により強く寄せます。`,
+          exaggeration_description: `標準モデルのみ: 上げるほど表現が強くドラマチックになり、発話が速くなる場合があります。`,
+          turbo_description: `高速生成と対応済みイベントタグ用に Chatterbox-Turbo を使います。CFG/表現調整を使う場合は無効化します。`,
+          enabled_label: `有効`,
+          disabled_label: `無効`,
+          success_title: `Chatterbox パラメータを更新しました`,
+          success_description: `Chatterbox Turbo: **{turbo}**\nCFG weight: **{cfg_weight}**\nExaggeration: **{exaggeration}**`,
+          turbo_notice: `現在 Turbo が有効なため、CFG weight と Exaggeration は保存されますが無視されます。対応済みイベントタグは保持され、未対応の角括弧記述は削除されます。`,
+          standard_notice: `現在 Turbo が無効なため、CFG weight と Exaggeration が有効です。\`[laugh]\` や \`[whisper]\` のような角括弧の記述は、音声生成前に削除されます。`,
+        },
+      },
       transcripts: {
         description: `ボイスメッセージの表示用字幕投稿を切り替えます。`,
         set_description: `チャット内の表示用字幕メッセージを有効または無効にします。`,
