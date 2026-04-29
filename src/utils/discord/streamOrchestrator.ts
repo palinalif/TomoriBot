@@ -1481,16 +1481,18 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       segmentToSend = `${state.prefillTarget}${StreamOrchestrator.PREFILL_WHITESPACE_SENTINEL}${strippedSegment}`;
     }
     let shouldStopForSpeakerGuard = false;
-    const speakerGuardResult = truncateBeforeRegisteredSpeakerLine(
-      segmentToSend,
-      textConfig.registeredSpeakerNamesLower,
-    );
-    if (speakerGuardResult.stopTriggered) {
-      log.warn(
-        `Stream speaker guard: stopping before speaker label "${speakerGuardResult.matchedSpeaker ?? "unknown"}"`,
+    if (context.tomoriState.config.llm_stop_speaker_pattern_enabled ?? false) {
+      const speakerGuardResult = truncateBeforeRegisteredSpeakerLine(
+        segmentToSend,
+        textConfig.registeredSpeakerNamesLower,
       );
-      segmentToSend = speakerGuardResult.text;
-      shouldStopForSpeakerGuard = true;
+      if (speakerGuardResult.stopTriggered) {
+        log.warn(
+          `Stream speaker guard: stopping before speaker label "${speakerGuardResult.matchedSpeaker ?? "unknown"}"`,
+        );
+        segmentToSend = speakerGuardResult.text;
+        shouldStopForSpeakerGuard = true;
+      }
     }
 
     if (!segmentToSend.trim()) {

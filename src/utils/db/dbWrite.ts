@@ -48,6 +48,10 @@ const FALLBACK_DEBUG_ENABLED = new Set(["1", "true", "yes", "on"]).has(
   (process.env.FALLBACK_DEBUG_ENABLED ?? "").trim().toLowerCase(),
 );
 
+function toPostgresTextArrayLiteral(values: readonly string[] | null | undefined): string {
+  return `{${(values ?? []).map((value) => `"${value.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
+}
+
 /**
  * Registers a user in the database if missing and returns the current row.
  * Existing nicknames and preferences are preserved on re-registration.
@@ -610,7 +614,8 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
 					thinking_level, fallback_llm_ids, channel_llm_overrides, persona_llm_overrides,
 					llm_temperature, llm_top_p, llm_top_k,
 					llm_frequency_penalty, llm_presence_penalty, llm_min_p,
-					llm_logit_biases, llm_disabled_params
+					llm_logit_biases, llm_disabled_params,
+					llm_stop_strings, llm_stop_speaker_pattern_enabled
 				) VALUES (
 					${server.server_id}, ${validConfig.provider}, ${validConfig.encryptedApiKey}, ${validConfig.keyVersion},
 					${selectedLlmId}, ${selectedDiffusionModelId}, ${selectedEmbeddingModelId},
@@ -619,7 +624,8 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
 					'auto', '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
 					NULL, NULL, NULL,
 					NULL, NULL, NULL,
-					'[]'::jsonb, '{}'::text[]
+					'[]'::jsonb, '{}'::text[],
+					'{}'::text[], false
 				)
 				ON CONFLICT (server_id, provider) DO NOTHING
 			`;
@@ -1978,7 +1984,8 @@ export async function upsertSavedProviderConfig(serverId: number, config: SavedP
     const channelOverridesJson = JSON.stringify(config.channel_llm_overrides ?? []);
     const personaOverridesJson = JSON.stringify(config.persona_llm_overrides ?? []);
     const logitBiasesJson = JSON.stringify(config.llm_logit_biases ?? []);
-    const disabledParamsLiteral = `{${(config.llm_disabled_params ?? []).map((param) => `"${param.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
+    const disabledParamsLiteral = toPostgresTextArrayLiteral(config.llm_disabled_params);
+    const stopStringsLiteral = toPostgresTextArrayLiteral(config.llm_stop_strings);
 
     const rows = await sql`
 			INSERT INTO saved_provider_configs (
@@ -1990,7 +1997,8 @@ export async function upsertSavedProviderConfig(serverId: number, config: SavedP
 				fallback_llm_ids, channel_llm_overrides, persona_llm_overrides,
 				llm_temperature, llm_top_p, llm_top_k,
 				llm_frequency_penalty, llm_presence_penalty, llm_min_p,
-				llm_logit_biases, llm_disabled_params
+				llm_logit_biases, llm_disabled_params,
+				llm_stop_strings, llm_stop_speaker_pattern_enabled
 			) VALUES (
 				${serverId}, ${provider}, ${config.api_key}, ${config.key_version},
 				${config.llm_id}, ${config.diffusion_model_id}, ${config.embedding_model_id},
@@ -2000,7 +2008,8 @@ export async function upsertSavedProviderConfig(serverId: number, config: SavedP
 				${fallbackJson}::jsonb, ${channelOverridesJson}::jsonb, ${personaOverridesJson}::jsonb,
 				${config.llm_temperature ?? null}, ${config.llm_top_p ?? null}, ${config.llm_top_k ?? null},
 				${config.llm_frequency_penalty ?? null}, ${config.llm_presence_penalty ?? null}, ${config.llm_min_p ?? null},
-				${logitBiasesJson}::jsonb, ${disabledParamsLiteral}::text[]
+				${logitBiasesJson}::jsonb, ${disabledParamsLiteral}::text[],
+				${stopStringsLiteral}::text[], ${config.llm_stop_speaker_pattern_enabled ?? false}
 			)
 			ON CONFLICT (server_id, provider) DO UPDATE SET
 				api_key = EXCLUDED.api_key,
@@ -2026,7 +2035,9 @@ export async function upsertSavedProviderConfig(serverId: number, config: SavedP
 				llm_presence_penalty = EXCLUDED.llm_presence_penalty,
 				llm_min_p = EXCLUDED.llm_min_p,
 				llm_logit_biases = EXCLUDED.llm_logit_biases,
-				llm_disabled_params = EXCLUDED.llm_disabled_params
+				llm_disabled_params = EXCLUDED.llm_disabled_params,
+				llm_stop_strings = EXCLUDED.llm_stop_strings,
+				llm_stop_speaker_pattern_enabled = EXCLUDED.llm_stop_speaker_pattern_enabled
 			RETURNING *
 		`;
 
@@ -2087,10 +2098,11 @@ export async function upsertUserSavedProviderConfig(
 ): Promise<boolean> {
   try {
     const provider = config.provider.toLowerCase();
-    const enabledCapabilitiesLiteral = `{${(config.enabled_capabilities ?? []).map((capability) => `"${capability.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
+    const enabledCapabilitiesLiteral = toPostgresTextArrayLiteral(config.enabled_capabilities);
     const fallbackJson = JSON.stringify(config.fallback_llm_ids ?? []);
     const logitBiasesJson = JSON.stringify(config.llm_logit_biases ?? []);
-    const disabledParamsLiteral = `{${(config.llm_disabled_params ?? []).map((param) => `"${param.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
+    const disabledParamsLiteral = toPostgresTextArrayLiteral(config.llm_disabled_params);
+    const stopStringsLiteral = toPostgresTextArrayLiteral(config.llm_stop_strings);
 
     const rows = await sql`
 			INSERT INTO user_saved_provider_configs (
@@ -2102,7 +2114,8 @@ export async function upsertUserSavedProviderConfig(
 				enabled_capabilities, fallback_llm_ids,
 				llm_temperature, llm_top_p, llm_top_k,
 				llm_frequency_penalty, llm_presence_penalty, llm_min_p,
-				llm_logit_biases, llm_disabled_params
+				llm_logit_biases, llm_disabled_params,
+				llm_stop_strings, llm_stop_speaker_pattern_enabled
 			) VALUES (
 				${userId}, ${provider}, ${config.api_key}, ${config.key_version},
 				${config.llm_id}, ${config.diffusion_model_id}, ${config.embedding_model_id},
@@ -2112,7 +2125,8 @@ export async function upsertUserSavedProviderConfig(
 				${enabledCapabilitiesLiteral}::text[], ${fallbackJson}::jsonb,
 				${config.llm_temperature ?? null}, ${config.llm_top_p ?? null}, ${config.llm_top_k ?? null},
 				${config.llm_frequency_penalty ?? null}, ${config.llm_presence_penalty ?? null}, ${config.llm_min_p ?? null},
-				${logitBiasesJson}::jsonb, ${disabledParamsLiteral}::text[]
+				${logitBiasesJson}::jsonb, ${disabledParamsLiteral}::text[],
+				${stopStringsLiteral}::text[], ${config.llm_stop_speaker_pattern_enabled ?? false}
 			)
 			ON CONFLICT (user_id, provider) DO UPDATE SET
 				api_key = EXCLUDED.api_key,
@@ -2137,7 +2151,9 @@ export async function upsertUserSavedProviderConfig(
 				llm_presence_penalty = EXCLUDED.llm_presence_penalty,
 				llm_min_p = EXCLUDED.llm_min_p,
 				llm_logit_biases = EXCLUDED.llm_logit_biases,
-				llm_disabled_params = EXCLUDED.llm_disabled_params
+				llm_disabled_params = EXCLUDED.llm_disabled_params,
+				llm_stop_strings = EXCLUDED.llm_stop_strings,
+				llm_stop_speaker_pattern_enabled = EXCLUDED.llm_stop_speaker_pattern_enabled
 			RETURNING *
 		`;
 

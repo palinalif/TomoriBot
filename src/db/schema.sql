@@ -387,6 +387,8 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   videogen_enabled BOOLEAN DEFAULT false,
   tool_notice_hidden_keys TEXT[] DEFAULT '{}',
   llm_disabled_params TEXT[] DEFAULT '{}', -- DEPRECATED Phase 1.5 Pass B: mirror of saved_provider_configs
+  llm_stop_strings TEXT[] DEFAULT '{}', -- DEPRECATED Phase 1.5 Pass B: mirror of saved_provider_configs
+  llm_stop_speaker_pattern_enabled BOOLEAN DEFAULT false, -- DEPRECATED Phase 1.5 Pass B: mirror of saved_provider_configs
   humanizer_degree INT DEFAULT 1,
   thinking_level TEXT DEFAULT 'auto', -- DEPRECATED Phase 1.5 Pass B: mirror of saved_provider_configs
   user_byok_mode BOOLEAN DEFAULT false,
@@ -694,6 +696,8 @@ SELECT add_column_if_not_exists('tomori_configs', 'llm_presence_penalty', 'REAL'
 SELECT add_column_if_not_exists('tomori_configs', 'llm_min_p', 'REAL', '0.05');
 -- llm_disabled_params: Parameter names omitted from outbound provider payloads
 SELECT add_column_if_not_exists('tomori_configs', 'llm_disabled_params', 'TEXT[]', 'ARRAY[]::TEXT[]');
+SELECT add_column_if_not_exists('tomori_configs', 'llm_stop_strings', 'TEXT[]', 'ARRAY[]::TEXT[]');
+SELECT add_column_if_not_exists('tomori_configs', 'llm_stop_speaker_pattern_enabled', 'BOOLEAN', 'false');
 -- llm_logit_biases: Stored OpenAI-style logit bias entries [{id, text, value}, ...]
 SELECT add_column_if_not_exists('tomori_configs', 'llm_logit_biases', 'JSONB', '''[]''::JSONB');
 
@@ -2227,6 +2231,8 @@ CREATE TABLE IF NOT EXISTS saved_provider_configs (
   persona_llm_overrides JSONB DEFAULT '[]'::JSONB,  -- DEPRECATED Phase 1.5 Pass B: switch-snapshot baggage; no longer written after switch.ts removed
   llm_logit_biases JSONB DEFAULT '[]'::JSONB, -- Snapshot: [{id, text, value}, ...]
   llm_disabled_params TEXT[] DEFAULT '{}',    -- Snapshot: params omitted for this provider
+  llm_stop_strings TEXT[] DEFAULT '{}',        -- Snapshot: exact provider stop strings
+  llm_stop_speaker_pattern_enabled BOOLEAN DEFAULT false, -- Snapshot: opt-in "\n{Name}:" speaker stop pattern
   saved_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(server_id, provider),
@@ -2257,6 +2263,8 @@ SELECT add_column_if_not_exists('saved_provider_configs', 'llm_presence_penalty'
 SELECT add_column_if_not_exists('saved_provider_configs', 'llm_min_p', 'REAL', 'NULL');
 SELECT add_column_if_not_exists('saved_provider_configs', 'llm_logit_biases', 'JSONB', '''[]''::JSONB');
 SELECT add_column_if_not_exists('saved_provider_configs', 'llm_disabled_params', 'TEXT[]', 'ARRAY[]::TEXT[]');
+SELECT add_column_if_not_exists('saved_provider_configs', 'llm_stop_strings', 'TEXT[]', 'ARRAY[]::TEXT[]');
+SELECT add_column_if_not_exists('saved_provider_configs', 'llm_stop_speaker_pattern_enabled', 'BOOLEAN', 'false');
 
 -- Migration: add video_model_id column to saved_provider_configs (April 2026)
 SELECT add_column_if_not_exists('saved_provider_configs', 'video_model_id', 'INTEGER', 'NULL');
@@ -2505,6 +2513,8 @@ CREATE TABLE IF NOT EXISTS user_saved_provider_configs (
   llm_min_p REAL,
   llm_logit_biases JSONB DEFAULT '[]'::JSONB,
   llm_disabled_params TEXT[] DEFAULT '{}',
+  llm_stop_strings TEXT[] DEFAULT '{}',
+  llm_stop_speaker_pattern_enabled BOOLEAN DEFAULT false,
   custom_endpoint_url TEXT, -- DEPRECATED Phase 3 rollout: legacy inline custom field; new registrations live in custom_endpoints
   custom_model_name TEXT, -- DEPRECATED Phase 3 rollout: legacy inline custom field; new registrations live in custom_endpoints
   custom_num_ctx INT, -- DEPRECATED Phase 3 rollout: legacy inline custom field; new registrations live in custom_endpoints
@@ -2536,6 +2546,8 @@ SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_presence_pen
 SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_min_p', 'REAL', 'NULL');
 SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_logit_biases', 'JSONB', '''[]''::JSONB');
 SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_disabled_params', 'TEXT[]', 'ARRAY[]::TEXT[]');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_stop_strings', 'TEXT[]', 'ARRAY[]::TEXT[]');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_stop_speaker_pattern_enabled', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('user_saved_provider_configs', 'custom_endpoint_url', 'TEXT', 'NULL');
 SELECT add_column_if_not_exists('user_saved_provider_configs', 'custom_model_name', 'TEXT', 'NULL');
 SELECT add_column_if_not_exists('user_saved_provider_configs', 'custom_num_ctx', 'INT', 'NULL');

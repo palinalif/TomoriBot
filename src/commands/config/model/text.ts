@@ -32,6 +32,10 @@ import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 const MODAL_CUSTOM_ID = "config_model_text_modal";
 const MODEL_SELECT_ID = "model_select";
 
+function toPostgresTextArrayLiteral(values: readonly string[] | null | undefined): string {
+  return `{${(values ?? []).map((value) => `"${value.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
+}
+
 /**
  * Returns a localized description with capability flags prepended (e.g. "(FREE+TOOLS+IMG) Description").
  */
@@ -363,7 +367,8 @@ export async function execute(
         customModel,
       );
       const resolvedLogitBiasesJson = JSON.stringify(resolvedLogitBiases.entries);
-      const disabledParamsLiteral = `{${(selectedSavedConfig.llm_disabled_params ?? []).map((param) => `"${param.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
+      const disabledParamsLiteral = toPostgresTextArrayLiteral(selectedSavedConfig.llm_disabled_params);
+      const stopStringsLiteral = toPostgresTextArrayLiteral(selectedSavedConfig.llm_stop_strings);
       const clearFallbacks = tomoriState.llm?.llm_provider?.toLowerCase() !== selectedProvider;
       const fallbackLlmIdsJson = clearFallbacks ? "[]" : JSON.stringify(selectedSavedConfig.fallback_llm_ids ?? []);
 
@@ -382,6 +387,8 @@ export async function execute(
             llm_min_p = ${selectedSavedConfig.llm_min_p ?? tomoriState.config.llm_min_p ?? 0.05},
             llm_disabled_params = ${disabledParamsLiteral}::text[],
             llm_logit_biases = ${resolvedLogitBiasesJson}::jsonb,
+            llm_stop_strings = ${stopStringsLiteral}::text[],
+            llm_stop_speaker_pattern_enabled = ${selectedSavedConfig.llm_stop_speaker_pattern_enabled ?? false},
             custom_model_name = ${selectedSavedConfig.custom_model_name ?? customModel.llm_description ?? customModel.llm_codename},
             custom_endpoint_url = ${selectedSavedConfig.custom_endpoint_url ?? null},
             custom_num_ctx = ${selectedSavedConfig.custom_num_ctx ?? null}
@@ -510,7 +517,8 @@ export async function execute(
     const resolvedLogitBiasesJson = JSON.stringify(resolvedLogitBiases.entries);
     const clearFallbacks = tomoriState.llm?.llm_provider?.toLowerCase() !== selectedProvider;
     const fallbackLlmIdsJson = clearFallbacks ? "[]" : JSON.stringify(selectedSavedConfig?.fallback_llm_ids ?? []);
-    const disabledParamsLiteral = `{${(selectedSavedConfig?.llm_disabled_params ?? []).map((param) => `"${param.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`;
+    const disabledParamsLiteral = toPostgresTextArrayLiteral(selectedSavedConfig?.llm_disabled_params);
+    const stopStringsLiteral = toPostgresTextArrayLiteral(selectedSavedConfig?.llm_stop_strings);
 
     const [updatedRow] = await sql`
       UPDATE tomori_configs
@@ -527,6 +535,8 @@ export async function execute(
           llm_min_p = ${selectedSavedConfig?.llm_min_p ?? tomoriState.config.llm_min_p ?? 0.05},
           llm_disabled_params = ${disabledParamsLiteral}::text[],
           llm_logit_biases = ${resolvedLogitBiasesJson}::jsonb,
+          llm_stop_strings = ${stopStringsLiteral}::text[],
+          llm_stop_speaker_pattern_enabled = ${selectedSavedConfig?.llm_stop_speaker_pattern_enabled ?? false},
           custom_model_name = NULL,
           custom_endpoint_url = NULL,
           custom_num_ctx = NULL

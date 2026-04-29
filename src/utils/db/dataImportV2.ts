@@ -287,6 +287,9 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
     const disabledParamsLiteral = config.llm_disabled_params
       ? `{${config.llm_disabled_params.map((param: string) => `"${param.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`
       : null;
+    const stopStringsLiteral = config.llm_stop_strings
+      ? `{${config.llm_stop_strings.map((stop: string) => `"${stop.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`
+      : null;
     const logitBiasesJson = JSON.stringify(config.llm_logit_biases ?? []);
 
     let updateRows = await sql<Array<{ tomori_config_id: number }>>`
@@ -300,6 +303,8 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 				llm_min_p = ${config.llm_min_p},
 				llm_disabled_params = COALESCE(${disabledParamsLiteral}::text[], llm_disabled_params, ARRAY[]::text[]),
 				llm_logit_biases = ${logitBiasesJson}::jsonb,
+				llm_stop_strings = COALESCE(${stopStringsLiteral}::text[], llm_stop_strings, ARRAY[]::text[]),
+				llm_stop_speaker_pattern_enabled = COALESCE(${config.llm_stop_speaker_pattern_enabled ?? null}, llm_stop_speaker_pattern_enabled, false),
 				humanizer_degree = ${config.humanizer_degree},
 				thinking_level = ${config.thinking_level},
 				timezone_offset = ${config.timezone_offset},
@@ -366,6 +371,8 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 						llm_min_p = ${config.llm_min_p},
 						llm_disabled_params = COALESCE(${disabledParamsLiteral}::text[], llm_disabled_params, ARRAY[]::text[]),
 						llm_logit_biases = ${logitBiasesJson}::jsonb,
+						llm_stop_strings = COALESCE(${stopStringsLiteral}::text[], llm_stop_strings, ARRAY[]::text[]),
+						llm_stop_speaker_pattern_enabled = COALESCE(${config.llm_stop_speaker_pattern_enabled ?? null}, llm_stop_speaker_pattern_enabled, false),
 						humanizer_degree = ${config.humanizer_degree},
 						thinking_level = ${config.thinking_level},
 						timezone_offset = ${config.timezone_offset},

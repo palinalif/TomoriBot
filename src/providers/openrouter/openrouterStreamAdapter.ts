@@ -445,11 +445,16 @@ export class OpenrouterStreamAdapter implements StreamProvider {
       const skippedUnsupportedParams: string[] = [];
       const normalizedModel = (config.model ?? "").toLowerCase();
       const omitTemperatureByModelOverride = OpenrouterStreamAdapter.TEMPERATURE_OMIT_MODELS.has(normalizedModel);
-      const personaSpeakerStop = buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname);
+      const speakerStopPatternEnabled = context.tomoriState.config.llm_stop_speaker_pattern_enabled ?? false;
+      const personaSpeakerStop = speakerStopPatternEnabled
+        ? buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname)
+        : null;
       const stopStrings = buildProviderStopStrings({
         providerName: "openrouter",
         model: config.model,
         personaName: context.tomoriState.tomori_nickname,
+        configuredStops: context.tomoriState.config.llm_stop_strings,
+        includePersonaSpeakerStop: speakerStopPatternEnabled,
       });
       let stopParamSupported = false;
 
@@ -620,7 +625,7 @@ export class OpenrouterStreamAdapter implements StreamProvider {
         }
       }
 
-      this.speakerGuardEnabled = Boolean(personaSpeakerStop) && !stopParamSupported;
+      this.speakerGuardEnabled = speakerStopPatternEnabled && Boolean(personaSpeakerStop) && !stopParamSupported;
       if (this.speakerGuardEnabled) {
         log.info("OpenRouter: Speaker-boundary fallback guard enabled (stop parameter unsupported)");
       }

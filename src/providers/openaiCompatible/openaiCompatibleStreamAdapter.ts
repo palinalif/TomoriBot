@@ -110,15 +110,22 @@ export class OpenAICompatibleStreamAdapter implements StreamProvider {
         requestBody.temperature = config.temperature;
       }
 
-      const personaSpeakerStop = buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname);
-      this.speakerGuardEnabled = this.options.enableSpeakerGuard !== false && Boolean(personaSpeakerStop);
+      const speakerStopPatternEnabled = context.tomoriState.config.llm_stop_speaker_pattern_enabled ?? false;
+      const includePersonaSpeakerStop = speakerStopPatternEnabled && this.options.includePersonaSpeakerStop !== false;
+      const personaSpeakerStop = includePersonaSpeakerStop
+        ? buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname)
+        : null;
+      this.speakerGuardEnabled =
+        speakerStopPatternEnabled && this.options.enableSpeakerGuard !== false && Boolean(personaSpeakerStop);
       if (this.speakerGuardEnabled) {
         log.info(`${this.options.adapterName}: Speaker-boundary fallback guard enabled`);
       }
       const stopStrings = buildProviderStopStrings({
         providerName: this.options.providerName,
         model: config.model,
-        personaName: this.options.includePersonaSpeakerStop === false ? null : context.tomoriState.tomori_nickname,
+        personaName: context.tomoriState.tomori_nickname,
+        configuredStops: context.tomoriState.config.llm_stop_strings,
+        includePersonaSpeakerStop,
       });
       if (stopStrings) {
         requestBody.stop = stopStrings;

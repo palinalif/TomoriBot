@@ -60,6 +60,8 @@ export function buildSavedProviderSnapshotFromTomoriState(tomoriState: TomoriSta
     llm_min_p: tomoriState.config.llm_min_p,
     llm_disabled_params: tomoriState.config.llm_disabled_params ?? [],
     llm_logit_biases: tomoriState.config.llm_logit_biases ?? [],
+    llm_stop_strings: tomoriState.config.llm_stop_strings ?? [],
+    llm_stop_speaker_pattern_enabled: tomoriState.config.llm_stop_speaker_pattern_enabled ?? false,
     custom_endpoint_url: tomoriState.config.custom_endpoint_url ?? null,
     custom_model_name: tomoriState.config.custom_model_name ?? null,
     custom_num_ctx: tomoriState.config.custom_num_ctx ?? null,
@@ -144,6 +146,9 @@ export async function buildSavedProviderConfigFromExistingOrDefaults(params: {
     llm_min_p: existingConfig?.llm_min_p ?? params.baseConfig.llm_min_p,
     llm_disabled_params: existingConfig?.llm_disabled_params ?? params.baseConfig.llm_disabled_params ?? [],
     llm_logit_biases: existingConfig?.llm_logit_biases ?? params.baseConfig.llm_logit_biases ?? [],
+    llm_stop_strings: existingConfig?.llm_stop_strings ?? params.baseConfig.llm_stop_strings ?? [],
+    llm_stop_speaker_pattern_enabled:
+      existingConfig?.llm_stop_speaker_pattern_enabled ?? params.baseConfig.llm_stop_speaker_pattern_enabled ?? false,
     custom_endpoint_url: params.customEndpointUrl ?? existingConfig?.custom_endpoint_url ?? null,
     custom_model_name: params.customModelName ?? existingConfig?.custom_model_name ?? null,
     custom_num_ctx: params.customNumCtx ?? existingConfig?.custom_num_ctx ?? null,
@@ -192,6 +197,9 @@ export async function buildUserSavedProviderConfigFromExistingOrDefaults(params:
     llm_min_p: existingConfig?.llm_min_p ?? params.baseConfig.llm_min_p,
     llm_disabled_params: existingConfig?.llm_disabled_params ?? params.baseConfig.llm_disabled_params ?? [],
     llm_logit_biases: existingConfig?.llm_logit_biases ?? params.baseConfig.llm_logit_biases ?? [],
+    llm_stop_strings: existingConfig?.llm_stop_strings ?? params.baseConfig.llm_stop_strings ?? [],
+    llm_stop_speaker_pattern_enabled:
+      existingConfig?.llm_stop_speaker_pattern_enabled ?? params.baseConfig.llm_stop_speaker_pattern_enabled ?? false,
     custom_endpoint_url: params.customEndpointUrl ?? existingConfig?.custom_endpoint_url ?? null,
     custom_model_name: params.customModelName ?? existingConfig?.custom_model_name ?? null,
     custom_num_ctx: params.customNumCtx ?? existingConfig?.custom_num_ctx ?? null,

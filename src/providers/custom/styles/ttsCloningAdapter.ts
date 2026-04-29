@@ -1,13 +1,9 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
 import { sql } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
 import { voiceSampleSchema } from "@/types/db/schema";
 import type { CustomEndpointRow } from "@/types/db/schema";
 import { stripElevenLabsExpressionTags } from "@/utils/audio/elevenLabsShared";
-
-/** Base directory for local voice sample files (mirrors seed.sql path). */
-const VOICE_SAMPLES_BASE_DIR = path.resolve(process.cwd(), "data", "voice-samples");
+import { loadStoredVoiceSampleBuffer } from "@/utils/storage/voiceSampleStorage";
 
 /** Timeout for /synthesize requests, configurable via env. */
 const TTS_CLONE_TIMEOUT_MS =
@@ -138,17 +134,14 @@ export async function synthesizeSpeechViaTtsClone(request: TtsCloneRequest): Pro
 
   const sample = parsed.data;
 
-  // 2. Read the audio file from disk and base64-encode it.
-  const samplePath = path.join(VOICE_SAMPLES_BASE_DIR, sample.file_path);
-  let refAudioBuffer: Buffer;
-  try {
-    refAudioBuffer = await fs.readFile(samplePath);
-  } catch (error) {
-    log.warn(`[TtsClone] Failed to read voice sample file at ${samplePath}`, error);
+  // 2. Read the audio from stable storage and base64-encode it.
+  const refAudioBuffer = await loadStoredVoiceSampleBuffer(sample.file_path);
+  if (!refAudioBuffer) {
+    log.warn(`[TtsClone] Failed to read voice sample ${voiceSampleId} from ${sample.file_path}`);
     return {
       success: false,
       errorKind: "sample_read_failed",
-      details: `Could not read voice sample file: ${error instanceof Error ? error.message : String(error)}`,
+      details: `Could not read voice sample ${voiceSampleId} from storage.`,
     };
   }
 

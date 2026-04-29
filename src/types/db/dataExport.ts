@@ -103,6 +103,8 @@ export const serverConfigExportSchema = z.object({
     (val) => (typeof val === "string" ? JSON.parse(val) : val),
     z.array(logitBiasEntrySchema).default([]),
   ),
+  llm_stop_strings: z.array(z.string()).default([]),
+  llm_stop_speaker_pattern_enabled: z.boolean().default(false),
   humanizer_degree: z.number().int().min(0).max(3),
   thinking_level: z.enum(THINKING_LEVEL_VALUES).default(DEFAULT_THINKING_LEVEL),
   timezone_offset: z.number().int().min(-12).max(14),

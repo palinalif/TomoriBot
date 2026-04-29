@@ -149,7 +149,9 @@ export class GoogleStreamAdapter implements StreamProvider {
 
     this.speakerGuardPendingTail = "";
     this.streamedTextTail = "";
-    this.speakerGuardEnabled = Boolean(buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname));
+    const speakerStopPatternEnabled = context.tomoriState.config.llm_stop_speaker_pattern_enabled ?? false;
+    this.speakerGuardEnabled =
+      speakerStopPatternEnabled && Boolean(buildPersonaSpeakerStopString(context.tomoriState.tomori_nickname));
     this.activePersonaNameLower = (context.tomoriState.tomori_nickname ?? "").toLowerCase();
     this.knownSpeakerNamesLower = this.collectKnownSpeakerNames(context.contextItems);
     if (this.activePersonaNameLower) {
@@ -160,6 +162,8 @@ export class GoogleStreamAdapter implements StreamProvider {
       providerName: "google",
       model: config.model,
       personaName: context.tomoriState.tomori_nickname,
+      configuredStops: context.tomoriState.config.llm_stop_strings,
+      includePersonaSpeakerStop: speakerStopPatternEnabled,
     });
     if (mergedStopSequences) {
       requestConfig.stopSequences = mergedStopSequences;

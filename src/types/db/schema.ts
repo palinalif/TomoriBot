@@ -103,7 +103,7 @@ export type TomoriRow = z.infer<typeof tomoriSchema>;
 
 /**
  * Schema for voice_samples table — reference audio clips for local TTS voice cloning.
- * Files live in /data/voice-samples/{server_id}/; this table stores metadata only.
+ * file_path stores either a production S3/CloudFront URL or a local data/voice-samples path.
  */
 export const voiceSampleSchema = z.object({
   sample_id: z.number().optional(),
@@ -371,6 +371,23 @@ function normalizeToolNoticeHiddenKeys(value: unknown): ToolNoticeKey[] {
   return source.filter((item): item is ToolNoticeKey => typeof item === "string" && isToolNoticeKey(item));
 }
 
+function normalizeStringArray(value: unknown): string[] {
+  let source: unknown = value;
+  if (typeof source === "string") {
+    try {
+      source = JSON.parse(source);
+    } catch {
+      return [];
+    }
+  }
+
+  if (!Array.isArray(source)) {
+    return [];
+  }
+
+  return source.filter((item): item is string => typeof item === "string" && item.length > 0);
+}
+
 function normalizeDisabledLlmParams(value: unknown): SupportedParamValue[] {
   let source: unknown = value;
   if (typeof source === "string") {
@@ -427,6 +444,8 @@ export const tomoriConfigSchema = z.object({
     (value) => normalizeLogitBiasEntries(value),
     z.array(logitBiasEntrySchema).default([]),
   ), // Added March 2026 - Stored OpenAI-style logit bias entries (text or explicit token IDs)
+  llm_stop_strings: z.preprocess((value) => normalizeStringArray(value), z.array(z.string()).default([])), // Added April 2026 - Provider-scoped exact stop strings
+  llm_stop_speaker_pattern_enabled: z.boolean().default(false), // Added April 2026 - Opt-in "\n{Name}:" speaker stop pattern
   api_key: z.instanceof(Buffer).nullable(),
   key_version: z.number().int().default(1).optional(), // Added November 2025 - Encryption key version for rotation
   trigger_words: z.array(z.string()).default([]),
@@ -1189,6 +1208,8 @@ export const savedProviderConfigSchema = z.object({
     (value) => normalizeLogitBiasEntries(value),
     z.array(logitBiasEntrySchema).default([]),
   ), // Added March 2026 - Logit bias snapshot
+  llm_stop_strings: z.preprocess((value) => normalizeStringArray(value), z.array(z.string()).default([])), // Added April 2026 - Provider-scoped exact stop strings
+  llm_stop_speaker_pattern_enabled: z.boolean().default(false), // Added April 2026 - Opt-in "\n{Name}:" speaker stop pattern
   custom_endpoint_url: z.string().nullable(), // DEPRECATED Phase 3 rollout - Legacy inline custom field mirrored for backward compatibility
   custom_model_name: z.string().nullable(), // DEPRECATED Phase 3 rollout - Legacy inline custom field mirrored for backward compatibility
   custom_num_ctx: z.number().int().min(512).nullable().optional(), // DEPRECATED Phase 3 rollout - Legacy inline custom field mirrored for backward compatibility
@@ -1265,6 +1286,8 @@ export const userSavedProviderConfigSchema = z.object({
     (value) => normalizeLogitBiasEntries(value),
     z.array(logitBiasEntrySchema).default([]),
   ),
+  llm_stop_strings: z.preprocess((value) => normalizeStringArray(value), z.array(z.string()).default([])),
+  llm_stop_speaker_pattern_enabled: z.boolean().default(false),
   custom_endpoint_url: z.string().nullable(), // DEPRECATED Phase 3 rollout - Legacy inline custom field mirrored for backward compatibility
   custom_model_name: z.string().nullable(), // DEPRECATED Phase 3 rollout - Legacy inline custom field mirrored for backward compatibility
   custom_num_ctx: z.number().int().min(512).nullable().optional(), // DEPRECATED Phase 3 rollout - Legacy inline custom field mirrored for backward compatibility
