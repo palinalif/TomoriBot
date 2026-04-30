@@ -325,7 +325,7 @@ export default {
       "429_default_message": `Anthropicのレート制限に達しました。しばらく待ってから再試行してください。`,
       "500_default_message": `Anthropicで内部サーバーエラーが発生しました。`,
       "503_default_message": `Anthropicは現在利用できないか、過負荷状態です。`,
-      temperature_top_p_conflict_message: `Anthropic は Temperature と Top-P を同時に受け付けません。\`/config samplers\` を使って、そのプロバイダーの **Temperature** か **Top P** のどちらかを調整してください。`,
+      temperature_top_p_conflict_message: `Anthropic は Temperature と Top-P を同時に受け付けません。\`/config parameters\` を使って、そのプロバイダーの **Temperature** か **Top P** のどちらかを調整してください。`,
       unknown_default_message: `Anthropicとの通信中に予期しないエラーが発生しました。`,
     },
     self_teach: {
@@ -3350,7 +3350,7 @@ Prompt Guidance Rescale: {cfg_rescale}
         success_title: `思考レベルを更新しました`,
         success_description: `思考レベルを \`{previous_value}\` から \`{value}\` に変更しました。有効なのは、現在のプロバイダー/モデルがリクエスト側の思考制御に対応している場合のみです。`,
       },
-      samplers: {
+      parameters: {
         description: `プロバイダーごとの保存済みサンプラー設定を更新します。`,
         provider_description: `更新するプロバイダーを指定します。未指定なら現在のテキストプロバイダーです。`,
         temperature_description: `このプロバイダーの Temperature 上書き値（0〜2）。`,
@@ -3360,12 +3360,14 @@ Prompt Guidance Rescale: {cfg_rescale}
         presence_penalty_description: `このプロバイダーの出現ペナルティ上書き値（-2〜2）。`,
         min_p_description: `このプロバイダーの Min-P 上書き値（0〜1）。`,
         thinking_level_description: `このプロバイダーの思考レベル上書き値。`,
+        max_output_tokens_description: `このプロバイダーの最大出力トークン数（1〜131072）。未設定の場合はプロバイダーのデフォルト値を使用します。`,
         sampler_temperature_label: `温度`,
         sampler_top_p_label: `Top-P`,
         sampler_top_k_label: `Top-K`,
         sampler_frequency_penalty_label: `頻度ペナルティ`,
         sampler_presence_penalty_label: `存在ペナルティ`,
         sampler_min_p_label: `Min-P`,
+        sampler_max_output_tokens_label: `最大出力トークン数`,
         provider_not_saved_title: `保存済みプロバイダーが見つかりません`,
         provider_not_saved_description: `**{provider}** の保存済み設定がありません。先に \`/config provider add\` で追加してください。`,
         picker_description: `新しいサンプラー設定を適用する保存済みプロバイダーを選択してください。`,
@@ -5138,7 +5140,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
           cleared_description: `個人 {provider} テキストプロバイダーのフォールバックモデルをクリアしました。`,
         },
       },
-      samplers: {
+      parameters: {
         description: `個人プロバイダーのサンプラー設定を調整します。`,
         provider_description: `任意: 保存済みの個人プロバイダーを選択します。未指定の場合は有効な個人テキストプロバイダーを使用します。`,
         no_provider_title: `個人プロバイダーが選択されていません`,

@@ -614,6 +614,7 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
 					thinking_level, fallback_llm_ids, channel_llm_overrides, persona_llm_overrides,
 					llm_temperature, llm_top_p, llm_top_k,
 					llm_frequency_penalty, llm_presence_penalty, llm_min_p,
+					llm_max_output_tokens,
 					llm_logit_biases, llm_disabled_params
 				) VALUES (
 					${server.server_id}, ${validConfig.provider}, ${validConfig.encryptedApiKey}, ${validConfig.keyVersion},
@@ -2004,6 +2005,7 @@ export async function upsertSavedProviderConfig(serverId: number, config: SavedP
 				${fallbackJson}::jsonb, ${channelOverridesJson}::jsonb, ${personaOverridesJson}::jsonb,
 				${config.llm_temperature ?? null}, ${config.llm_top_p ?? null}, ${config.llm_top_k ?? null},
 				${config.llm_frequency_penalty ?? null}, ${config.llm_presence_penalty ?? null}, ${config.llm_min_p ?? null},
+				${config.llm_max_output_tokens ?? null},
 				${logitBiasesJson}::jsonb, ${disabledParamsLiteral}::text[]
 			)
 			ON CONFLICT (server_id, provider) DO UPDATE SET
@@ -2029,6 +2031,7 @@ export async function upsertSavedProviderConfig(serverId: number, config: SavedP
 				llm_frequency_penalty = EXCLUDED.llm_frequency_penalty,
 				llm_presence_penalty = EXCLUDED.llm_presence_penalty,
 				llm_min_p = EXCLUDED.llm_min_p,
+				llm_max_output_tokens = EXCLUDED.llm_max_output_tokens,
 				llm_logit_biases = EXCLUDED.llm_logit_biases,
 				llm_disabled_params = EXCLUDED.llm_disabled_params
 			RETURNING *
@@ -2106,6 +2109,7 @@ export async function upsertUserSavedProviderConfig(
 				enabled_capabilities, fallback_llm_ids,
 				llm_temperature, llm_top_p, llm_top_k,
 				llm_frequency_penalty, llm_presence_penalty, llm_min_p,
+				llm_max_output_tokens,
 				llm_logit_biases, llm_disabled_params
 			) VALUES (
 				${userId}, ${provider}, ${config.api_key}, ${config.key_version},
@@ -2116,6 +2120,7 @@ export async function upsertUserSavedProviderConfig(
 				${enabledCapabilitiesLiteral}::text[], ${fallbackJson}::jsonb,
 				${config.llm_temperature ?? null}, ${config.llm_top_p ?? null}, ${config.llm_top_k ?? null},
 				${config.llm_frequency_penalty ?? null}, ${config.llm_presence_penalty ?? null}, ${config.llm_min_p ?? null},
+				${config.llm_max_output_tokens ?? null},
 				${logitBiasesJson}::jsonb, ${disabledParamsLiteral}::text[]
 			)
 			ON CONFLICT (user_id, provider) DO UPDATE SET
@@ -2140,6 +2145,7 @@ export async function upsertUserSavedProviderConfig(
 				llm_frequency_penalty = EXCLUDED.llm_frequency_penalty,
 				llm_presence_penalty = EXCLUDED.llm_presence_penalty,
 				llm_min_p = EXCLUDED.llm_min_p,
+				llm_max_output_tokens = EXCLUDED.llm_max_output_tokens,
 				llm_logit_biases = EXCLUDED.llm_logit_biases,
 				llm_disabled_params = EXCLUDED.llm_disabled_params
 			RETURNING *

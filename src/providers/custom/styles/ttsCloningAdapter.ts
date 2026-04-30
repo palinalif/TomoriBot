@@ -5,6 +5,7 @@ import type { CustomEndpointRow } from "@/types/db/schema";
 import { stripElevenLabsExpressionTags } from "@/utils/audio/elevenLabsShared";
 import { loadStoredVoiceSampleBuffer } from "@/utils/storage/voiceSampleStorage";
 import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
+import { stripTtsUnsupportedEmojiAttempts } from "@/utils/text/emojiHelper";
 
 /** Timeout for /synthesize requests, configurable via env. */
 const TTS_CLONE_TIMEOUT_MS =
@@ -27,6 +28,7 @@ const CHATTERBOX_TURBO_TAGS = new Set([
 ]);
 
 export type TtsCloneErrorKind =
+  | "invalid_request"
   | "missing_sample"
   | "sample_read_failed"
   | "request_failed"
@@ -95,6 +97,12 @@ function stripUnsupportedChatterboxTurboTags(text: string): string {
   );
 }
 
+function isIrodoriTtsEndpoint(endpoint: CustomEndpointRow): boolean {
+  return [endpoint.label, endpoint.display_name, endpoint.model_name, endpoint.endpoint_url].some((value) =>
+    value?.toLowerCase().includes("irodori"),
+  );
+}
+
 /**
  * Calls a local TTS clone server that implements the /synthesize spec.
  *
@@ -148,6 +156,7 @@ export async function synthesizeSpeechViaTtsClone(request: TtsCloneRequest): Pro
 
   const scriptMarkup = (endpoint.extra_config.script_markup as string | undefined) ?? "plain";
   const supportsInstruct = Boolean(endpoint.extra_config.supports_instruct);
+  const preserveUnicodeEmojis = scriptMarkup === "emoji" || isIrodoriTtsEndpoint(endpoint);
 
   // 3. Prepare script: strip all bracket tags for "plain" endpoints and
   //    standard Chatterbox, because only Turbo handles bracket descriptors.
@@ -165,6 +174,17 @@ export async function synthesizeSpeechViaTtsClone(request: TtsCloneRequest): Pro
   } else {
     processedScript = script;
     captionText = stripElevenLabsExpressionTags(script);
+  }
+
+  processedScript = stripTtsUnsupportedEmojiAttempts(processedScript, { preserveUnicodeEmojis });
+  captionText = stripTtsUnsupportedEmojiAttempts(captionText, { preserveUnicodeEmojis });
+
+  if (!processedScript) {
+    return {
+      success: false,
+      errorKind: "invalid_request",
+      details: "Voice script was empty after removing unsupported emoji markup.",
+    };
   }
 
   // 4. Build the /synthesize request body per the TomoriBot TTS spec.

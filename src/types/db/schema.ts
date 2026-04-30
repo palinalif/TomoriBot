@@ -436,6 +436,7 @@ export const tomoriConfigSchema = z.object({
   llm_frequency_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Frequency penalty (0.0=neutral)
   llm_presence_penalty: z.number().min(-2.0).max(2.0).default(0.0), // Added February 2026 - Presence penalty (0.0=neutral)
   llm_min_p: z.number().min(0.0).max(1.0).default(0.05), // Added February 2026 - Min-P sampling (0.05=default)
+  llm_max_output_tokens: z.number().int().min(1).nullable().optional(), // Added April 2026 - Max output tokens override (NULL = use provider default)
   llm_disabled_params: z.preprocess(
     (value) => normalizeDisabledLlmParams(value),
     z.array(supportedParamSchema).default([]),
@@ -1200,6 +1201,7 @@ export const savedProviderConfigSchema = z.object({
   llm_frequency_penalty: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
   llm_presence_penalty: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
   llm_min_p: z.number().nullable().optional(), // Added March 2026 - Sampler snapshot
+  llm_max_output_tokens: z.number().int().min(1).nullable().optional(), // Added April 2026 - Max output tokens override snapshot
   llm_disabled_params: z.preprocess(
     (value) => normalizeDisabledLlmParams(value),
     z.array(supportedParamSchema).default([]),
@@ -1276,6 +1278,7 @@ export const userSavedProviderConfigSchema = z.object({
   llm_frequency_penalty: z.number().nullable().optional(),
   llm_presence_penalty: z.number().nullable().optional(),
   llm_min_p: z.number().nullable().optional(),
+  llm_max_output_tokens: z.number().int().min(1).nullable().optional(), // Added April 2026 - Max output tokens override snapshot
   llm_disabled_params: z.preprocess(
     (value) => normalizeDisabledLlmParams(value),
     z.array(supportedParamSchema).default([]),

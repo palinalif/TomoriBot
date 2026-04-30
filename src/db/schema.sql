@@ -2622,3 +2622,9 @@ BEGIN
     ON DELETE SET NULL;
   END IF;
 END $$;
+
+-- Max output tokens override (April 2026)
+-- User-configurable generation length cap per saved provider. NULL = use provider default (8192 or hardcoded fallback).
+SELECT add_column_if_not_exists('tomori_configs', 'llm_max_output_tokens', 'INTEGER', 'NULL');
+SELECT add_column_if_not_exists('saved_provider_configs', 'llm_max_output_tokens', 'INTEGER', 'NULL');
+SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_max_output_tokens', 'INTEGER', 'NULL');
