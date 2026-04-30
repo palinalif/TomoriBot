@@ -1,6 +1,6 @@
 {
   "name": "tomoribot",
-  "version": "0.7.958",
+  "version": "0.7.959",
   "description": "Customizable AI Assistant Discord Bot",
   "main": "./src/index.ts",
   "type": "module",
@@ -18,6 +18,7 @@
     "lint": "biome check --fix",
     "check": "bunx tsc --noEmit",
     "check-locales": "bun run scripts/maintenance/checkLocalizationKeys.ts",
+    "check-schema": "bun run scripts/maintenance/checkSchemaDrift.ts",
     "list-unused-locales": "bun run scripts/maintenance/checkLocalizationKeys.ts --list-unused",
     "prune-locales": "bun run scripts/maintenance/pruneLocaleKeys.ts",
     "find-stale-translations": "bun run scripts/maintenance/findStaleTranslations.ts",
@@ -30,7 +31,7 @@
     "setup:tokenizers": "bun run scripts/maintenance/downloadTokenizers.ts",
     "//audit": "audit:clean suppresses GHSA-p8p7-x288-28g6 (request<=2.88.2 SSRF) — ghost vuln, no patch exists since 'request' was archived in 2020",
     "audit:clean": "bun run scripts/maintenance/auditClean.ts",
-    "validate": "bun run check && bun run lint && bun run check-locales && bun run audit:clean",
+    "validate": "bun run check && bun run lint && bun run check-locales && bun run check-schema && bun run audit:clean",
     "vl": "bun run validate"
   },
   "author": "Bredrumb",

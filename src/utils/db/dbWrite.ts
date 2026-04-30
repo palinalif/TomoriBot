@@ -624,6 +624,7 @@ export async function setupServer(guild: Guild | null, config: SetupConfig): Pro
 					'auto', '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
 					NULL, NULL, NULL,
 					NULL, NULL, NULL,
+					NULL,
 					'[]'::jsonb, '{}'::text[]
 				)
 				ON CONFLICT (server_id, provider) DO NOTHING
@@ -1995,6 +1996,7 @@ export async function upsertSavedProviderConfig(serverId: number, config: SavedP
 				fallback_llm_ids, channel_llm_overrides, persona_llm_overrides,
 				llm_temperature, llm_top_p, llm_top_k,
 				llm_frequency_penalty, llm_presence_penalty, llm_min_p,
+				llm_max_output_tokens,
 				llm_logit_biases, llm_disabled_params
 			) VALUES (
 				${serverId}, ${provider}, ${config.api_key}, ${config.key_version},

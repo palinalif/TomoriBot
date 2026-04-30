@@ -2572,7 +2572,7 @@ Prompt Guidance Rescale: {cfg_rescale}
         prefill_label: `Prefill (Optional)`,
         prefill_placeholder: `Add assistant prefill (optional)...`,
         success_title: `Manual Response Triggered`,
-        success_description: `Responding to the latest message in this channel...`,
+        success_description: `Responding to the latest message in this channel as the last persona...`,
         missing_permissions_title: `Missing Permissions`,
         missing_permissions_description: `I don't have permission to read message history in this channel. Please ensure I have the **View Channel** and **Read Message History** permissions.`,
         extra_options_description: `Show extra options before responding (persona picker, reasoning, prompt, prefill).`,

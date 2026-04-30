@@ -140,10 +140,31 @@ jobs:
             echo "Localization warnings found, but no critical missing keys. Continuing deployment..."
           fi
 
+  test-schema:
+    runs-on: ubuntu-24.04
+    needs: validate-secrets
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7
+        with:
+          bun-version: 1.2.12
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check schema drift
+        run: |
+          echo "Checking schema drift..."
+          bun run check-schema
+          echo "Schema drift check passed!"
+
   # BUILD DOCKER IMAGE
   build-image:
     runs-on: ubuntu-24.04
-    needs: [test-lint, test-locales]
+    needs: [test-lint, test-locales, test-schema]
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5

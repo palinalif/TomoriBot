@@ -291,6 +291,7 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
       ? `{${config.llm_stop_strings.map((stop: string) => `"${stop.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`
       : null;
     const logitBiasesJson = JSON.stringify(config.llm_logit_biases ?? []);
+    const hasMaxOutputTokens = Object.hasOwn(config, "llm_max_output_tokens");
 
     let updateRows = await sql<Array<{ tomori_config_id: number }>>`
 			UPDATE tomori_configs
@@ -301,6 +302,10 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 				llm_frequency_penalty = ${config.llm_frequency_penalty},
 				llm_presence_penalty = ${config.llm_presence_penalty},
 				llm_min_p = ${config.llm_min_p},
+				llm_max_output_tokens = CASE
+					WHEN ${hasMaxOutputTokens} THEN ${config.llm_max_output_tokens ?? null}
+					ELSE llm_max_output_tokens
+				END,
 				llm_disabled_params = COALESCE(${disabledParamsLiteral}::text[], llm_disabled_params, ARRAY[]::text[]),
 				llm_logit_biases = ${logitBiasesJson}::jsonb,
 				llm_stop_strings = COALESCE(${stopStringsLiteral}::text[], llm_stop_strings, ARRAY[]::text[]),
@@ -369,6 +374,10 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 						llm_frequency_penalty = ${config.llm_frequency_penalty},
 						llm_presence_penalty = ${config.llm_presence_penalty},
 						llm_min_p = ${config.llm_min_p},
+						llm_max_output_tokens = CASE
+							WHEN ${hasMaxOutputTokens} THEN ${config.llm_max_output_tokens ?? null}
+							ELSE llm_max_output_tokens
+						END,
 						llm_disabled_params = COALESCE(${disabledParamsLiteral}::text[], llm_disabled_params, ARRAY[]::text[]),
 						llm_logit_biases = ${logitBiasesJson}::jsonb,
 						llm_stop_strings = COALESCE(${stopStringsLiteral}::text[], llm_stop_strings, ARRAY[]::text[]),
