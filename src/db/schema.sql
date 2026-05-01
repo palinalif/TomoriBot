@@ -266,9 +266,6 @@ SELECT add_column_if_not_exists('llms', 'is_uncensored', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'supports_structoutput', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'llm_description', 'TEXT');
 SELECT add_column_if_not_exists('llms', 'ja_description', 'TEXT');
-SELECT add_column_if_not_exists('image_diffusion_models', 'is_scoped_registration', 'BOOLEAN', 'false');
-SELECT add_column_if_not_exists('video_generation_models', 'is_scoped_registration', 'BOOLEAN', 'false');
-SELECT add_column_if_not_exists('embedding_models', 'is_scoped_registration', 'BOOLEAN', 'false');
 
 
 -- Removed updated_at trigger for llms table (static metadata, rarely changes)
@@ -347,6 +344,10 @@ CREATE INDEX IF NOT EXISTS idx_embedding_models_default ON embedding_models(is_d
 CREATE INDEX IF NOT EXISTS idx_embedding_models_family ON embedding_models(model_family);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_embedding_models_provider_codename
   ON embedding_models(provider, codename);
+
+SELECT add_column_if_not_exists('image_diffusion_models', 'is_scoped_registration', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('video_generation_models', 'is_scoped_registration', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('embedding_models', 'is_scoped_registration', 'BOOLEAN', 'false');
 
 -- Allow the same codename to exist under different providers for model metadata tables.
 DO $$
@@ -1030,6 +1031,7 @@ CREATE TABLE IF NOT EXISTS server_memories (
   persona_lineage_id BIGINT NOT NULL, -- Shared persona identity for memory continuity across remove/re-import
   user_id INT, -- Creator of this server memory (nullable - set to NULL if user deleted)
   content TEXT NOT NULL,
+  tags TEXT[] DEFAULT '{}',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
@@ -1040,6 +1042,8 @@ CREATE TABLE IF NOT EXISTS server_memories (
 SELECT add_column_if_not_exists('server_memories', 'tomori_id', 'INTEGER');
 -- Add lineage scope column for existing databases
 SELECT add_column_if_not_exists('server_memories', 'persona_lineage_id', 'BIGINT');
+-- Add tags column for existing databases
+SELECT add_column_if_not_exists('server_memories', 'tags', 'TEXT[]');
 
 -- Backfill server memories to the current main persona for each server
 DO $$

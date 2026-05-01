@@ -1406,15 +1406,17 @@ async function buildContextNative({
 
     let serverMemoryLines: string[] = [];
     try {
-      const serverMemoryRows = await sql<Array<{ server_memory_id: number; content: string }>>`
-				SELECT server_memory_id, content
+      const serverMemoryRows = await sql<Array<{ server_memory_id: number; content: string; tags: string[] | null }>>`
+				SELECT server_memory_id, content, tags
 				FROM server_memories
 				WHERE server_id = ${tomoriState.server_id}
 				  AND persona_lineage_id = ${tomoriState.persona_lineage_id}
 				ORDER BY created_at DESC
 			`;
 
-      serverMemoryLines = serverMemoryRows.map((row) => formatMemoryWithId(row.server_memory_id, row.content));
+      serverMemoryLines = serverMemoryRows.map((row) =>
+        formatMemoryWithId(row.server_memory_id, row.content, row.tags ?? []),
+      );
     } catch (error) {
       log.warn("Failed to load server memories with IDs for context", error);
       serverMemoryLines = tomoriState.server_memories;

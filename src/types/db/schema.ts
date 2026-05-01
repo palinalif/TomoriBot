@@ -653,6 +653,7 @@ export const serverMemorySchema = z.object({
   }, z.number().int().nonnegative()),
   user_id: z.number().nullable(), // Nullable - set to NULL if user deleted
   content: z.string(),
+  tags: z.array(z.string().max(32)).max(5).default([]),
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
