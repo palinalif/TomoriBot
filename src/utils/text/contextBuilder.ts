@@ -1914,7 +1914,7 @@ async function buildContextNative({
                   tomoriConfig.personal_memories_enabled,
                 );
                 const memoryId = memoryRow.personal_memory_id ?? index + 1;
-                return formatMemoryWithId(memoryId, processedMemory);
+                return formatMemoryWithId(memoryId, processedMemory, memoryRow.tags ?? []);
               }),
             );
             detailLines.push(`- Memories: ${processedMemories.join("; ")}`);

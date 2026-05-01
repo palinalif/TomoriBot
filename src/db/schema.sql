@@ -1206,10 +1206,14 @@ CREATE TABLE IF NOT EXISTS personal_memories (
   user_id INT NOT NULL,
   persona_lineage_id BIGINT NOT NULL,
   content TEXT NOT NULL,
+  tags TEXT[] DEFAULT '{}',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
+
+-- Add tags column for existing databases
+SELECT add_column_if_not_exists('personal_memories', 'tags', 'TEXT[]');
 
 -- Create updated_at trigger for personal_memories table
 DROP TRIGGER IF EXISTS update_personal_memories_timestamp ON personal_memories;

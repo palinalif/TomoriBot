@@ -696,6 +696,7 @@ export const personalMemorySchema = z.object({
     return value;
   }, z.number().int().nonnegative()),
   content: z.string(),
+  tags: z.array(z.string().max(32)).max(5).default([]),
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
