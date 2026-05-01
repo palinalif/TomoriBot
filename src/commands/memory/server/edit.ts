@@ -384,7 +384,7 @@ export async function execute(
       const editedMemory = editModalResult.values?.[MEMORY_INPUT_ID]?.trim() ?? "";
       const rawTagsInput = editModalResult.values?.[MEMORY_TAGS_INPUT_ID]?.trim() ?? "";
       const editedTags = rawTagsInput
-        ? [...new Set(rawTagsInput.split(",").map((t) => t.trim()).filter((t) => t.length > 0 && t.length <= MAX_TAG_LENGTH))].slice(0, MAX_TAGS)
+        ? [...new Set(rawTagsInput.split(",").map((t) => t.trim().replace(/^["']+|["']+$/g, "")).filter((t) => t.length > 0 && t.length <= MAX_TAG_LENGTH))].slice(0, MAX_TAGS)
         : [];
       if (!editModalInteraction) {
         log.error("Server memory edit modal unexpectedly missing interaction");

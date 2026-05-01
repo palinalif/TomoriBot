@@ -384,6 +384,7 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   sampledialogue_memteaching_enabled BOOLEAN DEFAULT false,
   self_teaching_enabled BOOLEAN DEFAULT true,
   personal_memories_enabled BOOLEAN DEFAULT true,
+  memory_tagging_enabled BOOLEAN DEFAULT false,
   imagegen_enabled BOOLEAN DEFAULT true,
   videogen_enabled BOOLEAN DEFAULT false,
   tool_notice_hidden_keys TEXT[] DEFAULT '{}',
@@ -1043,7 +1044,7 @@ SELECT add_column_if_not_exists('server_memories', 'tomori_id', 'INTEGER');
 -- Add lineage scope column for existing databases
 SELECT add_column_if_not_exists('server_memories', 'persona_lineage_id', 'BIGINT');
 -- Add tags column for existing databases
-SELECT add_column_if_not_exists('server_memories', 'tags', 'TEXT[]');
+SELECT add_column_if_not_exists('server_memories', 'tags', 'TEXT[]', 'ARRAY[]::TEXT[]');
 
 -- Backfill server memories to the current main persona for each server
 DO $$
@@ -1213,7 +1214,7 @@ CREATE TABLE IF NOT EXISTS personal_memories (
 );
 
 -- Add tags column for existing databases
-SELECT add_column_if_not_exists('personal_memories', 'tags', 'TEXT[]');
+SELECT add_column_if_not_exists('personal_memories', 'tags', 'TEXT[]', 'ARRAY[]::TEXT[]');
 
 -- Create updated_at trigger for personal_memories table
 DROP TRIGGER IF EXISTS update_personal_memories_timestamp ON personal_memories;
@@ -2636,3 +2637,6 @@ END $$;
 SELECT add_column_if_not_exists('tomori_configs', 'llm_max_output_tokens', 'INTEGER', 'NULL');
 SELECT add_column_if_not_exists('saved_provider_configs', 'llm_max_output_tokens', 'INTEGER', 'NULL');
 SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_max_output_tokens', 'INTEGER', 'NULL');
+
+-- Memory tag filtering toggle (May 2026)
+SELECT add_column_if_not_exists('tomori_configs', 'memory_tagging_enabled', 'BOOLEAN', 'false');
