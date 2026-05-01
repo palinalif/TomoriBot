@@ -1125,6 +1125,7 @@ export async function buildContext(params: BuildContextParams): Promise<BuildCon
                     videogen_enabled: params.tomoriConfig.videogen_enabled,
                     nai_exclusive_imggen: params.tomoriConfig.nai_exclusive_imggen,
                     voice_message_enabled: params.tomoriConfig.voice_message_enabled,
+                    thread_creation_enabled: params.tomoriConfig.thread_creation_enabled,
                   },
                 }
               : undefined,
@@ -1248,6 +1249,7 @@ async function buildContextNative({
               videogen_enabled: tomoriConfig.videogen_enabled,
               nai_exclusive_imggen: tomoriConfig.nai_exclusive_imggen,
               voice_message_enabled: tomoriConfig.voice_message_enabled,
+              thread_creation_enabled: tomoriConfig.thread_creation_enabled,
             },
           }
         : undefined,

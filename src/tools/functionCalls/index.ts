@@ -29,6 +29,7 @@ export { ReminderTool } from "./reminderTool";
 export { RevealMessageMetadataTool } from "./revealMessageMetadataTool";
 export { ReviewCapabilitiesTool } from "./reviewCapabilities";
 export { CrossChannelMessageTool } from "./crossChannelMessageTool";
+export { CreateThreadTool } from "./createThreadTool";
 
 // Re-export common types for convenience
 export type {

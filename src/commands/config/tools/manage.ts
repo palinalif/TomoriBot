@@ -91,6 +91,13 @@ const PERMISSION_DEFINITIONS: PermissionDefinition[] = [
     getState: (c) => c.manage_message_enabled,
   },
   {
+    value: "threadcreation",
+    dbColumn: "thread_creation_enabled",
+    labelKey: "commands.config.tools.manage.threadcreation_option",
+    descKey: "commands.config.tools.manage.threadcreation_desc",
+    getState: (c) => c.thread_creation_enabled,
+  },
+  {
     value: "imagegen",
     dbColumn: "imagegen_enabled",
     labelKey: "commands.config.tools.manage.imagegen_option",

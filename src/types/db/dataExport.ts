@@ -147,6 +147,7 @@ export const serverConfigExportSchema = z.object({
   manage_message_enabled: z.boolean().optional(),
   videogen_enabled: z.boolean().optional(),
   voice_message_enabled: z.boolean().optional(),
+  thread_creation_enabled: z.boolean().optional(),
   voice_transcript_chat_mode: z.boolean().optional(),
   chatterbox_turbo_enabled: z.boolean().optional(),
   chatterbox_cfg_weight: z.number().min(0.0).optional(),

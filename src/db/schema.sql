@@ -385,6 +385,7 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   personal_memories_enabled BOOLEAN DEFAULT true,
   imagegen_enabled BOOLEAN DEFAULT true,
   videogen_enabled BOOLEAN DEFAULT false,
+  thread_creation_enabled BOOLEAN DEFAULT true,
   tool_notice_hidden_keys TEXT[] DEFAULT '{}',
   llm_disabled_params TEXT[] DEFAULT '{}', -- DEPRECATED Phase 1.5 Pass B: mirror of saved_provider_configs
   llm_stop_strings TEXT[] DEFAULT '{}',
@@ -550,6 +551,9 @@ SELECT add_column_if_not_exists('tomori_configs', 'web_search_enabled', 'BOOLEAN
 
 -- Add message management permission (November 2025)
 SELECT add_column_if_not_exists('tomori_configs', 'manage_message_enabled', 'BOOLEAN', 'true');
+
+-- Add thread creation permission (May 2026)
+SELECT add_column_if_not_exists('tomori_configs', 'thread_creation_enabled', 'BOOLEAN', 'true');
 
 -- Add image generation permission
 SELECT add_column_if_not_exists('tomori_configs', 'imagegen_enabled', 'BOOLEAN', 'true');
