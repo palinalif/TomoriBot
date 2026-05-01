@@ -1,5 +1,5 @@
 // src/test-secrets.ts
-import { getAppSecrets } from "../src/utils/security/secretsManager";
+import { getAppSecrets } from "@/utils/security/secretsManager";
 
 async function test() {
   console.log("🔒 Attempting to fetch secrets from AWS...");

@@ -424,6 +424,9 @@ Enable these capability flags for ChatMock:
 | `bun run nuke-db` | Drops all tables (start the bot afterwards to reinitialise). Usually used in conjunction with backups for clean installs |
 | `bun run purge-commands` | Clear all registered Discord slash commands |
 | `bun run rotate-keys` | Migrate all encrypted fields to the current key version |
+| `bun run vl-db` | Creates a disposable local PostgreSQL database and validates fresh schema initialization, backup/restore scripts, key audits, legacy-provider audit, `nuke-db`, and re-initialization |
+
+`bun run backup` and `bun run vl-db` require PostgreSQL client tools (`pg_dump` and `psql`) in PATH. `bun run vl-db` also needs a local PostgreSQL user with permission to create and drop disposable databases.
 
 ### Updating TomoriBot
 
@@ -546,7 +549,7 @@ Since TomoriBot is still in Beta, any contributions made are **greatly appreciat
 
 ### To contribute new features
 
-The TomoriBot wiki for contributors is still WIP but there are already comprehensive documentation available at `/docs/` that can help you understand TomoriBot's architecture more. Please make sure that `bun run vl` does not return any errors before doing a pull request of a new feature.
+The TomoriBot wiki for contributors is still WIP but there are already comprehensive documentation available at `/docs/` that can help you understand TomoriBot's architecture more. Please make sure that `bun run check`, `bun run lint`, `bun run check-locales`, and `bun run vl-db` do not return any errors before doing a pull request of a new feature.
 
 <!-- LEGAL -->
 ## Legal & License

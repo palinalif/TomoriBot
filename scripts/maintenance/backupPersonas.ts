@@ -1,15 +1,16 @@
 import { sql } from "@/utils/db/client";
-import { log } from "../src/utils/misc/logger";
+import { log } from "@/utils/misc/logger";
 import { config } from "dotenv";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { exportPresetData } from "@/utils/db/presetExport";
 import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
-import { embedMetadataInPNG } from "@/utils/image/pngMetadata";
-import { loadStoredPersonaAvatarBuffer } from "@/utils/storage/avatarStorage";
-import { convertToPNG } from "@/utils/image/imageProcessor";
 
 config();
+
+function resolveBackupsRoot(): string {
+  return process.env.TOMORI_BACKUP_DIR ? resolve(process.env.TOMORI_BACKUP_DIR) : join(process.cwd(), "backups");
+}
 
 // ---------------------------------------------------------------------------
 // scripts/maintenance/backupPersonas.ts
@@ -114,7 +115,7 @@ async function runBackup(): Promise<void> {
   }
 
   // 2. Create timestamped output directory
-  const backupsRoot = join(process.cwd(), "backups");
+  const backupsRoot = resolveBackupsRoot();
   if (!existsSync(backupsRoot)) mkdirSync(backupsRoot, { recursive: true });
 
   const timestamp = new Date().toISOString().replace(/:/g, "-").replace(/\..+/, "").replace("T", "_");
@@ -129,7 +130,7 @@ async function runBackup(): Promise<void> {
   const servers = await getAllServers();
   if (servers.length === 0) {
     log.warn("No servers found in the database. Nothing to export.");
-    process.exit(0);
+    return;
   }
   log.info(`Found ${servers.length} server(s)`);
 
@@ -212,6 +213,11 @@ async function runBackup(): Promise<void> {
         let filenamePng: string | null = null;
         if (persona.webhook_avatar_url) {
           try {
+            const [{ loadStoredPersonaAvatarBuffer }, { convertToPNG }, { embedMetadataInPNG }] = await Promise.all([
+              import("@/utils/storage/avatarStorage"),
+              import("@/utils/image/imageProcessor"),
+              import("@/utils/image/pngMetadata"),
+            ]);
             const avatarBuffer = await loadStoredPersonaAvatarBuffer(persona.webhook_avatar_url);
             if (avatarBuffer) {
               const pngBuffer = await convertToPNG(avatarBuffer);

@@ -13,14 +13,37 @@
  *     in this dependency chain.
  */
 
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+
 const GHOST_ADVISORIES = new Set(["GHSA-P8P7-X288-28G6", "GHSA-W5HQ-G745-H8PQ"]);
 
-// Run `bun audit` and capture combined stdout + stderr
-const proc = Bun.spawn(["bun", "audit"], { stderr: "pipe", stdout: "pipe" });
-const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
-await proc.exited;
+async function runBunAudit(): Promise<string> {
+  if (process.platform === "win32") {
+    const tempDir = join(process.cwd(), ".temp");
+    if (!existsSync(tempDir)) mkdirSync(tempDir, { recursive: true });
 
-const combined = stdout + stderr;
+    const outputPath = join(tempDir, `bun-audit-${process.pid}.txt`);
+    const command = `${process.execPath} audit > ${outputPath} 2>&1`;
+    const proc = Bun.spawn(["cmd.exe", "/d", "/s", "/c", command], {
+      stdin: "ignore",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+
+    await proc.exited;
+    const output = readFileSync(outputPath, "utf-8");
+    rmSync(outputPath, { force: true });
+    return output;
+  }
+
+  const proc = Bun.spawn([process.execPath, "audit"], { stderr: "pipe", stdout: "pipe" });
+  const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
+  await proc.exited;
+  return stdout + stderr;
+}
+
+const combined = await runBunAudit();
 
 // Extract all advisory IDs found in the output (format: GHSA-xxxx-xxxx-xxxx)
 const foundIds = [...combined.matchAll(/GHSA-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+/gi)].map((m) => m[0].toUpperCase());

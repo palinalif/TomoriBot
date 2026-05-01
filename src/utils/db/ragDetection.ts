@@ -1,3 +1,4 @@
+import type { SQL } from "bun";
 import { sql } from "@/utils/db/client";
 
 /** Cached result of pgvector availability check */
@@ -14,19 +15,21 @@ let cachedResult: boolean | null = null;
  *
  * @returns `true` if pgvector is available, `false` otherwise
  */
-export async function detectRagAvailability(): Promise<boolean> {
-  if (cachedResult !== null) return cachedResult;
+export async function detectRagAvailability(client: SQL = sql): Promise<boolean> {
+  const shouldUseCache = client === sql;
+  if (shouldUseCache && cachedResult !== null) return cachedResult;
 
   try {
-    const [row] = await sql`
+    const [row] = await client<{ available: boolean }[]>`
 			SELECT EXISTS(
 				SELECT 1 FROM pg_available_extensions WHERE name = 'vector'
 			) AS available
 		`;
-    cachedResult = Boolean(row.available);
-    return cachedResult;
+    const available = Boolean(row?.available);
+    if (shouldUseCache) cachedResult = available;
+    return available;
   } catch {
-    cachedResult = false;
+    if (shouldUseCache) cachedResult = false;
     return false;
   }
 }

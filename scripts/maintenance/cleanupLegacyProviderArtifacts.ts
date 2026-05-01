@@ -12,9 +12,9 @@ import { config } from "dotenv";
 
 config();
 
-const { sql } = await import("../src/utils/db/client");
+const { sql } = await import("@/utils/db/client");
 const { buildServerCustomProviderName, buildUserCustomProviderName, parseCustomProvider } = await import(
-  "../src/utils/provider/customProviderUtils"
+  "@/utils/provider/customProviderUtils"
 );
 
 interface CountRow {
