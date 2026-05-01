@@ -46,7 +46,16 @@ export type CommandCooldownMap = Map<string, number>;
 // Categories that are completely restricted to guilds only
 const GUILD_ONLY_CATEGORIES: string[] = ["server", "conditioning"];
 // Categories that require manage permissions in guild context
-const MANAGER_ONLY_CATEGORIES = ["config", "nsfw", "optional-key", "server"];
+const MANAGER_ONLY_CATEGORIES = [
+  "config",
+  "model",
+  "provider",
+  "mcp",
+  "capabilities",
+  "nsfw",
+  "optional-key",
+  "server",
+];
 
 const COMMAND_LOCALIZATION_ALIASES: Record<string, string> = {
   "commands.memory.description": "commands.teach.memory.description",
@@ -91,7 +100,7 @@ function getCommandLocalizationAliases(key: string): string[] {
   }
 
   const configDescriptionAliases: Record<string, string> = {
-    "commands.config.tools.manage.description": "commands.config.tools.manage.description",
+    "commands.capabilities.manage.description": "commands.capabilities.manage.description",
     "commands.config.send-limit.description": "commands.config.sendlimit.description",
     "commands.server.always-reply.description": "commands.server.alwaysreply.description",
     "commands.server.deliberate-trigger-mode.description": "commands.server.deliberatetriggermode.description",
@@ -99,7 +108,7 @@ function getCommandLocalizationAliases(key: string): string[] {
     "commands.server.quota.image-generation.description": "commands.server.quota.imagegen.description",
     "commands.server.quota.text-generation.description": "commands.server.quota.textgen.description",
     "commands.server.quota.video-generation.description": "commands.server.quota.videogen.description",
-    "commands.config.model-override.remove.description": "commands.config.remove.modeloverride.description",
+    "commands.model.override.remove.description": "commands.config.remove.modeloverride.description",
   };
   const configAlias = configDescriptionAliases[key];
   if (configAlias) {

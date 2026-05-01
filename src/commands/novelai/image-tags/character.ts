@@ -5,11 +5,11 @@
   type ModalSubmitInteraction,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import { invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
-import { localizer } from "../../../utils/text/localizer";
-import { log, ColorCode } from "../../../utils/misc/logger";
-import { promptWithRawModal, replyInfoEmbed, safeSelectOptionText } from "../../../utils/discord/interactionHelper";
-import type { TomoriState, UserRow } from "../../../types/db/schema";
+import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
+import { promptWithRawModal, replyInfoEmbed, safeSelectOptionText } from "@/utils/discord/interactionHelper";
+import type { TomoriState, UserRow } from "@/types/db/schema";
 import { sql } from "@/utils/db/client";
 import {
   formatTextArrayLiteral,
@@ -18,8 +18,8 @@ import {
   parseAndValidateNaiTags,
   TAGS_MODAL_MAX_LENGTH,
 } from "@/utils/novelai/tagHelpers";
-import type { SelectOption } from "../../../types/discord/modal";
-import { loadAllPersonasForServer } from "../../../utils/db/dbRead";
+import type { SelectOption } from "@/types/discord/modal";
+import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 
 // Modal field IDs
 const MODAL_CUSTOM_ID = "novelai_tags_character_modal";

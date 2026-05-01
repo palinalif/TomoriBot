@@ -12,9 +12,9 @@ import {
   type UserRow,
   type ErrorContext,
   type TomoriState,
-} from "../../../types/db/schema";
-import { localizer } from "../../../utils/text/localizer";
-import { log, ColorCode } from "../../../utils/misc/logger";
+} from "@/types/db/schema";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
 import {
   acknowledgeModalSubmitForRefresh,
   replyInfoEmbed,
@@ -24,9 +24,9 @@ import {
   replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   safeSelectOptionText,
-} from "../../../utils/discord/interactionHelper";
-import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
-import type { SelectOption } from "../../../types/discord/modal";
+} from "@/utils/discord/interactionHelper";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import type { SelectOption } from "@/types/discord/modal";
 import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 
 // Rule 20: Constants for static values at the top

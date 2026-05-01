@@ -1,7 +1,7 @@
 import type { ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { loadAvailableModelsForProvider } from "@/utils/db/dbRead";
-import { promptForSavedProvider } from "@/commands/config/model/providerPicker";
+import { promptForSavedProvider } from "@/commands/model/providerPicker";
 import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
@@ -83,8 +83,8 @@ export async function execute(
     });
     if (!availableModels?.length) {
       await replyInfoEmbed(providerSelection.interaction, locale, {
-        titleKey: "commands.config.model.text.no_models_title",
-        descriptionKey: "commands.config.model.text.no_models_description",
+        titleKey: "commands.model.text.no_models_title",
+        descriptionKey: "commands.model.text.no_models_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -98,13 +98,13 @@ export async function execute(
 
     const modalResult = await promptWithPaginatedModal(providerSelection.interaction, locale, {
       modalCustomId: "personal_provider_model_text_modal",
-      modalTitleKey: "commands.config.model.text.modal_title",
+      modalTitleKey: "commands.model.text.modal_title",
       components: [
         {
           customId: MODEL_SELECT_ID,
-          labelKey: "commands.config.model.text.select_label",
-          descriptionKey: "commands.config.model.text.select_description",
-          placeholder: "commands.config.model.text.select_placeholder",
+          labelKey: "commands.model.text.select_label",
+          descriptionKey: "commands.model.text.select_description",
+          placeholder: "commands.model.text.select_placeholder",
           required: true,
           options: modelOptions,
         },
@@ -119,8 +119,8 @@ export async function execute(
     const selectedModel = availableModels.find((model) => model.llm_codename === selectedCodename) ?? null;
     if (!selectedModel?.llm_id) {
       await replyInfoEmbed(modalResult.interaction, locale, {
-        titleKey: "commands.config.model.text.invalid_model_title",
-        descriptionKey: "commands.config.model.text.invalid_model_description",
+        titleKey: "commands.model.text.invalid_model_title",
+        descriptionKey: "commands.model.text.invalid_model_description",
         color: ColorCode.ERROR,
       });
       return;

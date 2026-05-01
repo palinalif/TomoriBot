@@ -1,15 +1,17 @@
 import type { ButtonInteraction, ChatInputCommandInteraction, Client, SlashCommandSubcommandBuilder } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { THINKING_LEVEL_VALUES, type ThinkingLevelValue, isThinkingLevelValue } from "@/constants/thinkingLevels";
-import type { ErrorContext, SavedProviderConfigRow, UserRow } from "@/types/db/schema";
+import type { ErrorContext, UserRow } from "@/types/db/schema";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { sql } from "@/utils/db/client";
+import { upsertSavedProviderConfig } from "@/utils/db/dbWrite";
 import { createStandardEmbed } from "@/utils/discord/embedHelper";
 import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
 import { log, ColorCode } from "@/utils/misc/logger";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
-import { localizer } from "@/utils/text/localizer";
-import { loadUserSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
-import { upsertUserSavedProviderConfig } from "@/utils/db/dbWrite";
+import { loadSavedProvidersForCapability } from "@/utils/provider/savedProviderConfig";
 import { promptForSavedProvider } from "@/commands/model/providerPicker";
+import { localizer } from "@/utils/text/localizer";
 
 /**
  * Formats a list of changed sampler settings into a human-readable string.
@@ -41,7 +43,7 @@ function getChangedSettingLabel(locale: string, setting: string): string {
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("parameters")
-    .setDescription(localizer("en-US", "commands.personal.parameters.description"))
+    .setDescription(localizer("en-US", "commands.model.parameters.description"))
     .addNumberOption((option) =>
       option
         .setName("temperature")
@@ -126,7 +128,16 @@ export async function execute(
     });
     return;
   }
-  if (!userData.user_id) {
+
+  const serverId = interaction.guild?.id ?? interaction.user.id;
+  const tomoriState = await getCachedTomoriState(serverId);
+  if (!tomoriState) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "general.errors.tomori_not_setup_title",
+      descriptionKey: "general.errors.tomori_not_setup_description",
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
@@ -165,16 +176,11 @@ export async function execute(
       return;
     }
 
-    // 3. Load all saved personal text providers and present the picker.
-    //    UserSavedProviderConfigRow shares the `provider` field that promptForSavedProvider reads,
-    //    so the cast is safe — the picker only uses that field to build button labels.
-    const savedProviders = await loadUserSavedProvidersForCapability(userData.user_id, "text");
-    const providerSelection = await promptForSavedProvider(
-      interaction,
-      locale,
-      savedProviders as unknown as SavedProviderConfigRow[],
-      { descriptionKey: "commands.model.parameters.picker_description" },
-    );
+    // 3. Load all saved text providers and present the picker
+    const savedProviders = await loadSavedProvidersForCapability(tomoriState.server_id, "text");
+    const providerSelection = await promptForSavedProvider(interaction, locale, savedProviders, {
+      descriptionKey: "commands.model.parameters.picker_description",
+    });
     if (!providerSelection) return;
 
     const selectedProvider = providerSelection.provider;
@@ -227,10 +233,16 @@ export async function execute(
       });
     }
     if (interaction.options.getNumber("top_p") !== null) {
-      changedSettings.push({ label: getChangedSettingLabel(locale, "top_p"), value: String(nextConfig.llm_top_p) });
+      changedSettings.push({
+        label: getChangedSettingLabel(locale, "top_p"),
+        value: String(nextConfig.llm_top_p),
+      });
     }
     if (interaction.options.getInteger("top_k") !== null) {
-      changedSettings.push({ label: getChangedSettingLabel(locale, "top_k"), value: String(nextConfig.llm_top_k) });
+      changedSettings.push({
+        label: getChangedSettingLabel(locale, "top_k"),
+        value: String(nextConfig.llm_top_k),
+      });
     }
     if (interaction.options.getNumber("frequency_penalty") !== null) {
       changedSettings.push({
@@ -245,7 +257,10 @@ export async function execute(
       });
     }
     if (interaction.options.getNumber("min_p") !== null) {
-      changedSettings.push({ label: getChangedSettingLabel(locale, "min_p"), value: String(nextConfig.llm_min_p) });
+      changedSettings.push({
+        label: getChangedSettingLabel(locale, "min_p"),
+        value: String(nextConfig.llm_min_p),
+      });
     }
     if (nextMaxOutputTokens !== null) {
       changedSettings.push({
@@ -260,9 +275,9 @@ export async function execute(
       });
     }
 
-    // 7. Persist the updated personal sampler config
-    const writeOk = await upsertUserSavedProviderConfig(userData.user_id, nextConfig);
-    if (!writeOk) {
+    // 7. Persist the updated sampler config
+    const upserted = await upsertSavedProviderConfig(tomoriState.server_id, nextConfig);
+    if (!upserted) {
       await replyWithResult({
         titleKey: "general.errors.update_failed_title",
         descriptionKey: "general.errors.update_failed_description",
@@ -271,11 +286,30 @@ export async function execute(
       return;
     }
 
+    // 8. Mirror sampler values into tomori_configs when this is the currently active provider,
+    //    so in-flight requests immediately reflect the new settings without a config switch.
+    if (selectedProvider === tomoriState.llm.llm_provider.toLowerCase()) {
+      await sql`
+        UPDATE tomori_configs
+        SET llm_temperature = ${nextConfig.llm_temperature},
+            llm_top_p = ${nextConfig.llm_top_p},
+            llm_top_k = ${nextConfig.llm_top_k},
+            llm_frequency_penalty = ${nextConfig.llm_frequency_penalty},
+            llm_presence_penalty = ${nextConfig.llm_presence_penalty},
+            llm_min_p = ${nextConfig.llm_min_p},
+            llm_max_output_tokens = ${nextConfig.llm_max_output_tokens ?? null},
+            thinking_level = ${nextConfig.thinking_level}
+        WHERE server_id = ${tomoriState.server_id}
+      `;
+    }
+
+    invalidateTomoriStateCache(serverId);
+
     await replyWithResult({
-      titleKey: "commands.personal.parameters.success_title",
-      descriptionKey: "commands.personal.parameters.success_description",
+      titleKey: "commands.model.parameters.success_title",
+      descriptionKey: "commands.model.parameters.success_description",
       descriptionVars: {
-        provider: getProviderDisplayName(savedConfig.provider),
+        provider: getProviderDisplayName(selectedProvider),
         settings: formatChangedSettings(locale, changedSettings),
       },
       color: ColorCode.SUCCESS,
@@ -283,14 +317,17 @@ export async function execute(
   } catch (error) {
     const context: ErrorContext = {
       userId: userData.user_id,
+      serverId: tomoriState.server_id,
+      tomoriId: tomoriState.tomori_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "personal parameters",
+        command: "config parameters",
         guildId: interaction.guild?.id,
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error("Error executing /personal parameters", error as Error, context);
+    await log.error(`Error executing /config parameters for user ${userData.user_disc_id}`, error as Error, context);
+
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",

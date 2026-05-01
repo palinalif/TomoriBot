@@ -5,16 +5,16 @@ import {
   type ModalSubmitInteraction,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import { invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
-import { localizer } from "../../../utils/text/localizer";
-import { log, ColorCode } from "../../../utils/misc/logger";
-import { promptWithRawModal, replyInfoEmbed, safeSelectOptionText } from "../../../utils/discord/interactionHelper";
-import type { ErrorContext, TomoriState, UserRow } from "../../../types/db/schema";
-import { personaConfigSchema } from "../../../types/db/schema";
+import { invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
+import { promptWithRawModal, replyInfoEmbed, safeSelectOptionText } from "@/utils/discord/interactionHelper";
+import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
+import { personaConfigSchema } from "@/types/db/schema";
 import { sql } from "@/utils/db/client";
-import { validateMemoryContent, getMemoryLimits } from "../../../utils/db/memoryLimits";
-import type { SelectOption } from "../../../types/discord/modal";
-import { loadAllPersonasForServer } from "../../../utils/db/dbRead";
+import { validateMemoryContent, getMemoryLimits } from "@/utils/db/memoryLimits";
+import type { SelectOption } from "@/types/discord/modal";
+import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 
 // Get memory limits from environment variables
 const memoryLimits = getMemoryLimits();

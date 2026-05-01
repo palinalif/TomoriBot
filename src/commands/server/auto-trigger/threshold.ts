@@ -5,12 +5,12 @@
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
 import { sql } from "@/utils/db/client";
-import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
-import { tomoriConfigSchema, tomoriSchema } from "../../../types/db/schema";
-import { localizer } from "../../../utils/text/localizer";
-import { log, ColorCode } from "../../../utils/misc/logger";
-import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
-import type { UserRow, ErrorContext } from "../../../types/db/schema";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { tomoriConfigSchema, tomoriSchema } from "@/types/db/schema";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
+import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
+import type { UserRow, ErrorContext } from "@/types/db/schema";
 
 // Constants for threshold limits (Rule #20)
 const MIN_THRESHOLD = 0; // 0 means always-reply in configured auto-chat channels
