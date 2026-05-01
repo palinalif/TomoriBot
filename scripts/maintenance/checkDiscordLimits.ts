@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { Glob } from "bun";
-import { log } from "../src/utils/misc/logger";
+import { log } from "@/utils/misc/logger";
 
 /**
  * Discord API Limits

@@ -111,9 +111,9 @@ bun run build
 bun run start
 bun run lint
 bun run check
-bun run seed-db
+bun run vl
 bun run nuke-db
-bun run backup-db
+bun run backup
 bun run purge-commands
 bun run check-locales
 bun run check-limits

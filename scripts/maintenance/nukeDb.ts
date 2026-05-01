@@ -1,8 +1,11 @@
 import { sql } from "bun";
-import { log } from "../src/utils/misc/logger";
+import { log } from "@/utils/misc/logger";
 import { config } from "dotenv";
 
 config();
+
+const args = new Set(process.argv.slice(2));
+const skipPrompt = args.has("--yes") && process.env.TOMORI_NUKE_CONFIRM === "NUKE DATABASE";
 
 // Construct DATABASE_URL from individual POSTGRES_* vars if not explicitly set.
 // Bun's sql tag reads DATABASE_URL from the environment — without this, it falls
@@ -29,9 +32,9 @@ if (!process.env.DATABASE_URL) {
  * Uses pg_tables to enumerate tables at runtime so this script never goes
  * stale when new tables are added to the schema.
  *
- * DANGER: This is irreversible. Run `bun run backup-db` first.
+ * DANGER: This is irreversible. Run `bun run backup` first.
  */
-async function nukeDatabase() {
+async function nukeDatabase(): Promise<void> {
   log.section("⚠️ DATABASE DESTRUCTION SCRIPT ⚠️");
   log.info("This will DELETE ALL TABLES and DATA in the connected PostgreSQL database.");
   log.info("Run `bun run backup` first if you want to preserve your data.");
@@ -46,26 +49,30 @@ async function nukeDatabase() {
 
   if (tableRows.length === 0) {
     log.info("No tables found in the public schema. Database is already empty.");
-    process.exit(0);
+    return;
   }
 
   const tableNames = tableRows.map((r) => r.tablename);
   log.info(`Tables found (${tableNames.length}): ${tableNames.join(", ")}`);
 
-  log.info("Type 'NUKE DATABASE' (all caps) to confirm deletion:");
+  if (!skipPrompt) {
+    log.info("Type 'NUKE DATABASE' (all caps) to confirm deletion:");
 
-  // 2. Require explicit confirmation before proceeding
-  const response = await new Promise<string>((resolve) => {
-    process.stdin.resume();
-    process.stdin.once("data", (data) => {
-      resolve(data.toString().trim());
-      process.stdin.pause();
+    // 2. Require explicit confirmation before proceeding
+    const response = await new Promise<string>((resolve) => {
+      process.stdin.resume();
+      process.stdin.once("data", (data) => {
+        resolve(data.toString().trim());
+        process.stdin.pause();
+      });
     });
-  });
 
-  if (response !== "NUKE DATABASE") {
-    log.info("Aborted. Your database is safe.");
-    process.exit(0);
+    if (response !== "NUKE DATABASE") {
+      log.info("Aborted. Your database is safe.");
+      return;
+    }
+  } else {
+    log.warn("Non-interactive confirmation accepted from TOMORI_NUKE_CONFIRM.");
   }
 
   log.info("Confirmation received. Starting database nuke process...");
@@ -92,9 +99,10 @@ async function nukeDatabase() {
     log.info("To start completely fresh: bun run dev  (bot auto-initializes the schema)");
   } catch (error) {
     log.error("Error during database nuke process:", error);
-  } finally {
-    process.exit(0);
   }
 }
 
-nukeDatabase();
+nukeDatabase().catch((error) => {
+  log.error("Database nuke failed:", error);
+  process.exitCode = 1;
+});

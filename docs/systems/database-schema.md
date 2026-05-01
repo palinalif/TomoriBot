@@ -214,6 +214,10 @@ Schema is idempotent and startup-safe:
 - helper functions like `add_column_if_not_exists` and `drop_column_if_exists`
 - guarded `DO $$ ... $$` blocks for conditional constraint/index/column changes
 
+Startup schema execution is shared through `src/utils/db/initializeDatabase.ts`. The bot entry point and
+`bun run vl-db` both use this path, so fresh-install validation exercises the same schema, optional RAG schema,
+ST preset schema, and seed data load as runtime startup.
+
 ### Adding Columns — Always Use `seed.sql`
 
 `seed.sql` runs on **every startup** during app initialization. This means any `add_column_if_not_exists` call placed there is automatically applied to existing databases on the next restart — no separate one-off migration script needed.
@@ -232,3 +236,4 @@ One-off `scripts/maintenance/add*.ts` migration scripts are **not necessary** fo
 - `cleanup_expired_cooldowns()` is defined in schema and used by startup cleanup + optional pg_cron.
 - Quota cleanup helpers exist for old image/text/video quota rows (`cleanup_old_image_quotas()`, `cleanup_old_text_quotas()`, `cleanup_old_video_quotas()`).
 - RAG tables are intentionally separate so local development can run without pgvector unless enabled.
+- `bun run vl-db` creates a disposable database on the configured local PostgreSQL server, validates fresh schema/seed initialization twice, smoke-tests backup/restore and DB maintenance scripts, runs `nuke-db` against only that disposable DB, and verifies re-initialization afterward.

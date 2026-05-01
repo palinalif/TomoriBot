@@ -1,10 +1,14 @@
 import { sql } from "@/utils/db/client";
-import { log } from "../src/utils/misc/logger";
+import { log } from "@/utils/misc/logger";
 import { config } from "dotenv";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 config();
+
+function resolveBackupsRoot(): string {
+  return process.env.TOMORI_BACKUP_DIR ? resolve(process.env.TOMORI_BACKUP_DIR) : join(process.cwd(), "backups");
+}
 
 // ---------------------------------------------------------------------------
 // scripts/maintenance/backupMemories.ts
@@ -55,7 +59,7 @@ async function runBackup(): Promise<void> {
   }
 
   // 2. Create timestamped output directory
-  const backupsRoot = join(process.cwd(), "backups");
+  const backupsRoot = resolveBackupsRoot();
   if (!existsSync(backupsRoot)) mkdirSync(backupsRoot, { recursive: true });
 
   const timestamp = new Date().toISOString().replace(/:/g, "-").replace(/\..+/, "").replace("T", "_");
@@ -77,7 +81,7 @@ async function runBackup(): Promise<void> {
 
   if (users.length === 0) {
     log.warn("No users with personal memories found. Nothing to export.");
-    process.exit(0);
+    return;
   }
 
   log.info(`Found ${users.length} user(s) with personal memories`);
