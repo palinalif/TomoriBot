@@ -28,6 +28,7 @@ import { ContextItemTag, type StructuredContextItem } from "../../types/misc/con
 import { log } from "../../utils/misc/logger";
 import { localizer } from "../../utils/text/localizer";
 import { truncateBeforeGenericSpeakerLine } from "../../utils/text/stringHelper";
+import { safeDownload } from "@/utils/security/safeDownload";
 import { buildProviderStopStrings } from "../utils/stopStrings";
 import type {
   ProcessedChunk,
@@ -39,6 +40,11 @@ import type {
 } from "../../types/stream/interfaces";
 import { extractGifKeyframes } from "../../utils/media/gifProcessor";
 import { fetchAndOptimizeImage } from "../../utils/image/imageProcessor";
+
+const VIDEO_CONTEXT_MAX_INLINE_MB = Math.max(
+  1,
+  Number.parseInt(process.env.VIDEO_CONTEXT_MAX_INLINE_MB ?? "20", 10) || 20,
+);
 
 /**
  * Google-specific stream configuration extending the base StreamConfig
@@ -1176,18 +1182,19 @@ export class GoogleStreamAdapter implements StreamProvider {
                 }
               } else {
                 // Direct video uploads (handle size limits)
-                const videoResponse = await fetch(part.uri);
-                if (!videoResponse.ok) {
-                  throw new Error(`Video fetch failed: ${videoResponse.status}`);
+                const videoResponse = await safeDownload(part.uri, {
+                  maxSizeMB: VIDEO_CONTEXT_MAX_INLINE_MB,
+                  timeoutMs: 20_000,
+                });
+                if (!videoResponse.success || !videoResponse.buffer) {
+                  throw new Error(`Video fetch failed: ${videoResponse.details ?? videoResponse.error}`);
                 }
 
-                const contentLength = videoResponse.headers.get("content-length");
-                const fileSizeBytes = contentLength ? Number.parseInt(contentLength, 10) : 0;
-                const maxInlineSize = 20 * 1024 * 1024; // 20MB limit
+                const fileSizeBytes = videoResponse.buffer.byteLength;
+                const maxInlineSize = VIDEO_CONTEXT_MAX_INLINE_MB * 1024 * 1024;
 
-                if (fileSizeBytes > 0 && fileSizeBytes < maxInlineSize) {
-                  const videoArrayBuffer = await videoResponse.arrayBuffer();
-                  const base64VideoData = Buffer.from(videoArrayBuffer).toString("base64");
+                if (fileSizeBytes > 0 && fileSizeBytes <= maxInlineSize) {
+                  const base64VideoData = videoResponse.buffer.toString("base64");
 
                   geminiParts.push({
                     inlineData: {

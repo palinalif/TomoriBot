@@ -13,6 +13,8 @@ import {
 } from "@/utils/provider/customEndpointCapabilityModal";
 import { registerCustomEndpoint, validateCustomEndpointReachability } from "@/utils/provider/customEndpointService";
 import { isValidCustomEndpointLabel, normalizeCustomEndpointLabel } from "@/utils/provider/customProviderUtils";
+import { IMPORT_LIMITS } from "@/utils/security/rateLimiter";
+import { safeDownload } from "@/utils/security/safeDownload";
 import { localizer } from "@/utils/text/localizer";
 
 const WORKFLOW_UPLOAD_ID = "workflow_json";
@@ -23,12 +25,15 @@ async function loadWorkflowJson(url: string | null): Promise<Record<string, unkn
     return null;
   }
 
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Workflow download failed: ${response.status} ${response.statusText}`);
+  const downloadResult = await safeDownload(url, {
+    maxSizeMB: IMPORT_LIMITS.MAX_DATA_IMPORT_SIZE_MB,
+    timeoutMs: 10_000,
+  });
+  if (!downloadResult.success || !downloadResult.buffer) {
+    throw new Error(`Workflow download failed: ${downloadResult.details ?? downloadResult.error ?? "unknown error"}`);
   }
 
-  return (await response.json()) as Record<string, unknown>;
+  return JSON.parse(downloadResult.buffer.toString("utf8")) as Record<string, unknown>;
 }
 
 /**
@@ -266,12 +271,19 @@ export async function execute(
     return;
   }
 
-  // 1b. Image / video: show a raw modal with display_name + workflow_json file upload.
+  // 1b. Image / video: show a raw modal with model_name, display_name, and workflow_json file upload.
   const imageVideoModalCustomId = `custom_endpoint_add_image_modal_${interaction.id}`;
   const modalResult = await promptWithRawModal(interaction, locale, {
     modalCustomId: imageVideoModalCustomId,
     modalTitleKey: `commands.config.custom_models.capability_modal.${capability}_title`,
     components: [
+      {
+        customId: ModalFieldId.model_name,
+        labelKey: "commands.config.custom_models.capability_modal.model_name_label",
+        placeholder: localizer(locale, "commands.config.custom_models.capability_modal.model_name_placeholder"),
+        required: false,
+        maxLength: 200,
+      },
       {
         customId: ModalFieldId.display_name,
         labelKey: "commands.config.custom_models.capability_modal.display_name_label",
@@ -300,6 +312,7 @@ export async function execute(
   try {
     await modalSubmit.deferReply({ flags: MessageFlags.Ephemeral });
 
+    const modelName = modalResult.values?.[ModalFieldId.model_name]?.trim() || null;
     const displayName = modalResult.values?.[ModalFieldId.display_name]?.trim() || label;
     const workflowAttachment = modalResult.attachments?.[WORKFLOW_UPLOAD_ID];
 
@@ -332,7 +345,7 @@ export async function execute(
       apiStyle,
       endpointUrl,
       displayName,
-      modelName: null,
+      modelName,
       authToken,
       extraConfig: workflow ? { workflow } : {},
     });

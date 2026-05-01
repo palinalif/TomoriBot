@@ -35,6 +35,8 @@ import {
 } from "@/utils/provider/credentialResolver";
 import { applyPersonalProviderSelectionsToTomoriState } from "@/utils/provider/personalProviderRuntime";
 import { formatCustomEndpointModelDisplay } from "@/utils/provider/customProviderUtils";
+import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
+import { safeDownload } from "@/utils/security/safeDownload";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "generate_image_modal";
@@ -78,15 +80,18 @@ async function convertAttachmentToBase64(attachment: APIAttachment): Promise<{ m
     throw new Error(`Invalid image type: ${attachment.content_type}`);
   }
 
-  // 2. Fetch image from Discord CDN
-  const response = await fetch(attachment.url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+  // 2. Fetch image from Discord CDN with bounded download checks
+  const downloadResult = await safeDownload(attachment.url, {
+    maxSizeMB: MEDIA_LIMITS.MAX_MEDIA_SIZE_MB,
+    timeoutMs: 10_000,
+    knownSize: attachment.size,
+  });
+  if (!downloadResult.success || !downloadResult.buffer) {
+    throw new Error(`Failed to fetch image: ${downloadResult.details ?? downloadResult.error ?? "unknown error"}`);
   }
 
   // 3. Convert to base64
-  const arrayBuffer = await response.arrayBuffer();
-  const base64Data = Buffer.from(arrayBuffer).toString("base64");
+  const base64Data = downloadResult.buffer.toString("base64");
 
   log.info(`Converted attachment ${attachment.id} (${attachment.filename}) to base64`);
 
@@ -212,12 +217,14 @@ async function generateImageWithOpenRouter(
 
     // Fallback: fetch remote URL and convert to base64.
     if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
-      const imageResponse = await fetch(imageUrl);
-      if (imageResponse.ok) {
-        const mimeType = imageResponse.headers.get("content-type")?.split(";")[0] || null;
-        const arrayBuffer = await imageResponse.arrayBuffer();
+      const imageResponse = await safeDownload(imageUrl, {
+        maxSizeMB: MEDIA_LIMITS.MAX_MEDIA_SIZE_MB,
+        timeoutMs: 15_000,
+      });
+      if (imageResponse.success && imageResponse.buffer) {
+        const mimeType = imageResponse.contentType?.split(";")[0] || null;
         return {
-          imageData: Buffer.from(arrayBuffer).toString("base64"),
+          imageData: imageResponse.buffer.toString("base64"),
           mimeType,
         };
       }

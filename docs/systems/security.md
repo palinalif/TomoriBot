@@ -175,6 +175,8 @@ Current runtime protections for guild MCP servers and custom endpoints:
 
 Key takeaway: TomoriBot no longer relies on a validation-only DNS check for user-supplied remote endpoints; the validated address is now the address actually used for the request.
 
+The same URL-validation path is also used by `safeDownload()` for user/media downloads. Discord attachment imports, workflow JSON uploads, image/GIF/video context expansion, avatar/character-reference reloads, and provider-returned media downloads get bounded size checks, timeout enforcement, redirect revalidation, and production SSRF blocking before bytes are read into memory.
+
 ## Runtime Guardrails and Anti-Abuse Controls
 
 Primary files:
@@ -191,6 +193,7 @@ Controls include:
 - Stream flood guard (`MAX_FLUSH_COUNT`)
 - Memory pressure guard with warning/critical modes and emergency cooldown
 - Safe attachment download with max size + timeout + response validation
+- Media download limits for provider-returned videos and Gemini/Vertex inline video context are configurable through `PROVIDER_VIDEO_DOWNLOAD_MAX_MB` and `VIDEO_CONTEXT_MAX_INLINE_MB`.
 
 ## Supply Chain Security
 

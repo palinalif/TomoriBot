@@ -102,7 +102,7 @@ Providers may emit displayable reasoning separately from visible reply text.
 - thought text is not flushed to Discord as part of the normal reply
 - thought text is not stored in short-term memory
 
-On successful streamed turns, `StreamOrchestrator` returns the merged reasoning payload in `StreamResult.thoughtLog`, along with the first visible reply URL when one exists.
+On successful streamed turns, `StreamOrchestrator` returns the merged reasoning payload in `StreamResult.thoughtLog`, along with the first visible reply URL when one exists. Thought-log payloads also carry provider streaming duration, which is summed across tool-call iterations and shown in the final thought-log embed footer only when actual thought-log content is emitted.
 
 `tomoriChat` merges thought logs across successful tool-call iterations and posts one final embed to the configured `tomori_configs.thought_log_channel_disc_id` channel after the full turn completes. Thought-log embeds are sent with suppressed notifications so they do not ping channel subscribers. If the configured channel is missing, inaccessible, or deleted, the main reply still succeeds and the thought-log post is skipped with a warning.
 

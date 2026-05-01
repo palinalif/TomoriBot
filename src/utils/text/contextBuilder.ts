@@ -1760,7 +1760,10 @@ async function buildContextNative({
     // 3. Process each user (including bot itself)
     for (const userIdToProcess of userList) {
       // 4. Special handling for TomoriBot itself
-      if (client.user && userIdToProcess === client.user.id) {
+      if (
+        (client.user && userIdToProcess === client.user.id) ||
+        (tomoriState?.is_alter && userIdToProcess === String(tomoriState.tomori_id))
+      ) {
         userEntries.push({
           userId: userIdToProcess,
           displayName: botName,

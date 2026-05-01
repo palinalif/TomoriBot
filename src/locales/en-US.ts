@@ -182,6 +182,7 @@ export default {
       raw_field: `Raw Thoughts`,
       fetched_content_field: `Fetched Content`,
       footer: `Provider: {provider} | Model: {model}`,
+      footer_with_generation_time: `Provider: {provider} | Model: {model} | Generation time: {generation_time}`,
     },
     message_interaction: {
       reply_context_author: `Replying to {user}`,
@@ -608,6 +609,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
       compact: {
         description: `Summarize the recent conversation into a compact system memory.`,
         channel_description: `Optional channel to post the summary in (defaults to this channel).`,
+        thread_description: `Optional Discord thread ID to post the summary in.`,
         modal: {
           title: `Compact Summary`,
           type_label: `Summary Type`,
@@ -626,6 +628,10 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         success_title: `✅ Summary Posted`,
         success_description: `Your compact summary has been posted in this channel.`,
         success_description_redirect: `Your compact summary has been posted in {channel}.`,
+        destination_conflict_title: `Choose One Destination`,
+        destination_conflict_description: `Use either the channel option or the thread option, not both.`,
+        thread_invalid_title: `Invalid Thread`,
+        thread_invalid_description: `Please provide a valid Discord thread ID from this server.`,
         failed_title: `Summary Failed`,
         failed_description: `I couldn't generate the summary: {error}`,
         provider_unsupported_title: `Provider Not Supported`,

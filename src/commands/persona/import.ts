@@ -24,6 +24,7 @@ import { loadAllPersonasForServer } from "../../utils/db/dbRead";
 import { getMemoryLimits } from "../../utils/db/memoryLimits";
 import { sql } from "../../utils/db/client";
 import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
+import { safeDownload } from "@/utils/security/safeDownload";
 import { resolvePersonaAvatarPublicUrl, uploadPersonaAvatarToS3 } from "../../utils/storage/avatarStorage";
 
 /**
@@ -393,24 +394,20 @@ export async function execute(
 
     // 7. Download the import file with timeout
     let importFileBuffer: Buffer;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout for larger files
 
     try {
-      const response = await fetch(attachment.url, {
-        signal: controller.signal,
+      const response = await safeDownload(attachment.url, {
+        maxSizeMB: IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB,
+        timeoutMs: 15_000,
+        knownSize: attachment.size,
       });
-      clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
+      if (!response.success || !response.buffer) {
+        throw new Error(`Failed to download file: ${response.details ?? response.error ?? "unknown error"}`);
       }
 
-      const arrayBuffer = await response.arrayBuffer();
-      importFileBuffer = Buffer.from(arrayBuffer);
+      importFileBuffer = response.buffer;
     } catch (error) {
-      clearTimeout(timeoutId);
-
       // Handle timeout vs other errors
       if (error instanceof Error && error.name === "AbortError") {
         log.warn("Persona import download timed out");

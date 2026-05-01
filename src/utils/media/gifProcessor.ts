@@ -7,6 +7,8 @@
 import { parseGIF, decompressFrames } from "gifuct-js";
 import sharp from "sharp";
 import { log } from "../misc/logger";
+import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
+import { safeDownload } from "@/utils/security/safeDownload";
 
 // ========================================
 // GIF Processing Configuration Constants
@@ -145,12 +147,14 @@ async function extractFramesInternal(
   let gifBuffer: Buffer;
   if (typeof gifSource === "string") {
     log.info(`GIF Processor: Fetching GIF from URL: ${gifSource}`);
-    const response = await fetch(gifSource);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch GIF: ${response.status} ${response.statusText}`);
+    const response = await safeDownload(gifSource, {
+      maxSizeMB: MEDIA_LIMITS.MAX_GIF_SIZE_MB,
+      timeoutMs: 20_000,
+    });
+    if (!response.success || !response.buffer) {
+      throw new Error(`Failed to fetch GIF: ${response.details ?? response.error ?? "unknown error"}`);
     }
-    const arrayBuffer = await response.arrayBuffer();
-    gifBuffer = Buffer.from(arrayBuffer);
+    gifBuffer = response.buffer;
     log.info(`GIF Processor: Fetched ${gifBuffer.length} bytes`);
   } else {
     gifBuffer = gifSource;

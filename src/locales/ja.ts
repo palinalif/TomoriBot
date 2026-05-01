@@ -182,6 +182,7 @@ export default {
       raw_field: `生の思考`,
       fetched_content_field: `取得コンテンツ`,
       footer: `プロバイダー: {provider} | モデル: {model}`,
+      footer_with_generation_time: `プロバイダー: {provider} | モデル: {model} | 生成時間: {generation_time}`,
     },
     message_interaction: {
       reply_context_author: `返信先: {user}`,
@@ -608,6 +609,7 @@ export default {
       compact: {
         description: `最近の会話をコンパクトなシステム要約にまとめます。`,
         channel_description: `要約を投稿するチャンネル（省略時はこのチャンネルに投稿）。`,
+        thread_description: `要約を投稿するDiscordスレッドID（任意）。`,
         modal: {
           title: `コンパクト要約`,
           type_label: `要約タイプ`,
@@ -626,6 +628,10 @@ export default {
         success_title: `✅ 要約を投稿しました`,
         success_description: `コンパクト要約をこのチャンネルに投稿しました。`,
         success_description_redirect: `コンパクト要約を {channel} に投稿しました。`,
+        destination_conflict_title: `投稿先を1つだけ選択してください`,
+        destination_conflict_description: `channelオプションとthreadオプションは同時に指定できません。どちらか一方だけを指定してください。`,
+        thread_invalid_title: `無効なスレッド`,
+        thread_invalid_description: `このサーバー内の有効なDiscordスレッドIDを入力してください。`,
         failed_title: `要約に失敗しました`,
         failed_description: `要約の生成に失敗しました: {error}`,
         provider_unsupported_title: `未対応のプロバイダー`,

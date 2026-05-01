@@ -18,6 +18,8 @@ import {
   ZAI_GENERAL_CHAT_COMPLETIONS_URL,
 } from "@/providers/zai/zaiShared";
 import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
+import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
+import { safeDownload } from "@/utils/security/safeDownload";
 import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 
 /**
@@ -39,7 +41,7 @@ const DEFAULT_VISION_PROMPT =
   "Describe what you see in this image in detail. Include any text, objects, people, colors, and notable elements.";
 
 /** Maximum total size of all images in bytes (8 MB) to avoid API rejections */
-const MAX_TOTAL_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_TOTAL_IMAGE_BYTES = MEDIA_LIMITS.MAX_MEDIA_SIZE_MB * 1024 * 1024;
 
 /**
  * Built-in tool that analyzes images using a dedicated vision model.
@@ -401,29 +403,32 @@ export class AnalyzeImageTool extends BaseTool {
 
     for (const imageInfo of imageUrls) {
       try {
-        const imageResponse = await fetch(imageInfo.url);
-        if (!imageResponse.ok) {
-          log.warn(`Failed to fetch image from ${imageInfo.source}: ${imageResponse.status}`);
+        const imageResponse = await safeDownload(imageInfo.url, {
+          maxSizeMB: MEDIA_LIMITS.MAX_MEDIA_SIZE_MB,
+          timeoutMs: 15_000,
+        });
+        if (!imageResponse.success || !imageResponse.buffer) {
+          log.warn(`Failed to fetch image from ${imageInfo.source}: ${imageResponse.details ?? imageResponse.error}`);
           continue;
         }
 
-        const imageArrayBuffer = await imageResponse.arrayBuffer();
+        const imageBuffer = imageResponse.buffer;
 
         // Check cumulative size limit
-        if (totalBytes + imageArrayBuffer.byteLength > MAX_TOTAL_IMAGE_BYTES) {
+        if (totalBytes + imageBuffer.byteLength > MAX_TOTAL_IMAGE_BYTES) {
           log.warn(`Skipping image from ${imageInfo.source}: would exceed ${MAX_TOTAL_IMAGE_BYTES} byte limit`);
           continue;
         }
 
-        totalBytes += imageArrayBuffer.byteLength;
-        const base64Data = Buffer.from(imageArrayBuffer).toString("base64");
+        totalBytes += imageBuffer.byteLength;
+        const base64Data = imageBuffer.toString("base64");
 
         inlineDataArray.push({
           mimeType: imageInfo.mimeType,
           data: base64Data,
         });
 
-        log.info(`Fetched image from ${imageInfo.source} (${imageArrayBuffer.byteLength} bytes)`);
+        log.info(`Fetched image from ${imageInfo.source} (${imageBuffer.byteLength} bytes)`);
       } catch (imgErr) {
         log.warn(`Failed to process image from ${imageInfo.source}:`, imgErr as Error);
       }

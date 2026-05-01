@@ -44,6 +44,7 @@ Current `cross_channel_message` runtime notes:
 - deprecated `channel_id` / `channel_name` inputs are still accepted at execution time for backward compatibility, but they are no longer advertised to the model
 - ambiguous channel or thread names return a clarification failure instead of guessing; same-name text channels, active thread titles, and forum-parent references are disambiguated together so a forum request cannot silently fall through to a text channel with the same name. Clarification candidates now expose copyable inline-code labels like `` `#label (ID: <snowflake>)` `` so the next tool call can copy that exact label or use the raw ID directly
 - thread permission checks use `SendMessagesInThreads` instead of `SendMessages`
+- target visits require both bot `ViewChannel` and invoking member `ViewChannel`; if the invoking guild member cannot be resolved, the tool fails closed before peeking or dispatching
 - the `/server crosschannel-blocklist` setting blocks tool-driven visits into listed channels, and blocked forum/media parents also block thread targets under them
 - tool-driven cross-channel dispatch now preserves the active sender identity, including alter personas and `/bot impersonate` user impersonation turns, for both the target-channel visit and optional boomerang follow-up
 - Discord channel/thread links in prompt context are normalized into readable labels; when reusing the visible label alone would be ambiguous, the prompt-visible label becomes a copyable inline-code token like `` `#label (ID: <snowflake>)` ``
