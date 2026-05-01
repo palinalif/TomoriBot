@@ -564,7 +564,7 @@ export class GoogleStreamAdapter implements StreamProvider {
   }
 
   private shouldFlushSpeakerGuardTailBeforeNonTextChunk(chunk: GoogleStreamChunk): boolean {
-    if (!this.speakerGuardEnabled || this.speakerGuardPendingTail.length === 0 || Boolean(chunk.text)) {
+    if (!this.speakerGuardEnabled || this.speakerGuardPendingTail.length === 0 || chunk.text) {
       return false;
     }
 

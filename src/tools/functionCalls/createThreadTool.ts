@@ -183,7 +183,7 @@ export class CreateThreadTool extends BaseTool {
       first_message: {
         type: "string",
         description:
-          "The first message the active persona should send inside the newly created thread. Keep it under Discord's 2000-character message limit.",
+          "The first message you send inside the newly created thread. This message should usually be you acknowledging and finishing the creation of the thread. Or, if in a story or roleplay, this could be the first message of the story or roleplay.",
       },
       channel_name: {
         type: "string",
@@ -311,6 +311,20 @@ export class CreateThreadTool extends BaseTool {
       return targetResult.result;
     }
     const targetChannel = targetResult.channel;
+
+    // Blocklist guard — mirrors the cross_channel_message check so blocked channels
+    // cannot be targeted via thread creation either.
+    const blockedChannelIds = new Set(context.tomoriState.config.crosschannel_blocklist_ids ?? []);
+    if (blockedChannelIds.has(targetChannel.id)) {
+      return {
+        success: false,
+        error: `Thread creation is blocked for \`#${targetChannel.name}\` in this server.`,
+        data: {
+          status: "create_thread_failed_blocklisted_channel",
+          reason: "The target channel is in the server cross-channel blocklist.",
+        },
+      };
+    }
 
     const botMember =
       guild.members.me ??

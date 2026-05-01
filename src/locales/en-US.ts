@@ -3743,10 +3743,10 @@ Preview:
       config: {
         description: `Manage server configuration data.`,
         export: {
-          description: `Export this server's Tomori settings, excluding memories, personas, and personal settings.`,
+          description: `Export this server's settings, excluding memories, personas, and personal settings.`,
         },
         import: {
-          description: `Import server Tomori settings. Does not import memories, personas, or personal settings.`,
+          description: `Import server settings. Does not import memories, personas, or personal settings.`,
           file_description: `Server configuration JSON file.`,
           confirmation_description: `WARNING: This may replace existing server settings based on the imported file. Continue?`,
           confirmation_choice_yes: `Yes, import it`,
@@ -4527,10 +4527,10 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
       config: {
         description: `Manage your personal configuration data.`,
         export: {
-          description: `Export your personal Tomori settings, excluding server settings, personas, and memories.`,
+          description: `Export your personal settings, excluding server settings, personas, and memories.`,
         },
         import: {
-          description: `Import your personal Tomori settings only. Does not import server settings or memories.`,
+          description: `Import your personal settings only. Does not import server settings or memories.`,
           file_description: `Personal configuration JSON file.`,
           confirmation_description: `WARNING: This may replace existing personal settings based on the imported file. Continue?`,
           confirmation_choice_yes: `Yes, import it`,
@@ -5754,7 +5754,7 @@ A malicious server may send misleading instructions, collect data sent to its to
         disabled_success: `Tool use is now **disabled**. I will not use any tools or functions regardless of model capability.`,
       },
       manage: {
-        description: `Configure my core behavior permissions on this server.`,
+        description: `Configure which specific tools I can use on this server.`,
         selfteaching_option: `Self-Teaching`,
         personalization_option: `Personalization (Memories/Nicknames)`,
         emojiusage_option: `Emoji Usage`,

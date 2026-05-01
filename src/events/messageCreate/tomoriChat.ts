@@ -5585,7 +5585,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               tomoriState.llm.llm_provider === "novelai" &&
               (tomoriState.llm.llm_codename === "kayra-v1" || tomoriState.llm.llm_codename === "llama-3-erato-v1");
             const usePrefillContinuationDirective = Boolean(trimmedPrefill) && !isNovelaiKayraOrErato;
-            if (Boolean(trimmedPrefill) && isNovelaiKayraOrErato) {
+            if (trimmedPrefill && isNovelaiKayraOrErato) {
               log.info("Manual prefill directive skipped for NovelAI Kayra/Erato; relying on assistant prefill tail");
             }
 
@@ -8392,6 +8392,10 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       } // END OF MULTI-PERSONA RESPONSE LOOP
 
       const finalThoughtLog = turnThoughtLog;
+      if (finalThoughtLog) {
+        finalThoughtLog.generationDurationMs = Date.now() - message.createdTimestamp;
+      }
+
       const thoughtLogAttributionLine =
         textCredentialSource === "personal" && personalTextProvider
           ? localizer(locale, "genai.thought_log.personal_attribution", {
