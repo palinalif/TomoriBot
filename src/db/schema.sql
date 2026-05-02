@@ -937,7 +937,6 @@ CREATE TABLE IF NOT EXISTS users (
   user_disc_id TEXT UNIQUE NOT NULL,
   user_nickname TEXT NOT NULL,
   language_pref TEXT DEFAULT 'en',
-  personal_memories TEXT[] DEFAULT '{}',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -1241,22 +1240,26 @@ BEGIN
 		SELECT 1 FROM information_schema.columns
 		WHERE table_name = 'users' AND column_name = 'personal_memories'
 	) THEN
-		INSERT INTO personal_memories (user_id, persona_lineage_id, content, created_at, updated_at)
-		SELECT
-			u.user_id,
-			0::BIGINT,
-			legacy_memory,
-			COALESCE(u.updated_at, CURRENT_TIMESTAMP),
-			COALESCE(u.updated_at, CURRENT_TIMESTAMP)
-		FROM users u
-		CROSS JOIN LATERAL unnest(COALESCE(u.personal_memories, ARRAY[]::TEXT[])) AS legacy_memory
-		WHERE NOT EXISTS (
-			SELECT 1
-			FROM personal_memories pm
-			WHERE pm.user_id = u.user_id
-			  AND pm.persona_lineage_id = 0
-			  AND pm.content = legacy_memory
-		);
+		-- EXECUTE defers parsing until runtime so the column reference is only
+		-- validated when the branch is actually taken (column still exists).
+		EXECUTE $migration$
+			INSERT INTO personal_memories (user_id, persona_lineage_id, content, created_at, updated_at)
+			SELECT
+				u.user_id,
+				0::BIGINT,
+				legacy_memory,
+				COALESCE(u.updated_at, CURRENT_TIMESTAMP),
+				COALESCE(u.updated_at, CURRENT_TIMESTAMP)
+			FROM users u
+			CROSS JOIN LATERAL unnest(COALESCE(u.personal_memories, ARRAY[]::TEXT[])) AS legacy_memory
+			WHERE NOT EXISTS (
+				SELECT 1
+				FROM personal_memories pm
+				WHERE pm.user_id = u.user_id
+				  AND pm.persona_lineage_id = 0
+				  AND pm.content = legacy_memory
+			)
+		$migration$;
 
 		ALTER TABLE users DROP COLUMN personal_memories;
 	END IF;

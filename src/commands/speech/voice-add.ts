@@ -37,16 +37,30 @@ const ACCEPTED_MIME_TYPES = new Set([
 ]);
 const ACCEPTED_EXTENSION_REGEX = /\.(wav|mp3|ogg|opus|flac|m4a|aac)$/i;
 
+/** Thrown when an ffmpeg binary cannot be spawned (missing, wrong architecture, no execute permission). */
+class FfmpegSpawnError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = "FfmpegSpawnError";
+  }
+}
+
+async function spawnFfmpeg(binary: string, tmpIn: string, tmpOut: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const proc = spawn(binary, ["-y", "-i", tmpIn, "-ar", "22050", "-ac", "1", "-f", "wav", tmpOut]);
+    // Wrap OS-level spawn failures separately so the caller can retry with a different binary.
+    proc.on("error", (err) => reject(new FfmpegSpawnError(err)));
+    proc.on("close", (code: number | null) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`))));
+  });
+}
+
 /**
  * Converts an audio buffer to mono WAV at 22050 Hz.
- * Prefers the bundled ffmpeg-static binary; falls back to system `ffmpeg`
- * when the static binary is absent or fails (common on Alpine Linux / musl).
+ * Tries the bundled ffmpeg-static binary first; if it cannot be spawned
+ * (e.g. glibc/musl mismatch on Alpine), retries with the system `ffmpeg` command.
+ * Conversion errors (bad input audio) are NOT retried.
  */
 async function normalizeToWav(inputBuffer: Buffer): Promise<Buffer> {
-  // ffmpeg-static ships a glibc binary that silently fails on Alpine (musl).
-  // System ffmpeg (apk add ffmpeg) is the reliable fallback in production.
-  const ffmpegBinary = ffmpegPath ?? "ffmpeg";
-
   const suffix = Date.now();
   const tmpIn = path.join(os.tmpdir(), `tts-in-${suffix}`);
   const tmpOut = path.join(os.tmpdir(), `tts-out-${suffix}.wav`);
@@ -54,22 +68,18 @@ async function normalizeToWav(inputBuffer: Buffer): Promise<Buffer> {
   await fs.writeFile(tmpIn, inputBuffer);
 
   try {
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn(ffmpegBinary, [
-        "-y",
-        "-i",
-        tmpIn,
-        "-ar",
-        "22050", // 22050 Hz — widely compatible with TTS clone engines
-        "-ac",
-        "1", // Mono
-        "-f",
-        "wav",
-        tmpOut,
-      ]);
-      proc.on("close", (code: number | null) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}`))));
-      proc.on("error", reject);
-    });
+    const primaryBinary = ffmpegPath ?? "ffmpeg";
+    try {
+      await spawnFfmpeg(primaryBinary, tmpIn, tmpOut);
+    } catch (err) {
+      // Only retry on spawn failure (binary can't run), not on bad-input errors.
+      if (err instanceof FfmpegSpawnError && primaryBinary !== "ffmpeg") {
+        log.warn("[VoiceAdd] ffmpeg-static failed to spawn, retrying with system ffmpeg", err);
+        await spawnFfmpeg("ffmpeg", tmpIn, tmpOut);
+      } else {
+        throw err;
+      }
+    }
 
     return await fs.readFile(tmpOut);
   } finally {
