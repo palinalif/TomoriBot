@@ -73,11 +73,16 @@ const DISCORD_CHANNEL_LINK_REPLACE_PATTERN =
 const MIN_MESSAGES_FOR_SUMMARY = Number.parseInt(process.env.SHORT_TERM_MEMORY_MIN_MESSAGES_FOR_SUMMARY || "6", 10);
 const MAX_OTHER_CHANNEL_MEMORIES = Number.parseInt(process.env.SHORT_TERM_MEMORY_MAX_OTHER_CHANNELS || "3", 10);
 
-const DOCUMENT_CONTEXT_MAX_CHARS = 2000;
 const DOCUMENT_QUERY_MAX_LENGTH = 1000;
 const DOCUMENT_QUERY_MIN_LENGTH = 3;
-const DOCUMENT_MAX_RESULTS = 6;
-const DOCUMENT_MIN_SIMILARITY = 0.2;
+const DOCUMENT_MAX_RESULTS = (() => {
+  const parsed = Number.parseInt(process.env.DOCUMENT_MAX_RESULTS || "6", 10);
+  return Number.isFinite(parsed) ? Math.max(1, parsed) : 6;
+})();
+const DOCUMENT_MIN_SIMILARITY = (() => {
+  const parsed = Number.parseFloat(process.env.DOCUMENT_MIN_SIMILARITY || "0.5");
+  return Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : 0.5;
+})();
 const MEDIA_IMAGE_MESSAGE_LIMIT = (() => {
   const parsed = Number.parseInt(process.env.MEDIA_IMAGE_MESSAGE_LIMIT || "3", 10);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 3;
@@ -2209,7 +2214,7 @@ async function buildContextNative({
               minSimilarity: DOCUMENT_MIN_SIMILARITY,
             });
 
-            const documentContext = formatRetrievedChunksForPrompt(chunks, DOCUMENT_CONTEXT_MAX_CHARS);
+            const documentContext = formatRetrievedChunksForPrompt(chunks);
 
             if (documentContext) {
               contextItems.push({

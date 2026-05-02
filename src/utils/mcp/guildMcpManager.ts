@@ -54,7 +54,7 @@ const CONNECTION_TTL_MS = (Number(process.env.GUILD_MCP_CONNECTION_TTL_MINUTES) 
 const CONNECT_TIMEOUT_MS = Number(process.env.GUILD_MCP_CONNECT_TIMEOUT_MS) || 15_000;
 
 /** Timeout for individual tool execution calls (default: 30s) */
-const EXECUTION_TIMEOUT_MS = 30_000;
+const EXECUTION_TIMEOUT_MS = Number(process.env.GUILD_MCP_EXECUTION_TIMEOUT_MS) || 30_000;
 
 /** Eviction sweep interval (60s) */
 const EVICTION_INTERVAL_MS = 60_000;

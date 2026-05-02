@@ -14,35 +14,32 @@ import { safeDownload } from "@/utils/security/safeDownload";
 // GIF Processing Configuration Constants
 // ========================================
 
-/**
- * Maximum width for resized keyframe images (pixels)
- * Images maintain aspect ratio and won't be upscaled
- */
+/** Maximum width for resized keyframe images (pixels). Images maintain aspect ratio and won't be upscaled. */
 const MAX_KEYFRAME_WIDTH = 800;
 
-/**
- * JPEG compression quality (0-100)
- * Higher = better quality but larger file size
- */
-const JPEG_QUALITY = 80;
+/** JPEG compression quality (0–100) for extracted GIF keyframes. Higher = better quality, larger payload. */
+const JPEG_QUALITY = (() => {
+  const parsed = Number.parseInt(process.env.GIF_JPEG_QUALITY || "80", 10);
+  return Number.isFinite(parsed) ? Math.min(100, Math.max(1, parsed)) : 80;
+})();
+
+/** Maximum number of keyframes to extract from a GIF. Prevents extremely long GIFs from overwhelming context. */
+const MAX_KEYFRAMES = (() => {
+  const parsed = Number.parseInt(process.env.GIF_MAX_KEYFRAMES || "10", 10);
+  return Number.isFinite(parsed) ? Math.max(1, parsed) : 10;
+})();
 
 /**
- * Maximum number of keyframes to extract from a GIF
- * Prevents extremely long GIFs from overwhelming the context
- */
-const MAX_KEYFRAMES = 10;
-
-/**
- * Extract every Nth frame as a keyframe
+ * Extract every Nth frame as a keyframe.
  * E.g., 10 means extract frames 0, 10, 20, 30, etc. (plus first and last)
  */
 const FRAME_INTERVAL = 10;
 
-/**
- * Processing timeout in milliseconds
- * Prevents hanging on corrupted or extremely large GIFs
- */
-const PROCESSING_TIMEOUT_MS = 30000; // 30 seconds
+/** Processing timeout in milliseconds. Prevents hanging on corrupted or extremely large GIFs. */
+const PROCESSING_TIMEOUT_MS = (() => {
+  const parsed = Number.parseInt(process.env.GIF_PROCESSING_TIMEOUT_MS || "30000", 10);
+  return Number.isFinite(parsed) ? Math.max(1000, parsed) : 30000;
+})();
 
 /**
  * Represents a processed GIF keyframe

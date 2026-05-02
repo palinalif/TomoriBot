@@ -28,7 +28,10 @@ interface ComfyUiGenerationOptions {
 
 type WorkflowPlaceholderValue = string | number | boolean | null | Record<string, unknown> | Array<unknown>;
 
-const COMFYUI_IMAGE_TARGET_AREA = 1024 * 1024;
+const COMFYUI_IMAGE_TARGET_AREA = (() => {
+  const parsed = Number.parseInt(process.env.COMFYUI_IMAGE_TARGET_AREA || "1048576", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1024 * 1024;
+})();
 const COMFYUI_DIMENSION_MULTIPLE = 64;
 
 function getComfyUiTimeoutMs(): number {
