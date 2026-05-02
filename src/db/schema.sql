@@ -170,6 +170,11 @@ BEGIN
 	UPDATE tomoris
 	SET persona_lineage_id = nextval('persona_lineage_id_seq')
 	WHERE persona_lineage_id IS NULL;
+
+	-- Repair personas incorrectly assigned lineage ID 0 (reserved for global memories only, never a valid persona ID)
+	UPDATE tomoris
+	SET persona_lineage_id = nextval('persona_lineage_id_seq')
+	WHERE persona_lineage_id = 0;
 END $$;
 
 -- Ensure future personas get lineage IDs automatically
@@ -1219,22 +1224,35 @@ BEFORE UPDATE ON personal_memories
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 
--- Backfill existing users.personal_memories into global personal namespace (lineage 0)
-INSERT INTO personal_memories (user_id, persona_lineage_id, content, created_at, updated_at)
-SELECT
-	u.user_id,
-	0::BIGINT,
-	legacy_memory,
-	COALESCE(u.updated_at, CURRENT_TIMESTAMP),
-	COALESCE(u.updated_at, CURRENT_TIMESTAMP)
-FROM users u
-CROSS JOIN LATERAL unnest(COALESCE(u.personal_memories, ARRAY[]::TEXT[])) AS legacy_memory
-WHERE NOT EXISTS (
-	SELECT 1
-	FROM personal_memories pm
-	WHERE pm.user_id = u.user_id
-	  AND pm.persona_lineage_id = 0
-);
+-- Backfill existing users.personal_memories into global personal namespace (lineage 0).
+-- Wrapped in a column-existence check so this runs exactly once: subsequent schema runs
+-- skip both the INSERT and the DROP cleanly once the column is gone.
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1 FROM information_schema.columns
+		WHERE table_name = 'users' AND column_name = 'personal_memories'
+	) THEN
+		INSERT INTO personal_memories (user_id, persona_lineage_id, content, created_at, updated_at)
+		SELECT
+			u.user_id,
+			0::BIGINT,
+			legacy_memory,
+			COALESCE(u.updated_at, CURRENT_TIMESTAMP),
+			COALESCE(u.updated_at, CURRENT_TIMESTAMP)
+		FROM users u
+		CROSS JOIN LATERAL unnest(COALESCE(u.personal_memories, ARRAY[]::TEXT[])) AS legacy_memory
+		WHERE NOT EXISTS (
+			SELECT 1
+			FROM personal_memories pm
+			WHERE pm.user_id = u.user_id
+			  AND pm.persona_lineage_id = 0
+			  AND pm.content = legacy_memory
+		);
+
+		ALTER TABLE users DROP COLUMN personal_memories;
+	END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_personal_memories_user_lineage_created_at
 ON personal_memories(user_id, persona_lineage_id, created_at DESC);

@@ -25,7 +25,7 @@ export class MemoryTool extends BaseTool {
       memory_content: {
         type: "string",
         description:
-          "The specific piece of information, fact, or preference to remember. Be concise, clear, and ensure it's new information not already in your knowledge base. IMPORTANT: Use {char} instead of hardcoded character names and {user} instead of hardcoded user names in your memory content. Example: '{char} likes {user}'s dogs'",
+          "The specific piece of information, fact, or preference to remember. Be concise and clear. Write in third-person. Use {user} to refer to the target user and {bot} to refer to yourself — never hardcode names. Example: '{user} likes dogs' or '{bot} should greet {user} formally'.",
       },
       memory_scope: {
         type: "string",
@@ -260,14 +260,27 @@ export class MemoryTool extends BaseTool {
       };
     }
 
+    // Guard: lineage_id=0 is reserved for global memories, never a valid persona ID.
+    // The schema migration repairs this, but block the write if it somehow persists.
+    if (tomoriState.persona_lineage_id === 0) {
+      log.error(
+        `Self-teach blocked: Tomori ${tomoriState.tomori_id} has persona_lineage_id=0. Schema migration may not have run.`,
+      );
+      return {
+        success: false,
+        error: "Internal configuration error: this persona has an invalid lineage ID.",
+        data: {
+          status: "memory_save_failed_internal_error",
+          reason: "Persona lineage ID is 0, which is reserved for global memories. Schema migration may not have run.",
+        },
+      };
+    }
+
     if (effectiveScope === "server_wide") {
       // Server-wide memory handling (from tomoriChat.ts:1127-1179)
       try {
         // Check server memory limit before adding
-        const serverLimitCheck = await checkServerMemoryLimit(
-          tomoriState.server_id,
-          tomoriState.persona_lineage_id ?? 0,
-        );
+        const serverLimitCheck = await checkServerMemoryLimit(tomoriState.server_id, tomoriState.persona_lineage_id);
         if (!serverLimitCheck.isValid) {
           return {
             success: false,
@@ -285,7 +298,7 @@ export class MemoryTool extends BaseTool {
         const dbResult = await addServerMemoryByTomori(
           tomoriState.server_id,
           tomoriState.tomori_id,
-          tomoriState.persona_lineage_id ?? 0,
+          tomoriState.persona_lineage_id,
           userRow.user_id,
           memoryContent,
         );
@@ -417,7 +430,7 @@ export class MemoryTool extends BaseTool {
         // Check personal memory limit before adding
         const personalLimitCheck = await checkPersonalMemoryLimit(
           targetUserRow.user_id,
-          tomoriState.persona_lineage_id ?? 0,
+          tomoriState.persona_lineage_id,
           true,
         );
         if (!personalLimitCheck.isValid) {
@@ -438,7 +451,7 @@ export class MemoryTool extends BaseTool {
         // Save personal memory (from tomoriChat.ts:1262-1335)
         const dbResult = await addPersonalMemoryByTomori(
           targetUserRow.user_id,
-          tomoriState.persona_lineage_id ?? 0,
+          tomoriState.persona_lineage_id,
           memoryContent,
         );
 
