@@ -266,10 +266,6 @@ SELECT add_column_if_not_exists('llms', 'is_uncensored', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'supports_structoutput', 'BOOLEAN', 'false');
 SELECT add_column_if_not_exists('llms', 'llm_description', 'TEXT');
 SELECT add_column_if_not_exists('llms', 'ja_description', 'TEXT');
-SELECT add_column_if_not_exists('image_diffusion_models', 'is_scoped_registration', 'BOOLEAN', 'false');
-SELECT add_column_if_not_exists('video_generation_models', 'is_scoped_registration', 'BOOLEAN', 'false');
-SELECT add_column_if_not_exists('embedding_models', 'is_scoped_registration', 'BOOLEAN', 'false');
-
 
 -- Removed updated_at trigger for llms table (static metadata, rarely changes)
 DROP TRIGGER IF EXISTS update_llms_timestamp ON llms;
@@ -289,6 +285,9 @@ CREATE TABLE IF NOT EXISTS image_diffusion_models (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Moved to prevent error on first-time DB creation!
+SELECT add_column_if_not_exists('image_diffusion_models', 'is_scoped_registration', 'BOOLEAN', 'false');
 
 -- Removed updated_at trigger for image_diffusion_models table (static metadata, rarely changes)
 DROP TRIGGER IF EXISTS update_image_diffusion_models_timestamp ON image_diffusion_models;
@@ -314,6 +313,9 @@ CREATE TABLE IF NOT EXISTS video_generation_models (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Moved to prevent error on first-time DB creation!
+SELECT add_column_if_not_exists('video_generation_models', 'is_scoped_registration', 'BOOLEAN', 'false');
+
 -- Removed updated_at trigger for video_generation_models table (static metadata, rarely changes)
 DROP TRIGGER IF EXISTS update_video_generation_models_timestamp ON video_generation_models;
 
@@ -337,6 +339,9 @@ CREATE TABLE IF NOT EXISTS embedding_models (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Moved to prevent error on first-time DB creation!
+SELECT add_column_if_not_exists('embedding_models', 'is_scoped_registration', 'BOOLEAN', 'false');
 
 -- Removed updated_at trigger for embedding_models table (static metadata, rarely changes)
 DROP TRIGGER IF EXISTS update_embedding_models_timestamp ON embedding_models;
