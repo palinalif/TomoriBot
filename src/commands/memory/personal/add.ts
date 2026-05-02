@@ -174,8 +174,8 @@ export async function execute(
     modalComponents.push({
       customId: MEMORY_TAGS_INPUT_ID,
       labelKey: "Memory Tags",
-      descriptionKey: "Optional: comma-separated tags",
-      placeholder: "mango,drinks,server_snack_prefs",
+      descriptionKey: "Up to 5 comma-separated tags, use '/memory tagging set' to enable tagged memory",
+      placeholder: "mango,drinks,snacks",
       style: TextInputStyle.Short,
       required: false,
       maxLength: MAX_TAGS * (MAX_TAG_LENGTH + 2),
