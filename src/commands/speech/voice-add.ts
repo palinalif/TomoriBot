@@ -38,14 +38,14 @@ const ACCEPTED_MIME_TYPES = new Set([
 const ACCEPTED_EXTENSION_REGEX = /\.(wav|mp3|ogg|opus|flac|m4a|aac)$/i;
 
 /**
- * Converts an audio buffer to mono WAV at 22050 Hz using the bundled ffmpeg binary.
- * Throws if ffmpeg-static is unavailable or the conversion fails.
+ * Converts an audio buffer to mono WAV at 22050 Hz.
+ * Prefers the bundled ffmpeg-static binary; falls back to system `ffmpeg`
+ * when the static binary is absent or fails (common on Alpine Linux / musl).
  */
 async function normalizeToWav(inputBuffer: Buffer): Promise<Buffer> {
-  if (!ffmpegPath) {
-    throw new Error("ffmpeg-static binary not found; WAV normalization unavailable.");
-  }
-  const ffmpegBinary = ffmpegPath;
+  // ffmpeg-static ships a glibc binary that silently fails on Alpine (musl).
+  // System ffmpeg (apk add ffmpeg) is the reliable fallback in production.
+  const ffmpegBinary = ffmpegPath ?? "ffmpeg";
 
   const suffix = Date.now();
   const tmpIn = path.join(os.tmpdir(), `tts-in-${suffix}`);
@@ -213,8 +213,25 @@ export async function execute(
     try {
       wavBuffer = await normalizeToWav(rawBuffer);
     } catch (error) {
-      log.warn("[VoiceAdd] WAV normalization failed; using raw upload", error);
-      wavBuffer = rawBuffer;
+      log.warn("[VoiceAdd] WAV normalization failed", error);
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.speech.voice_add.normalization_error_title",
+        descriptionKey: "commands.speech.voice_add.normalization_error_description",
+        color: ColorCode.ERROR,
+      });
+      return;
+    }
+
+    // Guard: verify the output is actually a WAV file (starts with "RIFF" magic bytes).
+    // If ffmpeg silently produced garbage, reject early rather than sending broken audio to the TTS server.
+    if (wavBuffer.length < 4 || wavBuffer.subarray(0, 4).toString("ascii") !== "RIFF") {
+      log.warn("[VoiceAdd] Post-normalization buffer is not a valid WAV file (missing RIFF header)");
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "commands.speech.voice_add.normalization_error_title",
+        descriptionKey: "commands.speech.voice_add.normalization_error_description",
+        color: ColorCode.ERROR,
+      });
+      return;
     }
 
     const durationMs = Math.round(durationSecs * 1000);

@@ -412,6 +412,8 @@ The selected model requires allowing data for paid model training, but your Open
         size_error_description: `Voice samples must be {limit_mb} MB or smaller.`,
         duration_error_title: `Audio Clip Too Long`,
         duration_error_description: `Voice samples must be {limit_secs} seconds or shorter.`,
+        normalization_error_title: `Audio Conversion Failed`,
+        normalization_error_description: `Failed to convert the audio file to WAV format. Please try a different file or format.`,
         success_title: `Voice Sample Added`,
         success_description: `Added **{name}** as a local voice sample.\n\nReference text: {ref_text_hint}`,
         ref_text_provided: `provided`,

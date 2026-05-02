@@ -412,6 +412,8 @@ export default {
         size_error_description: `音声サンプルは {limit_mb} MB 以下にしてください。`,
         duration_error_title: `音声クリップが長すぎます`,
         duration_error_description: `音声サンプルは {limit_secs} 秒以下にしてください。`,
+        normalization_error_title: `音声変換に失敗しました`,
+        normalization_error_description: `音声ファイルをWAV形式に変換できませんでした。別のファイルまたは形式をお試しください。`,
         success_title: `音声サンプルを追加しました`,
         success_description: `**{name}** をローカル音声サンプルとして追加しました。\n\n参照テキスト: {ref_text_hint}`,
         ref_text_provided: `あり`,

@@ -17,6 +17,7 @@ RUN apk update && apk upgrade && \
     ca-certificates \
     tzdata \
     curl \
+    ffmpeg \
     python3~=3.12 \
     py3-pip \
     nodejs \
