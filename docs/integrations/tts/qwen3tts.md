@@ -1,6 +1,6 @@
 # Qwen3-TTS
 
-Use `scripts/tts/qwen3tts/server.py` for both Qwen3-TTS 12Hz 1.7B modes. By default it starts the Base voice-clone model.
+Use `scripts/tts/qwen3tts/server.py` for both Qwen3-TTS 12Hz 1.7B modes. By default it starts in auto mode, which chooses the Base voice-clone model or VoiceDesign model from each request shape.
 
 ```powershell
 python -m venv scripts\tts\qwen3tts\.venv
@@ -10,7 +10,7 @@ pip install -r scripts\tts\qwen3tts\requirements.txt
 python scripts\tts\qwen3tts\server.py
 ```
 
-If you want one running server to handle both clone and VoiceDesign requests, start it in auto mode instead:
+You can also specify auto mode explicitly:
 
 ```powershell
 python scripts\tts\qwen3tts\server.py --mode auto

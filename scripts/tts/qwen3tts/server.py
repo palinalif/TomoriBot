@@ -45,7 +45,7 @@ def read_startup_mode() -> str:
     if arg.startswith("--mode="):
       return arg.split("=", 1)[1]
 
-  return os.getenv("TOMORI_TTS_MODE", "clone")
+  return os.getenv("TOMORI_TTS_MODE", "auto")
 
 
 MODE = resolve_mode(read_startup_mode())
