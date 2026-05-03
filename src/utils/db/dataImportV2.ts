@@ -198,14 +198,16 @@ export async function importPersonalSettings(
 				language_pref,
 				impersonation_prompt,
 				nai_char_tags,
-				nai_char_ref_url
+				nai_char_ref_url,
+				personal_deliberate_tool_mode
 			) VALUES (
 				${userDiscId},
 				${importData.user_nickname},
 				${importData.language_pref},
 				${impersonationPrompt},
 				${naiCharTagsArrayLiteral}::text[],
-				${naiCharRefUrl}
+				${naiCharRefUrl},
+				${importData.personal_deliberate_tool_mode ?? "follow"}
 			)
 			ON CONFLICT (user_disc_id) DO UPDATE
 			SET
@@ -216,6 +218,7 @@ export async function importPersonalSettings(
 				nai_char_ref_url = EXCLUDED.nai_char_ref_url,
 				privacy_level = COALESCE(${importData.privacy_level ?? null}, users.privacy_level),
 				personal_dtm = COALESCE(${importData.personal_dtm ?? null}, users.personal_dtm),
+				personal_deliberate_tool_mode = COALESCE(${importData.personal_deliberate_tool_mode ?? null}, users.personal_deliberate_tool_mode),
 				shortterm_cache_crossserver_opt_in = COALESCE(${importData.shortterm_cache_crossserver_opt_in ?? null}, users.shortterm_cache_crossserver_opt_in)
 			RETURNING user_id
 		`;
@@ -236,6 +239,7 @@ export async function importPersonalSettings(
     if (naiCharRefUrl) fieldsCount++;
     if (importData.privacy_level !== undefined) fieldsCount++;
     if (importData.personal_dtm !== undefined) fieldsCount++;
+    if (importData.personal_deliberate_tool_mode !== undefined) fieldsCount++;
     if (importData.shortterm_cache_crossserver_opt_in !== undefined) fieldsCount++;
 
     return {
@@ -340,6 +344,7 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 				send_message_limit = COALESCE(${config.send_message_limit ?? null}, send_message_limit),
 				always_reply_enabled = COALESCE(${config.always_reply_enabled ?? null}, always_reply_enabled),
 				deliberate_trigger_mode = COALESCE(${config.deliberate_trigger_mode ?? null}, deliberate_trigger_mode),
+				deliberate_tool_mode = COALESCE(${config.deliberate_tool_mode ?? null}, deliberate_tool_mode),
 				cooldown_type = COALESCE(${config.cooldown_type ?? null}, cooldown_type),
 				cooldown_length = COALESCE(${config.cooldown_length ?? null}, cooldown_length),
 				stm_privacy_bypass = COALESCE(${config.stm_privacy_bypass ?? null}, stm_privacy_bypass),
@@ -413,6 +418,7 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 						send_message_limit = COALESCE(${config.send_message_limit ?? null}, send_message_limit),
 						always_reply_enabled = COALESCE(${config.always_reply_enabled ?? null}, always_reply_enabled),
 						deliberate_trigger_mode = COALESCE(${config.deliberate_trigger_mode ?? null}, deliberate_trigger_mode),
+						deliberate_tool_mode = COALESCE(${config.deliberate_tool_mode ?? null}, deliberate_tool_mode),
 						cooldown_type = COALESCE(${config.cooldown_type ?? null}, cooldown_type),
 						cooldown_length = COALESCE(${config.cooldown_length ?? null}, cooldown_length),
 						stm_privacy_bypass = COALESCE(${config.stm_privacy_bypass ?? null}, stm_privacy_bypass),

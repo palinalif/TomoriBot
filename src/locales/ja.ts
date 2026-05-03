@@ -817,6 +817,7 @@ export default {
         field_blacklisted_members_with_count: `{current} 人`,
         // Personal scope additions
         field_personal_dtm: `個人DTM`,
+        field_personal_deliberate_tool_mode: `個人ツールモード`,
         field_crossserver_stm: `クロスサーバーSTM`,
         field_nai_char_tags: `NAIキャラクタータグ`,
         field_nai_char_ref: `NAIキャラクター参照画像`,
@@ -831,6 +832,7 @@ export default {
         field_custom_endpoint: `カスタムエンドポイント`,
         // Server scope - Page 2 additions
         field_deliberate_trigger: `明示的トリガーモード`,
+        field_deliberate_tool_mode: `明示的ツールモード`,
         field_user_byok_enabled: `有効。ユーザー発言に対する応答では各メンバーの個人プロバイダーが必要です。{toggle_command} で切り替えられます。`,
         field_user_byok_disabled: `無効。個人プロバイダーがない場合でもユーザー発言はサーバープロバイダーにフォールバックできます。{toggle_command} で切り替えられます。`,
         // Server scope - Page 4 additions
@@ -4381,6 +4383,16 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
         disabled_title: `明示的トリガーモードが無効になりました`,
         disabled_description: `**{persona_name}** は再びトリガーワードで応答します。`,
       },
+      deliberatetoolmode: {
+        description: `このサーバーの明示的ツールモードを切り替えます。`,
+        enabled_title: `明示的ツールモードが有効になりました`,
+        enabled_description: `**{persona_name}** は、ツールが必要だと明示されたメッセージの場合にのみツールを受け取ります。プロンプト量とローカルモデルの待ち時間を減らせます。`,
+        disabled_title: `明示的ツールモードが無効になりました`,
+        disabled_description: `対応モデルでは、ツール宣言が通常どおり利用可能になります。`,
+      },
+      "deliberate-tool-mode": {
+        description: `このサーバーの明示的ツールモードを切り替えます。`,
+      },
     },
     personal: {
       description: `あなたの個人的な設定を管理します`,
@@ -4753,6 +4765,22 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
         follow_description: `DTMの動作が**サーバー設定に従う**ようになりました。サーバーがDTMを有効にしている場合は直接的な呼びかけが必要になり、そうでない場合は通常のトリガーワードが使用できます。`,
         on_title: `個人DTM：オン`,
         on_description: `サーバー設定に関わらず、DTMが**常に有効**です。直接的な呼びかけのみ機能します：\`@{trigger}\`プレフィックス、リプライ、Discordメンション、または\`/bot respond\`。`,
+      },
+      deliberatetoolmode: {
+        description: `個人の明示的ツールモード設定を変更します。`,
+        mode_description: `明示的ツールモードを個人的にどのように適用するか選択します。`,
+        off_option: `オフ`,
+        follow_option: `サーバーに従う`,
+        on_option: `オン`,
+        off_title: `個人明示的ツールモード：オフ`,
+        off_description: `サーバー設定に関わらず、あなたの明示的ツールモードは**無効**です。対応モデルではツールが通常どおり利用可能です。`,
+        follow_title: `個人明示的ツールモード：サーバーに従う`,
+        follow_description: `明示的ツールモードの動作が**サーバー設定に従う**ようになりました。`,
+        on_title: `個人明示的ツールモード：オン`,
+        on_description: `サーバー設定に関わらず、明示的ツールモードが**常に有効**です。ツールが必要だと明示されたメッセージ以外ではツールを省略します。`,
+      },
+      "deliberate-tool-mode": {
+        description: `個人の明示的ツールモード設定を変更します。`,
       },
     },
     "scheduled-task": {

@@ -805,6 +805,9 @@ END $$;
 -- Add tool-use master toggle (April 2026)
 -- When FALSE, has_tools is artificially overridden to false in the pipeline for all models
 SELECT add_column_if_not_exists('tomori_configs', 'tool_use_enabled', 'BOOLEAN', 'true');
+-- Deliberate tool mode (May 2026)
+-- When TRUE, tool declarations/instructions are omitted unless a turn has explicit tool intent
+SELECT add_column_if_not_exists('tomori_configs', 'deliberate_tool_mode', 'BOOLEAN', 'false');
 
 -- Create updated_at trigger for tomori_configs table
 DROP TRIGGER IF EXISTS update_tomori_configs_timestamp ON tomori_configs;
@@ -977,6 +980,9 @@ BEGIN
   END IF;
 END;
 $$;
+
+-- Personal deliberate tool mode (May 2026) - User-scoped tri-state: 'off', 'follow' (default), 'on'
+SELECT add_column_if_not_exists('users', 'personal_deliberate_tool_mode', 'TEXT', '''follow''');
 
 -- Create updated_at trigger for users table
 DROP TRIGGER IF EXISTS update_users_timestamp ON users;
