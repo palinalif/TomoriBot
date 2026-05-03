@@ -140,15 +140,13 @@ export async function synthesizeSpeechViaTtsVoiceDesign(request: TtsVoiceDesignR
 
   const body: Record<string, unknown> = {
     text: processedScript,
-    // Voice-design endpoints should not need reference audio. Keep the field
-    // present as null because the TomoriBot local TTS contract names it, and
-    // wrappers can ignore it without receiving a fake sample.
-    ref_audio: null,
-    ref_text: null,
+    // VoiceDesign requests deliberately omit ref_audio/ref_text. Some FastAPI
+    // wrappers type those fields as optional strings but still reject explicit
+    // JSON null, and omitting unused clone fields makes the request shape the
+    // server's auto mode can reliably distinguish from voice cloning.
     instruct: cleanedVoiceInstructions
       ? `${cleanedDesignPrompt}\n\nFor this message only: ${cleanedVoiceInstructions}`
       : cleanedDesignPrompt,
-    language: null,
   };
 
   const endpointUrl = endpoint.endpoint_url.replace(/\/+$/, "");

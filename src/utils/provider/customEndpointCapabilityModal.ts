@@ -7,7 +7,7 @@
  * Field layout per capability:
  *   text:          model_name (text), display_name (text), num_ctx (text), text_capabilities (checkbox group)
  *   embedding:     model_name (text), display_name (text)
- *   speech:        display_name (text), voice_mode (radio group), script_markup (radio group), supports_instruct (checkbox)
+ *   speech:        display_name (text), voice_mode (radio group), script_markup (radio group)
  *   transcription: display_name (text), transcription_model (text), transcription_language (text)
  *   image/video:   display_name (text) + workflow_json file upload (separate path via promptWithRawModal)
  *
@@ -292,12 +292,6 @@ export function buildCapabilityAddModalComponents(
           ],
           required: true,
         },
-        {
-          kind: "checkbox" as const,
-          customId: ModalFieldId.supports_instruct,
-          labelKey: "commands.config.custom_models.capability_modal.supports_instruct_label",
-          descriptionKey: "commands.config.custom_models.capability_modal.supports_instruct_description",
-        },
       ];
 
     case "transcription":
@@ -556,13 +550,6 @@ export function buildCapabilityEditModalComponents(
             },
           ],
           required: true,
-        },
-        {
-          kind: "checkbox" as const,
-          customId: ModalFieldId.supports_instruct,
-          labelKey: "commands.config.custom_models.capability_modal.supports_instruct_label",
-          descriptionKey: "commands.config.custom_models.capability_modal.supports_instruct_description",
-          default: existing.supportsInstruct ?? false,
         },
       ];
     }
