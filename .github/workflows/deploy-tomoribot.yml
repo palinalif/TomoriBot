@@ -730,15 +730,15 @@ jobs:
             --db-snapshot-identifier "$SNAPSHOT_ID"
 
       - name: Terraform init
-        working-directory: terraform
+        working-directory: terraform/aws
         run: terraform init
 
       - name: Terraform plan
-        working-directory: terraform
+        working-directory: terraform/aws
         run: terraform plan -input=false -var-file=terraform.ci.tfvars -out=tfplan
 
       - name: Guard against RDS destroy/replace
-        working-directory: terraform
+        working-directory: terraform/aws
         run: |
           echo "Checking plan for destructive RDS changes..."
           if terraform show -json tfplan | jq -e '.resource_changes[]
@@ -749,7 +749,7 @@ jobs:
           fi
 
       - name: Terraform apply
-        working-directory: terraform
+        working-directory: terraform/aws
         run: terraform apply -input=false -auto-approve tfplan
 
   verify-ecs-deployment:

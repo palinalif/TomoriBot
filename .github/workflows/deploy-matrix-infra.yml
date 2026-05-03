@@ -10,10 +10,10 @@ on:
     branches:
       - main
     paths:
-      - "terraform-do/**"
+      - "terraform/do/**"
   pull_request:
     paths:
-      - "terraform-do/**"
+      - "terraform/do/**"
   workflow_dispatch:
     inputs:
       action:
@@ -61,16 +61,16 @@ jobs:
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
 
       - name: Terraform init
-        working-directory: terraform-do
+        working-directory: terraform/do
         run: terraform init
 
       - name: Terraform validate
-        working-directory: terraform-do
+        working-directory: terraform/do
         run: terraform validate
 
       - name: Terraform plan
         id: plan
-        working-directory: terraform-do
+        working-directory: terraform/do
         run: |
           set +e
           terraform plan \
@@ -88,7 +88,7 @@ jobs:
           fi
 
       - name: Guard against droplet destroy/replace
-        working-directory: terraform-do
+        working-directory: terraform/do
         run: |
           echo "Checking plan for destructive droplet changes..."
           if terraform show -json tfplan | jq -e '
@@ -96,7 +96,7 @@ jobs:
             | select(.type == "digitalocean_droplet")
             | select(.change.actions | index("delete"))' >/dev/null 2>&1; then
             echo "ERROR: Plan would destroy or replace the Matrix droplet. Aborting."
-            echo "Review terraform-do/matrix-homeserver.tf lifecycle settings."
+            echo "Review terraform/do/matrix-homeserver.tf lifecycle settings."
             exit 1
           fi
           echo "No destructive droplet changes detected."
@@ -109,7 +109,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const planOutput = fs.readFileSync('terraform-do/plan_output.txt', 'utf8');
+            const planOutput = fs.readFileSync('terraform/do/plan_output.txt', 'utf8');
             const exitCode = '${{ steps.plan.outputs.exit_code }}';
             const status = exitCode === '0' ? '✅ No changes' : exitCode === '2' ? '⚠️ Changes detected' : '❌ Error';
 
@@ -137,7 +137,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: tfplan-matrix-do
-          path: terraform-do/tfplan
+          path: terraform/do/tfplan
           retention-days: 1
 
   # APPLY — only runs on push to main (not PRs)
@@ -163,15 +163,15 @@ jobs:
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
 
       - name: Terraform init
-        working-directory: terraform-do
+        working-directory: terraform/do
         run: terraform init
 
       - name: Download plan artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: tfplan-matrix-do
-          path: terraform-do
+          path: terraform/do
 
       - name: Terraform apply
-        working-directory: terraform-do
+        working-directory: terraform/do
         run: terraform apply -input=false -auto-approve tfplan
