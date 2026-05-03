@@ -64,7 +64,7 @@ import { localizer, getSupportedLocales, getLocaleSubKeys } from "../../utils/te
 import { escapeRegExp, normalizeCustomEmojisForLlm } from "../../utils/text/stringHelper";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
 import { hasExplicitLongTermMemoryIntent } from "@/utils/memory/explicitLongTermMemoryIntent";
-import { hasDeliberateToolIntent, resolveDeliberateToolMode } from "@/utils/tools/deliberateToolMode";
+import { getDeliberateToolAllowedNames, resolveDeliberateToolMode } from "@/utils/tools/deliberateToolMode";
 import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
 import { getLinkedMatrixRoom, pendingMatrixReplyChannels, sendMatrixTypingIndicator } from "@/utils/matrix";
@@ -5472,8 +5472,24 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
             effectiveTomoriState.config.deliberate_tool_mode,
             userRow?.personal_deliberate_tool_mode ?? "follow",
           );
+          const deliberateToolIntentText =
+            reminderData && (reminderRecipientID || reminderData.self_reminder)
+              ? `${message.content}\n${reminderData.reminder_purpose}`
+              : message.content;
+          const deliberateToolAllowedNames = getDeliberateToolAllowedNames(deliberateToolIntentText);
+          if (reminderData && (reminderRecipientID || reminderData.self_reminder)) {
+            if (/\b(voice|audio|speech|say\s+(?:it|this)\s+out\s+loud|spoken)\b/i.test(reminderData.reminder_purpose)) {
+              deliberateToolAllowedNames.push("generate_voice_message");
+            }
+
+            const createTaskIndex = deliberateToolAllowedNames.indexOf("create_task");
+            if (createTaskIndex !== -1) {
+              deliberateToolAllowedNames.splice(createTaskIndex, 1);
+            }
+          }
           const deliberateToolIntent =
-            hasDeliberateToolIntent(message.content) || (streamingContext.endTurnAfterTools?.length ?? 0) > 0;
+            deliberateToolAllowedNames.length > 0 ||
+            (streamingContext.endTurnAfterTools?.length ?? 0) > 0;
           const toolsDisabledByDeliberateMode =
             !streamingContext.disableAllTools && deliberateToolModeActive && !deliberateToolIntent;
 
@@ -5481,6 +5497,15 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
             streamingContext.disableAllTools = true;
             log.info(
               `Deliberate tool mode: suppressing tools for turn in channel ${channel.id} (no explicit tool intent)`,
+            );
+          } else if (
+            deliberateToolModeActive &&
+            !streamingContext.disableAllTools &&
+            deliberateToolAllowedNames.length > 0
+          ) {
+            streamingContext.deliberateToolAllowedNames = Array.from(new Set(deliberateToolAllowedNames));
+            log.info(
+              `Deliberate tool mode: allowing scoped tools for turn in channel ${channel.id}: ${streamingContext.deliberateToolAllowedNames.join(", ")}`,
             );
           }
 
