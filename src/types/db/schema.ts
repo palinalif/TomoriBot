@@ -97,6 +97,7 @@ export const tomoriSchema = z.object({
   speech_voice_sample_id: z.number().int().nullable().optional(), // Added Phase 4.1 - FK → voice_samples; used for local TTS clone path
   speech_voice_id: z.string().nullable().optional(), // Added Phase 4.1 - Preset voice ID for provider-hosted voices (e.g. ElevenLabs)
   speech_voice_name: z.string().nullable().optional(), // Added Phase 4.1 - Cached friendly voice display name (either path)
+  speech_voice_design_prompt: z.string().nullable().optional(), // Added May 2026 - Persona voice-design prompt for instruct-capable local TTS endpoints
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });

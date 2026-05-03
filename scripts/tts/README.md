@@ -7,8 +7,9 @@ Each engine lives in its own subfolder with its own `.venv` to keep dependencies
 | Engine | Folder | Default port |
 |---|---|---|
 | Chatterbox (Turbo by default, English, bracket tags) | `chatterbox/` | 8011 |
-| Qwen3-TTS 12Hz 1.7B Base (10 languages, plain text) | `qwen3tts/` | 8012 |
+| Qwen3-TTS 12Hz 1.7B Base / VoiceDesign auto mode (10 languages, plain text) | `qwen3tts/` | 8012 |
 | Irodori-TTS 500M v2 (Japanese, emoji tags) | `irodoritts/` | 8013 |
+| Qwen3-TTS 12Hz 1.7B VoiceDesign (natural-language voice descriptions) | `qwen3tts/server.py --mode voice-design` | 8014 |
 
 ## Prerequisites
 
@@ -45,7 +46,7 @@ For other engines, replace `chatterbox` with `qwen3tts` or `irodoritts` througho
 
 ## Registering in TomoriBot
 
-After the server is running, register it with `/config custom-endpoint add`:
+After the server is running, register it with `/provider custom-endpoint add`:
 
 - `capability = speech`
 - `api_style = tts-clone`
@@ -53,6 +54,8 @@ After the server is running, register it with `/config custom-endpoint add`:
 - `script_markup` — select the correct option for the engine (bracket-tags for Chatterbox, plain for the others)
 
 > **ffmpeg required**: voice sample uploads are normalised to WAV via ffmpeg. Install it
-> and ensure `ffmpeg` is on your PATH before running `/config speech voice-add`.
+> and ensure `ffmpeg` is on your PATH before running `/speech voice-add`.
 
 Chatterbox defaults to Turbo. Use `/speech chatterbox parameters` to disable Turbo and send standard-model `cfg_weight` and `exaggeration` values with generated voice messages.
+
+Qwen3-TTS defaults to auto mode. One server URL can handle both clone and VoiceDesign requests: the server detects clone requests by `ref_audio`, detects VoiceDesign requests by `instruct`, and swaps the loaded model when needed. Start VoiceDesign only with `TOMORI_TTS_MODE=voice-design python scripts/tts/qwen3tts/server.py` or `python scripts/tts/qwen3tts/server.py --mode voice-design`. In TomoriBot, set persona prompts with `/speech voice-design`; generated tool calls send that prompt as `instruct`.
