@@ -3,13 +3,28 @@ export type PersonalDeliberateToolMode = (typeof PERSONAL_DELIBERATE_TOOL_MODES)
 
 const URL_PATTERN = /\bhttps?:\/\/\S+/i;
 
-const REMINDER_INTENT_PATTERN =
-  /\b(remind(?:er|s)?|timer|alarm|schedule|scheduled\s+task|task\s+reminder|ping\s+me|notify\s+me)\b/i;
+const RELATIVE_TIME_PATTERN =
+  /\b(?:in|for|after)\s+(?:about\s+|around\s+|like\s+|another\s+|a\s+)?\d+\s*(?:seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?|months?)\b/i;
+const SCHEDULE_TIME_PATTERN =
+  /\b(?:tomorrow|tonight|today|later|next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month)|at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?|from\s+now)\b/i;
+const REMINDER_DIRECT_REQUEST_PATTERN =
+  /\b(?:remind|ping|notify)\s+(?:me|us|them|him|her|[A-Za-z0-9_@{}.-]+)\b/i;
+const REMINDER_CREATE_PATTERN =
+  /\b(?:set|create|make|start|schedule|add)\b.{0,80}\b(?:reminder|timer|alarm|task|scheduled\s+task|task\s+reminder)\b/i;
+const REMINDER_ANAPHORA_PATTERN =
+  /\b(?:set|create|make|start|schedule|add|try|do)\b.{0,80}\b(?:one|another|it|that|the\s+same)\b.{0,80}\b(?:from\s+now|for\s+(?:a\s+)?(?:longer\s+)?time|seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?|months?)\b/i;
+
+function hasReminderCreationIntent(text: string): boolean {
+  return (
+    REMINDER_DIRECT_REQUEST_PATTERN.test(text) ||
+    REMINDER_CREATE_PATTERN.test(text) ||
+    (REMINDER_ANAPHORA_PATTERN.test(text) && (RELATIVE_TIME_PATTERN.test(text) || SCHEDULE_TIME_PATTERN.test(text)))
+  );
+}
 
 const TOOL_INTENT_PATTERNS: RegExp[] = [
   /\b(search|web\s*search|look\s+up|browse|google|fetch|read\s+this\s+(?:url|link|page)|open\s+this\s+(?:url|link|page))\b/i,
   /\b(latest|today|current|currently|up[- ]?to[- ]?date|news|recent)\b/i,
-  REMINDER_INTENT_PATTERN,
   /\b(remember|save\s+(?:this|that|it)|forget|delete\s+(?:that\s+)?memory|update\s+(?:your\s+)?memory|store\s+(?:this|that|it))\b/i,
   /\b(look\s+at|analy[sz]e|inspect|describe|what(?:'s| is)\s+in)\b.*\b(image|picture|photo|avatar|profile\s+picture|gif|video|youtube|attachment)\b/i,
   /\b(image|picture|photo|avatar|profile\s+picture|gif|video|youtube|attachment)\b.*\b(look\s+at|analy[sz]e|inspect|describe|summari[sz]e)\b/i,
@@ -51,6 +66,10 @@ export function hasDeliberateToolIntent(content: string | null | undefined): boo
   const text = content?.trim();
   if (!text) return false;
 
+  if (hasReminderCreationIntent(text)) {
+    return true;
+  }
+
   if (TOOL_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
     return true;
   }
@@ -64,7 +83,7 @@ export function getDeliberateToolAllowedNames(content: string | null | undefined
 
   const allowedToolNames: string[] = [];
 
-  if (REMINDER_INTENT_PATTERN.test(text)) {
+  if (hasReminderCreationIntent(text)) {
     allowedToolNames.push("create_task");
   }
 
