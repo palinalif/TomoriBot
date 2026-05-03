@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import gc
 import os
 import sys
 import tempfile
@@ -20,6 +21,10 @@ from pydantic import BaseModel
 
 CLONE_MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
 VOICE_DESIGN_MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign"
+MODEL_NAMES = {
+  "clone": "qwen3-tts-12hz-1.7b-base",
+  "voice-design": "qwen3-tts-12hz-1.7b-voice-design",
+}
 
 
 def resolve_mode(raw_mode: str) -> str:
@@ -28,7 +33,9 @@ def resolve_mode(raw_mode: str) -> str:
     return "clone"
   if normalized in {"voice-design", "design"}:
     return "voice-design"
-  raise ValueError("TOMORI_TTS_MODE must be 'clone' or 'voice-design'.")
+  if normalized in {"auto", "dynamic"}:
+    return "auto"
+  raise ValueError("TOMORI_TTS_MODE must be 'clone', 'voice-design', or 'auto'.")
 
 
 def read_startup_mode() -> str:
@@ -42,9 +49,6 @@ def read_startup_mode() -> str:
 
 
 MODE = resolve_mode(read_startup_mode())
-DEFAULT_MODEL_ID = VOICE_DESIGN_MODEL_ID if MODE == "voice-design" else CLONE_MODEL_ID
-MODEL_ID = os.getenv("QWEN3TTS_MODEL_ID", DEFAULT_MODEL_ID)
-MODEL_NAME = "qwen3-tts-12hz-1.7b-voice-design" if MODE == "voice-design" else "qwen3-tts-12hz-1.7b-base"
 HOST = os.getenv("TOMORI_TTS_HOST", "127.0.0.1")
 PORT = int(os.getenv("TOMORI_TTS_PORT", "8014" if MODE == "voice-design" else "8012"))
 DEVICE_MAP = os.getenv("QWEN3TTS_DEVICE_MAP", "cuda:0" if torch.cuda.is_available() else "cpu")
@@ -69,6 +73,7 @@ LANGUAGE_NAMES = {
 }
 
 model = None
+model_mode: Optional[str] = None
 model_lock = threading.Lock()
 
 
@@ -131,8 +136,35 @@ def resolve_design_instruct(payload: SynthesizeRequest) -> str:
   )
 
 
-def load_model() -> None:
-  global model
+def model_id_for_mode(mode: str) -> str:
+  generic_override = os.getenv("QWEN3TTS_MODEL_ID")
+  if MODE != "auto" and generic_override:
+    return generic_override
+
+  if mode == "voice-design":
+    return os.getenv("QWEN3TTS_VOICE_DESIGN_MODEL_ID", VOICE_DESIGN_MODEL_ID)
+
+  return os.getenv("QWEN3TTS_CLONE_MODEL_ID", CLONE_MODEL_ID)
+
+
+def unload_model() -> None:
+  global model, model_mode
+
+  model = None
+  model_mode = None
+  gc.collect()
+  if torch.cuda.is_available():
+    torch.cuda.empty_cache()
+
+
+def load_model_for_mode(mode: str) -> None:
+  global model, model_mode
+
+  if model is not None and model_mode == mode:
+    return
+
+  if model is not None:
+    unload_model()
 
   from qwen_tts import Qwen3TTSModel
 
@@ -143,12 +175,53 @@ def load_model() -> None:
   if USE_FLASH_ATTENTION:
     kwargs["attn_implementation"] = "flash_attention_2"
 
-  model = Qwen3TTSModel.from_pretrained(MODEL_ID, **kwargs)
+  model = Qwen3TTSModel.from_pretrained(model_id_for_mode(mode), **kwargs)
+  model_mode = mode
+
+
+def infer_request_mode(payload: SynthesizeRequest) -> str:
+  has_ref_audio = bool(payload.ref_audio and payload.ref_audio.strip())
+  has_voice_design_prompt = bool(
+    (payload.instruct and payload.instruct.strip())
+    or (payload.ref_text and payload.ref_text.strip())
+    or DEFAULT_INSTRUCT
+  )
+
+  if has_ref_audio:
+    return "clone"
+  if has_voice_design_prompt:
+    return "voice-design"
+
+  raise HTTPException(
+    status_code=400,
+    detail=(
+      "Could not infer Qwen3-TTS mode from the request. Send `ref_audio` for clone "
+      "mode, or send `instruct` for VoiceDesign mode."
+    ),
+  )
+
+
+def resolve_request_mode(payload: SynthesizeRequest) -> str:
+  if MODE == "auto":
+    return infer_request_mode(payload)
+
+  if MODE == "clone" and payload.instruct and payload.instruct.strip() and not payload.ref_audio:
+    raise HTTPException(
+      status_code=400,
+      detail=(
+        "This Qwen3-TTS server is running in clone mode, but the request looks "
+        "like a VoiceDesign request. Restart with `python server.py --mode "
+        "voice-design`, use `--mode auto`, or set TOMORI_TTS_MODE=voice-design."
+      ),
+    )
+
+  return MODE
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-  load_model()
+  if MODE != "auto":
+    load_model_for_mode(MODE)
   yield
 
 
@@ -157,20 +230,21 @@ app = FastAPI(title=f"TomoriBot Qwen3-TTS 12Hz 1.7B {MODE} Server", lifespan=lif
 
 @app.get("/health")
 def health() -> dict[str, str]:
+  active_mode = model_mode or ("lazy" if MODE == "auto" else MODE)
+  active_model_id = model_id_for_mode(model_mode) if model_mode else ""
+  active_model_name = MODEL_NAMES.get(model_mode or "", "")
   return {
-    "status": "ok" if model is not None else "loading",
-    "model": MODEL_NAME,
-    "model_id": MODEL_ID,
+    "status": "ok" if model is not None else ("idle" if MODE == "auto" else "loading"),
+    "model": active_model_name,
+    "model_id": active_model_id,
     "device_map": DEVICE_MAP,
     "mode": MODE,
+    "active_mode": active_mode,
   }
 
 
 @app.post("/synthesize")
 def synthesize(payload: SynthesizeRequest) -> Response:
-  if model is None:
-    raise HTTPException(status_code=503, detail="Model is still loading.")
-
   text = payload.text.strip()
   if not text:
     raise HTTPException(status_code=400, detail="text is required.")
@@ -181,7 +255,10 @@ def synthesize(payload: SynthesizeRequest) -> Response:
     output_path = Path(temp_dir) / "output.wav"
 
     with model_lock:
-      if MODE == "voice-design":
+      request_mode = resolve_request_mode(payload)
+      load_model_for_mode(request_mode)
+
+      if request_mode == "voice-design":
         wavs, sample_rate = model.generate_voice_design(
           text=text,
           language=resolve_language(payload.language),
@@ -209,7 +286,7 @@ def parse_args() -> argparse.Namespace:
   parser = argparse.ArgumentParser(description="TomoriBot Qwen3-TTS wrapper")
   parser.add_argument(
     "--mode",
-    choices=("clone", "voice-design"),
+    choices=("clone", "voice-design", "auto"),
     default=MODE,
     help="TTS serving mode. Equivalent to TOMORI_TTS_MODE.",
   )

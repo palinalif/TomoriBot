@@ -57,7 +57,7 @@ export interface ParsedCapabilityModalFields {
   seesImages: boolean;
   supportsStructOutput: boolean;
   scriptMarkup: "plain" | "bracket-tags" | "emoji";
-  voiceMode: "clone" | "voice-design";
+  voiceMode: "clone" | "voice-design" | "auto";
   supportsInstruct: boolean;
   transcriptionModel: string | null;
   transcriptionLanguage: string | null;
@@ -111,10 +111,11 @@ export function parseCapabilityModalFields(
     }
     case "speech": {
       const rawVoiceMode = values[ModalFieldId.voice_mode]?.trim().toLowerCase();
-      result.voiceMode = rawVoiceMode === "voice-design" ? "voice-design" : "clone";
+      result.voiceMode = rawVoiceMode === "voice-design" || rawVoiceMode === "auto" ? rawVoiceMode : "clone";
       const rawMarkup = values[ModalFieldId.script_markup]?.trim().toLowerCase();
       result.scriptMarkup = rawMarkup === "bracket-tags" || rawMarkup === "emoji" ? rawMarkup : "plain";
-      result.supportsInstruct = result.voiceMode === "voice-design" || values[ModalFieldId.supports_instruct] === "true";
+      result.supportsInstruct =
+        result.voiceMode === "voice-design" || result.voiceMode === "auto" || values[ModalFieldId.supports_instruct] === "true";
       break;
     }
     case "transcription": {
@@ -244,6 +245,14 @@ export function buildCapabilityAddModalComponents(
               description: localizer(
                 locale,
                 "commands.config.custom_models.capability_modal.voice_mode_design_description",
+              ),
+            },
+            {
+              value: "auto",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.voice_mode_auto"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.voice_mode_auto_description",
               ),
             },
           ],
@@ -499,6 +508,15 @@ export function buildCapabilityEditModalComponents(
                 "commands.config.custom_models.capability_modal.voice_mode_design_description",
               ),
               default: currentVoiceMode === "voice-design",
+            },
+            {
+              value: "auto",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.voice_mode_auto"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.voice_mode_auto_description",
+              ),
+              default: currentVoiceMode === "auto",
             },
           ],
           required: true,

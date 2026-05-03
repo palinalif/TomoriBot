@@ -140,7 +140,11 @@ export async function execute(
 
     if (shouldClear) {
       const voiceNameIfOtherVoiceRemains =
-        selectedPersona.speech_voice_sample_id || selectedPersona.speech_voice_id?.trim()
+        selectedPersona.speech_voice_sample_id
+          ? selectedPersona.speech_voice_name === "VoiceDesign"
+            ? "Voice Clone"
+            : selectedPersona.speech_voice_name
+          : selectedPersona.speech_voice_id?.trim()
           ? selectedPersona.speech_voice_name
           : null;
 
@@ -258,17 +262,12 @@ async function saveVoiceDesignPrompt(
     return;
   }
 
-  // Setting a voice-design prompt intentionally clears clone/provider voice
-  // assignments for this persona. At generation time the prompt is sent in the
-  // JSON tool call as `instruct`, so the active endpoint receives a direct
-  // voice-design request instead of a fake sample transcript.
+  // Keep clone/provider voice assignments as reusable persona data. In auto
+  // endpoint mode, speech_voice_name marks VoiceDesign as the active voice
+  // choice while preserving any saved sample/provider voice for later.
   const updatedTomori = await updateTomori(selectedPersona.tomori_id, {
     speech_voice_design_prompt: designPrompt,
-    speech_voice_sample_id: null,
-    speech_voice_id: null,
     speech_voice_name: "VoiceDesign",
-    elevenlabs_voice_id: null,
-    elevenlabs_voice_name: null,
   });
 
   if (!updatedTomori) {

@@ -269,6 +269,8 @@ export class NvidiaProvider
             tomoriState.speech_voice_id?.trim() ||
             tomoriState.elevenlabs_voice_id?.trim(),
         ),
+        activePersonaVoiceDesignPrompt: tomoriState.speech_voice_design_prompt?.trim() || null,
+        activePersonaVoiceName: tomoriState.speech_voice_name,
         diffusion_model_id: tomoriState.config.diffusion_model_id,
         nai_diffusion_model_id: tomoriState.config.nai_diffusion_model_id,
         video_model_id: tomoriState.config.video_model_id,
@@ -498,6 +500,8 @@ export class NvidiaProvider
           request.tomoriState.speech_voice_id?.trim() ||
           request.tomoriState.elevenlabs_voice_id?.trim(),
       ),
+      activePersonaVoiceDesignPrompt: request.tomoriState.speech_voice_design_prompt?.trim() || null,
+      activePersonaVoiceName: request.tomoriState.speech_voice_name,
       diffusion_model_id: request.tomoriState.config.diffusion_model_id,
       nai_diffusion_model_id: request.tomoriState.config.nai_diffusion_model_id,
       video_model_id: request.tomoriState.config.video_model_id,

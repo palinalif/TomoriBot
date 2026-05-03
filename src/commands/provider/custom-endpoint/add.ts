@@ -246,13 +246,16 @@ export async function execute(
 
       const isTtsCloneSpeech = capability === "speech" && apiStyle === "tts-clone";
       const isVoiceDesignSpeech = isTtsCloneSpeech && parsed.voiceMode === "voice-design";
+      const isAutoSpeech = isTtsCloneSpeech && parsed.voiceMode === "auto";
       await replyInfoEmbed(modalSubmit, locale, {
         titleKey: "commands.config.custom_models.add.success_title",
-        descriptionKey: isVoiceDesignSpeech
-          ? "commands.config.custom_models.add.speech_voice_design_next_steps_description"
-          : isTtsCloneSpeech
-            ? "commands.config.custom_models.add.speech_next_steps_description"
-            : "commands.config.custom_models.add.success_description",
+        descriptionKey: isAutoSpeech
+          ? "commands.config.custom_models.add.speech_auto_next_steps_description"
+          : isVoiceDesignSpeech
+            ? "commands.config.custom_models.add.speech_voice_design_next_steps_description"
+            : isTtsCloneSpeech
+              ? "commands.config.custom_models.add.speech_next_steps_description"
+              : "commands.config.custom_models.add.success_description",
         descriptionVars: { display_name: displayName, label, capability },
         color: ColorCode.SUCCESS,
       });

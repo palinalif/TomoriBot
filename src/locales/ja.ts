@@ -1560,7 +1560,7 @@ export default {
         },
         qwen3tts: {
           title: `Qwen3-TTS 音声`,
-          description: `Qwen3-TTS 12Hz Base は中国語・英語・日本語・韓国語・ドイツ語・フランス語・ロシア語・ポルトガル語・スペイン語・イタリア語の 10 言語に対応した多言語音声クローンサーバーです。同じ Qwen3-TTS フォルダには、自然言語の声質説明を使う VoiceDesign 用の別ラッパーも含まれています。どちらも感情マークアップなしのプレーンテキストのみ受け付けます。登録時は **Script Markup（スクリプトマークアップ）** を **Plain（通常テキスト）** に設定してください。`,
+          description: `Qwen3-TTS 12Hz Base は中国語・英語・日本語・韓国語・ドイツ語・フランス語・ロシア語・ポルトガル語・スペイン語・イタリア語の 10 言語に対応した多言語音声クローンサーバーです。同じ Qwen3-TTS サーバーで、自然言語の声質説明を使う VoiceDesign モデルを起動したり、1つのエンドポイントURLでクローンと VoiceDesign のリクエストを自動判定したりできます。どのモードも感情マークアップなしのプレーンテキストのみ受け付けます。登録時は **Script Markup（スクリプトマークアップ）** を **Plain（通常テキスト）** に設定してください。`,
           steps_title: `設定手順`,
           steps_description: `**前提条件**
 • Python 3.10+
@@ -1572,8 +1572,8 @@ export default {
 3. \`requirements.txt\` をインストールします。
 4. *(GPU)* PyTorch を再インストール: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
 5. *(任意)* 高速化のため flash-attn をインストール — 手順 4 の後 \`pip install wheel\`、次に \`pip install flash-attn --no-build-isolation\` (Winは20-40分)。初回はスキップ。
-6. 音声クローンには \`server.py\`、Qwen3-TTS VoiceDesign には \`server.py --mode voice-design\` を起動します。
-7. {custom_endpoint_add} で登録: Capability（機能）は \`Speech\`、API Style（API スタイル）は \`TTS-Clone\`、Script Markup（スクリプトマークアップ）は \`Plain\` を選択。VoiceDesign では音声ソースモードに \`VoiceDesign\` を選ぶと、TomoriBot が自動的に instruct 対応として扱います。
+6. 音声クローンには \`server.py\`、Qwen3-TTS VoiceDesign のみには \`server.py --mode voice-design\`、1つのURLでリクエストごとにクローン/VoiceDesignを判定するには \`server.py --mode auto\` を起動します。
+7. {custom_endpoint_add} で登録: Capability（機能）は \`Speech\`、API Style（API スタイル）は \`TTS-Clone\`、Script Markup（スクリプトマークアップ）は \`Plain\` を選択。VoiceDesign では音声ソースモードに \`VoiceDesign\` を選ぶと、TomoriBot が自動的に instruct 対応として扱います。auto モードでは、同じサーバーURLを指すクローン用と VoiceDesign 用のエンドポイントを登録できます。
 8. {model_speech} で選択します。クローンモードでは {voice_add} と {voice_assign}、VoiceDesign では各ペルソナに \`/speech voice-design\` を実行します。`,
         },
         irodoritts: {
@@ -3049,6 +3049,7 @@ Prompt Guidance Rescale: {cfg_rescale}
           success_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。\`/config model\` から選択できます。`,
           speech_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。次に \`/speech voice-add\` で音声サンプルを追加し、\`/speech voice-assign\` で割り当ててください。`,
           speech_voice_design_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。次に \`/model speech\` で選択し、\`/speech voice-design\` でペルソナの声質プロンプトを設定してください。`,
+          speech_auto_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。次に \`/model speech\` で選択してください。クローン用ペルソナは \`/speech voice-add\` と \`/speech voice-assign\`、VoiceDesign 用ペルソナは \`/speech voice-design\` を使用します。`,
         },
         edit: {
           description: `登録済みのラベル付きカスタムエンドポイントを編集します。`,
@@ -3139,6 +3140,8 @@ Prompt Guidance Rescale: {cfg_rescale}
           voice_mode_clone_description: `アップロード済み音声サンプルを話者参照として使用`,
           voice_mode_design: `VoiceDesign`,
           voice_mode_design_description: `ペルソナの声質プロンプトを instruct として送信`,
+          voice_mode_auto: `自動`,
+          voice_mode_auto_description: `各ペルソナの設定に応じて、音声サンプルまたは VoiceDesign プロンプトを使用`,
           script_markup_label: `スクリプトマークアップ形式`,
           script_markup_description: `このエンドポイントに送信するスピーチテキストでのマークアップ形式`,
           script_markup_plain: `プレーン`,

@@ -5,6 +5,7 @@ import { synthesizeSpeechViaElevenLabsAdapter } from "@/providers/custom/styles/
 import { synthesizeSpeechViaTtsClone } from "@/providers/custom/styles/ttsCloningAdapter";
 import {
   isVoiceDesignEndpoint,
+  shouldUseVoiceDesignForPersona,
   synthesizeSpeechViaTtsVoiceDesign,
 } from "@/providers/custom/styles/ttsVoiceDesignAdapter";
 import { ELEVENLABS_SERVICE_NAME } from "@/utils/audio/elevenLabsAccount";
@@ -380,6 +381,11 @@ export class GenerateVoiceMessageTool extends BaseTool {
     //    during the transition window before seed.sql migration has run.
     const speechEndpoint = await resolveActiveSpeechEndpoint(context.tomoriState.server_id);
     const activeEndpointIsVoiceDesign = isVoiceDesignEndpoint(speechEndpoint?.endpoint);
+    const shouldUseVoiceDesign = shouldUseVoiceDesignForPersona(
+      speechEndpoint?.endpoint,
+      voiceDesignPrompt,
+      context.tomoriState.speech_voice_name,
+    );
 
     if (activeEndpointIsVoiceDesign && !voiceDesignPrompt) {
       return {
@@ -404,10 +410,12 @@ export class GenerateVoiceMessageTool extends BaseTool {
     // first-class `instruct` field in the JSON body. The endpoint metadata's
     // supports_instruct flag is our guardrail: it prevents accidentally sending
     // design prompts to older clone-only wrappers that ignore or reject instruct.
+    // Auto endpoints are for mixed deployments: clone personas keep using their
+    // stored samples, while VoiceDesign personas send `instruct` to the same URL.
     if (
       voiceDesignPrompt &&
       speechEndpoint?.endpoint.api_style === "tts-clone" &&
-      (activeEndpointIsVoiceDesign || speechEndpoint.endpoint.extra_config.supports_instruct === true)
+      shouldUseVoiceDesign
     ) {
       const designResult = await synthesizeSpeechViaTtsVoiceDesign({
         endpoint: speechEndpoint.endpoint,

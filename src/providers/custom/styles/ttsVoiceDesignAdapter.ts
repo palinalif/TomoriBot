@@ -25,8 +25,33 @@ export interface TtsVoiceDesignRequest {
   apiKey: string;
 }
 
+export type TtsVoiceMode = "clone" | "voice-design" | "auto";
+
+export function getTtsVoiceMode(endpoint: CustomEndpointRow | null | undefined): TtsVoiceMode {
+  const rawMode = endpoint?.extra_config.voice_mode;
+  return rawMode === "voice-design" || rawMode === "auto" ? rawMode : "clone";
+}
+
 export function isVoiceDesignEndpoint(endpoint: CustomEndpointRow | null | undefined): boolean {
-  return endpoint?.api_style === "tts-clone" && endpoint.extra_config.voice_mode === "voice-design";
+  return endpoint?.api_style === "tts-clone" && getTtsVoiceMode(endpoint) === "voice-design";
+}
+
+export function isAutoVoiceEndpoint(endpoint: CustomEndpointRow | null | undefined): boolean {
+  return endpoint?.api_style === "tts-clone" && getTtsVoiceMode(endpoint) === "auto";
+}
+
+export function shouldUseVoiceDesignForPersona(
+  endpoint: CustomEndpointRow | null | undefined,
+  voiceDesignPrompt: string | null | undefined,
+  activeVoiceName?: string | null,
+): boolean {
+  if (endpoint?.api_style !== "tts-clone") return false;
+
+  const mode = getTtsVoiceMode(endpoint);
+  if (mode === "voice-design") return true;
+  if (mode !== "auto") return false;
+
+  return Boolean(voiceDesignPrompt?.trim()) && activeVoiceName === "VoiceDesign";
 }
 
 function resolveExtensionFromContentType(contentType: string): string {
@@ -42,6 +67,17 @@ function normalizeTtsWhitespace(text: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[^\S\n]+/g, " ")
     .trim();
+}
+
+function stringifyErrorDetail(detail: unknown): string | null {
+  if (!detail) return null;
+  if (typeof detail === "string") return detail;
+
+  try {
+    return JSON.stringify(detail);
+  } catch {
+    return String(detail);
+  }
 }
 
 /**
@@ -148,9 +184,9 @@ export async function synthesizeSpeechViaTtsVoiceDesign(request: TtsVoiceDesignR
   if (!response.ok) {
     let errorDetails = `HTTP ${response.status}`;
     try {
-      const errorBody = (await response.json()) as { error?: string; detail?: string };
-      if (errorBody.error) errorDetails += `: ${errorBody.error}`;
-      else if (errorBody.detail) errorDetails += `: ${errorBody.detail}`;
+      const errorBody = (await response.json()) as { error?: unknown; detail?: unknown };
+      const structuredDetail = stringifyErrorDetail(errorBody.error ?? errorBody.detail);
+      if (structuredDetail) errorDetails += `: ${structuredDetail}`;
     } catch {
       // Ignore JSON parse failures on error responses.
     }

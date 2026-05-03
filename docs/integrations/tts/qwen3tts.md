@@ -10,6 +10,16 @@ pip install -r scripts\tts\qwen3tts\requirements.txt
 python scripts\tts\qwen3tts\server.py
 ```
 
+If you want one running server to handle both clone and VoiceDesign requests, start it in auto mode instead:
+
+```powershell
+python scripts\tts\qwen3tts\server.py --mode auto
+```
+
+Auto mode inspects each `/synthesize` request: requests with `ref_audio` use the clone model, while requests with `instruct` use the VoiceDesign model. It keeps only one model loaded at a time and swaps models when the request type changes, so the first request after a swap may be slower.
+
+In TomoriBot, select `Auto` as the speech endpoint's voice source mode when one endpoint URL should support mixed personas. Personas configured with `/speech voice-assign` use clone synthesis; personas configured with `/speech voice-design` use VoiceDesign synthesis. Voice samples and VoiceDesign prompts are kept as reusable persona data; the most recently selected voice mode becomes active without deleting the other saved setup.
+
 Register with `/provider custom-endpoint add`:
 
 - capability: `speech`
@@ -29,6 +39,8 @@ python scripts\tts\qwen3tts\server.py
 ```
 
 You can also pass `--mode voice-design` instead of setting `TOMORI_TTS_MODE`.
+
+For mixed clone and VoiceDesign usage on one endpoint URL, prefer `--mode auto` and register a TomoriBot custom endpoint with the `Auto` voice source mode.
 
 Register it the same way as the clone wrapper, but select the VoiceDesign voice source mode. TomoriBot treats VoiceDesign mode as instruct-capable automatically; the Supports Instruct checkbox does not need to be selected separately.
 

@@ -1100,6 +1100,8 @@ async function fetchProviderTools(persona: TomoriState, providerName: string): P
         persona.speech_voice_id?.trim() ||
         persona.elevenlabs_voice_id?.trim(),
     ),
+    activePersonaVoiceDesignPrompt: persona.speech_voice_design_prompt?.trim() || null,
+    activePersonaVoiceName: persona.speech_voice_name,
     llm: {
       llm_codename: activeLlm.llm_codename,
       has_tools: activeLlm.has_tools,

@@ -1552,9 +1552,9 @@ Please try again with different inputs or check your API key.`,
         },
         qwen3tts: {
           title: `Qwen3-TTS Speech`,
-          description: `Qwen3-TTS 12Hz Base is a multilingual voice clone server supporting 10 languages: Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, and Italian. The bundled Qwen3-TTS folder also includes a separate VoiceDesign wrapper for natural-language voice descriptions. Both expect plain speech text only — no emotion markup. Register them with **Script Markup** set to **Plain**.`,
+          description: `Qwen3-TTS 12Hz Base is a multilingual voice clone server supporting 10 languages: Chinese, English, Japanese, Korean, German, French, Russian, Portuguese, Spanish, and Italian. The bundled Qwen3-TTS server can also run the VoiceDesign model for natural-language voice descriptions, or auto-switch between clone and VoiceDesign requests on one endpoint URL. All modes expect plain speech text only — no emotion markup. Register them with **Script Markup** set to **Plain**.`,
           steps_title: `Setup Steps`,
-          steps_description: `**Prerequisites**\n• Python 3.10+\n• SoX installed system-wide (Windows: \`scoop install sox\`, macOS: \`brew install sox\`)\n• CUDA 12.x + drivers (optional, for GPU)\n\n1. Download the [TTS scripts](https://github.com/Bredrumb/TomoriBot/tree/main/scripts/tts) from GitHub to your machine.\n2. Navigate to the downloaded \`qwen3tts\` folder, create and activate a Python \`.venv\`.\n3. Install \`requirements.txt\`.\n4. *(GPU)* Reinstall PyTorch: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`\n5. *(Optional)* Install flash-attn for speed — requires step 4, \`pip install wheel\`, then \`pip install flash-attn --no-build-isolation\` (takes 20-40m on Win). Skip initially.\n6. Start \`server.py\` for voice cloning, or start \`server.py --mode voice-design\` for Qwen3-TTS VoiceDesign.\n7. Register with {custom_endpoint_add}: select \`Speech\` capability, \`TTS-Clone\` API Style, and \`Plain\` Script Markup. For VoiceDesign, choose \`VoiceDesign\` as the voice source mode; TomoriBot treats it as instruct-capable automatically.\n8. Select with {model_speech}. For clone mode, run {voice_add} and {voice_assign}; for VoiceDesign, run \`/speech voice-design\` for each persona.`,
+          steps_description: `**Prerequisites**\n• Python 3.10+\n• SoX installed system-wide (Windows: \`scoop install sox\`, macOS: \`brew install sox\`)\n• CUDA 12.x + drivers (optional, for GPU)\n\n1. Download the [TTS scripts](https://github.com/Bredrumb/TomoriBot/tree/main/scripts/tts) from GitHub to your machine.\n2. Navigate to the downloaded \`qwen3tts\` folder, create and activate a Python \`.venv\`.\n3. Install \`requirements.txt\`.\n4. *(GPU)* Reinstall PyTorch: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`\n5. *(Optional)* Install flash-attn for speed — requires step 4, \`pip install wheel\`, then \`pip install flash-attn --no-build-isolation\` (takes 20-40m on Win). Skip initially.\n6. Start \`server.py\` for voice cloning, \`server.py --mode voice-design\` for Qwen3-TTS VoiceDesign only, or \`server.py --mode auto\` to detect clone vs VoiceDesign from each request on one URL.\n7. Register with {custom_endpoint_add}: select \`Speech\` capability, \`TTS-Clone\` API Style, and \`Plain\` Script Markup. For VoiceDesign, choose \`VoiceDesign\` as the voice source mode; TomoriBot treats it as instruct-capable automatically. In auto mode, you can register clone and VoiceDesign endpoints that point to the same server URL.\n8. Select with {model_speech}. For clone mode, run {voice_add} and {voice_assign}; for VoiceDesign, run \`/speech voice-design\` for each persona.`,
         },
         irodoritts: {
           title: `IrodoriTTS Speech`,
@@ -2985,6 +2985,7 @@ Your donations help:
           success_description: `Added **{display_name}** under label **{label}** for **{capability}**. Select it with \`/config model\`.`,
           speech_next_steps_description: `Added **{display_name}** under label **{label}** for **{capability}**. Next: add a voice sample with \`/speech voice-add\`, then assign it with \`/speech voice-assign\`.`,
           speech_voice_design_next_steps_description: `Added **{display_name}** under label **{label}** for **{capability}**. Next: select it with \`/model speech\`, then set persona prompts with \`/speech voice-design\`.`,
+          speech_auto_next_steps_description: `Added **{display_name}** under label **{label}** for **{capability}**. Next: select it with \`/model speech\`. Clone personas use \`/speech voice-add\` and \`/speech voice-assign\`; VoiceDesign personas use \`/speech voice-design\`.`,
         },
         edit: {
           description: `Edit fields on a registered custom endpoint.`,
@@ -3075,6 +3076,8 @@ Your donations help:
           voice_mode_clone_description: `Use uploaded voice samples as speaker references`,
           voice_mode_design: `VoiceDesign`,
           voice_mode_design_description: `Use persona voice prompts sent as instruct`,
+          voice_mode_auto: `Auto`,
+          voice_mode_auto_description: `Use each persona's configured voice type: clone sample or VoiceDesign prompt`,
           script_markup_label: `Script Markup Style`,
           script_markup_description: `How emotion/delivery markup should appear in speech text sent to this endpoint`,
           script_markup_plain: `Plain`,

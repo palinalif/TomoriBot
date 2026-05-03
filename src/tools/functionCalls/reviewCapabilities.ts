@@ -777,6 +777,8 @@ export class ReviewCapabilitiesTool extends BaseTool {
               context.tomoriState.speech_voice_id?.trim() ||
               context.tomoriState.elevenlabs_voice_id?.trim(),
           ),
+          activePersonaVoiceDesignPrompt: context.tomoriState.speech_voice_design_prompt?.trim() || null,
+          activePersonaVoiceName: context.tomoriState.speech_voice_name,
           llm: {
             llm_codename: llm.llm_codename,
             has_tools: llm.has_tools,

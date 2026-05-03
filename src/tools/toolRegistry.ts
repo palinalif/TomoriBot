@@ -25,7 +25,7 @@ import { MessageIdMap } from "@/utils/text/messageIdMap";
 import { sql } from "@/utils/db/client";
 import { resolveActiveSpeechEndpoint } from "@/utils/provider/speechEndpointResolver";
 import { VOICE_TOOL_VARIANTS, type VoiceScriptMarkup } from "@/tools/functionCalls/generateVoiceMessageTool";
-import { isVoiceDesignEndpoint } from "@/providers/custom/styles/ttsVoiceDesignAdapter";
+import { shouldUseVoiceDesignForPersona } from "@/providers/custom/styles/ttsVoiceDesignAdapter";
 
 /**
  * Minimal state interface for context building operations
@@ -35,6 +35,10 @@ export interface ToolStateForContext {
   server_id: string;
   /** True when the active persona has either a local voice sample or provider-hosted voice assigned. */
   activePersonaHasElevenlabsVoice: boolean;
+  /** Present when the active persona should use instruct-based VoiceDesign synthesis. */
+  activePersonaVoiceDesignPrompt?: string | null;
+  /** Display/name marker for the active speech voice selection. */
+  activePersonaVoiceName?: string | null;
   llm: ToolAvailabilityLlmState;
   diffusion_model_id?: number | null;
   nai_diffusion_model_id?: number | null;
@@ -511,7 +515,11 @@ class ToolRegistryImpl implements ToolRegistryInterface {
           // activeSpeechEndpoint is already resolved above; no extra DB call needed.
           const scriptMarkup =
             (activeSpeechEndpoint?.endpoint.extra_config?.script_markup as string | undefined) ?? "bracket-tags";
-          const voiceDesign = isVoiceDesignEndpoint(activeSpeechEndpoint?.endpoint);
+          const voiceDesign = shouldUseVoiceDesignForPersona(
+            activeSpeechEndpoint?.endpoint,
+            stateForContext.activePersonaVoiceDesignPrompt,
+            stateForContext.activePersonaVoiceName,
+          );
           const variant = voiceDesign
             ? VOICE_TOOL_VARIANTS["voice-design"]
             : (VOICE_TOOL_VARIANTS[scriptMarkup as VoiceScriptMarkup] ?? VOICE_TOOL_VARIANTS["bracket-tags"]);

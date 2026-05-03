@@ -7,7 +7,7 @@ Each engine lives in its own subfolder with its own `.venv` to keep dependencies
 | Engine | Folder | Default port |
 |---|---|---|
 | Chatterbox (Turbo by default, English, bracket tags) | `chatterbox/` | 8011 |
-| Qwen3-TTS 12Hz 1.7B Base (10 languages, plain text) | `qwen3tts/` | 8012 |
+| Qwen3-TTS 12Hz 1.7B Base / VoiceDesign auto mode (10 languages, plain text) | `qwen3tts/` | 8012 |
 | Irodori-TTS 500M v2 (Japanese, emoji tags) | `irodoritts/` | 8013 |
 | Qwen3-TTS 12Hz 1.7B VoiceDesign (natural-language voice descriptions) | `qwen3tts/server.py --mode voice-design` | 8014 |
 
@@ -58,4 +58,4 @@ After the server is running, register it with `/provider custom-endpoint add`:
 
 Chatterbox defaults to Turbo. Use `/speech chatterbox parameters` to disable Turbo and send standard-model `cfg_weight` and `exaggeration` values with generated voice messages.
 
-Qwen3-TTS VoiceDesign uses the same endpoint contract as the clone wrappers, but it ignores `ref_audio` and reads the voice description from `instruct`, `ref_text`, or `TOMORI_TTS_DEFAULT_INSTRUCT`. Start it with `TOMORI_TTS_MODE=voice-design python scripts/tts/qwen3tts/server.py` or `python scripts/tts/qwen3tts/server.py --mode voice-design`. In TomoriBot, set persona prompts with `/speech voice-design`; generated tool calls send that prompt as `instruct`.
+Qwen3-TTS VoiceDesign uses the same endpoint contract as the clone wrappers, but it ignores `ref_audio` and reads the voice description from `instruct`, `ref_text`, or `TOMORI_TTS_DEFAULT_INSTRUCT`. Start VoiceDesign only with `TOMORI_TTS_MODE=voice-design python scripts/tts/qwen3tts/server.py` or `python scripts/tts/qwen3tts/server.py --mode voice-design`. For one server URL that can handle both clone and VoiceDesign requests, use `python scripts/tts/qwen3tts/server.py --mode auto`; the server detects clone requests by `ref_audio`, detects VoiceDesign requests by `instruct`, and swaps the loaded model when needed. In TomoriBot, set persona prompts with `/speech voice-design`; generated tool calls send that prompt as `instruct`.
