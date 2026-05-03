@@ -230,8 +230,10 @@ export async function execute(
 
         const updatedTomori = await updateTomori(selectedPersona.tomori_id, {
           speech_voice_sample_id: sampleIdToAssign,
-          // Clear preset voice fields when assigning a local sample.
-          ...(isClear ? {} : { speech_voice_id: null, speech_voice_name: null }),
+          // Clear preset/design voice fields when assigning a local sample.
+          ...(isClear
+            ? { speech_voice_design_prompt: null }
+            : { speech_voice_id: null, speech_voice_name: null, speech_voice_design_prompt: null }),
         });
 
         if (!updatedTomori) {
@@ -366,6 +368,7 @@ export async function execute(
         elevenlabs_voice_id: chosenVoice?.voiceId ?? null,
         elevenlabs_voice_name: chosenVoice?.name ?? null,
         speech_voice_sample_id: null,
+        speech_voice_design_prompt: null,
       });
 
       if (!updatedTomori) {

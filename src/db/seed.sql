@@ -2272,9 +2272,11 @@ CREATE INDEX IF NOT EXISTS idx_voice_samples_server ON voice_samples(server_id);
 --    speech_voice_sample_id: FK → voice_samples (local clone path).
 --    speech_voice_id: preset voice ID for provider-hosted voices (ElevenLabs).
 --    speech_voice_name: cached friendly name for display (either path).
+--    speech_voice_design_prompt: natural-language voice design prompt for instruct-capable local TTS.
 SELECT add_column_if_not_exists('tomoris', 'speech_voice_sample_id', 'INTEGER');
 SELECT add_column_if_not_exists('tomoris', 'speech_voice_id', 'TEXT');
 SELECT add_column_if_not_exists('tomoris', 'speech_voice_name', 'TEXT');
+SELECT add_column_if_not_exists('tomoris', 'speech_voice_design_prompt', 'TEXT');
 
 -- 3. Backfill new columns from legacy ElevenLabs voice columns for any persona
 --    that had a voice configured before Phase 4.1. The legacy columns are kept

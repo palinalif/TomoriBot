@@ -159,6 +159,7 @@ export class ZaicodingProvider
         server_id: tomoriState.server_id.toString(),
         activePersonaHasElevenlabsVoice: Boolean(
           tomoriState.speech_voice_sample_id ||
+            tomoriState.speech_voice_design_prompt?.trim() ||
             tomoriState.speech_voice_id?.trim() ||
             tomoriState.elevenlabs_voice_id?.trim(),
         ),
@@ -387,6 +388,7 @@ export class ZaicodingProvider
       server_id: request.tomoriState.server_id.toString(),
       activePersonaHasElevenlabsVoice: Boolean(
         request.tomoriState.speech_voice_sample_id ||
+          request.tomoriState.speech_voice_design_prompt?.trim() ||
           request.tomoriState.speech_voice_id?.trim() ||
           request.tomoriState.elevenlabs_voice_id?.trim(),
       ),

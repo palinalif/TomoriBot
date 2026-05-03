@@ -25,6 +25,7 @@ import { MessageIdMap } from "@/utils/text/messageIdMap";
 import { sql } from "@/utils/db/client";
 import { resolveActiveSpeechEndpoint } from "@/utils/provider/speechEndpointResolver";
 import { VOICE_TOOL_VARIANTS, type VoiceScriptMarkup } from "@/tools/functionCalls/generateVoiceMessageTool";
+import { isVoiceDesignEndpoint } from "@/providers/custom/styles/ttsVoiceDesignAdapter";
 
 /**
  * Minimal state interface for context building operations
@@ -506,11 +507,14 @@ class ToolRegistryImpl implements ToolRegistryInterface {
             );
           }
         } else {
-          // Proxy the voice tool with a description that matches the endpoint's script_markup mode.
+          // Proxy the voice tool with a description that matches the endpoint's speech mode.
           // activeSpeechEndpoint is already resolved above; no extra DB call needed.
           const scriptMarkup =
             (activeSpeechEndpoint?.endpoint.extra_config?.script_markup as string | undefined) ?? "bracket-tags";
-          const variant = VOICE_TOOL_VARIANTS[scriptMarkup as VoiceScriptMarkup] ?? VOICE_TOOL_VARIANTS["bracket-tags"];
+          const voiceDesign = isVoiceDesignEndpoint(activeSpeechEndpoint?.endpoint);
+          const variant = voiceDesign
+            ? VOICE_TOOL_VARIANTS["voice-design"]
+            : (VOICE_TOOL_VARIANTS[scriptMarkup as VoiceScriptMarkup] ?? VOICE_TOOL_VARIANTS["bracket-tags"]);
 
           builtInTools = builtInTools.map((tool) => {
             if (tool.name !== "generate_voice_message") return tool;
@@ -525,6 +529,14 @@ class ToolRegistryImpl implements ToolRegistryInterface {
                       ...tool.parameters.properties.script,
                       description: variant.scriptDescription,
                     },
+                    ...(voiceDesign
+                      ? {
+                          voice_instructions: {
+                            type: "string" as const,
+                            description: VOICE_TOOL_VARIANTS["voice-design"].voiceInstructionsDescription,
+                          },
+                        }
+                      : {}),
                   },
                 },
                 enumerable: true,

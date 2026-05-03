@@ -7,7 +7,7 @@
  * Field layout per capability:
  *   text:          model_name (text), display_name (text), num_ctx (text), text_capabilities (checkbox group)
  *   embedding:     model_name (text), display_name (text)
- *   speech:        display_name (text), script_markup (radio group), supports_instruct (checkbox)
+ *   speech:        display_name (text), voice_mode (radio group), script_markup (radio group), supports_instruct (checkbox)
  *   transcription: display_name (text), transcription_model (text), transcription_language (text)
  *   image/video:   display_name (text) + workflow_json file upload (separate path via promptWithRawModal)
  *
@@ -25,6 +25,7 @@ export const ModalFieldId = {
   display_name: "display_name",
   num_ctx: "num_ctx",
   text_capabilities: "text_capabilities",
+  voice_mode: "voice_mode",
   script_markup: "script_markup",
   supports_instruct: "supports_instruct",
   transcription_model: "transcription_model",
@@ -56,6 +57,7 @@ export interface ParsedCapabilityModalFields {
   seesImages: boolean;
   supportsStructOutput: boolean;
   scriptMarkup: "plain" | "bracket-tags" | "emoji";
+  voiceMode: "clone" | "voice-design";
   supportsInstruct: boolean;
   transcriptionModel: string | null;
   transcriptionLanguage: string | null;
@@ -82,6 +84,7 @@ export function parseCapabilityModalFields(
     seesImages: false,
     supportsStructOutput: false,
     scriptMarkup: "plain",
+    voiceMode: "clone",
     supportsInstruct: false,
     transcriptionModel: null,
     transcriptionLanguage: null,
@@ -107,9 +110,11 @@ export function parseCapabilityModalFields(
       break;
     }
     case "speech": {
+      const rawVoiceMode = values[ModalFieldId.voice_mode]?.trim().toLowerCase();
+      result.voiceMode = rawVoiceMode === "voice-design" ? "voice-design" : "clone";
       const rawMarkup = values[ModalFieldId.script_markup]?.trim().toLowerCase();
       result.scriptMarkup = rawMarkup === "bracket-tags" || rawMarkup === "emoji" ? rawMarkup : "plain";
-      result.supportsInstruct = values[ModalFieldId.supports_instruct] === "true";
+      result.supportsInstruct = result.voiceMode === "voice-design" || values[ModalFieldId.supports_instruct] === "true";
       break;
     }
     case "transcription": {
@@ -220,6 +225,32 @@ export function buildCapabilityAddModalComponents(
         },
         {
           kind: "radioGroup" as const,
+          customId: ModalFieldId.voice_mode,
+          labelKey: "commands.config.custom_models.capability_modal.voice_mode_label",
+          descriptionKey: "commands.config.custom_models.capability_modal.voice_mode_description",
+          options: [
+            {
+              value: "clone",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.voice_mode_clone"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.voice_mode_clone_description",
+              ),
+              default: true,
+            },
+            {
+              value: "voice-design",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.voice_mode_design"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.voice_mode_design_description",
+              ),
+            },
+          ],
+          required: true,
+        },
+        {
+          kind: "radioGroup" as const,
           customId: ModalFieldId.script_markup,
           labelKey: "commands.config.custom_models.capability_modal.script_markup_label",
           descriptionKey: "commands.config.custom_models.capability_modal.script_markup_description",
@@ -305,6 +336,7 @@ export interface EditModalExistingValues {
   hasTools?: boolean;
   seesImages?: boolean;
   supportsStructOutput?: boolean;
+  voiceMode?: string | null;
   scriptMarkup?: string | null;
   supportsInstruct?: boolean;
   transcriptionModel?: string | null;
@@ -426,6 +458,7 @@ export function buildCapabilityEditModalComponents(
 
     case "speech": {
       const currentMarkup = existing.scriptMarkup?.toLowerCase();
+      const currentVoiceMode = existing.voiceMode?.toLowerCase();
       return [
         {
           customId: ModalFieldId.display_name,
@@ -442,6 +475,33 @@ export function buildCapabilityEditModalComponents(
           placeholder: localizer(locale, "commands.config.custom_models.capability_modal.auth_token_placeholder"),
           required: false,
           maxLength: 500,
+        },
+        {
+          kind: "radioGroup" as const,
+          customId: ModalFieldId.voice_mode,
+          labelKey: "commands.config.custom_models.capability_modal.voice_mode_label",
+          descriptionKey: "commands.config.custom_models.capability_modal.voice_mode_description",
+          options: [
+            {
+              value: "clone",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.voice_mode_clone"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.voice_mode_clone_description",
+              ),
+              default: !currentVoiceMode || currentVoiceMode === "clone",
+            },
+            {
+              value: "voice-design",
+              label: localizer(locale, "commands.config.custom_models.capability_modal.voice_mode_design"),
+              description: localizer(
+                locale,
+                "commands.config.custom_models.capability_modal.voice_mode_design_description",
+              ),
+              default: currentVoiceMode === "voice-design",
+            },
+          ],
+          required: true,
         },
         {
           kind: "radioGroup" as const,

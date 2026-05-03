@@ -1095,7 +1095,10 @@ async function fetchProviderTools(persona: TomoriState, providerName: string): P
   const toolStateForContext: ToolStateForContext = {
     server_id: persona.server_id.toString(),
     activePersonaHasElevenlabsVoice: Boolean(
-      persona.speech_voice_sample_id || persona.speech_voice_id?.trim() || persona.elevenlabs_voice_id?.trim(),
+      persona.speech_voice_sample_id ||
+        persona.speech_voice_design_prompt?.trim() ||
+        persona.speech_voice_id?.trim() ||
+        persona.elevenlabs_voice_id?.trim(),
     ),
     llm: {
       llm_codename: activeLlm.llm_codename,

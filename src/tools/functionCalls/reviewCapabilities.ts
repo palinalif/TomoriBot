@@ -237,14 +237,19 @@ export class ReviewCapabilitiesTool extends BaseTool {
       // 5d. Voice System section (conditional on speech voice assignment + server permission)
       const hasVoiceAssignment = Boolean(
         context.tomoriState.speech_voice_sample_id ||
+          context.tomoriState.speech_voice_design_prompt?.trim() ||
           context.tomoriState.speech_voice_id?.trim() ||
           context.tomoriState.elevenlabs_voice_id?.trim(),
       );
       const voiceName =
         context.tomoriState.speech_voice_name ||
         context.tomoriState.elevenlabs_voice_name ||
+        (context.tomoriState.speech_voice_design_prompt?.trim() ? "VoiceDesign prompt" : null) ||
         (context.tomoriState.speech_voice_sample_id ? "Local voice sample" : "Unknown");
-      const voiceSource = context.tomoriState.speech_voice_sample_id ? "Local/custom TTS" : "Provider voice";
+      const voiceSource =
+        context.tomoriState.speech_voice_design_prompt?.trim() || context.tomoriState.speech_voice_sample_id
+          ? "Local/custom TTS"
+          : "Provider voice";
       const voiceEnabled = config.voice_message_enabled ?? true;
 
       capabilitiesContent += "## Voice System\n\n";
@@ -358,6 +363,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
         capabilitiesContent += "- **select_sticker_for_response** (choose stickers)\n";
         const toolHasVoiceAssignment = Boolean(
           context.tomoriState.speech_voice_sample_id ||
+            context.tomoriState.speech_voice_design_prompt?.trim() ||
             context.tomoriState.speech_voice_id?.trim() ||
             context.tomoriState.elevenlabs_voice_id?.trim(),
         );
@@ -684,12 +690,14 @@ export class ReviewCapabilitiesTool extends BaseTool {
       const voiceEnabledSettings = config.voice_message_enabled ?? true;
       const hasPersonaVoice = Boolean(
         context.tomoriState.speech_voice_sample_id ||
+          context.tomoriState.speech_voice_design_prompt?.trim() ||
           context.tomoriState.speech_voice_id?.trim() ||
           context.tomoriState.elevenlabs_voice_id?.trim(),
       );
       const personaVoiceName =
         context.tomoriState.speech_voice_name ||
         context.tomoriState.elevenlabs_voice_name ||
+        (context.tomoriState.speech_voice_design_prompt?.trim() ? "VoiceDesign prompt" : null) ||
         (context.tomoriState.speech_voice_sample_id ? "Local voice sample" : "Unknown");
       if (voiceEnabledSettings && hasPersonaVoice) {
         settingsContent += `Voice messages are **enabled** and configured.\n`;
@@ -765,6 +773,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
           server_id: serverId.toString(),
           activePersonaHasElevenlabsVoice: Boolean(
             context.tomoriState.speech_voice_sample_id ||
+              context.tomoriState.speech_voice_design_prompt?.trim() ||
               context.tomoriState.speech_voice_id?.trim() ||
               context.tomoriState.elevenlabs_voice_id?.trim(),
           ),

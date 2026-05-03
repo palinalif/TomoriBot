@@ -162,7 +162,13 @@ function buildEndpointSummaryEmbed(locale: string, endpoint: CustomEndpointRow):
 
   if (endpoint.capability === "speech") {
     const scriptMarkup = extra.script_markup as string | undefined;
+    const voiceMode = extra.voice_mode as string | undefined;
     const supportsInstruct = extra.supports_instruct as boolean | undefined;
+    if (voiceMode) {
+      lines.push(
+        `**${localizer(locale, "commands.config.custom_models.capability_modal.voice_mode_label")}:** ${voiceMode}`,
+      );
+    }
     if (scriptMarkup) {
       lines.push(
         `**${localizer(locale, "commands.config.custom_models.capability_modal.script_markup_label")}:** ${scriptMarkup}`,
@@ -296,6 +302,7 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
       hasTools: existingEndpoint.has_tools,
       seesImages: existingEndpoint.sees_images,
       supportsStructOutput: existingEndpoint.supports_structoutput,
+      voiceMode: extra.voice_mode as string | null,
       scriptMarkup: extra.script_markup as string | null,
       supportsInstruct: extra.supports_instruct as boolean | undefined,
       transcriptionModel: extra.model as string | null,
@@ -360,6 +367,7 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
     if (existingEndpoint.capability === "speech") {
       extraConfig = {
         ...extraConfig,
+        voice_mode: parsed.voiceMode,
         script_markup: parsed.scriptMarkup,
         supports_instruct: parsed.supportsInstruct,
       };
