@@ -15,9 +15,10 @@
  */
 
 resource "google_cloud_run_v2_service" "tomoribot" {
-  name     = var.cloud_run_service_name
-  location = var.gcp_region
-  ingress  = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  name                = var.cloud_run_service_name
+  location            = var.gcp_region
+  ingress             = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+  deletion_protection = false
 
   template {
     service_account = google_service_account.app.email
@@ -41,7 +42,7 @@ resource "google_cloud_run_v2_service" "tomoribot" {
       secret {
         secret = google_secret_manager_secret.tomoribot.secret_id
         items {
-          version = "latest"
+          version = "1"
           path    = var.secret_name
         }
       }
@@ -108,17 +109,6 @@ resource "google_cloud_run_v2_service" "tomoribot" {
         mount_path = "/run/secrets"
       }
 
-      startup_probe {
-        initial_delay_seconds = var.health_check_start_period
-        timeout_seconds       = 10
-        period_seconds        = 30
-        failure_threshold     = 3
-
-        http_get {
-          path = "/health"
-          port = 3000
-        }
-      }
     }
   }
 

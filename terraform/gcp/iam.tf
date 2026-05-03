@@ -88,3 +88,11 @@ resource "google_project_iam_member" "app_cloudsql_client" {
   role    = "roles/cloudsql.client"
   member  = "serviceAccount:${google_service_account.app.email}"
 }
+
+# Grants ADC-based Vertex AI access — Cloud Run picks this up automatically via
+# the metadata server, so no JSON key or GOOGLE_APPLICATION_CREDENTIALS is needed.
+resource "google_project_iam_member" "app_vertex_ai_user" {
+  project = var.gcp_project_id
+  role    = "roles/aiplatform.user"
+  member  = "serviceAccount:${google_service_account.app.email}"
+}

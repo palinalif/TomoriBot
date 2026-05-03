@@ -14,6 +14,7 @@ locals {
     "secretmanager.googleapis.com",
     "storage.googleapis.com",
     "cloudkms.googleapis.com",
+    "aiplatform.googleapis.com",        # Vertex AI
   ]
 }
 

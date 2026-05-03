@@ -199,8 +199,3 @@ variable "run_env" {
   default     = "production"
 }
 
-variable "health_check_start_period" {
-  description = "Startup probe initial delay in seconds before health checks begin"
-  type        = number
-  default     = 60
-}
