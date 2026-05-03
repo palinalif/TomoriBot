@@ -36,6 +36,12 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
         .setName("clear")
         .setDescription(localizer("en-US", "commands.speech.voice_design.clear_description"))
         .setRequired(false),
+    )
+    .addBooleanOption((option) =>
+      option
+        .setName("edit")
+        .setDescription(localizer("en-US", "commands.speech.voice_design.edit_description"))
+        .setRequired(false),
     );
 
 export async function execute(
@@ -96,7 +102,18 @@ export async function execute(
     }
 
     const shouldClear = interaction.options.getBoolean("clear") ?? false;
+    const shouldEdit = interaction.options.getBoolean("edit") ?? false;
     const inlinePrompt = interaction.options.getString("prompt")?.trim() ?? "";
+
+    if ((shouldClear && (shouldEdit || inlinePrompt)) || (shouldEdit && inlinePrompt)) {
+      await replyInfoEmbed(interaction, locale, {
+        titleKey: "general.errors.invalid_option_title",
+        descriptionKey: "commands.speech.voice_design.invalid_combination_description",
+        color: ColorCode.ERROR,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
 
     const personaSelection = await replyPaginatedPersonaChoicesV2(interaction, locale, {
       personas: allPersonas,
@@ -151,11 +168,24 @@ export async function execute(
       return;
     }
 
+    const existingPrompt = selectedPersona.speech_voice_design_prompt?.trim() ?? "";
+    if (shouldEdit && !existingPrompt) {
+      await replyInfoEmbed(personaButtonInteraction, locale, {
+        titleKey: "commands.speech.voice_design.no_existing_prompt_title",
+        descriptionKey: "commands.speech.voice_design.no_existing_prompt_description",
+        descriptionVars: { persona: selectedPersona.tomori_nickname },
+        color: ColorCode.WARN,
+      });
+      return;
+    }
+
     let designPrompt = inlinePrompt;
-    if (!designPrompt) {
+    if (shouldEdit || !designPrompt) {
       const modalResult = await promptWithRawModal(personaButtonInteraction, locale, {
         modalCustomId: PROMPT_MODAL_ID,
-        modalTitleKey: "commands.speech.voice_design.modal_title",
+        modalTitleKey: shouldEdit
+          ? "commands.speech.voice_design.edit_modal_title"
+          : "commands.speech.voice_design.modal_title",
         components: [
           {
             customId: PROMPT_FIELD_ID,
@@ -166,7 +196,7 @@ export async function execute(
             required: true,
             minLength: 10,
             maxLength: MAX_VOICE_DESIGN_PROMPT_LENGTH,
-            value: selectedPersona.speech_voice_design_prompt?.slice(0, MAX_VOICE_DESIGN_PROMPT_LENGTH),
+            value: existingPrompt.slice(0, MAX_VOICE_DESIGN_PROMPT_LENGTH),
           },
         ],
       });
