@@ -64,6 +64,7 @@ import { localizer, getSupportedLocales, getLocaleSubKeys } from "../../utils/te
 import { escapeRegExp, normalizeCustomEmojisForLlm } from "../../utils/text/stringHelper";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
 import { hasExplicitLongTermMemoryIntent } from "@/utils/memory/explicitLongTermMemoryIntent";
+import { hasDeliberateToolIntent, resolveDeliberateToolMode } from "@/utils/tools/deliberateToolMode";
 import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
 import { getLinkedMatrixRoom, pendingMatrixReplyChannels, sendMatrixTypingIndicator } from "@/utils/matrix";
@@ -5467,6 +5468,34 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           // Must be `let` so the fallback model loop can swap in a different llm for each attempt.
           let effectiveTomoriState = isRpChannel ? { ...tomoriState, config: effectiveTomoriConfig } : tomoriState;
 
+          const deliberateToolModeActive = resolveDeliberateToolMode(
+            effectiveTomoriState.config.deliberate_tool_mode,
+            userRow?.personal_deliberate_tool_mode ?? "follow",
+          );
+          const deliberateToolIntent =
+            hasDeliberateToolIntent(message.content) || (streamingContext.endTurnAfterTools?.length ?? 0) > 0;
+          const toolsDisabledByDeliberateMode =
+            !streamingContext.disableAllTools && deliberateToolModeActive && !deliberateToolIntent;
+
+          if (toolsDisabledByDeliberateMode) {
+            streamingContext.disableAllTools = true;
+            log.info(
+              `Deliberate tool mode: suppressing tools for turn in channel ${channel.id} (no explicit tool intent)`,
+            );
+          }
+
+          if (streamingContext.disableAllTools && effectiveTomoriState.llm.has_tools) {
+            effectiveTomoriState = {
+              ...effectiveTomoriState,
+              llm: {
+                ...effectiveTomoriState.llm,
+                has_tools: false,
+              },
+            };
+            tomoriState = effectiveTomoriState;
+            personaSnapshot = { ...personaSnapshot, tomoriState: effectiveTomoriState };
+          }
+
           // Load emojis and stickers from 5-minute in-memory cache (lazy sync included)
           if (!isDMChannel && guild && currentPersona.server_id) {
             const { emojis, stickers } = await loadEmojiStickerCache(
@@ -5687,6 +5716,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               seesVideos: effectiveContextSeesVideos,
               // Vision tool available when: vision model configured AND chat model can't see images
               hasVisionTool: !!tomoriState?.vision_llm && !(effectiveContextSeesImages ?? tomoriState?.llm.sees_images),
+              toolsDisabledForTurn: streamingContext.disableAllTools,
               messageIdMap,
             });
             contextSegments = appendInjectedContextItems(contextBuild.contextItems, injectedContextItems);
@@ -6607,7 +6637,13 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                         `Trying fallback ${fi + 1}/${fallbackChain.length}: ${fallbackCodename}`,
                     );
 
-                    effectiveTomoriState = { ...effectiveTomoriState, llm: entry.model };
+                    effectiveTomoriState = {
+                      ...effectiveTomoriState,
+                      llm: {
+                        ...entry.model,
+                        has_tools: streamingContext.disableAllTools ? false : entry.model.has_tools,
+                      },
+                    };
 
                     const fallbackProviderName = entry.model.llm_provider.toLowerCase();
                     if (fallbackProviderName !== primaryProvider) {
@@ -6684,7 +6720,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                         ...effectiveTomoriState.llm,
                         llm_codename: ep.model_name ?? ep.label,
                         llm_provider: "custom",
-                        has_tools: ep.has_tools,
+                        has_tools: streamingContext.disableAllTools ? false : ep.has_tools,
                         sees_images: ep.sees_images,
                         sees_videos: ep.sees_videos,
                         supports_structoutput: ep.supports_structoutput,
@@ -7399,6 +7435,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                         seesVideos: effectiveContextSeesVideos,
                         hasVisionTool:
                           !!tomoriState?.vision_llm && !(effectiveContextSeesImages ?? tomoriState?.llm.sees_images),
+                        toolsDisabledForTurn: streamingContext.disableAllTools,
                         messageIdMap: rebuildMessageIdMap,
                       });
                       contextSegments = appendInjectedContextItems(contextBuild.contextItems, injectedContextItems);
@@ -7673,6 +7710,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                         seesVideos: effectiveContextSeesVideos,
                         hasVisionTool:
                           !!tomoriState?.vision_llm && !(effectiveContextSeesImages ?? tomoriState?.llm.sees_images),
+                        toolsDisabledForTurn: streamingContext.disableAllTools,
                         messageIdMap: rebuildMessageIdMap,
                       });
                       contextSegments = appendInjectedContextItems(contextBuild.contextItems, injectedContextItems);

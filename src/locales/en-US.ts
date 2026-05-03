@@ -817,6 +817,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_blacklisted_members_with_count: `{current} members`,
         // Personal scope additions
         field_personal_dtm: `Personal DTM`,
+        field_personal_deliberate_tool_mode: `Personal Tool Mode`,
         field_crossserver_stm: `Cross-Server STM`,
         field_nai_char_tags: `NAI Character Tags`,
         field_nai_char_ref: `NAI Character Reference`,
@@ -831,6 +832,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         field_custom_endpoint: `Custom Endpoint`,
         // Server scope - Page 2 additions
         field_deliberate_trigger: `Deliberate Trigger Mode`,
+        field_deliberate_tool_mode: `Deliberate Tool Mode`,
         field_user_byok_enabled: `Enabled. Members need their own personal provider for user-triggered messages. Toggle with {toggle_command}.`,
         field_user_byok_disabled: `Disabled. User-triggered messages can still fall back to the server provider. Toggle with {toggle_command}.`,
         // Server scope - Page 4 additions
@@ -4318,6 +4320,16 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
         disabled_title: `Deliberate Trigger Mode Disabled`,
         disabled_description: `**{persona_name}** will respond to plain trigger words again.`,
       },
+      deliberatetoolmode: {
+        description: `Toggle deliberate tool mode for this server.`,
+        enabled_title: `Deliberate Tool Mode Enabled`,
+        enabled_description: `**{persona_name}** will now receive tools only when a message deliberately asks for tool-backed behavior, reducing prompt bloat and local model latency.`,
+        disabled_title: `Deliberate Tool Mode Disabled`,
+        disabled_description: `Tool declarations will be available normally again whenever the active model supports them.`,
+      },
+      "deliberate-tool-mode": {
+        description: `Toggle deliberate tool mode for this server.`,
+      },
     },
     personal: {
       description: `Manage your personal settings`,
@@ -4690,6 +4702,22 @@ You can change this anytime using \`/personal privacy\`.`,
         follow_description: `Your DTM behavior now **follows the server setting**. If the server has DTM enabled, you will need direct invocations; otherwise plain trigger words work.`,
         on_title: `Personal DTM: On`,
         on_description: `DTM is **always enabled** for you regardless of the server setting. Only direct invocations work: \`@{trigger}\` prefix, replies, Discord mentions, or \`/bot respond\`.`,
+      },
+      deliberatetoolmode: {
+        description: `Set your personal deliberate tool mode preference.`,
+        mode_description: `Choose how deliberate tool mode applies to you personally.`,
+        off_option: `Off`,
+        follow_option: `Follow Server`,
+        on_option: `On`,
+        off_title: `Personal Deliberate Tool Mode: Off`,
+        off_description: `Deliberate tool mode is **disabled** for you regardless of the server setting. Tools will be available normally when the active model supports them.`,
+        follow_title: `Personal Deliberate Tool Mode: Follow Server`,
+        follow_description: `Your deliberate tool behavior now **follows the server setting**.`,
+        on_title: `Personal Deliberate Tool Mode: On`,
+        on_description: `Deliberate tool mode is **always enabled** for you regardless of the server setting. Tools are omitted unless your message deliberately asks for tool-backed behavior.`,
+      },
+      "deliberate-tool-mode": {
+        description: `Set your personal deliberate tool mode preference.`,
       },
     },
     "scheduled-task": {
