@@ -68,6 +68,7 @@ import { loadGuildMcpServers } from "@/utils/db/guildMcpDb";
 import { loadPresetsForServer, loadToggleableNodes } from "@/utils/db/stPresetDb";
 import { getProviderDisplayName } from "@/utils/provider/providerInfoRegistry";
 import { getThinkingLevelLocalizerKey } from "@/utils/provider/thinkingControl";
+import { resolveDeliberateToolContextTurns } from "@/utils/tools/deliberateToolMode";
 import { commandRegistry } from "@/utils/discord/commandRegistry";
 
 // Constants
@@ -1514,6 +1515,11 @@ export async function execute(
               {
                 nameKey: "commands.tool.status.field_deliberate_tool_mode",
                 value: formatBooleanLocalized(config.deliberate_tool_mode ?? false, locale),
+                inline: true,
+              },
+              {
+                nameKey: "commands.tool.status.field_deliberate_tool_context_turns",
+                value: resolveDeliberateToolContextTurns(config.deliberate_tool_context_turns).toString(),
                 inline: true,
               },
               {

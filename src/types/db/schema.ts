@@ -390,6 +390,39 @@ function normalizeStringArray(value: unknown): string[] {
   return source.filter((item): item is string => typeof item === "string" && item.length > 0);
 }
 
+function normalizeDeliberateToolTriggers(value: unknown): Record<string, string[]> {
+  let source: unknown = value;
+  if (typeof source === "string") {
+    try {
+      source = JSON.parse(source);
+    } catch {
+      return {};
+    }
+  }
+
+  if (!source || typeof source !== "object" || Array.isArray(source)) {
+    return {};
+  }
+
+  const normalized: Record<string, string[]> = {};
+  for (const [target, triggers] of Object.entries(source)) {
+    if (!Array.isArray(triggers)) continue;
+    const normalizedTriggers = Array.from(
+      new Set(
+        triggers
+          .filter((trigger): trigger is string => typeof trigger === "string")
+          .map((trigger) => trigger.replace(/\s+/g, " ").trim().toLowerCase())
+          .filter((trigger) => trigger.length > 0),
+      ),
+    );
+    if (normalizedTriggers.length > 0) {
+      normalized[target] = normalizedTriggers;
+    }
+  }
+
+  return normalized;
+}
+
 function normalizeDisabledLlmParams(value: unknown): SupportedParamValue[] {
   let source: unknown = value;
   if (typeof source === "string") {
@@ -470,6 +503,11 @@ export const tomoriConfigSchema = z.object({
   always_reply_enabled: z.boolean().default(false), // Added March 2026 - Main persona replies to all user messages (guild only, alters still require triggers)
   deliberate_trigger_mode: z.boolean().default(false), // Added April 2026 - Blocks plain trigger words; requires @{trigger}, reply, mention, or /bot respond
   deliberate_tool_mode: z.boolean().default(false), // Added May 2026 - Tools require explicit tool intent when enabled
+  deliberate_tool_context_turns: z.number().int().min(0).max(10).nullable().default(null), // Added May 2026 - Successful tools remain available for this many following channel turns; NULL uses env default
+  deliberate_tool_triggers: z.preprocess(
+    (value) => normalizeDeliberateToolTriggers(value),
+    z.record(z.string(), z.array(z.string())).default({}),
+  ), // Added May 2026 - Server-defined deliberate tool trigger phrases by tool target
   cascade_limit: z.number().int().min(0).max(10).default(3), // Added January 2026, renamed April 2026 - Total additional triggers allowed after the first
   send_message_limit: z.number().int().min(0).max(40).default(0), // Added March 2026 - Max Discord messages per response (0 = unlimited, capped by MAX_FLUSH_COUNT)
   match_limit: z.number().int().min(1).max(10).default(3), // Added February 2026, renamed April 2026 - Max personas matched per message

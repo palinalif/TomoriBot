@@ -700,6 +700,13 @@ SELECT add_column_if_not_exists('tomori_configs', 'autoch_persona_overrides', 'J
 -- Stores hidden notice keys only; missing entries remain visible by default
 SELECT add_column_if_not_exists('tomori_configs', 'tool_notice_hidden_keys', 'TEXT[]', 'ARRAY[]::TEXT[]');
 
+-- Add server-defined deliberate tool trigger phrases (May 2026)
+-- JSON object keyed by deliberate tool target, with arrays of literal trigger phrases
+SELECT add_column_if_not_exists('tomori_configs', 'deliberate_tool_triggers', 'JSONB', '''{}''::JSONB');
+-- Number of following channel turns where a successfully used tool remains available in deliberate tool mode.
+-- NULL uses DELIBERATE_TOOL_CONTEXT_TURNS (default 4); 0 disables retained tool context.
+SELECT add_column_if_not_exists('tomori_configs', 'deliberate_tool_context_turns', 'INTEGER', 'NULL');
+
 -- Add LLM sampling parameter columns (February 2026)
 -- DEPRECATED Phase 1.5 Pass B: all sampler columns are now canonical in saved_provider_configs
 -- llm_top_p: Nucleus sampling — probability mass threshold (0.95=default, 0.0=most restricted)
@@ -808,6 +815,7 @@ SELECT add_column_if_not_exists('tomori_configs', 'tool_use_enabled', 'BOOLEAN',
 -- Deliberate tool mode (May 2026)
 -- When TRUE, tool declarations/instructions are omitted unless a turn has explicit tool intent
 SELECT add_column_if_not_exists('tomori_configs', 'deliberate_tool_mode', 'BOOLEAN', 'false');
+SELECT add_column_if_not_exists('tomori_configs', 'deliberate_tool_context_turns', 'INTEGER', 'NULL');
 
 -- Create updated_at trigger for tomori_configs table
 DROP TRIGGER IF EXISTS update_tomori_configs_timestamp ON tomori_configs;

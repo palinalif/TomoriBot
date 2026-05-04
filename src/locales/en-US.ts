@@ -858,6 +858,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         // Server scope - Page 2 additions
         field_deliberate_trigger: `Deliberate Trigger Mode`,
         field_deliberate_tool_mode: `Deliberate Tool Mode`,
+        field_deliberate_tool_context_turns: `Tool Context Turns`,
         field_user_byok_enabled: `Enabled. Members need their own personal provider for user-triggered messages. Toggle with {toggle_command}.`,
         field_user_byok_disabled: `Disabled. User-triggered messages can still fall back to the server provider. Toggle with {toggle_command}.`,
         // Server scope - Page 4 additions
@@ -2129,6 +2130,24 @@ This means users must invoke personas more deliberately instead of accidentally 
   follow = use the server setting
   on = always require deliberate invocations`,
         footer: `If users say a persona name often in normal conversation and accidental triggers are a problem, DTM is the setting to use.`,
+      },
+      "deliberate-tool-mode": {
+        description: `Learn how deliberate tool mode changes tool availability`,
+        title: `Deliberate Tool Mode Guide`,
+        embed_description: `Deliberate Tool Mode keeps tool declarations out of ordinary chat turns unless the message looks like it needs a tool.`,
+        what_title: `What It Does`,
+        what_description: `When deliberate tool mode is active, I first checks the message for explicit tool intent. If no intent is found, tool declarations are removed for that turn, which reduces prompt size and helps smaller/local models answer faster.`,
+        intent_title: `What Counts As Tool Intent`,
+        intent_description: `Built-in triggers cover common requests like reminders, web search, memory updates, cross-channel messages, image/video/voice generation, media analysis, thread creation, and message actions.
+
+Follow-up wording also works when recent context points to a tool, such as \`do that again but angrier\`, \`same thing but softer\`, or \`pretty please?\` after a voice-message request.`,
+        custom_title: `Custom Trigger Phrases`,
+        custom_description: `Server managers can add literal phrases with {triggerCommand}. For example, \`pic\`, \`img\`, or \`pfp\` can expose image generation, while server-specific slang can map to whichever tool target fits.`,
+        control_title: `Controls And Logs`,
+        control_description: `- Server managers toggle it with {serverDtm}
+- Users can override it for themselves with {personalDtm}
+- If a thought-log channel is configured with {thoughtLogs}, successful deliberate-mode tool calls are logged there with the trigger that exposed the tool`,
+        footer: `Deliberate tool mode decides which tools are shown to the model. The model still has to actually choose to call the exposed tool.`,
       },
       customization: {
         description: `Learn how to customize TomoriBot's personality and behavior`,
@@ -4364,6 +4383,39 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
       },
       "deliberate-tool-mode": {
         description: `Toggle deliberate tool mode for this server.`,
+      },
+      "deliberate-tool-context": {
+        description: `Set how many following turns keep recently used tools available.`,
+        turns_description: `Following channel turns to keep successful tools available; 0 disables this.`,
+        already_set_title: `Tool Context Already Set`,
+        already_set_description: `Recently used tools are already retained for **{turns}** following turn(s).`,
+        updated_title: `Tool Context Updated`,
+        updated_description: `When deliberate tool mode is active, successful tools will remain available for the next **{turns}** channel turn(s).`,
+        disabled_title: `Tool Context Disabled`,
+        disabled_description: `Successful tools will no longer remain available after their original turn.`,
+      },
+      "deliberate-tool-trigger": {
+        description: `Manage custom trigger phrases for deliberate tool mode.`,
+        action_description: `Whether to add, remove, or list custom tool triggers.`,
+        action_add: `add`,
+        action_remove: `remove`,
+        action_list: `list`,
+        tool_description: `Which tool target this trigger should expose.`,
+        trigger_description: `Literal phrase to detect in messages, such as pic or make a song.`,
+        invalid_title: `Invalid Tool Trigger`,
+        missing_tool_description: `Choose a tool target when adding or removing a trigger.`,
+        missing_trigger_description: `Provide a trigger phrase when adding or removing a trigger.`,
+        duplicate_title: `Trigger Already Exists`,
+        duplicate_description: `\`{trigger}\` already exposes **{tool}**.`,
+        too_many_title: `Too Many Triggers`,
+        too_many_description: `**{tool}** already has the maximum of {max} custom triggers.`,
+        not_found_title: `Trigger Not Found`,
+        not_found_description: `\`{trigger}\` is not currently configured for **{tool}**.`,
+        added_title: `Tool Trigger Added`,
+        added_description: `\`{trigger}\` will now expose **{tool}** when deliberate tool mode is active.`,
+        removed_title: `Tool Trigger Removed`,
+        removed_description: `\`{trigger}\` will no longer expose **{tool}**.`,
+        list_title: `Custom Tool Triggers`,
       },
     },
     personal: {
