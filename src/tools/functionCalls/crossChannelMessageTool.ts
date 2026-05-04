@@ -316,8 +316,35 @@ export class CrossChannelMessageTool extends BaseTool {
     }
 
     // 5. Permission check — ViewChannel always required; send permissions only for dispatch mode
-    const botMember = guild.members.cache.get(context.client.user?.id ?? "");
-    if (botMember && "permissionsFor" in targetChannel) {
+    const botMember =
+      guild.members.me ??
+      (context.client.user ? await guild.members.fetch(context.client.user.id).catch(() => null) : null);
+    const invokingMember =
+      context.message?.member ?? (context.userId ? await guild.members.fetch(context.userId).catch(() => null) : null);
+
+    if (!invokingMember) {
+      return {
+        success: false,
+        error: `I could not verify the requesting user's permission to view channel \`${targetChannel.name}\`.`,
+        data: {
+          status: "cross_channel_failed_invoker_not_resolved",
+          reason: "Invoker guild member could not be resolved for target channel visibility check.",
+        },
+      };
+    }
+
+    if ("permissionsFor" in targetChannel) {
+      if (!botMember) {
+        return {
+          success: false,
+          error: `I could not verify my permission to view channel \`${targetChannel.name}\`.`,
+          data: {
+            status: "cross_channel_failed_bot_not_resolved",
+            reason: "Bot guild member could not be resolved for target channel permission checks.",
+          },
+        };
+      }
+
       const perms = targetChannel.permissionsFor(botMember);
 
       // Check ViewChannel permission (required for both peek and dispatch)
@@ -348,6 +375,18 @@ export class CrossChannelMessageTool extends BaseTool {
             },
           };
         }
+      }
+
+      const invokerPerms = targetChannel.permissionsFor(invokingMember);
+      if (!invokerPerms?.has(PermissionFlagsBits.ViewChannel)) {
+        return {
+          success: false,
+          error: `The requesting user does not have permission to view channel \`${targetChannel.name}\`.`,
+          data: {
+            status: "cross_channel_failed_invoker_no_view_permission",
+            reason: "Invoker is missing ViewChannel permission on the target channel.",
+          },
+        };
       }
     }
 
@@ -479,9 +518,6 @@ export class CrossChannelMessageTool extends BaseTool {
     const sourcePersonaId = context.activePersonaId ?? context.tomoriState.tomori_id ?? undefined;
     const isSourceUserImpersonation = context.isUserImpersonation === true;
     const sourceImpersonatedUserId = context.impersonatedUserId;
-    const invokingMember =
-      context.message?.member ??
-      (context.userId ? await targetChannel.guild.members.fetch(context.userId).catch(() => null) : null);
     const manualTriggerInvoker = context.userId
       ? {
           userDiscId: context.userId,

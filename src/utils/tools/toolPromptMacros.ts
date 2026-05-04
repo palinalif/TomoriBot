@@ -155,6 +155,12 @@ export const TOOL_PROMPT_MACRO_DOCS: ToolPromptMacroDocEntry[] = [
     notes: "Send an immediate message to another channel or thread.",
   },
   {
+    macro: "{create_thread_tool}",
+    type: "static",
+    currentTarget: "create_thread",
+    notes: "Create a Discord thread and send its first message.",
+  },
+  {
     macro: "{sticker_tool}",
     type: "static",
     currentTarget: "select_sticker_for_response",

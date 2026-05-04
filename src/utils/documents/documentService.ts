@@ -244,7 +244,7 @@ export async function retrieveRelevantDocumentChunks(params: {
   return results;
 }
 
-export function formatRetrievedChunksForPrompt(chunks: RetrievedDocumentChunk[], maxChars: number): string | null {
+export function formatRetrievedChunksForPrompt(chunks: RetrievedDocumentChunk[]): string | null {
   if (!chunks.length) {
     return null;
   }
@@ -254,22 +254,12 @@ export function formatRetrievedChunksForPrompt(chunks: RetrievedDocumentChunk[],
 
   for (const chunk of chunks) {
     if (chunk.document_name !== currentDoc) {
-      const header = `${currentDoc ? "\n" : ""}${chunk.document_name}:\n`;
-      if (output.length + header.length > maxChars) {
-        break;
-      }
-      output += header;
+      output += `${currentDoc ? "\n" : ""}${chunk.document_name}:\n`;
       currentDoc = chunk.document_name;
     }
-
-    const line = `${chunk.content}\n`;
-    if (output.length + line.length > maxChars) {
-      break;
-    }
-    output += line;
+    output += `${chunk.content}\n`;
   }
 
-  // Close the [System: ...] block
   const trimmed = output.trim();
   return trimmed.length > 0 ? `${trimmed}]` : null;
 }

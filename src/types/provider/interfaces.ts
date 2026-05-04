@@ -69,6 +69,8 @@ export interface ThoughtLogPayload {
   /** Formatted text content fetched via the fetch MCP tool, rendered as code blocks in thought-log embeds. */
   fetchedContent?: string;
   firstReplyUrl?: string;
+  /** Total provider streaming time represented by this thought log, in milliseconds. */
+  generationDurationMs?: number;
 }
 
 /**

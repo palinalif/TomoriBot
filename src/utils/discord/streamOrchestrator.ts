@@ -326,11 +326,15 @@ export class StreamOrchestrator implements IStreamOrchestrator {
     context.onStreamProgress?.();
   }
 
-  private buildThoughtLogPayload(state: StreamState): ThoughtLogPayload | undefined {
+  private buildThoughtLogPayload(state: StreamState, generationDurationMs?: number): ThoughtLogPayload | undefined {
     const summary = state.thoughtSummarySegments.join("").trim();
     const raw = state.thoughtRawSegments.join("").trim();
+    const normalizedDurationMs =
+      typeof generationDurationMs === "number" && Number.isFinite(generationDurationMs) && generationDurationMs >= 0
+        ? Math.round(generationDurationMs)
+        : undefined;
 
-    if (!summary && !raw && !state.firstReplyUrl) {
+    if (!summary && !raw && !state.firstReplyUrl && normalizedDurationMs === undefined) {
       return undefined;
     }
 
@@ -338,6 +342,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
       summary: summary || undefined,
       raw: raw || undefined,
       firstReplyUrl: state.firstReplyUrl,
+      generationDurationMs: normalizedDurationMs,
     };
   }
 
@@ -571,7 +576,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
         messageSentCount: state.messageSentCount,
         accumulatedText: state.accumulatedText, // Return accumulated text for short-term memory
         detailsContent: state.detailsSegments.length > 0 ? state.detailsSegments.join("\n\n") : undefined,
-        thoughtLog: this.buildThoughtLogPayload(state),
+        thoughtLog: this.buildThoughtLogPayload(state, metrics.endTime - metrics.startTime),
         data: terminalDoneMetadata,
       };
     } catch (error) {
@@ -666,7 +671,7 @@ export class StreamOrchestrator implements IStreamOrchestrator {
             data: chunk.functionCall,
             accumulatedText: state.accumulatedText,
             detailsContent: state.detailsSegments.length > 0 ? state.detailsSegments.join("\n\n") : undefined,
-            thoughtLog: this.buildThoughtLogPayload(state),
+            thoughtLog: this.buildThoughtLogPayload(state, Date.now() - metrics.startTime),
           };
         }
         break;

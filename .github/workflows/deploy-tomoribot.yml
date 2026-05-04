@@ -161,10 +161,53 @@ jobs:
           bun run check-schema
           echo "Schema drift check passed!"
 
+  test-lifecycle:
+    runs-on: ubuntu-24.04
+    needs: validate-secrets
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: tomodb
+          POSTGRES_USER: tomori
+          POSTGRES_PASSWORD: tomori_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tomori -d tomodb"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: tomori
+      POSTGRES_PASSWORD: tomori_ci_password
+      POSTGRES_DB: tomodb
+      CRYPTO_SECRET: ci_validation_crypto_secret
+      RUN_ENV: development
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7
+        with:
+          bun-version: 1.2.12
+
+      - name: Install PostgreSQL client tools
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check fresh database and maintenance scripts
+        run: bun run validate:lifecycle
+
   # BUILD DOCKER IMAGE
   build-image:
     runs-on: ubuntu-24.04
-    needs: [test-lint, test-locales, test-schema]
+    needs: [test-lint, test-locales, test-schema, test-lifecycle]
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5

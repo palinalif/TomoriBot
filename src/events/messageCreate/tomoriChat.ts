@@ -250,7 +250,7 @@ function dropOldestHistoryExchangePairs(
   };
 }
 
-const WEBHOOK_ERROR_COOLDOWN_MS = 10 * 60 * 1000;
+const WEBHOOK_ERROR_COOLDOWN_MS = parseIntegerEnvFlag(process.env.WEBHOOK_ERROR_COOLDOWN_MS, 600000, 1000);
 const webhookErrorCooldowns = new Map<string, number>();
 const REACTION_CONTEXT_ENABLED = parseBooleanEnvFlag(process.env.REACTION_CONTEXT_ENABLED, true);
 const OPENROUTER_LENGTH_EMPTY_RETRY_DROP_PAIRS = parseIntegerEnvFlag(
@@ -297,7 +297,7 @@ const TOOLS_SUPPRESS_FOLLOWUP_AFTER_PRETOOL_TEXT = new Set([
   //"create_long_term_memory",
   //"create_task",
 ]);
-const STREAM_SDK_CALL_TIMEOUT_MS = 120000; // Overall SDK call timeout (120 seconds) — must exceed typical TTFT for slow models
+const STREAM_SDK_CALL_TIMEOUT_MS = parseIntegerEnvFlag(process.env.STREAM_SDK_CALL_TIMEOUT_MS, 120000, 10000);
 const DEFAULT_CASCADE_LIMIT = 3;
 const MAX_CASCADE_LIMIT = 10;
 const DEFAULT_MATCH_LIMIT = 3;
@@ -1774,7 +1774,7 @@ function appendInjectedContextItems(
 }
 
 // New: Constants for the semaphore/locking mechanism
-const CHANNEL_LOCK_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes for a lock to be considered stale
+const CHANNEL_LOCK_TIMEOUT_MS = parseIntegerEnvFlag(process.env.CHANNEL_LOCK_TIMEOUT_MS, 180000, 10000);
 const TEXT_QUOTA_TRIGGER_TTL_MS = 10 * 60 * 1000; // Keep trigger consumption state for 10 minutes
 const DISCORD_TYPING_KEEPALIVE_INTERVAL_MS = parseIntegerEnvFlag(
   process.env.DISCORD_TYPING_KEEPALIVE_INTERVAL_MS,
@@ -2761,7 +2761,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           //    caching internally. The LLM will read it naturally from chat history,
           //    no re-transcription needed. Silently skip on webhook errors (non-fatal).
           const displayName = message.member?.displayName ?? message.author.displayName;
-          const avatarUrl = message.author.displayAvatarURL({
+          const avatarUrl = (message.member ?? message.author).displayAvatarURL({
             size: 256,
             extension: "png",
             forceStatic: true,
@@ -5585,7 +5585,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               tomoriState.llm.llm_provider === "novelai" &&
               (tomoriState.llm.llm_codename === "kayra-v1" || tomoriState.llm.llm_codename === "llama-3-erato-v1");
             const usePrefillContinuationDirective = Boolean(trimmedPrefill) && !isNovelaiKayraOrErato;
-            if (Boolean(trimmedPrefill) && isNovelaiKayraOrErato) {
+            if (trimmedPrefill && isNovelaiKayraOrErato) {
               log.info("Manual prefill directive skipped for NovelAI Kayra/Erato; relying on assistant prefill tail");
             }
 
@@ -8392,6 +8392,10 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
       } // END OF MULTI-PERSONA RESPONSE LOOP
 
       const finalThoughtLog = turnThoughtLog;
+      if (finalThoughtLog) {
+        finalThoughtLog.generationDurationMs = Date.now() - message.createdTimestamp;
+      }
+
       const thoughtLogAttributionLine =
         textCredentialSource === "personal" && personalTextProvider
           ? localizer(locale, "genai.thought_log.personal_attribution", {

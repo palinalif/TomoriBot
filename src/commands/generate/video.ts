@@ -32,6 +32,8 @@ import {
 } from "@/utils/provider/credentialResolver";
 import { applyPersonalProviderSelectionsToTomoriState } from "@/utils/provider/personalProviderRuntime";
 import { formatCustomEndpointModelDisplay } from "@/utils/provider/customProviderUtils";
+import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
+import { safeDownload } from "@/utils/security/safeDownload";
 
 // Modal configuration constants
 const MODAL_CUSTOM_ID = "generate_video_modal";
@@ -77,13 +79,16 @@ async function convertAttachmentToBase64(attachment: APIAttachment): Promise<{ m
     throw new Error(`Invalid image type: ${attachment.content_type}`);
   }
 
-  const response = await fetch(attachment.url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+  const downloadResult = await safeDownload(attachment.url, {
+    maxSizeMB: MEDIA_LIMITS.MAX_MEDIA_SIZE_MB,
+    timeoutMs: 10_000,
+    knownSize: attachment.size,
+  });
+  if (!downloadResult.success || !downloadResult.buffer) {
+    throw new Error(`Failed to fetch image: ${downloadResult.details ?? downloadResult.error ?? "unknown error"}`);
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  const base64Data = Buffer.from(arrayBuffer).toString("base64");
+  const base64Data = downloadResult.buffer.toString("base64");
 
   return {
     mimeType: attachment.content_type,

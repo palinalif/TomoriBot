@@ -48,6 +48,12 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
         .setDescription(localizer("en-US", "commands.tool.compact.channel_description"))
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(false),
+    )
+    .addStringOption((option) =>
+      option
+        .setName("thread")
+        .setDescription(localizer("en-US", "commands.tool.compact.thread_description"))
+        .setRequired(false),
     );
 
 function truncateEmbedDescription(text: string, maxLength = 4000): string {
@@ -662,6 +668,29 @@ type SendableChannel = {
   send: (options: { embeds: EmbedBuilder[] }) => Promise<Message>;
 };
 
+const DISCORD_SNOWFLAKE_PATTERN = /^\d{17,20}$/;
+
+function isDiscordThreadChannel(channel: unknown): boolean {
+  if (!channel || typeof channel !== "object") {
+    return false;
+  }
+
+  if ("isThread" in channel && typeof channel.isThread === "function") {
+    return channel.isThread();
+  }
+
+  if (!("type" in channel)) {
+    return false;
+  }
+
+  const channelType = Number((channel as { type: number }).type);
+  return (
+    channelType === ChannelType.PublicThread ||
+    channelType === ChannelType.PrivateThread ||
+    channelType === ChannelType.AnnouncementThread
+  );
+}
+
 async function sendEmbedsInChunks(channel: SendableChannel, embeds: EmbedBuilder[]): Promise<void> {
   const chunkSize = 10;
   for (let i = 0; i < embeds.length; i += chunkSize) {
@@ -691,6 +720,27 @@ export async function execute(
 
   // Read optional redirect channel — if provided, summary posts there instead of here
   const targetChannelOption = interaction.options.getChannel("channel");
+  const targetThreadId = interaction.options.getString("thread")?.trim();
+
+  if (targetChannelOption && targetThreadId) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "commands.tool.compact.destination_conflict_title",
+      descriptionKey: "commands.tool.compact.destination_conflict_description",
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  if (targetThreadId && !DISCORD_SNOWFLAKE_PATTERN.test(targetThreadId)) {
+    await replyInfoEmbed(interaction, locale, {
+      titleKey: "commands.tool.compact.thread_invalid_title",
+      descriptionKey: "commands.tool.compact.thread_invalid_description",
+      color: ColorCode.ERROR,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
 
   const modalComponents: ModalComponent[] = [
     {
@@ -913,6 +963,29 @@ export async function execute(
     }
     outputChannel = fetchedTarget as SendableChannel;
   }
+  if (targetThreadId) {
+    const fetchedTarget = await client.channels.fetch(targetThreadId).catch(() => null);
+    if (
+      !fetchedTarget ||
+      !isDiscordThreadChannel(fetchedTarget) ||
+      !("guildId" in fetchedTarget) ||
+      fetchedTarget.guildId !== interaction.guildId ||
+      !("send" in fetchedTarget) ||
+      typeof fetchedTarget.send !== "function"
+    ) {
+      await submitInteraction.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(localizer(locale, "commands.tool.compact.thread_invalid_title"))
+            .setDescription(localizer(locale, "commands.tool.compact.thread_invalid_description"))
+            .setColor(ColorCode.ERROR),
+        ],
+      });
+      return;
+    }
+
+    outputChannel = fetchedTarget as SendableChannel;
+  }
 
   // 2. Always build conversation context from the current channel (where the command was run)
   const { conversationText, imageReferences, userIds } = await buildConversationContext({
@@ -1024,9 +1097,10 @@ export async function execute(
     }
 
     // Show success — if summary was redirected, tell the user which channel it went to
-    const successDescription = targetChannelOption
+    const targetDestinationId = targetChannelOption?.id ?? targetThreadId;
+    const successDescription = targetDestinationId
       ? localizer(locale, "commands.tool.compact.success_description_redirect", {
-          channel: `<#${targetChannelOption.id}>`,
+          channel: `<#${targetDestinationId}>`,
         })
       : localizer(locale, "commands.tool.compact.success_description");
 

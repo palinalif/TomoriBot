@@ -170,6 +170,11 @@ BEGIN
 	UPDATE tomoris
 	SET persona_lineage_id = nextval('persona_lineage_id_seq')
 	WHERE persona_lineage_id IS NULL;
+
+	-- Repair personas incorrectly assigned lineage ID 0 (reserved for global memories only, never a valid persona ID)
+	UPDATE tomoris
+	SET persona_lineage_id = nextval('persona_lineage_id_seq')
+	WHERE persona_lineage_id = 0;
 END $$;
 
 -- Ensure future personas get lineage IDs automatically
@@ -287,6 +292,9 @@ CREATE TABLE IF NOT EXISTS image_diffusion_models (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Moved to prevent error on first-time DB creation!
+SELECT add_column_if_not_exists('image_diffusion_models', 'is_scoped_registration', 'BOOLEAN', 'false');
+
 -- Removed updated_at trigger for image_diffusion_models table (static metadata, rarely changes)
 DROP TRIGGER IF EXISTS update_image_diffusion_models_timestamp ON image_diffusion_models;
 
@@ -311,6 +319,9 @@ CREATE TABLE IF NOT EXISTS video_generation_models (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Moved to prevent error on first-time DB creation!
+SELECT add_column_if_not_exists('video_generation_models', 'is_scoped_registration', 'BOOLEAN', 'false');
+
 -- Removed updated_at trigger for video_generation_models table (static metadata, rarely changes)
 DROP TRIGGER IF EXISTS update_video_generation_models_timestamp ON video_generation_models;
 
@@ -334,6 +345,9 @@ CREATE TABLE IF NOT EXISTS embedding_models (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Moved to prevent error on first-time DB creation!
+SELECT add_column_if_not_exists('embedding_models', 'is_scoped_registration', 'BOOLEAN', 'false');
 
 -- Removed updated_at trigger for embedding_models table (static metadata, rarely changes)
 DROP TRIGGER IF EXISTS update_embedding_models_timestamp ON embedding_models;
@@ -387,6 +401,7 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   memory_tagging_enabled BOOLEAN DEFAULT false,
   imagegen_enabled BOOLEAN DEFAULT true,
   videogen_enabled BOOLEAN DEFAULT false,
+  thread_creation_enabled BOOLEAN DEFAULT true,
   tool_notice_hidden_keys TEXT[] DEFAULT '{}',
   llm_disabled_params TEXT[] DEFAULT '{}', -- DEPRECATED Phase 1.5 Pass B: mirror of saved_provider_configs
   llm_stop_strings TEXT[] DEFAULT '{}',
@@ -552,6 +567,9 @@ SELECT add_column_if_not_exists('tomori_configs', 'web_search_enabled', 'BOOLEAN
 
 -- Add message management permission (November 2025)
 SELECT add_column_if_not_exists('tomori_configs', 'manage_message_enabled', 'BOOLEAN', 'true');
+
+-- Add thread creation permission (May 2026)
+SELECT add_column_if_not_exists('tomori_configs', 'thread_creation_enabled', 'BOOLEAN', 'true');
 
 -- Add image generation permission
 SELECT add_column_if_not_exists('tomori_configs', 'imagegen_enabled', 'BOOLEAN', 'true');
@@ -921,7 +939,6 @@ CREATE TABLE IF NOT EXISTS users (
   user_disc_id TEXT UNIQUE NOT NULL,
   user_nickname TEXT NOT NULL,
   language_pref TEXT DEFAULT 'en',
-  personal_memories TEXT[] DEFAULT '{}',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -1223,22 +1240,39 @@ BEFORE UPDATE ON personal_memories
 FOR EACH ROW
 EXECUTE FUNCTION update_timestamp();
 
--- Backfill existing users.personal_memories into global personal namespace (lineage 0)
-INSERT INTO personal_memories (user_id, persona_lineage_id, content, created_at, updated_at)
-SELECT
-	u.user_id,
-	0::BIGINT,
-	legacy_memory,
-	COALESCE(u.updated_at, CURRENT_TIMESTAMP),
-	COALESCE(u.updated_at, CURRENT_TIMESTAMP)
-FROM users u
-CROSS JOIN LATERAL unnest(COALESCE(u.personal_memories, ARRAY[]::TEXT[])) AS legacy_memory
-WHERE NOT EXISTS (
-	SELECT 1
-	FROM personal_memories pm
-	WHERE pm.user_id = u.user_id
-	  AND pm.persona_lineage_id = 0
-);
+-- Backfill existing users.personal_memories into global personal namespace (lineage 0).
+-- Wrapped in a column-existence check so this runs exactly once: subsequent schema runs
+-- skip both the INSERT and the DROP cleanly once the column is gone.
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1 FROM information_schema.columns
+		WHERE table_name = 'users' AND column_name = 'personal_memories'
+	) THEN
+		-- EXECUTE defers parsing until runtime so the column reference is only
+		-- validated when the branch is actually taken (column still exists).
+		EXECUTE $migration$
+			INSERT INTO personal_memories (user_id, persona_lineage_id, content, created_at, updated_at)
+			SELECT
+				u.user_id,
+				0::BIGINT,
+				legacy_memory,
+				COALESCE(u.updated_at, CURRENT_TIMESTAMP),
+				COALESCE(u.updated_at, CURRENT_TIMESTAMP)
+			FROM users u
+			CROSS JOIN LATERAL unnest(COALESCE(u.personal_memories, ARRAY[]::TEXT[])) AS legacy_memory
+			WHERE NOT EXISTS (
+				SELECT 1
+				FROM personal_memories pm
+				WHERE pm.user_id = u.user_id
+				  AND pm.persona_lineage_id = 0
+				  AND pm.content = legacy_memory
+			)
+		$migration$;
+
+		ALTER TABLE users DROP COLUMN personal_memories;
+	END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_personal_memories_user_lineage_created_at
 ON personal_memories(user_id, persona_lineage_id, created_at DESC);

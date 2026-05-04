@@ -29,6 +29,8 @@ export enum ColorCode {
 const isProduction = process.env.RUN_ENV === "production";
 const isTestProduction = process.env.TEST_PRODUCTION === "true";
 const shouldHideLogs = isProduction && !isTestProduction;
+// const entrypointPath = process.argv[1]?.replace(/\\/g, "/") ?? "";
+// const isMaintenanceScript = entrypointPath.includes("/scripts/maintenance/");
 
 /**
  * Check if pino-pretty is available (it's a devDependency, absent in production Docker builds).
@@ -84,8 +86,20 @@ const colors = {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
-const toLoggableError = (err: unknown): Error | Record<string, unknown> => {
-  if (err instanceof Error) return err;
+const isCloneSafeLogValue = (value: unknown): boolean =>
+  value === null || ["string", "number", "boolean", "undefined"].includes(typeof value);
+
+const toLoggableError = (err: unknown): Record<string, unknown> => {
+  if (err instanceof Error) {
+    const safeExtraFields = Object.fromEntries(Object.entries(err).filter(([, value]) => isCloneSafeLogValue(value)));
+
+    return {
+      ...safeExtraFields,
+      name: err.name,
+      message: err.message,
+      stack: err.stack,
+    };
+  }
   if (isRecord(err)) return err;
   return { message: String(err) };
 };

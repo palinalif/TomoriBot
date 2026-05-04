@@ -25,6 +25,7 @@ From `src/tools/functionCalls/`:
 - `update_long_term_memory` (`updateLongTermMemoryTool.ts`)
 - `update_short_term_memory` (`updateShortTermMemoryTool.ts`)
 - `create_task` (`reminderTool.ts`)
+- `create_thread` (`createThreadTool.ts`)
 - `select_sticker_for_response` (`stickerTool.ts`)
 - `process_youtube_video` (`youtubeVideoTool.ts`)
 - `reveal_message_metadata` (`revealMessageMetadataTool.ts`)
@@ -44,11 +45,22 @@ Current `cross_channel_message` runtime notes:
 - deprecated `channel_id` / `channel_name` inputs are still accepted at execution time for backward compatibility, but they are no longer advertised to the model
 - ambiguous channel or thread names return a clarification failure instead of guessing; same-name text channels, active thread titles, and forum-parent references are disambiguated together so a forum request cannot silently fall through to a text channel with the same name. Clarification candidates now expose copyable inline-code labels like `` `#label (ID: <snowflake>)` `` so the next tool call can copy that exact label or use the raw ID directly
 - thread permission checks use `SendMessagesInThreads` instead of `SendMessages`
+- target visits require both bot `ViewChannel` and invoking member `ViewChannel`; if the invoking guild member cannot be resolved, the tool fails closed before peeking or dispatching
 - the `/server crosschannel-blocklist` setting blocks tool-driven visits into listed channels, and blocked forum/media parents also block thread targets under them
 - tool-driven cross-channel dispatch now preserves the active sender identity, including alter personas and `/bot impersonate` user impersonation turns, for both the target-channel visit and optional boomerang follow-up
 - Discord channel/thread links in prompt context are normalized into readable labels; when reusing the visible label alone would be ambiguous, the prompt-visible label becomes a copyable inline-code token like `` `#label (ID: <snowflake>)` ``
 - tool-driven cross-channel visits now hide `cross_channel_message` for the dispatched turn itself, the boomerang follow-up turn, and any queued same-chain follow-ups that inherit that internal turn state, preventing nested re-dispatch loops
 - boomerang return context now assumes the original assignment is already in history and asks for a concise report-back instead of restating the task
+
+Current `create_thread` runtime notes:
+
+- accepts `thread_name`, `first_message`, and optional `channel_name`
+- when `channel_name` is omitted or blank, the target defaults to the current channel
+- channel-name resolution uses the shared resolver from `targetResolver.ts`, including raw IDs and copyable `` `#name (ID: <snowflake>)` `` labels
+- target channels must be regular text or announcement channels; the tool fails closed for DMs, voice channels, forums, media channels, and existing threads
+- runtime requires bot `ViewChannel`, `CreatePublicThreads`, and `SendMessagesInThreads`; it also verifies the invoking member can view the target channel
+- alter persona and user-impersonation turns send the starter message through a bot-managed webhook in the target channel; main persona turns use a normal bot message
+- `/config tools manage` controls availability through `tomori_configs.thread_creation_enabled`
 
 Current `generate_image_nai` runtime notes:
 
@@ -119,6 +131,7 @@ Static built-in macros always expand to the current canonical built-in tool name
 | `{short_term_memory_tool}` | `update_short_term_memory` | Update the current conversation's STM. |
 | `{task_tool}` | `create_task` | Create reminders or scheduled self-tasks. |
 | `{cross_channel_tool}` | `cross_channel_message` | Send an immediate message to another channel/thread. |
+| `{create_thread_tool}` | `create_thread` | Create a Discord thread and send its first message. |
 | `{sticker_tool}` | `select_sticker_for_response` | Attach a Discord sticker to the response. |
 | `{manage_message_tool}` | `manage_message` | Pin any recent message, or edit/delete recent messages sent by the bot or its characters. |
 | `{pin_tool}` | `manage_message` | Compatibility alias for `{manage_message_tool}`. |

@@ -6,26 +6,22 @@ import type {
 } from "discord.js";
 import { MessageFlags, TextInputStyle } from "discord.js";
 import { sql } from "@/utils/db/client";
-import type { UserRow, ErrorContext, TomoriState } from "../../../types/db/schema";
-import { localizer } from "../../../utils/text/localizer";
-import { log, ColorCode } from "../../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
-} from "../../../utils/discord/interactionHelper";
+import type { UserRow, ErrorContext, TomoriState } from "@/types/db/schema";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "@/utils/discord/interactionHelper";
 import {
   loadTomoriState,
   isBlacklisted,
   loadAllPersonasForServer,
   loadPersonalMemoriesForUserLineage,
-} from "../../../utils/db/dbRead";
-import { invalidateUserCache } from "../../../utils/cache/userCache";
-import type { ModalResult, SelectOption } from "../../../types/discord/modal";
-import { validateMemoryContent, checkPersonalMemoryLimit, getMemoryLimits } from "../../../utils/db/memoryLimits";
-import { addPersonalMemoryByTomori } from "../../../utils/db/dbWrite";
-import type { ModalComponent } from "../../../types/discord/modal";
-import { dedupeCaseInsensitive, getNonEmptyNumberedLines, readTxtUpload } from "../../../utils/teach/batchUploadUtils";
+} from "@/utils/db/dbRead";
+import { invalidateUserCache } from "@/utils/cache/userCache";
+import type { ModalResult, SelectOption } from "@/types/discord/modal";
+import { validateMemoryContent, checkPersonalMemoryLimit, getMemoryLimits } from "@/utils/db/memoryLimits";
+import { addPersonalMemoryByTomori } from "@/utils/db/dbWrite";
+import type { ModalComponent } from "@/types/discord/modal";
+import { dedupeCaseInsensitive, getNonEmptyNumberedLines, readTxtUpload } from "@/utils/teach/batchUploadUtils";
 
 // Rule 20: Constants for modal and input IDs
 const MODAL_CUSTOM_ID = "teach_personalmemory_add_modal";
@@ -294,7 +290,7 @@ export async function execute(
     }
 
     // 11. Check if user has opted out of personalization (privacy setting)
-    const { getPrivacyLevel } = await import("../../../utils/db/dbRead");
+    const { getPrivacyLevel } = await import("@/utils/db/dbRead");
     const { PrivacyLevel } = await import("../../../types/db/schema");
     const userPrivacyLevel = await getPrivacyLevel(interaction.user.id);
 

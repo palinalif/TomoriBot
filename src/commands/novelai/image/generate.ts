@@ -19,6 +19,8 @@ import { checkImageQuota, incrementImageQuota } from "@/utils/quota/imageQuotaMa
 import { resolveNaiImageParams } from "@/utils/image/naiImageParams";
 import { resolveNaiDiffusionModel } from "@/utils/image/naiDiffusionModels";
 import { normalizeNaiReferenceImage } from "@/utils/image/imageProcessor";
+import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
+import { safeDownload } from "@/utils/security/safeDownload";
 import {
   NAI_CHAR_REF_INFO_EXTRACTED,
   NAI_CHAR_REF_STRENGTH,
@@ -62,13 +64,18 @@ async function prepareCharacterReferencePayload(attachment: APIAttachment): Prom
     throw new Error("Invalid character reference image type");
   }
 
-  const response = await fetch(attachment.url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch character reference image: ${response.status} ${response.statusText}`);
+  const downloadResult = await safeDownload(attachment.url, {
+    maxSizeMB: MEDIA_LIMITS.MAX_MEDIA_SIZE_MB,
+    timeoutMs: 10_000,
+    knownSize: attachment.size,
+  });
+  if (!downloadResult.success || !downloadResult.buffer) {
+    throw new Error(
+      `Failed to fetch character reference image: ${downloadResult.details ?? downloadResult.error ?? "unknown error"}`,
+    );
   }
 
-  const sourceBuffer = Buffer.from(await response.arrayBuffer());
-  const normalizedBuffer = await normalizeNaiReferenceImage(sourceBuffer);
+  const normalizedBuffer = await normalizeNaiReferenceImage(downloadResult.buffer);
 
   return {
     useCoords: false,

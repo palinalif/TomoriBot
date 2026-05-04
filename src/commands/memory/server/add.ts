@@ -6,20 +6,16 @@ import type {
 } from "discord.js";
 import { MessageFlags, TextInputStyle } from "discord.js";
 import { sql } from "@/utils/db/client";
-import type { UserRow, ErrorContext, TomoriState } from "../../../types/db/schema";
-import { localizer } from "../../../utils/text/localizer";
-import { log, ColorCode } from "../../../utils/misc/logger";
-import {
-  replyInfoEmbed,
-  promptWithPaginatedModal,
-  safeSelectOptionText,
-} from "../../../utils/discord/interactionHelper";
-import { isBlacklisted, loadAllPersonasForServer } from "../../../utils/db/dbRead";
-import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
-import type { ModalResult, SelectOption } from "../../../types/discord/modal";
-import { validateMemoryContent, checkServerMemoryLimit, getMemoryLimits } from "../../../utils/db/memoryLimits";
-import { addServerMemoryByTomori } from "../../../utils/db/dbWrite";
-import { dedupeCaseInsensitive, getNonEmptyNumberedLines, readTxtUpload } from "../../../utils/teach/batchUploadUtils";
+import type { UserRow, ErrorContext, TomoriState } from "@/types/db/schema";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
+import { replyInfoEmbed, promptWithPaginatedModal, safeSelectOptionText } from "@/utils/discord/interactionHelper";
+import { isBlacklisted, loadAllPersonasForServer } from "@/utils/db/dbRead";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import type { ModalResult, SelectOption } from "@/types/discord/modal";
+import { validateMemoryContent, checkServerMemoryLimit, getMemoryLimits } from "@/utils/db/memoryLimits";
+import { addServerMemoryByTomori } from "@/utils/db/dbWrite";
+import { dedupeCaseInsensitive, getNonEmptyNumberedLines, readTxtUpload } from "@/utils/teach/batchUploadUtils";
 
 // Rule 20: Constants for modal and input IDs
 const MODAL_CUSTOM_ID = "teach_servermemory_add_modal";

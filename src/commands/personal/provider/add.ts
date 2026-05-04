@@ -115,8 +115,8 @@ export async function execute(
 
     if (apiKeyInput.length < 10) {
       await replyInfoEmbed(modalResult.interaction, locale, {
-        titleKey: "commands.config.api-key.set.invalid_key_title",
-        descriptionKey: "commands.config.api-key.set.invalid_key_description",
+        titleKey: "commands.provider.api-key.set.invalid_key_title",
+        descriptionKey: "commands.provider.api-key.set.invalid_key_description",
         color: ColorCode.ERROR,
       });
       return;
@@ -127,10 +127,10 @@ export async function execute(
     if (!validationResult.valid) {
       const errorDescription = validationResult.error
         ? (providerInstance.formatErrorDescription(validationResult.error, locale) ?? validationResult.error.message)
-        : localizer(locale, "commands.config.api-key.set.key_validation_failed_description");
+        : localizer(locale, "commands.provider.api-key.set.key_validation_failed_description");
 
       await replyInfoEmbed(modalResult.interaction, locale, {
-        titleKey: "commands.config.api-key.set.key_validation_failed_title",
+        titleKey: "commands.provider.api-key.set.key_validation_failed_title",
         description: errorDescription,
         color: ColorCode.ERROR,
       });

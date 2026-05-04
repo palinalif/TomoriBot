@@ -1,28 +1,36 @@
 import { sql } from "@/utils/db/client";
-import { log } from "../src/utils/misc/logger";
+import { log } from "@/utils/misc/logger";
 import { config } from "dotenv";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 config();
+
+function resolveBackupsRoot(): string {
+  return process.env.TOMORI_BACKUP_DIR ? resolve(process.env.TOMORI_BACKUP_DIR) : join(process.cwd(), "backups");
+}
 
 // ---------------------------------------------------------------------------
 // scripts/maintenance/backupMemories.ts
 //   bun run backup:memories  → export ALL personal memories across all users
 //
-//   Iterates every user in the database and writes their personal_memories
-//   array to individual JSON files. Users with no memories are skipped.
+//   Reads from the personal_memories table (lineage-scoped). Each user gets
+//   their own JSON file containing all memory rows grouped by persona lineage.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface UserRow {
+interface MemoryRow {
+  personal_memory_id: number;
   user_id: number;
   user_disc_id: string;
   user_nickname: string;
-  personal_memories: string[];
+  persona_lineage_id: number;
+  content: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface UserEntry {
@@ -55,7 +63,7 @@ async function runBackup(): Promise<void> {
   }
 
   // 2. Create timestamped output directory
-  const backupsRoot = join(process.cwd(), "backups");
+  const backupsRoot = resolveBackupsRoot();
   if (!existsSync(backupsRoot)) mkdirSync(backupsRoot, { recursive: true });
 
   const timestamp = new Date().toISOString().replace(/:/g, "-").replace(/\..+/, "").replace("T", "_");
@@ -66,21 +74,36 @@ async function runBackup(): Promise<void> {
   // 3. Load bot version
   const { version } = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf-8")) as { version: string };
 
-  // 4. Fetch all users that have personal memories
-  const users = await sql<UserRow[]>`
-    SELECT user_id, user_disc_id, user_nickname, personal_memories
-    FROM users
-    WHERE personal_memories IS NOT NULL
-      AND array_length(personal_memories, 1) > 0
-    ORDER BY user_id ASC
+  // 4. Fetch all personal memories joined with user info
+  const rows = await sql<MemoryRow[]>`
+    SELECT
+      pm.personal_memory_id,
+      pm.user_id,
+      u.user_disc_id,
+      u.user_nickname,
+      pm.persona_lineage_id,
+      pm.content,
+      pm.created_at,
+      pm.updated_at
+    FROM personal_memories pm
+    JOIN users u ON pm.user_id = u.user_id
+    ORDER BY pm.user_id ASC, pm.persona_lineage_id ASC, pm.created_at ASC
   `;
 
-  if (users.length === 0) {
-    log.warn("No users with personal memories found. Nothing to export.");
-    process.exit(0);
+  if (rows.length === 0) {
+    log.warn("No personal memories found. Nothing to export.");
+    return;
   }
 
-  log.info(`Found ${users.length} user(s) with personal memories`);
+  // 5. Group rows by user
+  const byUser = new Map<number, MemoryRow[]>();
+  for (const row of rows) {
+    const existing = byUser.get(row.user_id) ?? [];
+    existing.push(row);
+    byUser.set(row.user_id, existing);
+  }
+
+  log.info(`Found ${byUser.size} user(s) with personal memories`);
 
   const manifest: BundleManifest = {
     exported_at: new Date().toISOString(),
@@ -90,48 +113,53 @@ async function runBackup(): Promise<void> {
     users: [],
   };
 
-  // 5. Export each user's memories
-  for (const user of users) {
-    const memories = user.personal_memories ?? [];
-    if (memories.length === 0) continue;
+  // 6. Export each user's memories
+  for (const [, memories] of byUser) {
+    const first = memories[0];
+    if (!first) continue;
 
-    // Sanitize nickname for filename (replace non-word chars with underscores)
     const safeName =
-      (user.user_nickname ?? "unknown")
+      (first.user_nickname ?? "unknown")
         .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[̀-ͯ]/g, "")
         .replace(/[^\w]/g, "_")
         .replace(/_+/g, "_")
         .replace(/^_|_$/g, "")
-        .slice(0, 50) || `user_${user.user_id}`;
+        .slice(0, 50) || `user_${first.user_id}`;
 
-    const filename = `${safeName}_${user.user_disc_id}.json`;
+    const filename = `${safeName}_${first.user_disc_id}.json`;
 
     const payload = {
-      user_disc_id: user.user_disc_id,
-      user_nickname: user.user_nickname,
+      user_disc_id: first.user_disc_id,
+      user_nickname: first.user_nickname,
       exported_at: new Date().toISOString(),
-      personal_memories: memories,
+      personal_memories: memories.map((m) => ({
+        personal_memory_id: m.personal_memory_id,
+        persona_lineage_id: m.persona_lineage_id,
+        content: m.content,
+        created_at: m.created_at,
+        updated_at: m.updated_at,
+      })),
     };
 
     writeFileSync(join(bundleDir, filename), `${JSON.stringify(payload, null, 2)}\n`);
 
-    log.success(`  ${user.user_nickname}: ${memories.length} memories`);
+    log.success(`  ${first.user_nickname}: ${memories.length} memories`);
 
     manifest.users.push({
-      user_disc_id: user.user_disc_id,
-      user_nickname: user.user_nickname,
+      user_disc_id: first.user_disc_id,
+      user_nickname: first.user_nickname,
       memory_count: memories.length,
       filename,
     });
     manifest.total_memories += memories.length;
   }
 
-  // 6. Write manifest
+  // 7. Write manifest
   manifest.total_users = manifest.users.length;
   writeFileSync(join(bundleDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 
-  // 7. Summary
+  // 8. Summary
   log.section("BACKUP COMPLETE");
   log.info(`Location:       ${bundleDir}`);
   log.info(`Users:          ${manifest.total_users}`);
