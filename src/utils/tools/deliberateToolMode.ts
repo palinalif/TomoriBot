@@ -38,6 +38,15 @@ const URL_TOOL_INTENT_PATTERNS: RegExp[] = [
   /\b(what(?:'s| is)\s+(?:this|on|in)|tell\s+me\s+about\s+this)\b/i,
 ];
 
+const CROSS_CHANNEL_INTENT_PATTERNS: RegExp[] = [
+  /\bcross[-_\s]?channel\b.{0,80}\b(?:message|send|post|peek|check|boomerang|tool|function)\b/i,
+  /\b(?:send|post|say|tell|ask|message|write)\b.{0,120}\b(?:in|to|into|over\s+in)\s+(?:<#\d+>|#[^\s]+|`[^`]+`)/iu,
+  /\b(?:send|post|say|tell|ask|message|write)\b.{0,120}\b(?:another|other|different|specific|target)\s+(?:channel|thread)\b/i,
+  /\b(?:go|hop|peek|check|read|look)\b.{0,100}\b(?:another|other|different|specific|target|that|the)\s+(?:channel|thread)\b/i,
+  /\b(?:peek|check|read|look)\b.{0,100}(?:<#\d+>|#[^\s]+|`[^`]+`)\b/iu,
+  /\b(?:boomerang|report\s+back)\b.{0,120}\b(?:channel|thread|<#\d+>|#[^\s]+|`[^`]+`)\b/iu,
+];
+
 const WEB_TOOL_NAMES = ["web-search", "fetch"];
 const MEMORY_TOOL_NAMES = ["create_long_term_memory", "update_long_term_memory"];
 const MEDIA_ANALYSIS_TOOL_NAMES = [
@@ -53,8 +62,6 @@ const MESSAGE_ACTION_TOOL_NAMES = [
   "interact_with_recent_message",
   "manage_message",
   "reveal_message_metadata",
-  "create_thread",
-  "cross_channel_message",
 ];
 const CAPABILITY_TOOL_NAMES = ["review_capabilities"];
 
@@ -67,6 +74,10 @@ export function hasDeliberateToolIntent(content: string | null | undefined): boo
   if (!text) return false;
 
   if (hasReminderCreationIntent(text)) {
+    return true;
+  }
+
+  if (CROSS_CHANNEL_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
     return true;
   }
 
@@ -121,6 +132,10 @@ export function getDeliberateToolAllowedNames(content: string | null | undefined
 
   if (/\b(react|reply\s+to|delete|pin|unpin|edit|manage)\b.*\b(message|post|that|it)\b/i.test(text)) {
     allowedToolNames.push(...MESSAGE_ACTION_TOOL_NAMES);
+  }
+
+  if (CROSS_CHANNEL_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
+    allowedToolNames.push("cross_channel_message");
   }
 
   if (/\b(create|make|start|open)\b.*\b(thread)\b/i.test(text)) {
