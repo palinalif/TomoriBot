@@ -64,6 +64,8 @@ const URL_TOOL_INTENT_PATTERNS: RegExp[] = [
 const CROSS_CHANNEL_INTENT_PATTERNS: RegExp[] = [
   /\bcross[-_\s]?channel\b.{0,80}\b(?:message|send|post|peek|check|boomerang|tool|function)\b/i,
   /\b(?:send|post|say|tell|ask|message|write)\b.{0,120}\b(?:in|to|into|over\s+in)\s+(?:<#\d+>|#[^\s]+|`[^`]+`)/iu,
+  /\b(?:go|hop|move|jump)\b.{0,80}\b(?:to|into|over\s+to)\s+(?:<#\d+>|#[^\s]+|`[^`]+`).{0,160}\b(?:send|post|say|tell|ask|message|write)\b/iu,
+  /\b(?:go|hop|move|jump)\b.{0,80}\b(?:to|into|over\s+to)\s+(?:the\s+)?(?:channel|thread)\s+(?:named|called)?\s*(?:<#\d+>|#[^\s]+|`[^`]+`|[A-Za-z0-9_-]+)\b.{0,160}\b(?:send|post|say|tell|ask|message|write)\b/iu,
   /\b(?:send|post|say|tell|ask|message|write)\b.{0,120}\b(?:another|other|different|specific|target)\s+(?:channel|thread)\b/i,
   /\b(?:go|hop|peek|check|read|look)\b.{0,100}\b(?:another|other|different|specific|target|that|the)\s+(?:channel|thread)\b/i,
   /\b(?:peek|check|read|look)\b.{0,100}(?:<#\d+>|#[^\s]+|`[^`]+`)\b/iu,
