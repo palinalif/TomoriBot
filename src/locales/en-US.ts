@@ -833,6 +833,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
         // Server scope - Page 2 additions
         field_deliberate_trigger: `Deliberate Trigger Mode`,
         field_deliberate_tool_mode: `Deliberate Tool Mode`,
+        field_deliberate_tool_context_turns: `Tool Context Turns`,
         field_user_byok_enabled: `Enabled. Members need their own personal provider for user-triggered messages. Toggle with {toggle_command}.`,
         field_user_byok_disabled: `Disabled. User-triggered messages can still fall back to the server provider. Toggle with {toggle_command}.`,
         // Server scope - Page 4 additions
@@ -4347,6 +4348,16 @@ Use {help_matrix} for setup steps, Matrix-only command notes, and the current li
       },
       "deliberate-tool-mode": {
         description: `Toggle deliberate tool mode for this server.`,
+      },
+      "deliberate-tool-context": {
+        description: `Set how many following turns keep recently used tools available.`,
+        turns_description: `Following channel turns to keep successful tools available; 0 disables this.`,
+        already_set_title: `Tool Context Already Set`,
+        already_set_description: `Recently used tools are already retained for **{turns}** following turn(s).`,
+        updated_title: `Tool Context Updated`,
+        updated_description: `When deliberate tool mode is active, successful tools will remain available for the next **{turns}** channel turn(s).`,
+        disabled_title: `Tool Context Disabled`,
+        disabled_description: `Successful tools will no longer remain available after their original turn.`,
       },
       "deliberate-tool-trigger": {
         description: `Manage custom trigger phrases for deliberate tool mode.`,

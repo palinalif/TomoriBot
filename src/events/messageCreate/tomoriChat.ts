@@ -67,6 +67,7 @@ import { hasExplicitLongTermMemoryIntent } from "@/utils/memory/explicitLongTerm
 import {
   getDeliberateToolIntentResult,
   getFollowUpToolIntentResult,
+  resolveDeliberateToolContextTurns,
   resolveDeliberateToolMode,
   type DeliberateToolIntentMatch,
 } from "@/utils/tools/deliberateToolMode";
@@ -1589,6 +1590,43 @@ function getRecentToolAffordanceNames(
   }
 
   return Array.from(new Set(toolNames));
+}
+
+type RetainedToolAffordance = {
+  remainingTurns: number;
+};
+
+const retainedToolAffordancesByChannel = new Map<string, Map<string, RetainedToolAffordance>>();
+
+function retainSuccessfulToolAffordance(channelId: string, toolName: string, turns: number): void {
+  if (turns <= 0) return;
+
+  let channelAffordances = retainedToolAffordancesByChannel.get(channelId);
+  if (!channelAffordances) {
+    channelAffordances = new Map<string, RetainedToolAffordance>();
+    retainedToolAffordancesByChannel.set(channelId, channelAffordances);
+  }
+
+  channelAffordances.set(toolName, { remainingTurns: turns });
+}
+
+function consumeRetainedToolAffordanceNames(channelId: string): string[] {
+  const channelAffordances = retainedToolAffordancesByChannel.get(channelId);
+  if (!channelAffordances) return [];
+
+  const toolNames = [...channelAffordances.keys()];
+  for (const [toolName, affordance] of channelAffordances.entries()) {
+    affordance.remainingTurns -= 1;
+    if (affordance.remainingTurns <= 0) {
+      channelAffordances.delete(toolName);
+    }
+  }
+
+  if (channelAffordances.size === 0) {
+    retainedToolAffordancesByChannel.delete(channelId);
+  }
+
+  return toolNames;
 }
 
 function buildRecentMessageMetadataInline(createdAt: number): string {
@@ -5536,6 +5574,17 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           );
           deliberateToolAllowedNames.push(...followUpToolIntentResult.allowedToolNames);
           deliberateToolTriggerMatches.push(...followUpToolIntentResult.matches);
+          const retainedToolNames = consumeRetainedToolAffordanceNames(channel.id);
+          if (deliberateToolModeActive) {
+            deliberateToolAllowedNames.push(...retainedToolNames);
+            deliberateToolTriggerMatches.push(
+              ...retainedToolNames.map((toolName) => ({
+                toolName,
+                trigger: "recent successful tool",
+                source: "follow-up" as const,
+              })),
+            );
+          }
           if (reminderData && (reminderRecipientID || reminderData.self_reminder)) {
             if (/\b(voice|audio|speech|say\s+(?:it|this)\s+out\s+loud|spoken)\b/i.test(reminderData.reminder_purpose)) {
               deliberateToolAllowedNames.push("generate_voice_message");
@@ -7249,6 +7298,13 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                   const toolResult = await ToolRegistry.executeTool(funcName, funcCall.args || {}, toolContext);
                   const functionCallDuration = Date.now() - functionCallStart;
                   const deliberateToolTriggerMatch = deliberateToolTriggerMatchByToolName.get(funcName);
+                  if (toolResult.success) {
+                    retainSuccessfulToolAffordance(
+                      channel.id,
+                      funcName,
+                      resolveDeliberateToolContextTurns(effectiveTomoriState.config.deliberate_tool_context_turns),
+                    );
+                  }
 
                   if (deliberateToolModeActive && deliberateToolTriggerMatch) {
                     const safeTrigger = deliberateToolTriggerMatch.trigger.replace(/`/g, "'");

@@ -52,6 +52,31 @@ export interface PendingBoomerang {
 
 const pendingBoomerangs = new Map<string, PendingBoomerang>();
 
+function inferTargetChannelFromTask(task: unknown): string | undefined {
+  if (typeof task !== "string") {
+    return undefined;
+  }
+
+  const patterns: RegExp[] = [
+    /\b(?:channel|thread)\s+(?:named|called)\s+`([^`]{1,120})`/iu,
+    /\b(?:go|hop|move|jump|peek|check|read|look)\b.{0,80}\b(?:to|into|over\s+to)\s+`([^`]{1,120})`/iu,
+    /\b(?:send|post|say|tell|ask|message|write)\b.{0,120}\b(?:in|to|into|over\s+in)\s+`([^`]{1,120})`/iu,
+    /<#(\d{17,20})>/u,
+    /\B#([A-Za-z0-9_-]{1,100})\b/u,
+    /\b(?:channel|thread)\s+(?:named|called)\s+([A-Za-z0-9_-]{1,100})\b/iu,
+  ];
+
+  for (const pattern of patterns) {
+    const match = task.match(pattern);
+    const inferred = match?.[1]?.trim();
+    if (inferred) {
+      return inferred;
+    }
+  }
+
+  return undefined;
+}
+
 /**
  * Consume (retrieve and delete) a pending boomerang for a given channel.
  * Called by tomoriChat after STM storage to check if a follow-up is needed.
@@ -137,7 +162,7 @@ export class CrossChannelMessageTool extends BaseTool {
           "If true, fetch and return the target channel's recent message history without sending any message there. Use this when you want to silently read what is happening in another channel to inform your response here, without making your presence known in that channel. The number of messages fetched matches the server's configured message fetch limit.",
       },
     },
-    required: ["task"],
+    required: ["target_channel", "task"],
   };
 
   /**
@@ -194,7 +219,12 @@ export class CrossChannelMessageTool extends BaseTool {
     const boomerangArg = args.boomerang as boolean | undefined;
     const peekOnlyArg = args.peek_only as boolean | undefined;
     const isPeekOnly = peekOnlyArg === true;
-    const requestedChannel = targetChannelArg?.trim() || legacyChannelNameArg?.trim() || legacyChannelIdArg?.trim();
+    const inferredChannelFromTask = inferTargetChannelFromTask(taskArg);
+    const requestedChannel =
+      targetChannelArg?.trim() ||
+      legacyChannelNameArg?.trim() ||
+      legacyChannelIdArg?.trim() ||
+      inferredChannelFromTask;
 
     // Validate: at least one channel identifier must be provided
     if (!requestedChannel) {

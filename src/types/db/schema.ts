@@ -502,6 +502,7 @@ export const tomoriConfigSchema = z.object({
   always_reply_enabled: z.boolean().default(false), // Added March 2026 - Main persona replies to all user messages (guild only, alters still require triggers)
   deliberate_trigger_mode: z.boolean().default(false), // Added April 2026 - Blocks plain trigger words; requires @{trigger}, reply, mention, or /bot respond
   deliberate_tool_mode: z.boolean().default(false), // Added May 2026 - Tools require explicit tool intent when enabled
+  deliberate_tool_context_turns: z.number().int().min(0).max(10).nullable().default(null), // Added May 2026 - Successful tools remain available for this many following channel turns; NULL uses env default
   deliberate_tool_triggers: z.preprocess(
     (value) => normalizeDeliberateToolTriggers(value),
     z.record(z.string(), z.array(z.string())).default({}),

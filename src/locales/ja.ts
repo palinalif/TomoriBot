@@ -833,6 +833,7 @@ export default {
         // Server scope - Page 2 additions
         field_deliberate_trigger: `明示的トリガーモード`,
         field_deliberate_tool_mode: `明示的ツールモード`,
+        field_deliberate_tool_context_turns: `ツールコンテキストターン`,
         field_user_byok_enabled: `有効。ユーザー発言に対する応答では各メンバーの個人プロバイダーが必要です。{toggle_command} で切り替えられます。`,
         field_user_byok_disabled: `無効。個人プロバイダーがない場合でもユーザー発言はサーバープロバイダーにフォールバックできます。{toggle_command} で切り替えられます。`,
         // Server scope - Page 4 additions
@@ -4410,6 +4411,16 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
       },
       "deliberate-tool-mode": {
         description: `このサーバーの明示的ツールモードを切り替えます。`,
+      },
+      "deliberate-tool-context": {
+        description: `直近で使ったツールを何ターン利用可能に保つかを設定します。`,
+        turns_description: `成功したツールを利用可能に保つ後続チャンネルターン数。0で無効化します。`,
+        already_set_title: `ツールコンテキストは既に設定済みです`,
+        already_set_description: `直近で使ったツールは既に後続 **{turns}** ターン利用可能に保たれます。`,
+        updated_title: `ツールコンテキストを更新しました`,
+        updated_description: `明示的ツールモードが有効な場合、成功したツールは後続 **{turns}** チャンネルターン利用可能になります。`,
+        disabled_title: `ツールコンテキストを無効にしました`,
+        disabled_description: `成功したツールは元のターンの後に利用可能なまま保持されません。`,
       },
       "deliberate-tool-trigger": {
         description: `明示的ツールモード用のカスタムトリガーフレーズを管理します。`,

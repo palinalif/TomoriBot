@@ -15,23 +15,34 @@ export interface DeliberateToolIntentResult {
   matches: DeliberateToolIntentMatch[];
 }
 
+const DEFAULT_TOOL_CONTEXT_TURNS = 4;
+const MAX_TOOL_CONTEXT_TURNS = 10;
+
 const URL_PATTERN = /\bhttps?:\/\/\S+/i;
 
 const RELATIVE_TIME_PATTERN =
   /\b(?:in|for|after)\s+(?:about\s+|around\s+|like\s+|another\s+|a\s+)?\d+\s*(?:seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?|months?)\b/i;
 const SCHEDULE_TIME_PATTERN =
   /\b(?:tomorrow|tonight|today|later|next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month)|at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?|from\s+now)\b/i;
-const REMINDER_DIRECT_REQUEST_PATTERN = /\b(?:remind|ping|notify)\s+(?:me|us|them|him|her|[A-Za-z0-9_@{}.-]+)\b/i;
+const REMINDER_DIRECT_REQUEST_PATTERN =
+  /\b(?:remind|ping|notify|poke|nudge)\s+(?:me|us|them|him|her|[A-Za-z0-9_@{}.-]+)\b/i;
+const REMINDER_WAKE_REQUEST_PATTERN =
+  /\b(?:wake\s+(?:me|us|them|him|her|[A-Za-z0-9_@{}.-]+)\s+up|get\s+(?:me|us|them|him|her|[A-Za-z0-9_@{}.-]+)\s+up)\b/i;
 const REMINDER_CREATE_PATTERN =
   /\b(?:set|create|make|start|schedule|add)\b.{0,80}\b(?:reminder|timer|alarm|task|scheduled\s+task|task\s+reminder)\b/i;
 const REMINDER_ANAPHORA_PATTERN =
   /\b(?:set|create|make|start|schedule|add|try|do)\b.{0,80}\b(?:one|another|it|that|the\s+same)\b.{0,80}\b(?:from\s+now|for\s+(?:a\s+)?(?:longer\s+)?time|seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?|months?)\b/i;
+const REMINDER_TOOL_CORRECTION_PATTERN =
+  /\b(?:didn'?t|did\s+not|forgot|failed|should(?:'ve|\s+have))\b.{0,100}\b(?:reminder|timer|alarm|create_task|scheduling?)\s+(?:tool|protocol)?\b/i;
 
 function hasReminderCreationIntent(text: string): boolean {
   return (
     REMINDER_DIRECT_REQUEST_PATTERN.test(text) ||
+    REMINDER_WAKE_REQUEST_PATTERN.test(text) ||
     REMINDER_CREATE_PATTERN.test(text) ||
-    (REMINDER_ANAPHORA_PATTERN.test(text) && (RELATIVE_TIME_PATTERN.test(text) || SCHEDULE_TIME_PATTERN.test(text)))
+    (REMINDER_ANAPHORA_PATTERN.test(text) && (RELATIVE_TIME_PATTERN.test(text) || SCHEDULE_TIME_PATTERN.test(text))) ||
+    (REMINDER_TOOL_CORRECTION_PATTERN.test(text) &&
+      (RELATIVE_TIME_PATTERN.test(text) || SCHEDULE_TIME_PATTERN.test(text)))
   );
 }
 
@@ -73,7 +84,8 @@ const CROSS_CHANNEL_INTENT_PATTERNS: RegExp[] = [
 ];
 
 const TOOL_FOLLOW_UP_PATTERNS: RegExp[] = [
-  /\b(?:do|try|make|send|say|generate|run|use|repeat|redo)\b.{0,80}\b(?:that|it|this|one|again|same)\b/i,
+  /\b(?:do|try|make|send|say|generate|run|repeat|redo)\b.{0,80}\b(?:that|it|this|one|again|same)\b/i,
+  /\buse\s+(?:that|it|this|one|the\s+same)\b/i,
   /\b(?:that|it|this|one)\b.{0,60}\b(?:but|with|except)\b/i,
   /\bagain\b.{0,60}\b(?:but|with|except|more|less)\b/i,
   /\b(?:same\s+thing|like\s+that)\b/i,
@@ -128,6 +140,20 @@ function uniqueMatches(matches: DeliberateToolIntentMatch[]): DeliberateToolInte
     seen.add(key);
     return true;
   });
+}
+
+function parseDeliberateToolContextTurnsEnv(): number {
+  const parsed = Number.parseInt(process.env.DELIBERATE_TOOL_CONTEXT_TURNS ?? "", 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_TOOL_CONTEXT_TURNS;
+  return Math.min(Math.max(parsed, 0), MAX_TOOL_CONTEXT_TURNS);
+}
+
+export function resolveDeliberateToolContextTurns(configuredTurns: number | null | undefined): number {
+  if (typeof configuredTurns === "number" && Number.isFinite(configuredTurns)) {
+    return Math.min(Math.max(Math.trunc(configuredTurns), 0), MAX_TOOL_CONTEXT_TURNS);
+  }
+
+  return parseDeliberateToolContextTurnsEnv();
 }
 
 function escapeRegExpLiteral(value: string): string {
