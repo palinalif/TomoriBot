@@ -64,7 +64,11 @@ import { localizer, getSupportedLocales, getLocaleSubKeys } from "../../utils/te
 import { escapeRegExp, normalizeCustomEmojisForLlm } from "../../utils/text/stringHelper";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
 import { hasExplicitLongTermMemoryIntent } from "@/utils/memory/explicitLongTermMemoryIntent";
-import { getDeliberateToolAllowedNames, resolveDeliberateToolMode } from "@/utils/tools/deliberateToolMode";
+import {
+  getDeliberateToolAllowedNames,
+  getFollowUpToolAllowedNames,
+  resolveDeliberateToolMode,
+} from "@/utils/tools/deliberateToolMode";
 import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
 import { getLinkedMatrixRoom, pendingMatrixReplyChannels, sendMatrixTypingIndicator } from "@/utils/matrix";
@@ -1541,6 +1545,42 @@ function formatAttachmentSystemHint(filename: string, messageId: string): string
 
 function formatAudioAttachmentHint(filename: string): string {
   return `[System: An audio file named \`${filename}\` was sent here but was not transcribed.]`;
+}
+
+function getRecentToolAffordanceNames(
+  recentMessages: Message[],
+  currentMessageId: string,
+  clientUserId?: string | null,
+): string[] {
+  const toolNames: string[] = [];
+
+  const lookbackMessages = recentMessages
+    .filter((recentMessage) => recentMessage.id !== currentMessageId)
+    .slice(-8)
+    .reverse();
+
+  for (const msg of lookbackMessages) {
+    const isPersonaOutput = Boolean(msg.webhookId) || (Boolean(clientUserId) && msg.author.id === clientUserId);
+    if (!isPersonaOutput) continue;
+
+    const attachments = [...msg.attachments.values()];
+
+    if (attachments.some(isAudioAttachment)) {
+      toolNames.push("generate_voice_message");
+    }
+
+    if (attachments.some((attachment) => isSupportedImageAttachmentContentType(attachment.contentType))) {
+      toolNames.push("generate_image", "generate_image_nai");
+    }
+
+    if (attachments.some((attachment) => isSupportedVideoAttachmentContentType(attachment.contentType))) {
+      toolNames.push("generate_video");
+    }
+
+    if (toolNames.length > 0) break;
+  }
+
+  return Array.from(new Set(toolNames));
 }
 
 function buildRecentMessageMetadataInline(createdAt: number): string {
@@ -5477,6 +5517,11 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               ? `${message.content}\n${reminderData.reminder_purpose}`
               : message.content;
           const deliberateToolAllowedNames = getDeliberateToolAllowedNames(deliberateToolIntentText);
+          const followUpToolAllowedNames = getFollowUpToolAllowedNames(
+            deliberateToolIntentText,
+            getRecentToolAffordanceNames(relevantMessagesArray, message.id, client.user?.id),
+          );
+          deliberateToolAllowedNames.push(...followUpToolAllowedNames);
           if (reminderData && (reminderRecipientID || reminderData.self_reminder)) {
             if (/\b(voice|audio|speech|say\s+(?:it|this)\s+out\s+loud|spoken)\b/i.test(reminderData.reminder_purpose)) {
               deliberateToolAllowedNames.push("generate_voice_message");

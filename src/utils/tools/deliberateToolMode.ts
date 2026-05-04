@@ -47,6 +47,13 @@ const CROSS_CHANNEL_INTENT_PATTERNS: RegExp[] = [
   /\b(?:boomerang|report\s+back)\b.{0,120}\b(?:channel|thread|<#\d+>|#[^\s]+|`[^`]+`)\b/iu,
 ];
 
+const TOOL_FOLLOW_UP_PATTERNS: RegExp[] = [
+  /\b(?:do|try|make|send|say|generate|run|use|repeat|redo)\b.{0,80}\b(?:that|it|this|one|again|same)\b/i,
+  /\b(?:that|it|this|one)\b.{0,60}\b(?:but|with|except)\b/i,
+  /\bagain\b.{0,60}\b(?:but|with|except|more|less)\b/i,
+  /\b(?:same\s+thing|like\s+that)\b/i,
+];
+
 const WEB_TOOL_NAMES = ["web-search", "fetch"];
 const MEMORY_TOOL_NAMES = ["create_long_term_memory", "update_long_term_memory"];
 const MEDIA_ANALYSIS_TOOL_NAMES = [
@@ -67,6 +74,10 @@ const CAPABILITY_TOOL_NAMES = ["review_capabilities"];
 
 function uniqueToolNames(toolNames: string[]): string[] {
   return Array.from(new Set(toolNames));
+}
+
+function hasToolFollowUpIntent(text: string): boolean {
+  return TOOL_FOLLOW_UP_PATTERNS.some((pattern) => pattern.test(text));
 }
 
 export function hasDeliberateToolIntent(content: string | null | undefined): boolean {
@@ -147,6 +158,15 @@ export function getDeliberateToolAllowedNames(content: string | null | undefined
   }
 
   return uniqueToolNames(allowedToolNames);
+}
+
+export function getFollowUpToolAllowedNames(
+  content: string | null | undefined,
+  recentToolNames: string[] | null | undefined,
+): string[] {
+  const text = content?.trim();
+  if (!text || !recentToolNames?.length || !hasToolFollowUpIntent(text)) return [];
+  return uniqueToolNames(recentToolNames);
 }
 
 export function filterDeliberateToolNames(toolNames: string[], allowedToolNames: string[] | null | undefined): string[] {
