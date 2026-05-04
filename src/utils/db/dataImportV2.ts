@@ -295,6 +295,8 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
       ? `{${config.llm_stop_strings.map((stop: string) => `"${stop.replace(/(["\\])/g, "\\$1")}"`).join(",")}}`
       : null;
     const logitBiasesJson = JSON.stringify(config.llm_logit_biases ?? []);
+    const deliberateToolTriggersJson =
+      config.deliberate_tool_triggers === undefined ? null : JSON.stringify(config.deliberate_tool_triggers ?? {});
     const hasMaxOutputTokens = Object.hasOwn(config, "llm_max_output_tokens");
 
     let updateRows = await sql<Array<{ tomori_config_id: number }>>`
@@ -345,6 +347,7 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 				always_reply_enabled = COALESCE(${config.always_reply_enabled ?? null}, always_reply_enabled),
 				deliberate_trigger_mode = COALESCE(${config.deliberate_trigger_mode ?? null}, deliberate_trigger_mode),
 				deliberate_tool_mode = COALESCE(${config.deliberate_tool_mode ?? null}, deliberate_tool_mode),
+				deliberate_tool_triggers = COALESCE(${deliberateToolTriggersJson}::jsonb, deliberate_tool_triggers, '{}'::jsonb),
 				cooldown_type = COALESCE(${config.cooldown_type ?? null}, cooldown_type),
 				cooldown_length = COALESCE(${config.cooldown_length ?? null}, cooldown_length),
 				stm_privacy_bypass = COALESCE(${config.stm_privacy_bypass ?? null}, stm_privacy_bypass),
@@ -419,6 +422,7 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 						always_reply_enabled = COALESCE(${config.always_reply_enabled ?? null}, always_reply_enabled),
 						deliberate_trigger_mode = COALESCE(${config.deliberate_trigger_mode ?? null}, deliberate_trigger_mode),
 						deliberate_tool_mode = COALESCE(${config.deliberate_tool_mode ?? null}, deliberate_tool_mode),
+						deliberate_tool_triggers = COALESCE(${deliberateToolTriggersJson}::jsonb, deliberate_tool_triggers, '{}'::jsonb),
 						cooldown_type = COALESCE(${config.cooldown_type ?? null}, cooldown_type),
 						cooldown_length = COALESCE(${config.cooldown_length ?? null}, cooldown_length),
 						stm_privacy_bypass = COALESCE(${config.stm_privacy_bypass ?? null}, stm_privacy_bypass),

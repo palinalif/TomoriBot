@@ -2152,6 +2152,24 @@ IDの形式は \`!abc:matrix.org\` のようになります。
   on = いつでも明示的な呼びかけだけを許可`,
         footer: `普段の会話でペルソナ名や短いトリガー語がよく出てしまい、誤反応が多いならDTMが有効です。`,
       },
+      "deliberate-tool-mode": {
+        description: `明示的ツールモードでツール利用がどう変わるかを学ぶ`,
+        title: `明示的ツールモードガイド`,
+        embed_description: `明示的ツールモードは、メッセージがツールを必要としているように見える場合だけ、通常会話ターンにツール宣言を含めます。`,
+        what_title: `何をするか`,
+        what_description: `明示的ツールモードが有効な場合、まずメッセージに明示的なツール意図があるか確認します。意図が見つからない場合、そのターンではツール宣言を外します。これによりプロンプト量が減り、小型・ローカルモデルの応答が速くなります。`,
+        intent_title: `ツール意図として扱われるもの`,
+        intent_description: `組み込みトリガーは、リマインダー、Web検索、メモリー更新、クロスチャンネルメッセージ、画像・動画・音声生成、メディア解析、スレッド作成、メッセージ操作などの一般的な依頼を扱います。
+
+最近の文脈がツールを示している場合は、\`do that again but angrier\`、\`same thing but softer\`、音声メッセージ依頼の後の \`pretty please?\` などのフォローアップ表現も使えます。`,
+        custom_title: `カスタムトリガーフレーズ`,
+        custom_description: `サーバー管理者は {triggerCommand} でリテラルなフレーズを追加できます。たとえば \`pic\`、\`img\`、\`pfp\` を画像生成に対応させたり、サーバー独自の言い回しを適切なツール対象へ対応させたりできます。`,
+        control_title: `制御とログ`,
+        control_description: `- サーバー管理者は {serverDtm} で切り替えられます
+- ユーザーは {personalDtm} で自分向けに上書きできます
+- {thoughtLogs} で思考ログチャンネルが設定されている場合、明示的ツールモードで実際に使われたツールと、そのツールを表示させたトリガーがそこに記録されます`,
+        footer: `明示的ツールモードは、どのツールをモデルに見せるかを決めます。見せられたツールを実際に呼ぶかどうかは、モデル側の判断です。`,
+      },
       customization: {
         description: `TomoriBotのパーソナリティと動作をカスタマイズする方法を学ぶ`,
         embed1_title: `TomoriBotのカスタマイズ`,
@@ -4392,6 +4410,29 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
       },
       "deliberate-tool-mode": {
         description: `このサーバーの明示的ツールモードを切り替えます。`,
+      },
+      "deliberate-tool-trigger": {
+        description: `明示的ツールモード用のカスタムトリガーフレーズを管理します。`,
+        action_description: `カスタムツールトリガーを追加、削除、または一覧表示します。`,
+        action_add: `追加`,
+        action_remove: `削除`,
+        action_list: `一覧`,
+        tool_description: `このトリガーで利用可能にするツール対象。`,
+        trigger_description: `メッセージ内で検出するフレーズ。例: pic や make a song。`,
+        invalid_title: `無効なツールトリガー`,
+        missing_tool_description: `追加または削除する場合はツール対象を選択してください。`,
+        missing_trigger_description: `追加または削除する場合はトリガーフレーズを入力してください。`,
+        duplicate_title: `トリガーは既に存在します`,
+        duplicate_description: `\`{trigger}\` は既に **{tool}** を利用可能にします。`,
+        too_many_title: `トリガーが多すぎます`,
+        too_many_description: `**{tool}** には既に最大数の {max} 個のカスタムトリガーがあります。`,
+        not_found_title: `トリガーが見つかりません`,
+        not_found_description: `\`{trigger}\` は現在 **{tool}** に設定されていません。`,
+        added_title: `ツールトリガーを追加しました`,
+        added_description: `明示的ツールモードが有効な場合、\`{trigger}\` で **{tool}** が利用可能になります。`,
+        removed_title: `ツールトリガーを削除しました`,
+        removed_description: `\`{trigger}\` では **{tool}** が利用可能になりません。`,
+        list_title: `カスタムツールトリガー`,
       },
     },
     personal: {

@@ -139,6 +139,7 @@ export const serverConfigExportSchema = z.object({
   always_reply_enabled: z.boolean().optional(),
   deliberate_trigger_mode: z.boolean().optional(),
   deliberate_tool_mode: z.boolean().optional(),
+  deliberate_tool_triggers: z.record(z.string(), z.array(z.string())).optional(),
   cooldown_type: z.number().int().min(0).max(4).optional(),
   cooldown_length: z.number().int().min(1).max(86400).optional(),
   stm_privacy_bypass: z.boolean().optional(),

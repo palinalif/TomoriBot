@@ -65,10 +65,12 @@ import { escapeRegExp, normalizeCustomEmojisForLlm } from "../../utils/text/stri
 import { MessageIdMap } from "@/utils/text/messageIdMap";
 import { hasExplicitLongTermMemoryIntent } from "@/utils/memory/explicitLongTermMemoryIntent";
 import {
-  getDeliberateToolAllowedNames,
-  getFollowUpToolAllowedNames,
+  getDeliberateToolIntentResult,
+  getFollowUpToolIntentResult,
   resolveDeliberateToolMode,
+  type DeliberateToolIntentMatch,
 } from "@/utils/tools/deliberateToolMode";
+import { routeHiddenToolNotice } from "@/utils/discord/toolProgressNotice";
 import { sql } from "@/utils/db/client";
 import { loadEmojiStickerCache } from "../../utils/cache/emojiStickerCache";
 import { getLinkedMatrixRoom, pendingMatrixReplyChannels, sendMatrixTypingIndicator } from "@/utils/matrix";
@@ -1561,7 +1563,13 @@ function getRecentToolAffordanceNames(
 
   for (const msg of lookbackMessages) {
     const isPersonaOutput = Boolean(msg.webhookId) || (Boolean(clientUserId) && msg.author.id === clientUserId);
-    if (!isPersonaOutput) continue;
+
+    if (!isPersonaOutput) {
+      const recentIntentResult = getDeliberateToolIntentResult(msg.content);
+      toolNames.push(...recentIntentResult.allowedToolNames);
+      if (toolNames.length > 0) break;
+      continue;
+    }
 
     const attachments = [...msg.attachments.values()];
 
@@ -5516,15 +5524,26 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
             reminderData && (reminderRecipientID || reminderData.self_reminder)
               ? `${message.content}\n${reminderData.reminder_purpose}`
               : message.content;
-          const deliberateToolAllowedNames = getDeliberateToolAllowedNames(deliberateToolIntentText);
-          const followUpToolAllowedNames = getFollowUpToolAllowedNames(
+          const deliberateToolIntentResult = getDeliberateToolIntentResult(
+            deliberateToolIntentText,
+            effectiveTomoriState.config.deliberate_tool_triggers,
+          );
+          const deliberateToolAllowedNames = [...deliberateToolIntentResult.allowedToolNames];
+          const deliberateToolTriggerMatches: DeliberateToolIntentMatch[] = [...deliberateToolIntentResult.matches];
+          const followUpToolIntentResult = getFollowUpToolIntentResult(
             deliberateToolIntentText,
             getRecentToolAffordanceNames(relevantMessagesArray, message.id, client.user?.id),
           );
-          deliberateToolAllowedNames.push(...followUpToolAllowedNames);
+          deliberateToolAllowedNames.push(...followUpToolIntentResult.allowedToolNames);
+          deliberateToolTriggerMatches.push(...followUpToolIntentResult.matches);
           if (reminderData && (reminderRecipientID || reminderData.self_reminder)) {
             if (/\b(voice|audio|speech|say\s+(?:it|this)\s+out\s+loud|spoken)\b/i.test(reminderData.reminder_purpose)) {
               deliberateToolAllowedNames.push("generate_voice_message");
+              deliberateToolTriggerMatches.push({
+                toolName: "generate_voice_message",
+                trigger: "voice reminder delivery",
+                source: "built-in",
+              });
             }
 
             const createTaskIndex = deliberateToolAllowedNames.indexOf("create_task");
@@ -5532,9 +5551,17 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
               deliberateToolAllowedNames.splice(createTaskIndex, 1);
             }
           }
+          const deliberateToolTriggerMatchByToolName = new Map<string, DeliberateToolIntentMatch>();
+          for (const match of deliberateToolTriggerMatches) {
+            if (
+              deliberateToolAllowedNames.includes(match.toolName) &&
+              !deliberateToolTriggerMatchByToolName.has(match.toolName)
+            ) {
+              deliberateToolTriggerMatchByToolName.set(match.toolName, match);
+            }
+          }
           const deliberateToolIntent =
-            deliberateToolAllowedNames.length > 0 ||
-            (streamingContext.endTurnAfterTools?.length ?? 0) > 0;
+            deliberateToolAllowedNames.length > 0 || (streamingContext.endTurnAfterTools?.length ?? 0) > 0;
           const toolsDisabledByDeliberateMode =
             !streamingContext.disableAllTools && deliberateToolModeActive && !deliberateToolIntent;
 
@@ -7221,6 +7248,23 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                   const functionCallStart = Date.now();
                   const toolResult = await ToolRegistry.executeTool(funcName, funcCall.args || {}, toolContext);
                   const functionCallDuration = Date.now() - functionCallStart;
+                  const deliberateToolTriggerMatch = deliberateToolTriggerMatchByToolName.get(funcName);
+
+                  if (deliberateToolModeActive && deliberateToolTriggerMatch) {
+                    const safeTrigger = deliberateToolTriggerMatch.trigger.replace(/`/g, "'");
+                    await routeHiddenToolNotice(
+                      toolContext,
+                      {
+                        color: ColorCode.INFO,
+                        titleKey: "genai.thought_log.title",
+                        description:
+                          `Tool \`${funcName}\` was used after deliberate tool mode exposed it.\n` +
+                          `Trigger: \`${safeTrigger}\`\n` +
+                          `Source: ${deliberateToolTriggerMatch.source}`,
+                      },
+                      "Deliberate tool trigger log",
+                    );
+                  }
 
                   // Log function call timing (especially long-running ones)
                   if (functionCallDuration > 5000) {
