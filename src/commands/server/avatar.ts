@@ -17,7 +17,7 @@ import { memoryGuard, reserveAvatarQuota } from "../../utils/security/rateLimite
 import { loadAllPersonasForServer } from "../../utils/db/dbRead";
 import { sql } from "../../utils/db/client";
 import { convertToPNG } from "../../utils/image/imageProcessor";
-import { deletePersonaAvatarFromS3, uploadPersonaAvatarToS3 } from "../../utils/storage/avatarStorage";
+import { deletePersonaAvatarFromStorage, uploadPersonaAvatarToStorage } from "../../utils/storage/avatarStorage";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 
 const PERSONA_SELECT_MODAL_ID = "server_avatar_persona_modal";
@@ -356,7 +356,7 @@ export async function execute(
         }
       } else {
         if (selectedPersona.webhook_avatar_url) {
-          await deletePersonaAvatarFromS3(selectedPersona.webhook_avatar_url);
+          await deletePersonaAvatarFromStorage(selectedPersona.webhook_avatar_url);
         }
 
         await sql`
@@ -466,7 +466,7 @@ export async function execute(
         return;
       }
 
-      persistedAvatarUrl = await uploadPersonaAvatarToS3({
+      persistedAvatarUrl = await uploadPersonaAvatarToStorage({
         personaId: selectedPersona.tomori_id,
         serverDiscId: interaction.guild.id,
         label: "server avatar",
@@ -484,7 +484,7 @@ export async function execute(
 
       if (persistedAvatarUrl) {
         if (selectedPersona.webhook_avatar_url && selectedPersona.webhook_avatar_url !== persistedAvatarUrl) {
-          await deletePersonaAvatarFromS3(selectedPersona.webhook_avatar_url);
+          await deletePersonaAvatarFromStorage(selectedPersona.webhook_avatar_url);
         }
 
         await sql`
