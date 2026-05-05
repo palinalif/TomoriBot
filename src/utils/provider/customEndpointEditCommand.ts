@@ -11,6 +11,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, EmbedBuilder, MessageFlags } from "discord.js";
 import type { ButtonInteraction, ChatInputCommandInteraction, ModalSubmitInteraction } from "discord.js";
 import type { CustomEndpointCapability, CustomEndpointRow, TomoriConfigRow } from "@/types/db/schema";
+import type { ModalComponent } from "@/types/discord/modal";
 import type { SelectOption } from "@/types/discord/modal";
 import {
   promptWithPaginatedModal,
@@ -25,12 +26,15 @@ import {
   parseCapabilityModalFields,
 } from "@/utils/provider/customEndpointCapabilityModal";
 import { registerCustomEndpoint, validateCustomEndpointReachability } from "@/utils/provider/customEndpointService";
+import { IMPORT_LIMITS } from "@/utils/security/rateLimiter";
+import { safeDownload } from "@/utils/security/safeDownload";
 import { localizer } from "@/utils/text/localizer";
 
 const SELECT_MODAL_CUSTOM_ID = "custom_endpoint_edit_select_modal";
 const ENDPOINT_SELECT_ID = "endpoint_select";
 const EDIT_BUTTON_ID = "edit_fields";
 const CANCEL_BUTTON_ID = "cancel_edit";
+const WORKFLOW_UPLOAD_ID = "workflow_json";
 
 type RegistrationScope =
   | { kind: "server"; ownerId: number; baseConfig: TomoriConfigRow }
@@ -100,6 +104,22 @@ function buildEndpointSelectOptions(
       description: safeSelectOptionText(description),
     };
   });
+}
+
+async function loadWorkflowJson(url: string | null): Promise<Record<string, unknown> | null> {
+  if (!url) {
+    return null;
+  }
+
+  const downloadResult = await safeDownload(url, {
+    maxSizeMB: IMPORT_LIMITS.MAX_DATA_IMPORT_SIZE_MB,
+    timeoutMs: 10_000,
+  });
+  if (!downloadResult.success || !downloadResult.buffer) {
+    throw new Error(`Workflow download failed: ${downloadResult.details ?? downloadResult.error ?? "unknown error"}`);
+  }
+
+  return JSON.parse(downloadResult.buffer.toString("utf8")) as Record<string, unknown>;
 }
 
 /** Build a concise embed summarising the selected endpoint's current configuration. */
@@ -265,10 +285,10 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
   // Step 4: from the button click, show the capability-specific edit modal (pre-filled).
   const extra = existingEndpoint.extra_config as Record<string, unknown>;
   const editModalCustomId = `custom_endpoint_edit_fields_${interaction.id}`;
-  const editModalResult = await promptWithRawModal(buttonInteraction, locale, {
-    modalCustomId: editModalCustomId,
-    modalTitleKey: `commands.config.custom_models.capability_modal.${existingEndpoint.capability}_edit_title`,
-    components: buildCapabilityEditModalComponents(existingEndpoint.capability, locale, {
+  const editModalComponents: ModalComponent[] = buildCapabilityEditModalComponents(
+    existingEndpoint.capability,
+    locale,
+    {
       modelName: existingEndpoint.model_name,
       displayName: existingEndpoint.display_name,
       endpointUrl: existingEndpoint.endpoint_url,
@@ -280,7 +300,27 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
       supportsInstruct: extra.supports_instruct as boolean | undefined,
       transcriptionModel: extra.model as string | null,
       transcriptionLanguage: extra.language as string | null,
-    }),
+    },
+  );
+
+  if (
+    (existingEndpoint.capability === "image" || existingEndpoint.capability === "video") &&
+    existingEndpoint.api_style === "comfyui"
+  ) {
+    editModalComponents.push({
+      customId: WORKFLOW_UPLOAD_ID,
+      labelKey: "commands.config.custom_models.capability_modal.workflow_json_label",
+      descriptionKey: "commands.config.custom_models.capability_modal.workflow_json_description",
+      minValues: 0,
+      maxValues: 1,
+      required: false,
+    });
+  }
+
+  const editModalResult = await promptWithRawModal(buttonInteraction, locale, {
+    modalCustomId: editModalCustomId,
+    modalTitleKey: `commands.config.custom_models.capability_modal.${existingEndpoint.capability}_edit_title`,
+    components: editModalComponents,
   });
 
   if (editModalResult.outcome !== "submit") {
@@ -298,6 +338,7 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
       editModalResult.multiValues ?? {},
       existingEndpoint.capability,
     );
+    const workflowAttachment = editModalResult.attachments?.[WORKFLOW_UPLOAD_ID];
 
     // Merge parsed values with existing, treating blank text inputs as "keep existing".
     const endpointUrl = parsed.endpointUrl || existingEndpoint.endpoint_url;
@@ -328,6 +369,24 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
         model: parsed.transcriptionModel || (extra.model as string | null) || "whisper-1",
         language: parsed.transcriptionLanguage ?? (extra.language as string | null) ?? null,
       };
+    } else if (
+      (existingEndpoint.capability === "image" || existingEndpoint.capability === "video") &&
+      existingEndpoint.api_style === "comfyui"
+    ) {
+      if (workflowAttachment) {
+        const workflow = await loadWorkflowJson(workflowAttachment.url);
+        extraConfig = {
+          ...extraConfig,
+          workflow,
+        };
+      } else if (!extraConfig.workflow) {
+        await selectInteraction.editReply({
+          embeds: [],
+          components: [],
+          content: localizer(locale, "commands.config.custom_models.validation.workflow_required"),
+        });
+        return;
+      }
     }
 
     // Validate the new endpoint URL if it changed.

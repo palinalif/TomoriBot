@@ -9,6 +9,8 @@
 
 import { log } from "../misc/logger";
 import type { ToolContext } from "../../types/tool/interfaces";
+import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
+import { safeDownload } from "@/utils/security/safeDownload";
 
 /** Intermediate representation of a discovered image URL before base64 conversion */
 interface ImageUrlInfo {
@@ -159,16 +161,18 @@ export async function extractImagesFromMessage(messageId: string, context: ToolC
 
   for (const imageInfo of imageUrls) {
     try {
-      const imageResponse = await fetch(imageInfo.url);
-      if (!imageResponse.ok) {
-        log.warn(`Failed to fetch image from ${imageInfo.source}: ${imageResponse.status}`);
+      const imageResponse = await safeDownload(imageInfo.url, {
+        maxSizeMB: MEDIA_LIMITS.MAX_MEDIA_SIZE_MB,
+        timeoutMs: 15_000,
+      });
+      if (!imageResponse.success || !imageResponse.buffer) {
+        log.warn(`Failed to fetch image from ${imageInfo.source}: ${imageResponse.details ?? imageResponse.error}`);
         continue;
       }
 
-      const imageArrayBuffer = await imageResponse.arrayBuffer();
       results.push({
         mimeType: imageInfo.mimeType,
-        data: Buffer.from(imageArrayBuffer).toString("base64"),
+        data: imageResponse.buffer.toString("base64"),
       });
 
       log.info(`Successfully converted image from ${imageInfo.source} to base64`);
@@ -193,13 +197,15 @@ export async function extractImagesFromMessage(messageId: string, context: ToolC
  * @throws Error if the fetch fails
  */
 export async function fetchImageAsBuffer(imageUrl: string): Promise<Buffer> {
-  const response = await fetch(imageUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+  const response = await safeDownload(imageUrl, {
+    maxSizeMB: MEDIA_LIMITS.MAX_MEDIA_SIZE_MB,
+    timeoutMs: 15_000,
+  });
+  if (!response.success || !response.buffer) {
+    throw new Error(`Failed to fetch image: ${response.details ?? response.error ?? "unknown error"}`);
   }
 
-  const arrayBuffer = await response.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  return response.buffer;
 }
 
 /**

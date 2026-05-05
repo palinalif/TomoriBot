@@ -47,6 +47,7 @@ export interface ToolStateForContext {
     videogen_enabled: boolean;
     nai_exclusive_imggen: boolean;
     voice_message_enabled: boolean;
+    thread_creation_enabled: boolean;
   };
 }
 

@@ -24,6 +24,8 @@ import { generateCustomImageViaEndpoint } from "@/providers/custom/customEndpoin
 import { ZAI_CODING_IMAGES_GENERATIONS_URL, ZAI_GENERAL_IMAGES_GENERATIONS_URL } from "@/providers/zai/zaiShared";
 import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
 import { formatCustomEndpointModelDisplay } from "@/utils/provider/customProviderUtils";
+import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
+import { safeDownload } from "@/utils/security/safeDownload";
 
 /**
  * Tool for generating images using the active provider's native image API
@@ -279,15 +281,17 @@ export class GenerateImageTool extends BaseTool {
       for (const imageInfo of imageUrls) {
         try {
           // Fetch image data
-          const imageResponse = await fetch(imageInfo.url);
-          if (!imageResponse.ok) {
-            log.warn(`Failed to fetch image from ${imageInfo.source}: ${imageResponse.status}`);
+          const imageResponse = await safeDownload(imageInfo.url, {
+            maxSizeMB: MEDIA_LIMITS.MAX_MEDIA_SIZE_MB,
+            timeoutMs: 15_000,
+          });
+          if (!imageResponse.success || !imageResponse.buffer) {
+            log.warn(`Failed to fetch image from ${imageInfo.source}: ${imageResponse.details ?? imageResponse.error}`);
             continue;
           }
 
           // Convert to base64
-          const imageArrayBuffer = await imageResponse.arrayBuffer();
-          const base64ImageData = Buffer.from(imageArrayBuffer).toString("base64");
+          const base64ImageData = imageResponse.buffer.toString("base64");
 
           inlineDataArray.push({
             mimeType: imageInfo.mimeType,
@@ -475,12 +479,14 @@ export class GenerateImageTool extends BaseTool {
 
       // Fallback: fetch remote URL and convert to base64.
       if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
-        const imageResponse = await fetch(imageUrl);
-        if (imageResponse.ok) {
-          const mimeType = imageResponse.headers.get("content-type")?.split(";")[0] || null;
-          const arrayBuffer = await imageResponse.arrayBuffer();
+        const imageResponse = await safeDownload(imageUrl, {
+          maxSizeMB: MEDIA_LIMITS.MAX_MEDIA_SIZE_MB,
+          timeoutMs: 15_000,
+        });
+        if (imageResponse.success && imageResponse.buffer) {
+          const mimeType = imageResponse.contentType?.split(";")[0] || null;
           return {
-            imageData: Buffer.from(arrayBuffer).toString("base64"),
+            imageData: imageResponse.buffer.toString("base64"),
             mimeType,
           };
         }
@@ -901,12 +907,14 @@ export class GenerateImageTool extends BaseTool {
    * Fetch an image URL and convert to base64 (used for profile pictures)
    */
   private async fetchAndConvertImageToBase64(imageUrl: string): Promise<string> {
-    const response = await fetch(imageUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+    const response = await safeDownload(imageUrl, {
+      maxSizeMB: MEDIA_LIMITS.MAX_MEDIA_SIZE_MB,
+      timeoutMs: 15_000,
+    });
+    if (!response.success || !response.buffer) {
+      throw new Error(`Failed to fetch image: ${response.details ?? response.error ?? "unknown error"}`);
     }
 
-    const imageArrayBuffer = await response.arrayBuffer();
-    return Buffer.from(imageArrayBuffer).toString("base64");
+    return response.buffer.toString("base64");
   }
 }

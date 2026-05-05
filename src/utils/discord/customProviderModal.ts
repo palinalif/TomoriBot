@@ -527,11 +527,11 @@ export async function promptOtherModelConfig(
     // 1. Build the "Enter Model" button and edit the deferred reply
     const enterModelButton = new ButtonBuilder()
       .setCustomId("enter_model_name")
-      .setLabel(localizer(locale, "commands.config.model.text.other_model_model_label"))
+      .setLabel(localizer(locale, "commands.model.text.other_model_model_label"))
       .setStyle(ButtonStyle.Primary);
 
     const message = await interaction.editReply({
-      content: localizer(locale, "commands.config.model.text.other_model_prompt_description"),
+      content: localizer(locale, "commands.model.text.other_model_prompt_description"),
       components: [new ActionRowBuilder<ButtonBuilder>().addComponents(enterModelButton)],
     });
 
@@ -554,12 +554,12 @@ export async function promptOtherModelConfig(
     // 3. Show modal from button click (button → modal is Discord-allowed)
     const modal = new ModalBuilder()
       .setCustomId("other_model_modal")
-      .setTitle(localizer(locale, "commands.config.model.text.other_model_modal_title"));
+      .setTitle(localizer(locale, "commands.model.text.other_model_modal_title"));
 
     const modelInput = new TextInputBuilder()
       .setCustomId("model_name_input")
-      .setLabel(localizer(locale, "commands.config.model.text.other_model_model_label"))
-      .setPlaceholder(localizer(locale, "commands.config.model.text.other_model_model_placeholder"))
+      .setLabel(localizer(locale, "commands.model.text.other_model_model_label"))
+      .setPlaceholder(localizer(locale, "commands.model.text.other_model_model_placeholder"))
       .setStyle(TextInputStyle.Short)
       .setRequired(true)
       .setMinLength(3)

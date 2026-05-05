@@ -20,6 +20,8 @@ import { ContextItemTag, type StructuredContextItem } from "../../types/misc/con
 import { ColorCode } from "@/utils/misc/logger";
 import { loadLlmById } from "@/utils/db/dbRead";
 import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/utils/provider/credentialResolver";
+import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
+import { safeDownload } from "@/utils/security/safeDownload";
 import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 
 /**
@@ -575,18 +577,18 @@ export class PeekProfilePictureTool extends BaseTool {
    */
   private async fetchAndConvertImageToBase64(avatarUrl: string): Promise<string> {
     try {
-      // Fetch the image from Discord CDN
-      const response = await fetch(avatarUrl);
+      // Fetch the image from Discord CDN with bounded download checks
+      const response = await safeDownload(avatarUrl, {
+        maxSizeMB: MEDIA_LIMITS.MAX_MEDIA_SIZE_MB,
+        timeoutMs: 15_000,
+      });
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch avatar image: ${response.status} ${response.statusText}`);
+      if (!response.success || !response.buffer) {
+        throw new Error(`Failed to fetch avatar image: ${response.details ?? response.error ?? "unknown error"}`);
       }
 
-      // Get the image as array buffer
-      const imageBuffer = await response.arrayBuffer();
-
       // Convert array buffer to base64
-      const base64String = Buffer.from(imageBuffer).toString("base64");
+      const base64String = response.buffer.toString("base64");
 
       return base64String;
     } catch (error) {

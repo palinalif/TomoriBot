@@ -493,6 +493,7 @@ export const tomoriConfigSchema = z.object({
     z.array(toolNoticeKeySchema).default([]),
   ), // Added April 2026 - Hidden notice embed types; missing entries remain visible by default
   voice_message_enabled: z.boolean().default(true), // Added March 2026 - Allow Tomori to send ElevenLabs TTS voice messages
+  thread_creation_enabled: z.boolean().default(true), // Added May 2026 - Allow tool-driven Discord thread creation
   voice_transcript_chat_mode: z.boolean().default(true), // Added March 2026 - Post voice transcripts as webhook chat messages instead of using internal cache
   chatterbox_turbo_enabled: z.boolean().default(true), // Added April 2026 - Use Chatterbox-Turbo model.generate path for local Chatterbox TTS
   chatterbox_cfg_weight: z.number().min(0.0).default(0.5), // Added April 2026 - Standard Chatterbox CFG weight; ignored by Turbo

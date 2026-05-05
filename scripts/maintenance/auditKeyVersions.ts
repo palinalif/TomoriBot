@@ -39,7 +39,7 @@ import { sql } from "bun";
 //    we imported it statically at the top of this file.
 config();
 
-const { keyManager } = await import("../src/utils/security/keyManager");
+const { keyManager } = await import("@/utils/security/keyManager");
 
 // 2. Populate the key manager's internal map from process.env (now loaded)
 keyManager.initialize();
@@ -65,7 +65,7 @@ function getPostgresUrl(): string {
     throw new Error("Database password must be provided via POSTGRES_PASSWORD or POSTGRES_URL");
   }
 
-  return `postgresql://${user}:${password}@${host}:${port}/${database}`;
+  return `postgresql://${user}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
 }
 
 const postgresUrl = getPostgresUrl();

@@ -451,6 +451,11 @@ export class ReviewCapabilitiesTool extends BaseTool {
           feature: "video generation",
           command: "/config tools manage (permission: videogen)",
         });
+      if (!config.thread_creation_enabled)
+        disabledFeatures.push({
+          feature: "thread creation",
+          command: "/config tools manage (permission: threadcreation)",
+        });
       if (!config.sticker_usage_enabled)
         disabledFeatures.push({
           feature: "sticker usage",
@@ -630,6 +635,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
           value: config.sampledialogue_memteaching_enabled,
         },
         { name: "Message Management Tool", value: config.manage_message_enabled },
+        { name: "Thread Creation Tool", value: config.thread_creation_enabled },
         {
           name: "Uncensored Unicode Space",
           value: config.uncensor_unicode_space_enabled,
@@ -779,6 +785,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
             videogen_enabled: config.videogen_enabled,
             nai_exclusive_imggen: config.nai_exclusive_imggen ?? false,
             voice_message_enabled: config.voice_message_enabled ?? true,
+            thread_creation_enabled: config.thread_creation_enabled,
           },
         });
 
@@ -903,6 +910,7 @@ export class ReviewCapabilitiesTool extends BaseTool {
       if (!config.attribute_memteaching_enabled) disabledFeatures.push("attribute teaching");
       if (!config.sampledialogue_memteaching_enabled) disabledFeatures.push("dialogue teaching");
       if (!config.manage_message_enabled) disabledFeatures.push("message management tool");
+      if (!config.thread_creation_enabled) disabledFeatures.push("thread creation tool");
 
       if (disabledFeatures.length > 0) {
         disabledReasons.push(`**Server Configuration**: Admin has disabled ${disabledFeatures.join(", ")}`);

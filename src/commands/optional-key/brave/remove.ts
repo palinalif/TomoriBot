@@ -4,12 +4,12 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import { getCachedTomoriState, invalidateTomoriStateCache } from "../../../utils/cache/tomoriStateCache";
-import { localizer } from "../../../utils/text/localizer";
-import { log, ColorCode } from "../../../utils/misc/logger";
-import { replyInfoEmbed } from "../../../utils/discord/interactionHelper";
-import type { UserRow, ErrorContext, TomoriState } from "../../../types/db/schema";
-import { deleteOptApiKey, hasOptApiKey } from "../../../utils/security/crypto";
+import { getCachedTomoriState, invalidateTomoriStateCache } from "@/utils/cache/tomoriStateCache";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
+import { replyInfoEmbed } from "@/utils/discord/interactionHelper";
+import type { UserRow, ErrorContext, TomoriState } from "@/types/db/schema";
+import { deleteOptApiKey, hasOptApiKey } from "@/utils/security/crypto";
 
 /**
  * Configure the subcommand for removing Brave Search API key

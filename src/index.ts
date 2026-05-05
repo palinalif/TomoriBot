@@ -1,9 +1,8 @@
 import { Client, GatewayIntentBits, Partials } from "discord.js";
 import { config } from "dotenv";
 import { sql } from "@/utils/db/client";
-import { detectRagAvailability } from "@/utils/db/ragDetection";
+import { initializeDatabase } from "@/utils/db/initializeDatabase";
 import { log } from "./utils/misc/logger";
-import path from "node:path";
 import { createServer } from "node:http";
 import eventHandler from "./handlers/eventHandler";
 import { initializeLocalizer } from "./utils/text/localizer";
@@ -197,66 +196,11 @@ if ((process.env.RUN_ENV || "development") !== "production") {
   await new Promise((resolve) => setTimeout(resolve, 500));
 }
 
-/**
- * Initialize database schema and seed data with retry logic for development hot-reloading
- * @param maxRetries - Maximum number of retry attempts
- * @param delayMs - Delay between retries in milliseconds
- */
-async function initializeDatabase(maxRetries = 3, delayMs = 1000): Promise<void> {
-  const schemaPath = path.join(import.meta.dir, "db", "schema.sql");
-  const ragSchemaPath = path.join(import.meta.dir, "db", "schema_rag.sql");
-  const stPresetSchemaPath = path.join(import.meta.dir, "db", "schema_stpreset.sql");
-  const seedPath = path.join(import.meta.dir, "db", "seed.sql");
-  const ragAvailable = await detectRagAvailability();
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      // Initialize schema
-      await sql.file(schemaPath);
-      log.success("PostgreSQL database schema verified");
-
-      if (ragAvailable) {
-        await sql.file(ragSchemaPath);
-        log.success("PostgreSQL RAG schema verified");
-      } else {
-        log.info(
-          "Skipping RAG schema init (pgvector extension not detected). Install pgvector to enable document features (see README.md).",
-        );
-      }
-
-      // Initialize ST preset schema (always-on — lightweight tables)
-      await sql.file(stPresetSchemaPath);
-      log.success("PostgreSQL ST preset schema verified");
-
-      // Initialize seed data
-      await sql.file(seedPath);
-      log.success("PostgreSQL database seed verified");
-
-      return; // Success - exit retry loop
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-
-      // Check if this is a concurrency error that might resolve with retry
-      const isConcurrencyError =
-        errorMessage.includes("tuple concurrently updated") ||
-        errorMessage.includes("could not serialize access") ||
-        errorMessage.includes("deadlock detected");
-
-      if (isConcurrencyError && attempt < maxRetries) {
-        log.warn(
-          `Database initialization attempt ${attempt} failed due to concurrency (retrying in ${delayMs}ms): ${errorMessage}`,
-        );
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
-      } else {
-        // Non-retryable error or max retries exceeded
-        log.error(`PostgreSQL database initialization failed after ${attempt} attempts:`, err);
-        process.exit(1);
-      }
-    }
-  }
+try {
+  await initializeDatabase();
+} catch {
+  process.exit(1);
 }
-
-await initializeDatabase();
 
 // Clean up expired cooldowns on startup (development alternative to pg_cron)
 log.section("Cleaning up expired cooldowns...");

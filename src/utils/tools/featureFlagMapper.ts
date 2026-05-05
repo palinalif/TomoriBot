@@ -20,6 +20,7 @@ export const BUILTIN_TOOL_FEATURE_FLAGS: Record<string, string> = {
 
   // Discord interaction tools
   manage_message: "manage_message",
+  create_thread: "thread_creation",
 
   // Image generation tools
   generate_image: "image_gen",
@@ -140,6 +141,7 @@ export function configToFeatureFlags(config: {
   imagegen_enabled: boolean;
   videogen_enabled: boolean;
   voice_message_enabled: boolean;
+  thread_creation_enabled: boolean;
 }): Record<string, boolean> {
   return {
     sticker_usage: config.sticker_usage_enabled,
@@ -149,5 +151,6 @@ export function configToFeatureFlags(config: {
     image_gen: config.imagegen_enabled,
     video_gen: config.videogen_enabled,
     voice_message: config.voice_message_enabled,
+    thread_creation: config.thread_creation_enabled,
   };
 }

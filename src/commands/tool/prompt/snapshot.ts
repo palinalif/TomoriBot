@@ -1117,6 +1117,7 @@ async function fetchProviderTools(persona: TomoriState, providerName: string): P
       videogen_enabled: persona.config.videogen_enabled,
       nai_exclusive_imggen: persona.config.nai_exclusive_imggen,
       voice_message_enabled: persona.config.voice_message_enabled,
+      thread_creation_enabled: persona.config.thread_creation_enabled,
     },
   };
 

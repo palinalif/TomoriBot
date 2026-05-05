@@ -5,6 +5,7 @@
  */
 
 import { log } from "@/utils/misc/logger";
+import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 
 /**
  * Options for safe download operation
@@ -25,6 +26,12 @@ export interface SafeDownloadOptions {
    * If provided, size check occurs before download attempt
    */
   knownSize?: number;
+
+  /**
+   * Additional fetch options such as provider-required headers.
+   * The timeout AbortSignal is always applied by safeDownload.
+   */
+  requestInit?: Omit<RequestInit, "signal">;
 }
 
 /**
@@ -40,6 +47,11 @@ export interface SafeDownloadResult {
    * Downloaded file buffer (only if success === true)
    */
   buffer?: Buffer;
+
+  /**
+   * Response Content-Type header, when the server provided one
+   */
+  contentType?: string;
 
   /**
    * Error type if download failed
@@ -75,7 +87,7 @@ export interface SafeDownloadResult {
  * ```
  */
 export async function safeDownload(url: string, options: SafeDownloadOptions): Promise<SafeDownloadResult> {
-  const { maxSizeMB, timeoutMs = 10000, knownSize } = options;
+  const { maxSizeMB, timeoutMs = 10000, knownSize, requestInit } = options;
   const maxSizeBytes = maxSizeMB * 1024 * 1024;
 
   // 1. Pre-check known size if provided (early rejection, no network call)
@@ -101,9 +113,7 @@ export async function safeDownload(url: string, options: SafeDownloadOptions): P
 
   try {
     // 3. Fetch with timeout and abort signal
-    const response = await fetch(url, { signal: controller.signal });
-
-    clearTimeout(timeoutId);
+    const response = await fetchUserRemoteUrl(url, { ...(requestInit ?? {}), signal: controller.signal });
 
     // 4. Validate response status
     if (!response.ok) {
@@ -170,10 +180,9 @@ export async function safeDownload(url: string, options: SafeDownloadOptions): P
     return {
       success: true,
       buffer,
+      contentType: response.headers.get("content-type") ?? undefined,
     };
   } catch (error) {
-    clearTimeout(timeoutId);
-
     // Handle abort (timeout)
     if (error instanceof Error && error.name === "AbortError") {
       log.warn(`Download timed out after ${timeoutMs}ms`, {
@@ -201,5 +210,7 @@ export async function safeDownload(url: string, options: SafeDownloadOptions): P
       error: "network_error",
       details: error instanceof Error ? error.message : String(error),
     };
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

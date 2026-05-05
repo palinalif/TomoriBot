@@ -8,6 +8,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { TomoriPresetRow } from "../../types/db/schema";
 import { log } from "../misc/logger";
+import { PERSONA_LIMITS } from "@/utils/security/rateLimiter";
+import { safeDownload } from "@/utils/security/safeDownload";
 
 /**
  * PNG file signature (magic bytes) for format verification
@@ -66,15 +68,16 @@ export async function getServerAvatar(guild: Guild | null, client: Client): Prom
 
     // 4. Download the avatar image
     log.info(`Downloading avatar from: ${avatarUrl}`);
-    const response = await fetch(avatarUrl);
+    const response = await safeDownload(avatarUrl, {
+      maxSizeMB: PERSONA_LIMITS.MAX_AVATAR_SIZE_MB,
+      timeoutMs: 10_000,
+    });
 
-    if (!response.ok) {
-      throw new Error(`Failed to fetch avatar: ${response.status} ${response.statusText}`);
+    if (!response.success || !response.buffer) {
+      throw new Error(`Failed to fetch avatar: ${response.details ?? response.error ?? "unknown error"}`);
     }
 
-    // 5. Convert to Buffer
-    const arrayBuffer = await response.arrayBuffer();
-    const imageBuffer = Buffer.from(arrayBuffer);
+    const imageBuffer = response.buffer;
 
     // 6. Verify it's a valid PNG
     if (!isPNGFormat(imageBuffer)) {
@@ -123,16 +126,16 @@ export async function downloadImage(imageUrl: string): Promise<Buffer> {
   try {
     log.info(`Downloading image from: ${imageUrl}`);
 
-    // 1. Fetch the image
-    const response = await fetch(imageUrl);
+    const response = await safeDownload(imageUrl, {
+      maxSizeMB: PERSONA_LIMITS.MAX_AVATAR_SIZE_MB,
+      timeoutMs: 10_000,
+    });
 
-    if (!response.ok) {
-      throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+    if (!response.success || !response.buffer) {
+      throw new Error(`Failed to download image: ${response.details ?? response.error ?? "unknown error"}`);
     }
 
-    // 2. Convert to Buffer
-    const arrayBuffer = await response.arrayBuffer();
-    const imageBuffer = Buffer.from(arrayBuffer);
+    const imageBuffer = response.buffer;
 
     log.success(`Successfully downloaded image (${imageBuffer.length} bytes)`);
     return imageBuffer;

@@ -1,5 +1,5 @@
-import { $, sql } from "bun";
-import { log } from "../src/utils/misc/logger";
+import { sql } from "bun";
+import { log } from "@/utils/misc/logger";
 import { config } from "dotenv";
 import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -15,6 +15,8 @@ config();
 
 const args = process.argv.slice(2);
 const mode = args[0];
+const restoreConfirmed = process.env.TOMORI_RESTORE_CONFIRM === "RESTORE";
+const forceNonEmptyRestore = process.env.TOMORI_RESTORE_FORCE_NONEMPTY === "RESTORE ANYWAY";
 
 if (mode !== "--backup" && mode !== "--restore") {
   log.error("Usage:");
@@ -27,6 +29,26 @@ if (mode !== "--backup" && mode !== "--restore") {
 // ---------------------------------------------------------------------------
 // Shared helper: build DATABASE_URL from .env vars
 // ---------------------------------------------------------------------------
+
+async function runExternalCommand(command: string, args: string[]): Promise<void> {
+  const subprocess = Bun.spawn([command, ...args], {
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+
+  const exitCode = await subprocess.exited;
+  if (exitCode !== 0) {
+    throw new Error(`${command} exited with code ${exitCode}`);
+  }
+}
+
+function resolveEnvPath(): string {
+  return process.env.TOMORI_ENV_FILE ? resolve(process.env.TOMORI_ENV_FILE) : join(process.cwd(), ".env");
+}
+
+function resolveBackupsRoot(): string {
+  return process.env.TOMORI_BACKUP_DIR ? resolve(process.env.TOMORI_BACKUP_DIR) : join(process.cwd(), "backups");
+}
 
 /**
  * Resolves a PostgreSQL connection URL from environment variables.
@@ -67,14 +89,14 @@ async function runBackup(): Promise<void> {
   log.info("Creating a migration bundle with your database and config...");
 
   // 1. Locate the .env file
-  const envPath = join(process.cwd(), ".env");
+  const envPath = resolveEnvPath();
   if (!existsSync(envPath)) {
-    log.error(".env file not found in project root. Cannot bundle config.");
+    log.error(`Environment file not found: ${envPath}. Cannot bundle config.`);
     process.exit(1);
   }
 
   // 2. Create the backups/ output directory
-  const backupsRoot = join(process.cwd(), "backups");
+  const backupsRoot = resolveBackupsRoot();
   if (!existsSync(backupsRoot)) {
     mkdirSync(backupsRoot, { recursive: true });
   }
@@ -94,7 +116,7 @@ async function runBackup(): Promise<void> {
   const dbUrl = resolveDatabaseUrl();
   log.info("Running pg_dump...");
   try {
-    await $`pg_dump ${dbUrl} -f ${dbDumpPath}`;
+    await runExternalCommand("pg_dump", [dbUrl, "--clean", "--if-exists", "-f", dbDumpPath]);
     log.success("Database dump completed.");
   } catch (_error) {
     log.error("pg_dump failed. Ensure pg_dump is installed and in your PATH.");
@@ -122,7 +144,7 @@ async function runBackup(): Promise<void> {
   log.section("✅ Bundle Created!");
   log.info(`Location:    ${bundleDir}`);
   log.info("Contents:");
-  log.info("  database.sql     — PostgreSQL dump (restore with: bun run transfer-restore)");
+  log.info("  database.sql     — PostgreSQL dump (restore with: bun run restore-backup)");
   log.info("  config.env       — Copy of your .env (review before restoring!)");
   log.info("  bundle_info.json — Bundle metadata");
   log.info("");
@@ -200,16 +222,22 @@ async function runRestore(bundlePath: string): Promise<void> {
     log.info("  - psql continues past errors, leaving the database in a mixed state.");
     log.info("");
     log.info("Recommended: run `bun run nuke-db` first, then re-run restore.");
-    log.info("Type 'RESTORE ANYWAY' to force restore into the existing database,");
-    log.info("or anything else to abort:");
+    let forceResponse = "";
+    if (forceNonEmptyRestore) {
+      log.warn("Non-interactive non-empty restore confirmation accepted from TOMORI_RESTORE_FORCE_NONEMPTY.");
+      forceResponse = "RESTORE ANYWAY";
+    } else {
+      log.info("Type 'RESTORE ANYWAY' to force restore into the existing database,");
+      log.info("or anything else to abort:");
 
-    const forceResponse = await new Promise<string>((resolve) => {
-      process.stdin.resume();
-      process.stdin.once("data", (data) => {
-        resolve(data.toString().trim());
-        process.stdin.pause();
+      forceResponse = await new Promise<string>((resolve) => {
+        process.stdin.resume();
+        process.stdin.once("data", (data) => {
+          resolve(data.toString().trim());
+          process.stdin.pause();
+        });
       });
-    });
+    }
 
     if (forceResponse !== "RESTORE ANYWAY") {
       log.info("Aborted. Run `bun run nuke-db` first for a clean restore.");
@@ -226,15 +254,21 @@ async function runRestore(bundlePath: string): Promise<void> {
   log.info("     ➜ After restore, update POSTGRES_HOST/PORT/USER/PASSWORD/DB in your .env");
   log.info("       if this machine's database credentials differ from the source machine.");
   log.info("  2. Restore the bundled database dump into your current DB connection.");
-  log.info("Type 'RESTORE' (all caps) to proceed:");
+  let response = "";
+  if (restoreConfirmed) {
+    log.warn("Non-interactive restore confirmation accepted from TOMORI_RESTORE_CONFIRM.");
+    response = "RESTORE";
+  } else {
+    log.info("Type 'RESTORE' (all caps) to proceed:");
 
-  const response = await new Promise<string>((resolve) => {
-    process.stdin.resume();
-    process.stdin.once("data", (data) => {
-      resolve(data.toString().trim());
-      process.stdin.pause();
+    response = await new Promise<string>((resolve) => {
+      process.stdin.resume();
+      process.stdin.once("data", (data) => {
+        resolve(data.toString().trim());
+        process.stdin.pause();
+      });
     });
-  });
+  }
 
   if (response !== "RESTORE") {
     log.info("Aborted. Nothing was changed.");
@@ -242,13 +276,13 @@ async function runRestore(bundlePath: string): Promise<void> {
   }
 
   // 4. Restore .env
-  const localEnvPath = join(process.cwd(), ".env");
+  const localEnvPath = resolveEnvPath();
   const envAlreadyExists = existsSync(localEnvPath);
   if (envAlreadyExists) {
     // Back up existing .env before overwriting
     const backupEnvPath = `${localEnvPath}.bak`;
     copyFileSync(localEnvPath, backupEnvPath);
-    log.info(`Existing .env backed up to: .env.bak`);
+    log.info(`Existing environment file backed up to: ${backupEnvPath}`);
   }
   copyFileSync(envBackupPath, localEnvPath);
   log.success(".env restored from bundle.");
@@ -260,7 +294,7 @@ async function runRestore(bundlePath: string): Promise<void> {
   const dbUrl = resolveDatabaseUrl();
   log.info("Restoring database from dump (running psql)...");
   try {
-    await $`psql ${dbUrl} -f ${dbDumpPath}`;
+    await runExternalCommand("psql", [dbUrl, "-v", "ON_ERROR_STOP=1", "-f", dbDumpPath]);
     log.success("Database restored successfully.");
   } catch (_error) {
     log.error("psql restore failed. Ensure psql is installed and in your PATH.");
@@ -289,7 +323,7 @@ async function runRestore(bundlePath: string): Promise<void> {
  * @returns Absolute path to the latest bundle directory.
  */
 function resolveLatestBundle(): string {
-  const backupsRoot = join(process.cwd(), "backups");
+  const backupsRoot = resolveBackupsRoot();
 
   if (!existsSync(backupsRoot)) {
     log.error("No backups/ directory found. Run `bun run backup` first.");

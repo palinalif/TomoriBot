@@ -101,6 +101,11 @@ export function parseCapabilityModalFields(
       result.modelName = values[ModalFieldId.model_name]?.trim() || null;
       break;
     }
+    case "image":
+    case "video": {
+      result.modelName = values[ModalFieldId.model_name]?.trim() || null;
+      break;
+    }
     case "speech": {
       const rawMarkup = values[ModalFieldId.script_markup]?.trim().toLowerCase();
       result.scriptMarkup = rawMarkup === "bracket-tags" || rawMarkup === "emoji" ? rawMarkup : "plain";
@@ -112,9 +117,6 @@ export function parseCapabilityModalFields(
       result.transcriptionLanguage = values[ModalFieldId.transcription_language]?.trim() || null;
       break;
     }
-    case "image":
-    case "video":
-      break;
   }
 
   return result;
@@ -413,6 +415,13 @@ export function buildCapabilityEditModalComponents(
           value: existing.displayName ?? undefined,
         },
         urlComponent,
+        {
+          customId: ModalFieldId.auth_token,
+          labelKey: "commands.config.custom_models.capability_modal.auth_token_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.auth_token_placeholder"),
+          required: false,
+          maxLength: 500,
+        },
       ];
 
     case "speech": {
@@ -525,6 +534,14 @@ export function buildCapabilityEditModalComponents(
     case "image":
     case "video":
       return [
+        {
+          customId: ModalFieldId.model_name,
+          labelKey: "commands.config.custom_models.capability_modal.model_name_label",
+          placeholder: localizer(locale, "commands.config.custom_models.capability_modal.model_name_placeholder"),
+          required: false,
+          maxLength: 200,
+          value: existing.modelName ?? undefined,
+        },
         {
           customId: ModalFieldId.display_name,
           labelKey: "commands.config.custom_models.capability_modal.display_name_label",

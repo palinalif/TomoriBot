@@ -17,6 +17,7 @@ If you customize TomoriBot's system prompt, persona instructions, or external pr
 | `update_short_term_memory` | `{short_term_memory_tool}` | Base Tool; unavailable on NovelAI | Save temporary working memory for the current channel/story arc without making it permanent. |
 | `create_task` | `{task_tool}` | Base Tool | Schedule one-time or recurring reminders and self-tasks. |
 | `cross_channel_message` | `{cross_channel_tool}` | Base Tool; unavailable on NovelAI; target channel permissions and cross-channel blocklist still apply | Instantly act in another channel or thread, with optional boomerang report-back. |
+| `create_thread` | `{create_thread_tool}` | `thread_creation_enabled`; bot `CreatePublicThreads` and `SendMessagesInThreads` permissions | Create a public thread in the current or named channel and send its starter message. |
 | `select_sticker_for_response` | `{sticker_tool}` | `sticker_usage_enabled`; `USE_EXTERNAL_STICKERS` | Pick a matching server sticker to accompany the response. |
 | `manage_message` | `{manage_message_tool}` | `manage_message_enabled`; `MANAGE_MESSAGES` still required for `pin` | Pin any recent message, or edit/delete recent messages sent by Tomori or its characters. |
 | `interact_with_recent_message` | `{message_interaction_tool}` | Base Tool; normal Discord send/react capability still applies at runtime | React to a recent message or send a short backtracking reply to it. |

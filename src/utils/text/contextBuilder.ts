@@ -73,11 +73,16 @@ const DISCORD_CHANNEL_LINK_REPLACE_PATTERN =
 const MIN_MESSAGES_FOR_SUMMARY = Number.parseInt(process.env.SHORT_TERM_MEMORY_MIN_MESSAGES_FOR_SUMMARY || "6", 10);
 const MAX_OTHER_CHANNEL_MEMORIES = Number.parseInt(process.env.SHORT_TERM_MEMORY_MAX_OTHER_CHANNELS || "3", 10);
 
-const DOCUMENT_CONTEXT_MAX_CHARS = 2000;
 const DOCUMENT_QUERY_MAX_LENGTH = 1000;
 const DOCUMENT_QUERY_MIN_LENGTH = 3;
-const DOCUMENT_MAX_RESULTS = 6;
-const DOCUMENT_MIN_SIMILARITY = 0.2;
+const DOCUMENT_MAX_RESULTS = (() => {
+  const parsed = Number.parseInt(process.env.DOCUMENT_MAX_RESULTS || "6", 10);
+  return Number.isFinite(parsed) ? Math.max(1, parsed) : 6;
+})();
+const DOCUMENT_MIN_SIMILARITY = (() => {
+  const parsed = Number.parseFloat(process.env.DOCUMENT_MIN_SIMILARITY || "0.5");
+  return Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : 0.5;
+})();
 const MEDIA_IMAGE_MESSAGE_LIMIT = (() => {
   const parsed = Number.parseInt(process.env.MEDIA_IMAGE_MESSAGE_LIMIT || "3", 10);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 3;
@@ -1125,6 +1130,7 @@ export async function buildContext(params: BuildContextParams): Promise<BuildCon
                     videogen_enabled: params.tomoriConfig.videogen_enabled,
                     nai_exclusive_imggen: params.tomoriConfig.nai_exclusive_imggen,
                     voice_message_enabled: params.tomoriConfig.voice_message_enabled,
+                    thread_creation_enabled: params.tomoriConfig.thread_creation_enabled,
                   },
                 }
               : undefined,
@@ -1248,6 +1254,7 @@ async function buildContextNative({
               videogen_enabled: tomoriConfig.videogen_enabled,
               nai_exclusive_imggen: tomoriConfig.nai_exclusive_imggen,
               voice_message_enabled: tomoriConfig.voice_message_enabled,
+              thread_creation_enabled: tomoriConfig.thread_creation_enabled,
             },
           }
         : undefined,
@@ -1774,7 +1781,10 @@ async function buildContextNative({
     // 3. Process each user (including bot itself)
     for (const userIdToProcess of userList) {
       // 4. Special handling for TomoriBot itself
-      if (client.user && userIdToProcess === client.user.id) {
+      if (
+        (client.user && userIdToProcess === client.user.id) ||
+        (tomoriState?.is_alter && userIdToProcess === String(tomoriState.tomori_id))
+      ) {
         userEntries.push({
           userId: userIdToProcess,
           displayName: botName,
@@ -2225,7 +2235,7 @@ async function buildContextNative({
               minSimilarity: DOCUMENT_MIN_SIMILARITY,
             });
 
-            const documentContext = formatRetrievedChunksForPrompt(chunks, DOCUMENT_CONTEXT_MAX_CHARS);
+            const documentContext = formatRetrievedChunksForPrompt(chunks);
 
             if (documentContext) {
               contextItems.push({

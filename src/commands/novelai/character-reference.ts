@@ -12,6 +12,8 @@ import { loadAllPersonasForServer } from "@/utils/db/dbRead";
 import { replyInfoEmbed, replyPaginatedPersonaChoicesV2 } from "@/utils/discord/interactionHelper";
 import { convertToPNG } from "@/utils/image/imageProcessor";
 import { ColorCode, log } from "@/utils/misc/logger";
+import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
+import { safeDownload } from "@/utils/security/safeDownload";
 import { deleteCharRef, uploadCharRef, type CharRefEntityType } from "@/utils/storage/charrefStorage";
 import { localizer } from "@/utils/text/localizer";
 import type { TomoriState, UserRow } from "@/types/db/schema";
@@ -60,8 +62,12 @@ async function prepareAttachmentForStorage(attachment: Attachment): Promise<Uplo
 
   let sourceBuffer: Buffer;
   try {
-    const response = await fetch(attachment.url);
-    if (!response.ok) {
+    const response = await safeDownload(attachment.url, {
+      maxSizeMB: MEDIA_LIMITS.MAX_MEDIA_SIZE_MB,
+      timeoutMs: 10_000,
+      knownSize: attachment.size,
+    });
+    if (!response.success || !response.buffer) {
       return {
         success: false,
         titleKey: "commands.novelai.character-reference.download_failed_title",
@@ -69,7 +75,7 @@ async function prepareAttachmentForStorage(attachment: Attachment): Promise<Uplo
       };
     }
 
-    sourceBuffer = Buffer.from(await response.arrayBuffer());
+    sourceBuffer = response.buffer;
   } catch (error) {
     log.warn("Failed to download NovelAI character reference attachment", error);
     return {

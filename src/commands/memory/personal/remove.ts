@@ -7,9 +7,9 @@ import type {
 } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { sql } from "@/utils/db/client";
-import { personalMemorySchema, type UserRow, type ErrorContext, type TomoriState } from "../../../types/db/schema";
-import { localizer } from "../../../utils/text/localizer";
-import { log, ColorCode } from "../../../utils/misc/logger";
+import { personalMemorySchema, type UserRow, type ErrorContext, type TomoriState } from "@/types/db/schema";
+import { localizer } from "@/utils/text/localizer";
+import { log, ColorCode } from "@/utils/misc/logger";
 import {
   acknowledgeModalSubmitForRefresh,
   replyInfoEmbed,
@@ -19,15 +19,11 @@ import {
   replyPaginatedPersonaChoicesV2,
   promptWithPaginatedModal,
   safeSelectOptionText,
-} from "../../../utils/discord/interactionHelper";
-import {
-  loadTomoriState,
-  loadAllPersonasForServer,
-  loadPersonalMemoriesForUserLineage,
-} from "../../../utils/db/dbRead";
-import { invalidateUserCache } from "../../../utils/cache/userCache";
-import type { SelectOption } from "../../../types/discord/modal";
-import { createStandardEmbed } from "../../../utils/discord/embedHelper";
+} from "@/utils/discord/interactionHelper";
+import { loadTomoriState, loadAllPersonasForServer, loadPersonalMemoriesForUserLineage } from "@/utils/db/dbRead";
+import { invalidateUserCache } from "@/utils/cache/userCache";
+import type { SelectOption } from "@/types/discord/modal";
+import { createStandardEmbed } from "@/utils/discord/embedHelper";
 
 // Rule 20: Constants for static values at the top
 const MODAL_CUSTOM_ID = "forget_personalmemory_modal";
