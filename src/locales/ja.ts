@@ -367,7 +367,13 @@ export default {
         description: `ペルソナに音声出力用の声を割り当てます。`,
       },
       "voice-design": {
-        description: `ペルソナに VoiceDesign 用の声質プロンプトを設定します。`,
+        description: `ペルソナの VoiceDesign プロンプトを管理します。`,
+        set: {
+          description: `ペルソナに VoiceDesign 用の声質プロンプトを設定します。`,
+        },
+        remove: {
+          description: `ペルソナの VoiceDesign プロンプトを削除します。`,
+        },
       },
       elevenlabs: {
         description: `ElevenLabs の音声生成と文字起こしを接続します。`,
@@ -459,20 +465,15 @@ export default {
       voice_design: {
         description: `ペルソナに VoiceDesign 用の声質プロンプトを設定します。`,
         prompt_description: `任意の声質説明。省略すると大きめの入力欄を開きます。`,
-        clear_description: `設定ではなく、このペルソナの VoiceDesign プロンプトを削除します。`,
-        edit_description: `既存の VoiceDesign プロンプトを入力済みの欄で編集します。`,
         unsupported_endpoint_title: `VoiceDesign エンドポイントが有効ではありません`,
         unsupported_endpoint_description: `VoiceDesign プロンプトを設定する前に、Supports Instruct が有効なローカルTTSエンドポイントを選択してください。`,
         select_persona_title: `VoiceDesign を設定するペルソナを選択`,
         modal_title: `VoiceDesign プロンプト`,
-        edit_modal_title: `VoiceDesign プロンプトを編集`,
+        update_modal_title: `VoiceDesign プロンプトを更新`,
         prompt_label: `声質説明`,
         prompt_help: `話者の年齢、声色、質感、アクセント、速度、感情、話し方を説明してください。`,
         prompt_placeholder: `落ち着いた大人のナレーター。ゆっくりめで、柔らかく息成分のある、安心感のある話し方。`,
-        prompt_required_description: `VoiceDesign プロンプトを入力するか、clear を有効にして再実行してください。`,
-        invalid_combination_description: `VoiceDesign の操作は1つだけ指定してください。プロンプト設定、既存プロンプト編集、削除のいずれかを選んでください。`,
-        no_existing_prompt_title: `VoiceDesign プロンプトがありません`,
-        no_existing_prompt_description: `**{persona}** には編集する VoiceDesign プロンプトがまだありません。作成するには edit を無効にして \`/speech voice-design\` を実行してください。`,
+        prompt_required_description: `VoiceDesign プロンプトを入力してください。`,
         success_title: `VoiceDesign プロンプトを設定しました`,
         success_description: `**{persona}** はローカルボイスメッセージで次の VoiceDesign プロンプトを使用します:\n\n> {preview}`,
         cleared_title: `VoiceDesign プロンプトを削除しました`,
@@ -1574,7 +1575,7 @@ export default {
 5. *(任意)* 高速化のため flash-attn をインストール — 手順 4 の後 \`pip install wheel\`、次に \`pip install flash-attn --no-build-isolation\` (Winは20-40分)。初回はスキップ。
 6. 音声クローンには \`server.py\`、Qwen3-TTS VoiceDesign のみには \`server.py --mode voice-design\`、1つのURLでリクエストごとにクローン/VoiceDesignを判定するには \`server.py --mode auto\` を起動します。
 7. {custom_endpoint_add} で登録: Capability（機能）は \`Speech\`、API Style（API スタイル）は \`TTS-Clone\`、Script Markup（スクリプトマークアップ）は \`Plain\` を選択。VoiceDesign では音声ソースモードに \`VoiceDesign\` を選ぶと、TomoriBot が自動的に instruct 対応として扱います。auto モードでは、同じサーバーURLを指すクローン用と VoiceDesign 用のエンドポイントを登録できます。
-8. {model_speech} で選択します。クローンモードでは {voice_add} と {voice_assign}、VoiceDesign では各ペルソナに \`/speech voice-design\` を実行します。`,
+8. {model_speech} で選択します。クローンモードでは {voice_add} と {voice_assign}、VoiceDesign では各ペルソナに {voice_design_set} を実行します。`,
         },
         irodoritts: {
           title: `IrodoriTTS 音声`,
@@ -3048,8 +3049,8 @@ Prompt Guidance Rescale: {cfg_rescale}
           success_title: `カスタムエンドポイントを追加しました`,
           success_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。\`/config model\` から選択できます。`,
           speech_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。次に \`/speech voice-add\` で音声サンプルを追加し、\`/speech voice-assign\` で割り当ててください。`,
-          speech_voice_design_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。次に \`/model speech\` で選択し、\`/speech voice-design\` でペルソナの声質プロンプトを設定してください。`,
-          speech_auto_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。次に \`/model speech\` で選択してください。クローン用ペルソナは \`/speech voice-add\` と \`/speech voice-assign\`、VoiceDesign 用ペルソナは \`/speech voice-design\` を使用します。`,
+          speech_voice_design_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。次に \`/model speech\` で選択し、\`/speech voice-design set\` でペルソナの声質プロンプトを設定してください。`,
+          speech_auto_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。次に \`/model speech\` で選択してください。クローン用ペルソナは \`/speech voice-add\` と \`/speech voice-assign\`、VoiceDesign 用ペルソナは \`/speech voice-design set\` を使用します。`,
         },
         edit: {
           description: `登録済みのラベル付きカスタムエンドポイントを編集します。`,
