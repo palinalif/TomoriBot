@@ -16,6 +16,7 @@ import {
   type PersonalSettingsExportData,
   type ServerConfigExport,
   type ImportResult,
+  type MemoryItem,
 } from "../../types/db/dataExport";
 import { validateMemoryContent } from "./memoryLimits";
 import { validateTomoriConfigFields } from "./sqlSecurity";
@@ -127,12 +128,12 @@ async function resolveMainTomoriScope(
 
 export async function importPersonalMemories(
   userDiscId: string,
-  memories: string[],
+  memories: MemoryItem[],
   personaLineageId = 0,
 ): Promise<ImportResult> {
   try {
     for (const memory of memories) {
-      const validation = validateMemoryContent(memory);
+      const validation = validateMemoryContent(memory.content);
       if (!validation.isValid) {
         return {
           success: false,
@@ -157,8 +158,8 @@ export async function importPersonalMemories(
 
     for (const memory of memories) {
       await sql`
-				INSERT INTO personal_memories (user_id, persona_lineage_id, content)
-				VALUES (${targetUserId}, ${personaLineageId}, ${memory})
+				INSERT INTO personal_memories (user_id, persona_lineage_id, content, tags)
+					VALUES (${targetUserId}, ${personaLineageId}, ${memory.content}, ${sql.array(memory.tags)})
 			`;
     }
 
@@ -462,7 +463,7 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 
 export async function importServerMemories(
   serverDiscId: string,
-  memories: string[],
+  memories: MemoryItem[],
   target: { mode: "persona"; tomoriId?: number } | { mode: "global" },
 ): Promise<ImportResult> {
   try {
@@ -475,7 +476,7 @@ export async function importServerMemories(
     }
 
     for (const memory of memories) {
-      const validation = validateMemoryContent(memory);
+      const validation = validateMemoryContent(memory.content);
       if (!validation.isValid) {
         return {
           success: false,
@@ -558,10 +559,10 @@ export async function importServerMemories(
 
     const userId = userRows[0].user_id;
 
-    for (const content of memories) {
+    for (const memory of memories) {
       await sql`
-				INSERT INTO server_memories (server_id, tomori_id, persona_lineage_id, user_id, content)
-				VALUES (${serverId}, ${insertTomoriId}, ${targetPersonaLineageId}, ${userId}, ${content})
+				INSERT INTO server_memories (server_id, tomori_id, persona_lineage_id, user_id, content, tags)
+				VALUES (${serverId}, ${insertTomoriId}, ${targetPersonaLineageId}, ${userId}, ${memory.content}, ${sql.array(memory.tags)})
 			`;
     }
 

@@ -4935,6 +4935,19 @@ Click **Confirm** to edit it.`,
           description: `Remove a server memory.`,
         },
       },
+      tagging: {
+        description: `Manage tagged memory mode.`,
+        set: {
+          description: `Switch to tagged memory mode`,
+          modal_title: `Tagged Memory Mode`,
+          select_label: `Tagging Mode`,
+          select_description: `Enable to filter memories by conversation tags; disable to include all memories.`,
+          select_placeholder: `Select a mode...`,
+          success_title: `Tagged Memory Mode Updated`,
+          success_enabled_description: `Tagged memory mode is now **enabled**. Only memories whose tags match the current conversation will be included in context.`,
+          success_disabled_description: `Tagged memory mode is now **disabled**. All memories will be included in context regardless of tags.`,
+        },
+      },
     },
     teach: {
       sampledialogue: {
