@@ -3012,6 +3012,7 @@ Your donations help:
         validation: {
           invalid_label: `Labels must use only lowercase letters, numbers, underscores, or hyphens, and be 1-40 characters long.`,
           unreachable: `I could not reach that endpoint: {reason}`,
+          local_address_blocked: `Personal endpoints block localhost and private IPs by default. If you're self-hosting, set \`ALLOW_PERSONAL_LOCAL_ENDPOINTS=true\` in your \`.env\` to allow local addresses.`,
           workflow_required: `ComfyUI image and video endpoints require a workflow JSON attachment.`,
           model_name_required: `Text and embedding endpoints require a remote model name.`,
           transcription_model_required: `Transcription endpoints require a model identifier such as \`large-v3\` or \`whisper-1\`.`,

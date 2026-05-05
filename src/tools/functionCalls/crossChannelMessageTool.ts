@@ -221,10 +221,7 @@ export class CrossChannelMessageTool extends BaseTool {
     const isPeekOnly = peekOnlyArg === true;
     const inferredChannelFromTask = inferTargetChannelFromTask(taskArg);
     const requestedChannel =
-      targetChannelArg?.trim() ||
-      legacyChannelNameArg?.trim() ||
-      legacyChannelIdArg?.trim() ||
-      inferredChannelFromTask;
+      targetChannelArg?.trim() || legacyChannelNameArg?.trim() || legacyChannelIdArg?.trim() || inferredChannelFromTask;
 
     // Validate: at least one channel identifier must be provided
     if (!requestedChannel) {

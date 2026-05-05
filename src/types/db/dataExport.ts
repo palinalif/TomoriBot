@@ -37,9 +37,7 @@ export const memoryItemSchema = z.union([
     content: z.string(),
     tags: z.preprocess(
       (v) =>
-        Array.isArray(v)
-          ? v.map((t: unknown) => (typeof t === "string" ? t.replace(/^["']+|["']+$/g, "") : t))
-          : [],
+        Array.isArray(v) ? v.map((t: unknown) => (typeof t === "string" ? t.replace(/^["']+|["']+$/g, "") : t)) : [],
       z.array(z.string().max(32)).max(5),
     ),
   }),

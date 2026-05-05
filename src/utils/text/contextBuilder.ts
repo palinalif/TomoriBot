@@ -1400,7 +1400,10 @@ async function buildContextNative({
 
   // Build conversation corpus once for tag-based memory filtering (used in blocks 4 and 9)
   const conversationCorpus = tomoriConfig.memory_tagging_enabled
-    ? simplifiedMessageHistory.map((m) => m.content ?? "").join(" ").toLowerCase()
+    ? simplifiedMessageHistory
+        .map((m) => m.content ?? "")
+        .join(" ")
+        .toLowerCase()
     : null;
 
   // 4. Server Memories / Conversation Memories
@@ -1427,9 +1430,12 @@ async function buildContextNative({
 			`;
 
       const filteredServerRows = conversationCorpus
-        ? serverMemoryRows.filter((row) =>
-            (row.tags ?? []).length > 0 &&
-            (row.tags ?? []).some((tag) => conversationCorpus.includes(tag.replace(/^["']+|["']+$/g, "").toLowerCase())),
+        ? serverMemoryRows.filter(
+            (row) =>
+              (row.tags ?? []).length > 0 &&
+              (row.tags ?? []).some((tag) =>
+                conversationCorpus.includes(tag.replace(/^["']+|["']+$/g, "").toLowerCase()),
+              ),
           )
         : serverMemoryRows;
 
@@ -1928,7 +1934,9 @@ async function buildContextNative({
             ? personalMemoryRows.filter(
                 (row) =>
                   (row.tags ?? []).length > 0 &&
-                  (row.tags ?? []).some((tag) => conversationCorpus.includes(tag.replace(/^["']+|["']+$/g, "").toLowerCase())),
+                  (row.tags ?? []).some((tag) =>
+                    conversationCorpus.includes(tag.replace(/^["']+|["']+$/g, "").toLowerCase()),
+                  ),
               )
             : personalMemoryRows;
           if (filteredPersonalRows.length > 0) {

@@ -3076,6 +3076,7 @@ Prompt Guidance Rescale: {cfg_rescale}
         validation: {
           invalid_label: `ラベルは英小文字・数字・アンダースコア・ハイフンのみ使用でき、長さは1〜40文字です。`,
           unreachable: `そのエンドポイントに接続できませんでした: {reason}`,
+          local_address_blocked: `パーソナルエンドポイントはデフォルトでlocalhostとプライベートIPをブロックします。セルフホストの場合は、ローカルアドレスを許可するために \`.env\` に \`ALLOW_PERSONAL_LOCAL_ENDPOINTS=true\` を設定してください。`,
           workflow_required: `ComfyUI の画像/動画エンドポイントではワークフローJSONの添付が必要です。`,
           model_name_required: `テキストと埋め込みのエンドポイントではモデル名が必要です。`,
           transcription_model_required: `文字起こしエンドポイントには \`large-v3\` や \`whisper-1\` などのモデル識別子が必要です。`,
@@ -4996,6 +4997,19 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
         },
         remove: {
           description: `サーバー記憶を削除します。`,
+        },
+      },
+      tagging: {
+        description: `タグ付き記憶モードを管理します。`,
+        set: {
+          description: `タグ付き記憶モードに切り替えます`,
+          modal_title: `タグ付き記憶モード`,
+          select_label: `タグモード`,
+          select_description: `有効にすると会話タグで記憶をフィルタリングし、無効にするとすべての記憶を含めます。`,
+          select_placeholder: `モードを選択...`,
+          success_title: `タグ付き記憶モードが更新されました`,
+          success_enabled_description: `タグ付き記憶モードが**有効**になりました。現在の会話のタグに一致する記憶のみがコンテキストに含まれます。`,
+          success_disabled_description: `タグ付き記憶モードが**無効**になりました。タグに関わらず、すべての記憶がコンテキストに含まれます。`,
         },
       },
     },

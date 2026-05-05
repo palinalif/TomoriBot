@@ -42,10 +42,7 @@ function sanitizeForJson(content: string): {
   return { sanitized: cleaned, wasSanitized };
 }
 
-function sanitizeMemoryItems(
-  items: MemoryItem[],
-  contextLabel: string,
-): MemoryItem[] {
+function sanitizeMemoryItems(items: MemoryItem[], contextLabel: string): MemoryItem[] {
   return items.map((item, index) => {
     const { sanitized, wasSanitized } = sanitizeForJson(item.content);
     if (wasSanitized) log.warn(`Sanitized ${contextLabel} at index ${index}: removed control characters`);

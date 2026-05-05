@@ -374,7 +374,8 @@ export async function execute(
             {
               customId: MEMORY_TAGS_INPUT_ID,
               labelKey: "Memory Tags",
-              descriptionKey: "Up to 5 comma-separated case-sensitive tags, use '/memory tagging set' to enable tagged memory",
+              descriptionKey:
+                "Up to 5 comma-separated case-sensitive tags, use '/memory tagging set' to enable tagged memory",
               placeholder: "mango,drinks,snacks",
               style: TextInputStyle.Short,
               required: false,
@@ -400,7 +401,14 @@ export async function execute(
         const editedMemory = editModalResult.values?.[MEMORY_INPUT_ID]?.trim() ?? "";
         const rawTagsInput = editModalResult.values?.[MEMORY_TAGS_INPUT_ID]?.trim() ?? "";
         const editedTags = rawTagsInput
-          ? [...new Set(rawTagsInput.split(",").map((t) => t.trim().replace(/^["']+|["']+$/g, "")).filter((t) => t.length > 0 && t.length <= MAX_TAG_LENGTH))].slice(0, MAX_TAGS)
+          ? [
+              ...new Set(
+                rawTagsInput
+                  .split(",")
+                  .map((t) => t.trim().replace(/^["']+|["']+$/g, ""))
+                  .filter((t) => t.length > 0 && t.length <= MAX_TAG_LENGTH),
+              ),
+            ].slice(0, MAX_TAGS)
           : [];
         if (!editModalInteraction) {
           log.error("Personal memory edit modal unexpectedly missing interaction");
@@ -585,7 +593,8 @@ export async function execute(
         {
           customId: MEMORY_TAGS_INPUT_ID,
           labelKey: "Memory Tags",
-          descriptionKey: "Up to 5 comma-separated case-sensitive tags, use '/memory tagging set' to enable tagged memory",
+          descriptionKey:
+            "Up to 5 comma-separated case-sensitive tags, use '/memory tagging set' to enable tagged memory",
           placeholder: "mango,drinks,snacks",
           style: TextInputStyle.Short,
           required: false,
@@ -604,7 +613,14 @@ export async function execute(
     const editedMemory = editModalResult.values?.[MEMORY_INPUT_ID]?.trim() ?? "";
     const rawTagsInput = editModalResult.values?.[MEMORY_TAGS_INPUT_ID]?.trim() ?? "";
     const editedTags = rawTagsInput
-      ? [...new Set(rawTagsInput.split(",").map((t) => t.trim()).filter((t) => t.length > 0 && t.length <= MAX_TAG_LENGTH))].slice(0, MAX_TAGS)
+      ? [
+          ...new Set(
+            rawTagsInput
+              .split(",")
+              .map((t) => t.trim())
+              .filter((t) => t.length > 0 && t.length <= MAX_TAG_LENGTH),
+          ),
+        ].slice(0, MAX_TAGS)
       : [];
     if (!editModalInteraction) {
       log.error("Global personal memory edit modal unexpectedly missing interaction");

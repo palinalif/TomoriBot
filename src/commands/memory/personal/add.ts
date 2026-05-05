@@ -199,7 +199,14 @@ export async function execute(
     const uploadedTextFile = modalResult.attachments?.[MEMORY_FILE_UPLOAD_ID];
     const rawTagsInput = modalResult.values?.[MEMORY_TAGS_INPUT_ID]?.trim() ?? "";
     const parsedTags = rawTagsInput
-      ? [...new Set(rawTagsInput.split(",").map((t) => t.trim().replace(/^["']+|["']+$/g, "")).filter((t) => t.length > 0 && t.length <= MAX_TAG_LENGTH))].slice(0, MAX_TAGS)
+      ? [
+          ...new Set(
+            rawTagsInput
+              .split(",")
+              .map((t) => t.trim().replace(/^["']+|["']+$/g, ""))
+              .filter((t) => t.length > 0 && t.length <= MAX_TAG_LENGTH),
+          ),
+        ].slice(0, MAX_TAGS)
       : [];
     if (memoryScope === PERSONAL_SCOPE_VALUE) {
       const selectedPersonaId = modalResult.values?.persona_select;
@@ -364,7 +371,12 @@ export async function execute(
     // 14. Insert lineage-scoped memory rows
     let insertSuccess = true;
     if (memoriesToAdd.length === 1) {
-      const insertedMemory = await addPersonalMemoryByTomori(targetUserId, targetLineageId, memoriesToAdd[0] ?? "", parsedTags);
+      const insertedMemory = await addPersonalMemoryByTomori(
+        targetUserId,
+        targetLineageId,
+        memoriesToAdd[0] ?? "",
+        parsedTags,
+      );
       insertSuccess = insertedMemory !== null;
     } else {
       try {

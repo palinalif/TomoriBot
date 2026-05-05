@@ -169,7 +169,8 @@ export async function execute(
         {
           customId: MEMORY_TAGS_INPUT_ID,
           labelKey: "Memory Tags",
-          descriptionKey: "Up to 5 comma-separated case-sensitive tags, use '/memory tagging set' to enable tagged memory",
+          descriptionKey:
+            "Up to 5 comma-separated case-sensitive tags, use '/memory tagging set' to enable tagged memory",
           placeholder: "mango,drinks,snacks",
           style: TextInputStyle.Short,
           required: false,
@@ -193,7 +194,14 @@ export async function execute(
     const uploadedTextFile = modalResult.attachments?.[MEMORY_FILE_UPLOAD_ID];
     const rawTagsInput = modalResult.values?.[MEMORY_TAGS_INPUT_ID]?.trim() ?? "";
     const parsedTags = rawTagsInput
-      ? [...new Set(rawTagsInput.split(",").map((t) => t.trim().replace(/^["']+|["']+$/g, "")).filter((t) => t.length > 0 && t.length <= MAX_TAG_LENGTH))].slice(0, MAX_TAGS)
+      ? [
+          ...new Set(
+            rawTagsInput
+              .split(",")
+              .map((t) => t.trim().replace(/^["']+|["']+$/g, ""))
+              .filter((t) => t.length > 0 && t.length <= MAX_TAG_LENGTH),
+          ),
+        ].slice(0, MAX_TAGS)
       : [];
     const selectedPersonaId = modalResult.values?.persona_select;
     selectedPersona = allPersonas.find((persona) => persona.tomori_id?.toString() === selectedPersonaId) ?? null;
