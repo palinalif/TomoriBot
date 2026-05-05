@@ -2129,7 +2129,7 @@ async function buildContextNative({
     const timeOfDayPhrase = getTimeOfDayPhrase(timezoneOffset);
     const conversationContext = isDMChannel
       ? "Conversation context: Direct Message."
-      : `Conversation context: ${formatDiscordChannelReference(channelId, `#${channelName}`)}.`;
+      : `Conversation context: #${channelName}${channelId ? ` (ID: ${channelId})` : ""}.`;
     const timeContext = `Current time: ${currentTime} (${timezoneLabel}), ${timeOfDayPhrase}.`;
 
     usersInConversationText += `${conversationContext}\n${timeContext}\n]`; // Close [System: ...] block

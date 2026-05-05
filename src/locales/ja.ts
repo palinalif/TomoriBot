@@ -3450,6 +3450,8 @@ Prompt Guidance Rescale: {cfg_rescale}
         current_byok_disabled_value: `無効。個人プロバイダーが有効でない場合は、ユーザー発言でもサーバープロバイダーを使えます。{toggle_command} で切り替えられます。`,
         already_setup_next_steps_field: `次のステップ`,
         already_setup_next_steps_value: `{provider_add_command} で別のサーバープロバイダーを保存し、{model_text_command} でアクティブなテキストモデルを切り替え、{byok_toggle_command} でBYOKモードを切り替えられます。メンバー向けの個人プロバイダー手順は {help_personal_provider} を確認してください。`,
+        broken_state_title: `設定が破損しています`,
+        broken_state_description: `このサーバーにはペルソナが存在しますが、設定が不完全です。サーバー設定またはAIモデルの参照が見つからないか、削除されています。\n\n{model_text_command} で有効なモデルを割り当てるか、{provider_add_command} で新しいプロバイダーを登録してください。問題が解決しない場合は、サーバー管理者にお問い合わせください。`,
         already_setup_description: `このサーバーでは既に設定が完了しています。設定を変更するには、\`/config\`、\`/persona\`、\`/memory\`、\`/server\`などの他のコマンドを使用してください。
 
 				プロバイダーを変更したい場合は、\`/config provider add\`で新しいプロバイダーを登録し、\`/config model text\`でアクティブにしてください。`,
