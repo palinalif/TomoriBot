@@ -947,6 +947,7 @@ I have built-in features to help reduce costs from abusers or spammers in your s
           dm_hint_try_json: `Run the command again with \`format: JSON\` for the raw format.`,
           dm_hint_try_text: `Run the command again with \`format: Text\` for a more user-readable format.`,
           dm_tools_txt_note: `Tool definitions are omitted from TXT format, please re-run with \`format: JSON\` and \`fetch_tools: true\` to include them.`,
+          dm_tools_filtering_note: `Tool definitions in JSON snapshots are filtered for the latest visible turn when deliberate tool mode is active. After-the-fact snapshots may not perfectly reconstruct transient retained tool context, but they no longer dump the full toolbox when the live turn would have scoped or suppressed tools.`,
           dm_config_heading: `**Sampling / request config** (matches what the provider adapter would send at runtime):`,
           dm_failed_title: `Could Not Send DM`,
           dm_failed_description: `I couldn't send a DM. Your snapshot is attached here instead. Enable DMs from server members to receive future snapshots in DMs.`,

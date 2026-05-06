@@ -57,6 +57,12 @@ const TOOL_INTENT_PATTERNS: RegExp[] = [
   /\b(create|make|start|open)\b.*\b(thread)\b/i,
 ];
 
+const IMAGE_GENERATION_REQUEST_PATTERNS: RegExp[] = [
+  /\b(?:can|could|may)\s+(?:i|we)\s+(?:have|get)\b.{0,80}\b(?:image|picture|photo|pic|img)\b/i,
+  /\b(?:send|give)\s+(?:me|us)\b.{0,80}\b(?:image|picture|photo|pic|img)\b/i,
+  /\b(?:i|we)\s+(?:want|would\s+like|need|could\s+use)\b.{0,80}\b(?:image|picture|photo|pic|img)\b/i,
+];
+
 const VOICE_MESSAGE_INTENT_PATTERNS: RegExp[] = [
   /\b(?:voice|audio|spoken)\s+message\b/i,
   /\b(?:send|say|speak|record|deliver|do|make|generate|create)\b.{0,80}\b(?:voice|audio|spoken)\s+message\b/i,
@@ -233,6 +239,10 @@ export function hasDeliberateToolIntent(
     return true;
   }
 
+  if (IMAGE_GENERATION_REQUEST_PATTERNS.some((pattern) => pattern.test(text))) {
+    return true;
+  }
+
   return URL_PATTERN.test(text) && URL_TOOL_INTENT_PATTERNS.some((pattern) => pattern.test(text));
 }
 
@@ -329,6 +339,16 @@ export function getDeliberateToolIntentResult(
 
   if (VOICE_MESSAGE_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
     addToolMatches(allowedToolNames, matches, VOICE_GENERATION_TOOL_NAMES, "voice message", "built-in");
+  }
+
+  if (IMAGE_GENERATION_REQUEST_PATTERNS.some((pattern) => pattern.test(text))) {
+    addToolMatches(
+      allowedToolNames,
+      matches,
+      IMAGE_GENERATION_TOOL_NAMES,
+      getRegexTrigger(text, /\b(image|picture|photo|pic|img)\b/i, "image request"),
+      "built-in",
+    );
   }
 
   const generationTargetMatch = text.match(
