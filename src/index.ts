@@ -467,9 +467,10 @@ if ((process.env.RUN_ENV || "development") === "production") {
     }
   });
 
-  // Bind to localhost only (not externally accessible)
-  healthCheckServer.listen(3000, "127.0.0.1", () => {
-    log.success("Health check server listening on http://127.0.0.1:3000/health");
+  // Bind to 0.0.0.0 so Cloud Run's health check can reach it on $PORT (default 8080)
+  const healthPort = parseInt(process.env.PORT ?? "8080", 10);
+  healthCheckServer.listen(healthPort, "0.0.0.0", () => {
+    log.success(`Health check server listening on http://0.0.0.0:${healthPort}/health`);
   });
 
   // Handle health check server errors
