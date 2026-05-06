@@ -2634,6 +2634,7 @@ SELECT add_column_if_not_exists('tomori_configs', 'prompt_snapshot_enabled', 'BO
 -- speech_voice_sample_id: FK → voice_samples; used for local TTS clone path.
 -- speech_voice_id: Preset voice ID for provider-hosted voices (e.g. ElevenLabs).
 -- speech_voice_name: Cached friendly voice display name (either path).
+-- speech_voice_design_prompt: Natural-language voice design prompt for instruct-capable local TTS.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS voice_samples (
   sample_id SERIAL PRIMARY KEY,
@@ -2651,6 +2652,7 @@ CREATE INDEX IF NOT EXISTS idx_voice_samples_server ON voice_samples(server_id);
 SELECT add_column_if_not_exists('tomoris', 'speech_voice_sample_id', 'INTEGER', 'NULL');
 SELECT add_column_if_not_exists('tomoris', 'speech_voice_id', 'TEXT', 'NULL');
 SELECT add_column_if_not_exists('tomoris', 'speech_voice_name', 'TEXT', 'NULL');
+SELECT add_column_if_not_exists('tomoris', 'speech_voice_design_prompt', 'TEXT', 'NULL');
 
 DO $$
 BEGIN
