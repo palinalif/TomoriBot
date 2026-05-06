@@ -63,6 +63,27 @@ resource "google_project_iam_member" "github_deploy_ar_writer" {
   member  = "serviceAccount:${google_service_account.github_deploy.email}"
 }
 
+# Broad read/write access needed for Terraform to manage GCP resources
+resource "google_project_iam_member" "github_deploy_editor" {
+  project = var.gcp_project_id
+  role    = "roles/editor"
+  member  = "serviceAccount:${google_service_account.github_deploy.email}"
+}
+
+# Required for Terraform to manage project-level IAM bindings
+resource "google_project_iam_member" "github_deploy_iam_admin" {
+  project = var.gcp_project_id
+  role    = "roles/resourcemanager.projectIamAdmin"
+  member  = "serviceAccount:${google_service_account.github_deploy.email}"
+}
+
+# Required for Terraform to read/write the GCS state backend bucket
+resource "google_storage_bucket_iam_member" "github_deploy_state_bucket" {
+  bucket = "tomoribot-terraform-state-gcp"
+  role   = "roles/storage.objectAdmin"
+  member = "serviceAccount:${google_service_account.github_deploy.email}"
+}
+
 # Required so GitHub Actions can deploy Cloud Run services that run as tomoribot-app
 resource "google_service_account_iam_member" "github_deploy_act_as_app" {
   service_account_id = google_service_account.app.name

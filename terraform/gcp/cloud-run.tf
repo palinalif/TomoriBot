@@ -42,7 +42,7 @@ resource "google_cloud_run_v2_service" "tomoribot" {
       secret {
         secret = google_secret_manager_secret.tomoribot.secret_id
         items {
-          version = "1"
+          version = "latest"
           path    = var.secret_name
         }
       }

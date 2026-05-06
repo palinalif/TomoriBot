@@ -88,7 +88,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7
         with:
-          bun-version: 1.2.12
+          bun-version: 1.3.3
 
       - name: Install dependencies
         run: |
@@ -113,7 +113,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7
         with:
-          bun-version: 1.2.12
+          bun-version: 1.3.3
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -147,7 +147,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7
         with:
-          bun-version: 1.2.12
+          bun-version: 1.3.3
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -190,7 +190,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7
         with:
-          bun-version: 1.2.12
+          bun-version: 1.3.3
 
       - name: Install PostgreSQL client tools
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -221,7 +221,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7
         with:
-          bun-version: 1.2.12
+          bun-version: 1.3.3
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -335,7 +335,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7
         with:
-          bun-version: 1.2.12
+          bun-version: 1.3.3
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -345,7 +345,7 @@ jobs:
           echo "Running dependency vulnerability scan..."
 
           # Run custom audit script (filters known ghost advisories, exits 1 on real vulns)
-          if ! bun audit --audit-level=high > audit-output.txt 2>&1; then
+          if ! bun run audit:clean > audit-output.txt 2>&1; then
             echo "High or critical vulnerabilities found in dependencies:"
             cat audit-output.txt
             exit 1

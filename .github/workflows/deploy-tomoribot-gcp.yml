@@ -73,7 +73,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7
         with:
-          bun-version: 1.2.12
+          bun-version: 1.3.3
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -93,7 +93,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7
         with:
-          bun-version: 1.2.12
+          bun-version: 1.3.3
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -120,7 +120,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7
         with:
-          bun-version: 1.2.12
+          bun-version: 1.3.3
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -160,7 +160,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7
         with:
-          bun-version: 1.2.12
+          bun-version: 1.3.3
 
       - name: Install PostgreSQL client tools
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
@@ -192,7 +192,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7
         with:
-          bun-version: 1.2.12
+          bun-version: 1.3.3
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -289,14 +289,14 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@f4d14e03ff726c06358e5557344e1da148b56cf7
         with:
-          bun-version: 1.2.12
+          bun-version: 1.3.3
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Run Bun audit
         run: |
-          if ! bun audit --audit-level=high > audit-output.txt 2>&1; then
+          if ! bun run audit:clean > audit-output.txt 2>&1; then
             cat audit-output.txt
             exit 1
           else
@@ -516,7 +516,6 @@ jobs:
     needs: push-to-artifact-registry
     if: needs['push-to-artifact-registry'].outputs.deploy == 'true'
     env:
-      TF_VAR_container_image: ${{ needs['push-to-artifact-registry'].outputs.image_uri }}
       TF_VAR_gcp_project_id: ${{ secrets.GCP_PROJECT_ID }}
       TF_VAR_db_password: ${{ secrets.CLOUD_SQL_INSTANCE_PASSWORD }}
       TF_IN_AUTOMATION: "1"
@@ -524,6 +523,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Resolve container image URI
+        id: resolve_image
+        env:
+          AR_REPO: ${{ secrets.ARTIFACT_REGISTRY_REPO }}
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          IMAGE_URI="${AR_REPO}/tomoribot:v${VERSION}"
+          echo "uri=${IMAGE_URI}" >> $GITHUB_OUTPUT
+          echo "Deploying image: ${IMAGE_URI}"
 
       - name: Authenticate to GCP (Workload Identity Federation)
         uses: google-github-actions/auth@v2
@@ -553,7 +562,7 @@ jobs:
 
       - name: Terraform plan
         working-directory: terraform/gcp
-        run: terraform plan -input=false -var-file=terraform.ci.tfvars -out=tfplan
+        run: terraform plan -input=false -var-file=terraform.ci.tfvars -var="container_image=${{ steps.resolve_image.outputs.uri }}" -out=tfplan
 
       - name: Guard against Cloud SQL destroy/replace
         working-directory: terraform/gcp
