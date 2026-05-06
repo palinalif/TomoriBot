@@ -412,11 +412,7 @@ export class GenerateVoiceMessageTool extends BaseTool {
     // design prompts to older clone-only wrappers that ignore or reject instruct.
     // Auto endpoints are for mixed deployments: clone personas keep using their
     // stored samples, while VoiceDesign personas send `instruct` to the same URL.
-    if (
-      voiceDesignPrompt &&
-      speechEndpoint?.endpoint.api_style === "tts-clone" &&
-      shouldUseVoiceDesign
-    ) {
+    if (voiceDesignPrompt && speechEndpoint?.endpoint.api_style === "tts-clone" && shouldUseVoiceDesign) {
       const designResult = await synthesizeSpeechViaTtsVoiceDesign({
         endpoint: speechEndpoint.endpoint,
         script,
@@ -438,7 +434,9 @@ export class GenerateVoiceMessageTool extends BaseTool {
       const voiceMeta = await generateVoiceMessageMetadata(designResult.audioBuffer, mimeType);
 
       if (!voiceMeta) {
-        log.warn("[VoiceWaveform] TTS voice-design waveform generation returned null — falling back to plain attachment");
+        log.warn(
+          "[VoiceWaveform] TTS voice-design waveform generation returned null — falling back to plain attachment",
+        );
       }
 
       const sentMessageId = await this.sendVoiceOrFallback({
