@@ -1,6 +1,6 @@
 # Use the official Bun image as base
 # Think of this as choosing the "apartment building type" - Bun comes pre-installed
-FROM oven/bun:1.2.12-alpine@sha256:d56cd65ffd4101fe999eb6940e3bfe2a59d9bd021cdb9bca3305267b6cff0b79 AS base
+FROM oven/bun:1.3.3-alpine AS base
 
 # Set the working directory inside the container
 # This is like choosing which floor/apartment number TomoriBot lives in
