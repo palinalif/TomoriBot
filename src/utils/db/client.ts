@@ -41,8 +41,21 @@ function createDatabaseClient(): SQL {
     });
   }
 
-  // Production: TLS with CA certificate verification
+  // Production: TLS for TCP connections (AWS RDS); no TLS for unix sockets (Cloud SQL Auth Proxy)
   if (isProduction) {
+    // Unix socket path (e.g. /cloudsql/<connection-name>) — Cloud SQL Auth Proxy handles TLS
+    // internally; the client connects via a local socket and must not add a second TLS layer.
+    if (host.startsWith("/")) {
+      return new SQL({
+        hostname: host,
+        port: port,
+        username: user,
+        password: password,
+        database: database,
+      });
+    }
+
+    // TCP connection (AWS RDS) — TLS with CA certificate verification
     // Allow overriding CA bundle location; fall back to common paths for dev and container builds.
     const caPathEnv = process.env.POSTGRES_CA_CERT_PATH;
     const candidatePaths = [
