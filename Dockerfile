@@ -103,17 +103,12 @@ ENV NODE_ENV=production
 ENV RUN_ENV=production
 ENV TOKENIZER_ASSET_DIR=./tokenizers
 
-# Expose health check port for AWS ECS monitoring
-# This port is only accessible from localhost inside the container
-EXPOSE 3000
+# Cloud Run injects PORT=8080; the health server binds to 0.0.0.0:$PORT
+EXPOSE 8080
 
-# Health check to ensure TomoriBot is running properly
-# Checks the HTTP health endpoint which verifies:
-# 1. Event loop is responsive (can handle HTTP requests)
-# 2. Discord client is connected (isReady() returns true)
-# If the bot enters a zombie state, this will timeout and trigger a restart
+# Health check for local docker run — Cloud Run uses its own TCP startup probe on PORT
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://127.0.0.1:3000/health || exit 1
+    CMD curl -f http://0.0.0.0:${PORT:-8080}/health || exit 1
 
 # Run TypeScript directly - just like your development setup
 CMD ["bun", "run", "src/index.ts"]
