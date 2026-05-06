@@ -359,7 +359,8 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 				uncensor_unicode_space_enabled = COALESCE(${config.uncensor_unicode_space_enabled ?? null}, uncensor_unicode_space_enabled),
 				uncensor_sanitize_enabled = COALESCE(${config.uncensor_sanitize_enabled ?? null}, uncensor_sanitize_enabled),
 				tool_use_enabled = COALESCE(${config.tool_use_enabled ?? null}, tool_use_enabled),
-				prompt_snapshot_enabled = COALESCE(${config.prompt_snapshot_enabled ?? null}, prompt_snapshot_enabled)
+				prompt_snapshot_enabled = COALESCE(${config.prompt_snapshot_enabled ?? null}, prompt_snapshot_enabled),
+				memory_tagging_enabled = COALESCE(${config.memory_tagging_enabled ?? null}, memory_tagging_enabled)
 			WHERE server_id = ${serverId}
 			RETURNING tomori_config_id
 		`;
@@ -432,7 +433,8 @@ export async function importServerConfig(serverDiscId: string, config: ServerCon
 						uncensor_unicode_space_enabled = COALESCE(${config.uncensor_unicode_space_enabled ?? null}, uncensor_unicode_space_enabled),
 						uncensor_sanitize_enabled = COALESCE(${config.uncensor_sanitize_enabled ?? null}, uncensor_sanitize_enabled),
 						tool_use_enabled = COALESCE(${config.tool_use_enabled ?? null}, tool_use_enabled),
-						prompt_snapshot_enabled = COALESCE(${config.prompt_snapshot_enabled ?? null}, prompt_snapshot_enabled)
+						prompt_snapshot_enabled = COALESCE(${config.prompt_snapshot_enabled ?? null}, prompt_snapshot_enabled),
+						memory_tagging_enabled = COALESCE(${config.memory_tagging_enabled ?? null}, memory_tagging_enabled)
 					WHERE tomori_id = ${mainTomoriId}
 					RETURNING tomori_config_id
 				`;

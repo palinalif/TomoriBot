@@ -1,11 +1,12 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 # GitHub Actions Workflow: Deploy TomoriBot to GCP Cloud Run
-# Trigger: workflow_dispatch only until GCP is the primary deployment target.
-# To cut over from AWS: add `push: branches: [main]` and remove it from deploy-tomoribot.yml.
 
 name: Deploy TomoriBot (GCP)
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       environment:
@@ -295,7 +296,7 @@ jobs:
 
       - name: Run Bun audit
         run: |
-          if ! bun run audit:clean > audit-output.txt 2>&1; then
+          if ! bun audit --audit-level=high > audit-output.txt 2>&1; then
             cat audit-output.txt
             exit 1
           else

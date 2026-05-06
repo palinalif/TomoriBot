@@ -4,10 +4,7 @@
 
 name: Deploy TomoriBot
 on:
-  push:
-    branches:
-      - main
-  workflow_dispatch: # Manual trigger - allows running on any branch
+  workflow_dispatch: # Manual trigger only — GCP pipeline handles push to main
     inputs:
       environment:
         description: "Deployment environment"
@@ -348,7 +345,7 @@ jobs:
           echo "Running dependency vulnerability scan..."
 
           # Run custom audit script (filters known ghost advisories, exits 1 on real vulns)
-          if ! bun run audit:clean > audit-output.txt 2>&1; then
+          if ! bun audit --audit-level=high > audit-output.txt 2>&1; then
             echo "High or critical vulnerabilities found in dependencies:"
             cat audit-output.txt
             exit 1
