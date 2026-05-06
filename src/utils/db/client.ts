@@ -47,12 +47,13 @@ function createDatabaseClient(): SQL {
     // internally; the client connects via a local socket and must not add a second TLS layer.
     if (host.startsWith("/")) {
       return new SQL({
-        hostname: host,
+        path: host, // Use path for Unix socket connections
         port: port,
         username: user,
         password: password,
         database: database,
-      });
+        // biome-ignore lint/suspicious/noExplicitAny: `path` is a valid Bun SQL unix socket option not yet reflected in the type definitions
+      } as any);
     }
 
     // TCP connection (AWS RDS) — TLS with CA certificate verification
