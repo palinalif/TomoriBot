@@ -39,7 +39,9 @@ function getAvatarStorageConfig(): AvatarStorageConfig | null {
   // GCS takes priority when AVATAR_GCS_BUCKET is set
   const gcsBucket = process.env.AVATAR_GCS_BUCKET?.trim();
   if (gcsBucket) {
-    const prefix = (process.env.AVATAR_S3_PREFIX || "avatars").replace(/^\/+/, "").replace(/\/+$/, "");
+    const prefix = (process.env.AVATAR_GCS_PREFIX || process.env.AVATAR_S3_PREFIX || "avatars")
+      .replace(/^\/+/, "")
+      .replace(/\/+$/, "");
     const publicBaseUrl = process.env.AVATAR_PUBLIC_BASE_URL?.trim() || `https://storage.googleapis.com/${gcsBucket}`;
     return { backend: "gcs", bucket: gcsBucket, prefix, publicBaseUrl };
   }
@@ -252,6 +254,9 @@ export async function uploadPersonaAvatarToStorage(options: AvatarUploadOptions)
           .file(key)
           .save(options.buffer, {
             contentType: "image/png",
+            // predefinedAcl grants allUsers READ; required for fine-grained ACL buckets.
+            // For uniform bucket-level access, set allUsers Storage Object Viewer at bucket level instead.
+            predefinedAcl: "publicRead",
             metadata: { cacheControl: "public, max-age=31536000, immutable" },
           });
         const publicUrl = buildPublicUrl(config, key);

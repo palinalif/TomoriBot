@@ -6,7 +6,7 @@ name: Deploy TomoriBot (GCP)
 on:
   push:
     branches:
-      - main
+      - release
   workflow_dispatch:
     inputs:
       environment:
@@ -648,7 +648,7 @@ jobs:
 
           hasImage=false
           if [ -n "$IMAGE_NAME" ]; then
-            imageUrl="https://github.com/${{ github.repository }}/raw/main/.github/release/v$VERSION/$IMAGE_NAME"
+            imageUrl="https://github.com/${{ github.repository }}/raw/release/.github/release/v$VERSION/$IMAGE_NAME"
             if curl -sL --max-time 30 "$imageUrl" -o "release-post-image.png" && [ -s "release-post-image.png" ]; then
               hasImage=true
             fi

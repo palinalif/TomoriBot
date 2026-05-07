@@ -4,7 +4,7 @@
 
 name: Deploy TomoriBot (AWS)
 on:
-  workflow_dispatch: # Manual trigger only — GCP pipeline handles push to main
+  workflow_dispatch: # Manual trigger only — GCP pipeline handles push to release
     inputs:
       environment:
         description: "Deployment environment"
@@ -869,7 +869,7 @@ jobs:
           # in the forum post, which Discord uses as the post's preview image
           hasImage=false
           if [ -n "$IMAGE_NAME" ]; then
-            imageUrl="https://github.com/${{ github.repository }}/raw/main/.github/release/v$VERSION/$IMAGE_NAME"
+            imageUrl="https://github.com/${{ github.repository }}/raw/release/.github/release/v$VERSION/$IMAGE_NAME"
             echo "Downloading release image: $imageUrl"
             if curl -sL --max-time 30 "$imageUrl" -o "release-post-image.png" && [ -s "release-post-image.png" ]; then
               hasImage=true
