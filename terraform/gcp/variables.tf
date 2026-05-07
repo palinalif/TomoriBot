@@ -40,10 +40,10 @@ variable "github_repo_name" {
   default     = "TomoriBot"
 }
 
-variable "github_allowed_ref" {
-  description = "Git ref allowed to impersonate the deploy service account via WIF"
-  type        = string
-  default     = "refs/heads/main"
+variable "github_allowed_refs" {
+  description = "Git refs allowed to impersonate the deploy service account via WIF"
+  type        = list(string)
+  default     = ["refs/heads/main", "refs/heads/release"]
 }
 
 # --- Artifact Registry ---

@@ -25,8 +25,8 @@ resource "google_iam_workload_identity_pool_provider" "github" {
     "attribute.ref"        = "assertion.ref"
   }
 
-  # Only tokens from the TomoriBot repo on the allowed ref are accepted
-  attribute_condition = "attribute.repository == '${var.github_repo_owner}/${var.github_repo_name}' && attribute.ref == '${var.github_allowed_ref}'"
+  # Only tokens from the TomoriBot repo on an allowed ref are accepted
+  attribute_condition = "attribute.repository == '${var.github_repo_owner}/${var.github_repo_name}' && attribute.ref in ['${join("', '", var.github_allowed_refs)}']"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
