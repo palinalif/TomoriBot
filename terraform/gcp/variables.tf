@@ -43,7 +43,7 @@ variable "github_repo_name" {
 variable "github_allowed_refs" {
   description = "Git refs allowed to impersonate the deploy service account via WIF"
   type        = list(string)
-  default     = ["refs/heads/main", "refs/heads/release"]
+  default     = ["refs/heads/release"]
 }
 
 # --- Artifact Registry ---
