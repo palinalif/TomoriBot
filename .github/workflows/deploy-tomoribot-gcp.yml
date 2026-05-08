@@ -64,7 +64,7 @@ jobs:
 
   # ─── VALIDATION (lint, types, schema, locales, lifecycle) ─────────────────
 
-  validate:
+  code-quality:
     needs: validate-secrets
     uses: ./.github/workflows/validation.yml
     permissions:
@@ -74,7 +74,7 @@ jobs:
 
   build-image:
     runs-on: ubuntu-24.04
-    needs: validate
+    needs: code-quality
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
