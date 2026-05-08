@@ -164,7 +164,7 @@ async function updateGuildAvatar(
       return {
         success: false,
         error: "api_error",
-        details: `${response.status} ${response.statusText}`,
+        details: `${response.status} ${response.statusText}: ${errorText}`,
       };
     }
 
@@ -352,6 +352,7 @@ export async function execute(
             titleKey: "commands.server.avatar.api_error_title",
             descriptionKey: "commands.server.avatar.api_error_description",
             color: ColorCode.ERROR,
+            descriptionVars: { details: result.details ?? "" },
           });
         }
       } else {
@@ -444,6 +445,7 @@ export async function execute(
           titleKey: "commands.server.avatar.api_error_title",
           descriptionKey: "commands.server.avatar.api_error_description",
           color: ColorCode.ERROR,
+          descriptionVars: { details: updateResult.details ?? "" },
         });
       }
     } else {

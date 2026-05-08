@@ -4351,7 +4351,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
         conversion_error_title: `変換エラー`,
         conversion_error_description: `画像の処理に失敗しました。別の画像ファイルを試してください。`,
         api_error_title: `APIエラー`,
-        api_error_description: `Discord APIを通じてアバターの更新に失敗しました。アバターを短時間で変更しすぎたことによるレート制限が原因であることが多いです。しばらく待ってから再度お試しください。`,
+        api_error_description: `Discord APIを通じてアバターの更新に失敗しました。アバターを短時間で変更しすぎたことによるレート制限が原因であることが多いです。しばらく待ってから再度お試しください。\n-# {details}`,
         error_download_timeout: `アバターのダウンロードが15秒後にタイムアウトしました。もう一度お試しください。`,
         error_api_timeout: `Discord API呼び出しが15秒後にタイムアウトしました。もう一度お試しください。`,
       },
