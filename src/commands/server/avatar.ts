@@ -160,7 +160,11 @@ async function updateGuildAvatar(
 
     if (!response.ok) {
       const errorText = await response.text();
-      log.error(`Failed to update guild avatar: ${response.status} ${response.statusText} - ${errorText}`);
+      const context: ErrorContext = {
+        errorType: "DiscordApiError",
+        metadata: { guildId, httpStatus: response.status, body: errorText },
+      };
+      await log.error(`Failed to update guild avatar: ${response.status} ${response.statusText}`, undefined, context);
       return {
         success: false,
         error: "api_error",
@@ -185,7 +189,10 @@ async function updateGuildAvatar(
     }
 
     // Handle other errors
-    log.error("Error updating guild avatar via Discord API", error);
+    await log.error("Error updating guild avatar via Discord API", error, {
+      errorType: "DiscordApiError",
+      metadata: { guildId },
+    });
     return {
       success: false,
       error: "api_error",
@@ -348,9 +355,10 @@ export async function execute(
             color: ColorCode.ERROR,
           });
         } else {
+          const baseMsg = localizer(locale, "commands.server.avatar.api_error_description");
           await replyInfoEmbed(responseInteraction, locale, {
             titleKey: "commands.server.avatar.api_error_title",
-            descriptionKey: "commands.server.avatar.api_error_description",
+            description: result.details ? `${baseMsg}\n-# ${result.details}` : baseMsg,
             color: ColorCode.ERROR,
             descriptionVars: { details: result.details ?? "" },
           });
@@ -441,9 +449,10 @@ export async function execute(
           color: ColorCode.ERROR,
         });
       } else {
+        const baseMsg = localizer(locale, "commands.server.avatar.api_error_description");
         await replyInfoEmbed(responseInteraction, locale, {
           titleKey: "commands.server.avatar.api_error_title",
-          descriptionKey: "commands.server.avatar.api_error_description",
+          description: updateResult.details ? `${baseMsg}\n-# ${updateResult.details}` : baseMsg,
           color: ColorCode.ERROR,
           descriptionVars: { details: updateResult.details ?? "" },
         });
