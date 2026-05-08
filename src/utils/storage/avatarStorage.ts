@@ -254,16 +254,16 @@ export async function uploadPersonaAvatarToStorage(options: AvatarUploadOptions)
           .file(key)
           .save(options.buffer, {
             contentType: "image/png",
-            // predefinedAcl grants allUsers READ; required for fine-grained ACL buckets.
-            // For uniform bucket-level access, set allUsers Storage Object Viewer at bucket level instead.
-            predefinedAcl: "publicRead",
             metadata: { cacheControl: "public, max-age=31536000, immutable" },
           });
         const publicUrl = buildPublicUrl(config, key);
         log.success(`[Avatar Storage] Uploaded persona avatar${label} to GCS (${publicUrl})`);
         return publicUrl;
       } catch (error) {
-        log.warn(`[Avatar Storage] Failed to upload persona avatar${label} to GCS`, error);
+        await log.error(`[Avatar Storage] Failed to upload persona avatar${label} to GCS`, error, {
+          errorType: "GcsUploadError",
+          metadata: { bucket: config.bucket, key },
+        });
         return null;
       }
     }
