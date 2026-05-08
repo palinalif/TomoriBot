@@ -12,3 +12,4 @@ container_image = "us-central1-docker.pkg.dev/your-gcp-project-id/tomoribot/tomo
 
 # Cloud SQL password — store this securely; it is also in the runtime secret JSON
 db_password = "change-me"
+

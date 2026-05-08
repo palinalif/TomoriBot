@@ -8,6 +8,12 @@ variable "gcp_project_id" {
   type        = string
 }
 
+variable "terraform_state_bucket" {
+  description = "GCS bucket name holding Terraform state (must match the backend config in main.tf — backends cannot use variables)"
+  type        = string
+  default     = "tomoribot-terraform-state-gcp"
+}
+
 variable "gcp_region" {
   description = "GCP region for all regional resources"
   type        = string
@@ -141,6 +147,7 @@ variable "db_deletion_protection" {
   type        = bool
   default     = false
 }
+
 
 # --- Secret Manager ---
 

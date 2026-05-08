@@ -15,6 +15,7 @@ locals {
     "storage.googleapis.com",
     "cloudkms.googleapis.com",
     "aiplatform.googleapis.com",        # Vertex AI
+    "bigquery.googleapis.com",          # BigQuery (used by Grafana monitoring datasource)
   ]
 }
 

@@ -62,3 +62,22 @@ resource "google_sql_user" "app" {
   instance = google_sql_database_instance.main.name
   password = var.db_password
 }
+
+# Password is auto-generated and stored in Terraform state.
+# Retrieve it after apply with: terraform output -raw grafana_db_password
+#
+# Grant read-only access in the DB after first apply:
+#   GRANT CONNECT ON DATABASE tomoribot TO grafana;
+#   GRANT USAGE ON SCHEMA public TO grafana;
+#   GRANT SELECT ON ALL TABLES IN SCHEMA public TO grafana;
+#   ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO grafana;
+resource "random_password" "grafana_db" {
+  length  = 32
+  special = false
+}
+
+resource "google_sql_user" "grafana" {
+  name     = "grafana"
+  instance = google_sql_database_instance.main.name
+  password = random_password.grafana_db.result
+}

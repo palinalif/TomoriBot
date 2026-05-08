@@ -51,3 +51,9 @@ output "secret_name" {
   description = "Secret Manager secret ID — populate this secret with the runtime JSON blob before deploying"
   value       = google_secret_manager_secret.tomoribot.secret_id
 }
+
+output "grafana_db_password" {
+  description = "Auto-generated password for the Grafana Cloud SQL user — use in your local Grafana PostgreSQL datasource"
+  value       = random_password.grafana_db.result
+  sensitive   = true
+}

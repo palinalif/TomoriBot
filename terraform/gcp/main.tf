@@ -12,8 +12,14 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 6.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
 
+  # Backend config cannot use variables — this bucket name must also match var.terraform_state_bucket.
+  # To override for a different environment: terraform init -backend-config="bucket=<name>"
   backend "gcs" {
     bucket = "tomoribot-terraform-state-gcp"
     prefix = "production"

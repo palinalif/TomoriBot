@@ -79,7 +79,7 @@ resource "google_project_iam_member" "github_deploy_iam_admin" {
 
 # Required for Terraform to read/write the GCS state backend bucket
 resource "google_storage_bucket_iam_member" "github_deploy_state_bucket" {
-  bucket = "tomoribot-terraform-state-gcp"
+  bucket = var.terraform_state_bucket
   role   = "roles/storage.objectAdmin"
   member = "serviceAccount:${google_service_account.github_deploy.email}"
 }
