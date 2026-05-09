@@ -815,7 +815,6 @@ SELECT add_column_if_not_exists('tomori_configs', 'tool_use_enabled', 'BOOLEAN',
 -- Deliberate tool mode (May 2026)
 -- When TRUE, tool declarations/instructions are omitted unless a turn has explicit tool intent
 SELECT add_column_if_not_exists('tomori_configs', 'deliberate_tool_mode', 'BOOLEAN', 'false');
-SELECT add_column_if_not_exists('tomori_configs', 'deliberate_tool_context_turns', 'INTEGER', 'NULL');
 
 -- Create updated_at trigger for tomori_configs table
 DROP TRIGGER IF EXISTS update_tomori_configs_timestamp ON tomori_configs;
