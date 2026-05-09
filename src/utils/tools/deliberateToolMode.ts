@@ -1,3 +1,5 @@
+import { log } from "@/utils/misc/logger";
+
 export const PERSONAL_DELIBERATE_TOOL_MODES = ["off", "follow", "on"] as const;
 export type PersonalDeliberateToolMode = (typeof PERSONAL_DELIBERATE_TOOL_MODES)[number];
 export type DeliberateToolTriggerMap = Record<string, string[]>;
@@ -63,6 +65,12 @@ const IMAGE_GENERATION_REQUEST_PATTERNS: RegExp[] = [
   /\b(?:i|we)\s+(?:want|would\s+like|need|could\s+use)\b.{0,80}\b(?:image|picture|photo|pic|img)\b/i,
 ];
 
+const VIDEO_GENERATION_REQUEST_PATTERNS: RegExp[] = [
+  /\b(?:can|could|may)\s+(?:i|we)\s+(?:have|get)\b.{0,80}\bvideo\b/i,
+  /\b(?:send|give)\s+(?:me|us)\b.{0,80}\bvideo\b/i,
+  /\b(?:i|we)\s+(?:want|would\s+like|need|could\s+use)\b.{0,80}\bvideo\b/i,
+];
+
 const VOICE_MESSAGE_INTENT_PATTERNS: RegExp[] = [
   /\b(?:voice|audio|spoken)\s+message\b/i,
   /\b(?:send|say|speak|record|deliver|do|make|generate|create)\b.{0,80}\b(?:voice|audio|spoken)\s+message\b/i,
@@ -89,6 +97,17 @@ const CROSS_CHANNEL_INTENT_PATTERNS: RegExp[] = [
   /\b(?:boomerang|report\s+back)\b.{0,120}\b(?:channel|thread|<#\d+>|#[^\s]+|`[^`]+`)\b/iu,
 ];
 
+const STICKER_INTENT_PATTERNS: RegExp[] = [
+  /\b(?:send|use|pick|choose|select|add)\b.{0,80}\b(?:sticker|stickers|emote|reaction\s+sticker)\b/i,
+  /\b(?:sticker|stickers)\b.{0,80}\b(?:please|pls|plz|too|also|instead|for\s+that|with\s+that)\b/i,
+];
+
+const MESSAGE_METADATA_INTENT_PATTERNS: RegExp[] = [
+  /\b(?:metadata|message\s+id|message\s+link|timestamp|jump\s+link)\b/i,
+  /\b(?:when|what\s+time)\b.{0,80}\b(?:was|did)\b.{0,80}\b(?:sent|posted|say|write)\b/i,
+  /\b(?:who|which\s+user)\b.{0,80}\b(?:sent|posted|said|wrote)\b/i,
+];
+
 const TOOL_FOLLOW_UP_PATTERNS: RegExp[] = [
   /\b(?:do|try|make|send|say|generate|run|repeat|redo)\b.{0,80}\b(?:that|it|this|one|again|same)\b/i,
   /\buse\s+(?:that|it|this|one|the\s+same)\b/i,
@@ -98,7 +117,20 @@ const TOOL_FOLLOW_UP_PATTERNS: RegExp[] = [
   /\b(?:pretty\s+please|please\??|pls|plz)\b/i,
 ];
 
-const WEB_TOOL_NAMES = ["web-search", "fetch"];
+const WEB_TOOL_NAMES = [
+  "web-search",
+  "felo-search",
+  "iask-search",
+  "monica-search",
+  "brave_web_search",
+  "brave_image_search",
+  "brave_video_search",
+  "brave_news_search",
+  "brave_local_search",
+  "brave_summarizer",
+  "fetch",
+  "url-metadata",
+];
 const MEMORY_TOOL_NAMES = ["create_long_term_memory", "update_long_term_memory"];
 const IMAGE_GENERATION_TOOL_NAMES = ["generate_image", "generate_image_nai"];
 const VIDEO_GENERATION_TOOL_NAMES = ["generate_video"];
@@ -113,6 +145,7 @@ const MEDIA_ANALYSIS_TOOL_NAMES = [
 ];
 const MESSAGE_ACTION_TOOL_NAMES = ["interact_with_recent_message", "manage_message", "reveal_message_metadata"];
 const CAPABILITY_TOOL_NAMES = ["review_capabilities"];
+const STICKER_TOOL_NAMES = ["select_sticker_for_response"];
 
 export const DELIBERATE_TOOL_TRIGGER_TARGETS = [
   { value: "image", label: "Image generation", toolNames: IMAGE_GENERATION_TOOL_NAMES },
@@ -124,6 +157,7 @@ export const DELIBERATE_TOOL_TRIGGER_TARGETS = [
   { value: "memory", label: "Long-term memory", toolNames: MEMORY_TOOL_NAMES },
   { value: "media-analysis", label: "Media analysis", toolNames: MEDIA_ANALYSIS_TOOL_NAMES },
   { value: "message-action", label: "Message actions", toolNames: MESSAGE_ACTION_TOOL_NAMES },
+  { value: "sticker", label: "Sticker selection", toolNames: STICKER_TOOL_NAMES },
   { value: "thread", label: "Thread creation", toolNames: ["create_thread"] },
   { value: "capabilities", label: "Capability review", toolNames: CAPABILITY_TOOL_NAMES },
 ] as const;
@@ -243,6 +277,18 @@ export function hasDeliberateToolIntent(
     return true;
   }
 
+  if (VIDEO_GENERATION_REQUEST_PATTERNS.some((pattern) => pattern.test(text))) {
+    return true;
+  }
+
+  if (STICKER_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
+    return true;
+  }
+
+  if (MESSAGE_METADATA_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
+    return true;
+  }
+
   return URL_PATTERN.test(text) && URL_TOOL_INTENT_PATTERNS.some((pattern) => pattern.test(text));
 }
 
@@ -351,6 +397,16 @@ export function getDeliberateToolIntentResult(
     );
   }
 
+  if (VIDEO_GENERATION_REQUEST_PATTERNS.some((pattern) => pattern.test(text))) {
+    addToolMatches(
+      allowedToolNames,
+      matches,
+      VIDEO_GENERATION_TOOL_NAMES,
+      getRegexTrigger(text, /\b(video)\b/i, "video request"),
+      "built-in",
+    );
+  }
+
   const generationTargetMatch = text.match(
     /\b(?:generate|create|make|draw)\b.*\b(image|picture|photo|pic|img|pfp|video|voice|audio|speech)\b/i,
   );
@@ -369,8 +425,16 @@ export function getDeliberateToolIntentResult(
     addToolMatches(allowedToolNames, matches, MESSAGE_ACTION_TOOL_NAMES, "message action request", "built-in");
   }
 
+  if (MESSAGE_METADATA_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
+    addToolMatches(allowedToolNames, matches, ["reveal_message_metadata"], "message metadata request", "built-in");
+  }
+
   if (CROSS_CHANNEL_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
     addToolMatches(allowedToolNames, matches, ["cross_channel_message"], "cross-channel request", "built-in");
+  }
+
+  if (STICKER_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
+    addToolMatches(allowedToolNames, matches, STICKER_TOOL_NAMES, "sticker request", "built-in");
   }
 
   if (/\b(create|make|start|open)\b.*\b(thread)\b/i.test(text)) {
@@ -438,6 +502,30 @@ export function isToolAllowedByDeliberateMode(
   allowedToolNames: string[] | null | undefined,
 ): boolean {
   return !allowedToolNames?.length || allowedToolNames.includes(toolName);
+}
+
+export function applyDeliberateToolAllowlist<T extends { name: string }>(params: {
+  providerLabel: string;
+  builtInTools: T[];
+  mcpFunctionNames: string[];
+  allowedToolNames?: string[] | null;
+}): { builtInTools: T[]; mcpFunctionNames: string[] } {
+  const { providerLabel, builtInTools, mcpFunctionNames, allowedToolNames } = params;
+  if (!allowedToolNames?.length) {
+    return { builtInTools, mcpFunctionNames };
+  }
+
+  const filteredBuiltInTools = builtInTools.filter((tool) => isToolAllowedByDeliberateMode(tool.name, allowedToolNames));
+  const filteredMcpFunctionNames = filterDeliberateToolNames(mcpFunctionNames, allowedToolNames);
+
+  log.info(
+    `${providerLabel}: Applied deliberate tool allowlist: ${builtInTools.length} -> ${filteredBuiltInTools.length} built-in, ${mcpFunctionNames.length} -> ${filteredMcpFunctionNames.length} MCP tools`,
+  );
+
+  return {
+    builtInTools: filteredBuiltInTools,
+    mcpFunctionNames: filteredMcpFunctionNames,
+  };
 }
 
 export function resolveDeliberateToolMode(

@@ -5573,6 +5573,7 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
             getRecentToolAffordanceNames(relevantMessagesArray, message.id, client.user?.id),
           );
           deliberateToolAllowedNames.push(...followUpToolIntentResult.allowedToolNames);
+          deliberateToolAllowedNames.push(...(streamingContext.endTurnAfterTools ?? []));
           deliberateToolTriggerMatches.push(...followUpToolIntentResult.matches);
           const retainedToolNames = consumeRetainedToolAffordanceNames(channel.id);
           if (deliberateToolModeActive) {
@@ -7295,9 +7296,29 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                   }
 
                   const functionCallStart = Date.now();
-                  const toolResult = await ToolRegistry.executeTool(funcName, funcCall.args || {}, toolContext);
+                  const deliberateAllowedSet = streamingContext.deliberateToolAllowedNames?.length
+                    ? new Set(streamingContext.deliberateToolAllowedNames)
+                    : null;
+                  const isBlockedByDeliberateAllowlist =
+                    deliberateToolModeActive && deliberateAllowedSet !== null && !deliberateAllowedSet.has(funcName);
+                  const toolResult = isBlockedByDeliberateAllowlist
+                    ? {
+                        success: false,
+                        error: `Tool "${funcName}" was not exposed for this deliberate tool mode turn.`,
+                        data: {
+                          status: "blocked_by_deliberate_tool_mode",
+                          functionName: funcName,
+                          allowedToolNames: [...deliberateAllowedSet],
+                        },
+                      }
+                    : await ToolRegistry.executeTool(funcName, funcCall.args || {}, toolContext);
                   const functionCallDuration = Date.now() - functionCallStart;
                   const deliberateToolTriggerMatch = deliberateToolTriggerMatchByToolName.get(funcName);
+                  if (isBlockedByDeliberateAllowlist) {
+                    log.warn(
+                      `Deliberate tool mode blocked unexposed tool call "${funcName}" in channel ${channel.id}. Allowed: ${[...deliberateAllowedSet].join(", ")}`,
+                    );
+                  }
                   if (toolResult.success) {
                     retainSuccessfulToolAffordance(
                       channel.id,

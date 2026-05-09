@@ -79,7 +79,7 @@ import { getCustomToolAdapter } from "./customToolAdapter";
 import { customProviderInfo } from "./providerInfo";
 import { resolveCustomEndpointForProvider } from "@/utils/provider/customEndpointService";
 import { buildCustomHeaders } from "@/providers/custom/customOpenAICompatibleUtils";
-import { filterDeliberateToolNames, isToolAllowedByDeliberateMode } from "@/utils/tools/deliberateToolMode";
+import { applyDeliberateToolAllowlist } from "@/utils/tools/deliberateToolMode";
 
 /**
  * Default model name placeholder for custom provider
@@ -276,26 +276,18 @@ export class CustomProvider
           return isContextAvailable;
         });
 
-        if (streamingContext.deliberateToolAllowedNames?.length) {
-          const beforeBuiltInCount = finalBuiltInTools.length;
-          const beforeMcpCount = finalMcpFunctionNames.length;
-          finalBuiltInTools = finalBuiltInTools.filter((tool) =>
-            isToolAllowedByDeliberateMode(tool.name, streamingContext.deliberateToolAllowedNames),
-          );
-          finalMcpFunctionNames = filterDeliberateToolNames(
-            finalMcpFunctionNames,
-            streamingContext.deliberateToolAllowedNames,
-          );
-
-          log.info(
-            `Applied deliberate tool allowlist: ${beforeBuiltInCount} → ${finalBuiltInTools.length} built-in, ${beforeMcpCount} → ${finalMcpFunctionNames.length} MCP tools`,
-          );
-        }
-
         log.info(
           `Applied streaming context filtering: ${availableBuiltInTools.length} → ${finalBuiltInTools.length} built-in tools`,
         );
       }
+
+      ({ builtInTools: finalBuiltInTools, mcpFunctionNames: finalMcpFunctionNames } =
+        applyDeliberateToolAllowlist({
+          providerLabel: "Custom provider",
+          builtInTools: finalBuiltInTools,
+          mcpFunctionNames: finalMcpFunctionNames,
+          allowedToolNames: streamingContext?.deliberateToolAllowedNames,
+        }));
 
       // Use the tool adapter to get all tools in OpenAI-compatible format
       const customAdapter = getCustomToolAdapter();
