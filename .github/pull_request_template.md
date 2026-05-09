@@ -1,6 +1,8 @@
 ## Summary
 _What does this change and why? Link to issues/discussions for deeper context if possible._
 
+Closes # <!-- Replace # with issue number, or remove this line if not applicable -->
+
 ## Type(s)
 - [ ] Bug Fix
 - [ ] Feature
