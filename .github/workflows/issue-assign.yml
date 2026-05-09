@@ -1,0 +1,19 @@
+name: Issue Assignment
+
+on:
+  schedule:
+    - cron: "0 0 * * *" # daily stale assignment check
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+
+jobs:
+  assign:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: takanome-dev/assign-issue-action@v3.1.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          maintainers: "Bredrumb"
