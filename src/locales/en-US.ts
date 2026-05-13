@@ -4811,6 +4811,7 @@ You can change this anytime using \`/personal privacy\`.`,
           scope_description: `Choose whether the document belongs to a persona or the whole server.`,
           scope_choice_persona: `Persona`,
           scope_choice_serverwide: `Serverwide`,
+          channels_description: `Restrict to specific channels (comma-separated, e.g. #general,#news). Blank = all channels.`,
         },
         remove: {
           description: `Remove a document from memory.`,

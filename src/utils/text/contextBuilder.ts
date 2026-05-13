@@ -1412,14 +1412,8 @@ async function buildContextNative({
     if (!tomoriConfig.channel_memory_enabled) return true;
     const normalizedTags = tags.map((t) => t.replace(/^["']+|["']+$/g, ""));
     const channelTags = normalizedTags.filter((t) => t.startsWith("#"));
-    console.log(`[DEBUG isChannelAllowed] currentChannelName="${channelName}" | allTags=${JSON.stringify(tags)} | normalizedTags=${JSON.stringify(normalizedTags)} | channelTags=${JSON.stringify(channelTags)}`);
-    if (channelTags.length === 0) {
-      console.log(`[DEBUG isChannelAllowed] no channel tags → allowed`);
-      return true;
-    }
-    const result = channelTags.some((t) => t.slice(1).toLowerCase() === channelName.toLowerCase());
-    console.log(`[DEBUG isChannelAllowed] comparing against "${channelName.toLowerCase()}" → ${result}`);
-    return result;
+    if (channelTags.length === 0) return true;
+    return channelTags.some((t) => t.slice(1).toLowerCase() === channelName.toLowerCase());
   };
 
   // 4. Server Memories / Conversation Memories
@@ -2259,6 +2253,7 @@ async function buildContextNative({
               apiKey: creds.apiKey,
               maxResults: DOCUMENT_MAX_RESULTS,
               minSimilarity: DOCUMENT_MIN_SIMILARITY,
+              channelName: tomoriConfig.channel_memory_enabled ? channelName : undefined,
             });
 
             const documentContext = formatRetrievedChunksForPrompt(chunks);

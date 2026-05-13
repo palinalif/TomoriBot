@@ -4874,6 +4874,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
           scope_description: `ドキュメントをペルソナ専用にするか、サーバー全体で共有するかを選択します。`,
           scope_choice_persona: `ペルソナ`,
           scope_choice_serverwide: `サーバー全体`,
+          channels_description: `任意：特定チャンネルのみに制限（カンマ区切り、例: #general,#bot-chat）。空白の場合は全チャンネルで利用可能。`,
         },
         remove: {
           description: `ドキュメントを記憶から削除します。`,
