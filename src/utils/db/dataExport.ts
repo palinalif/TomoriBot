@@ -233,7 +233,8 @@ export async function exportServerData(serverDiscId: string, tomoriId?: number):
 				COALESCE(tc_server.uncensor_sanitize_enabled, tc_legacy.uncensor_sanitize_enabled, false) as uncensor_sanitize_enabled,
 				COALESCE(tc_server.tool_use_enabled, tc_legacy.tool_use_enabled, true) as tool_use_enabled,
 				COALESCE(tc_server.prompt_snapshot_enabled, tc_legacy.prompt_snapshot_enabled, false) as prompt_snapshot_enabled,
-				COALESCE(tc_server.memory_tagging_enabled, tc_legacy.memory_tagging_enabled, false) as memory_tagging_enabled
+				COALESCE(tc_server.memory_tagging_enabled, tc_legacy.memory_tagging_enabled, false) as memory_tagging_enabled,
+				COALESCE(tc_server.channel_memory_enabled, tc_legacy.channel_memory_enabled, false) as channel_memory_enabled
 			FROM tomoris t
 			LEFT JOIN tomori_configs tc_server ON tc_server.server_id = t.server_id
 			LEFT JOIN tomori_configs tc_legacy ON tc_legacy.tomori_id = t.tomori_id
@@ -396,6 +397,7 @@ export async function exportServerData(serverDiscId: string, tomoriId?: number):
           tool_use_enabled: configData.tool_use_enabled,
           prompt_snapshot_enabled: configData.prompt_snapshot_enabled,
           memory_tagging_enabled: configData.memory_tagging_enabled,
+          channel_memory_enabled: configData.channel_memory_enabled,
         },
         server_memories: sanitizedServerMemories,
       },
