@@ -1444,8 +1444,7 @@ async function buildContextNative({
         const normalizedTags = tags.map((t) => t.replace(/^["']+|["']+$/g, ""));
         const contentTags = normalizedTags.filter((t) => !t.startsWith("#"));
         const passesTagFilter = conversationCorpus
-          ? contentTags.length > 0 &&
-            contentTags.some((tag) => conversationCorpus.includes(tag.toLowerCase()))
+          ? contentTags.length > 0 && contentTags.some((tag) => conversationCorpus.includes(tag.toLowerCase()))
           : true;
         return passesTagFilter && isChannelAllowed(tags);
       });
@@ -1946,8 +1945,7 @@ async function buildContextNative({
             const normalizedTags = tags.map((t) => t.replace(/^["']+|["']+$/g, ""));
             const contentTags = normalizedTags.filter((t) => !t.startsWith("#"));
             const passesTagFilter = conversationCorpus
-              ? contentTags.length > 0 &&
-                contentTags.some((tag) => conversationCorpus.includes(tag.toLowerCase()))
+              ? contentTags.length > 0 && contentTags.some((tag) => conversationCorpus.includes(tag.toLowerCase()))
               : true;
             return passesTagFilter && isChannelAllowed(tags);
           });
