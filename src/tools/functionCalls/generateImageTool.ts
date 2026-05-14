@@ -48,7 +48,17 @@ export class GenerateImageTool extends BaseTool {
       media_id: {
         type: "string",
         description:
-          "Optional: The media reference ID (e.g., media_1) from the system hint for the message containing images to use as reference for image-to-image generation. The tool will extract all images from this message and use them to guide the generation along with your prompt. If not provided, generates a new image from scratch (text-to-image).",
+          "Optional: The media reference ID (e.g., media_1) from the system hint for the message containing images to use as reference for image-to-image generation or inpainting. The tool will extract all images from this message and use them to guide the generation along with your prompt. If not provided, generates a new image from scratch (text-to-image).",
+      },
+      inpaint: {
+        type: "boolean",
+        description:
+          "Optional: Set to true when editing only a specific region of a referenced image. Requires media_id or target_identity. Use false or omit for normal image-to-image.",
+      },
+      mask_prompt: {
+        type: "string",
+        description:
+          "Optional: Short phrase describing the region to edit when inpaint is true, such as 'chair', 'blue chest piece', or 'background'. Keep this focused on the existing object/area to mask, not the desired replacement.",
       },
       target_identity: {
         type: "string",
@@ -88,6 +98,20 @@ export class GenerateImageTool extends BaseTool {
    */
   protected isEnabled(context: ToolContext): boolean {
     return context.tomoriState.config.imagegen_enabled;
+  }
+
+  private shouldUseInpaint(args: Record<string, unknown>, prompt: string, hasReference: boolean): boolean {
+    if (!hasReference) {
+      return false;
+    }
+    if (args.inpaint === true) {
+      return true;
+    }
+    if (typeof args.inpaint === "string") {
+      return args.inpaint.toLowerCase() === "true";
+    }
+
+    return /\binpaint(?:ing)?\b|\bmask(?:ed)?\b|\bedit only\b|\bchange only\b/i.test(prompt);
   }
 
   /**
@@ -577,6 +601,8 @@ export class GenerateImageTool extends BaseTool {
     const targetIdentity = (args.target_identity as string | undefined) ?? (args.user_id as string | undefined);
     const aspectRatio = (args.aspect_ratio as string) || "1:1";
     const usesReferences = !!(messageId || targetIdentity);
+    const inpaint = this.shouldUseInpaint(args, prompt, usesReferences);
+    const maskPrompt = (args.mask_prompt as string | undefined)?.trim() || null;
 
     try {
       // Get the diffusion model codename from database
@@ -708,6 +734,8 @@ export class GenerateImageTool extends BaseTool {
           prompt,
           aspectRatio,
           referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
+          inpaint,
+          maskPrompt,
         });
         generatedImageData = result.imageData;
       } else if (nativeImageProvider) {

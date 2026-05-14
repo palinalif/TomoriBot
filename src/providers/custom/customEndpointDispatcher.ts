@@ -42,7 +42,8 @@ type ComfyUiWorkflowSupports = {
   inpaint: boolean;
 };
 
-const ANIMA3_REQUIRED_NODE_IDS = ["6", "176", "186", "196", "188", "177", "198", "193"] as const;
+const ANIMA3_NODE_IDS = ["6", "176", "186", "196", "188", "177", "198", "193"] as const;
+type Anima3NodeId = (typeof ANIMA3_NODE_IDS)[number];
 const DEFAULT_COMFYUI_WORKFLOW_SUPPORTS: ComfyUiWorkflowSupports = {
   txt2img: true,
   img2img: true,
@@ -214,20 +215,46 @@ function hasComfyUiVisualWorkflowShape(workflow: ComfyUiWorkflow): boolean {
   return Array.isArray(workflow.nodes) || Array.isArray(workflow.links) || Array.isArray(workflow.groups);
 }
 
-function hasAnima3CombinedPromptNodes(workflow: ComfyUiWorkflow): boolean {
-  return ANIMA3_REQUIRED_NODE_IDS.every((nodeId) => isRecord(workflow[nodeId]));
+function hasAnima3CombinedPromptCoreNodes(workflow: ComfyUiWorkflow): boolean {
+  return ["6", "177", "188"].every((nodeId) => isRecord(workflow[nodeId]));
 }
 
-function getComfyUiNodeInputs(
-  workflow: ComfyUiWorkflow,
-  nodeId: (typeof ANIMA3_REQUIRED_NODE_IDS)[number],
-): Record<string, unknown> {
+function getComfyUiNodeInputs(workflow: ComfyUiWorkflow, nodeId: Anima3NodeId): Record<string, unknown> {
   const node = workflow[nodeId] as ComfyUiApiNode;
   if (!isRecord(node.inputs)) {
     node.inputs = {};
   }
 
   return node.inputs;
+}
+
+function getOptionalComfyUiNodeInputs(workflow: ComfyUiWorkflow, nodeId: Anima3NodeId): Record<string, unknown> | null {
+  if (!isRecord(workflow[nodeId])) {
+    return null;
+  }
+
+  return getComfyUiNodeInputs(workflow, nodeId);
+}
+
+function requireComfyUiNodeInputs(workflow: ComfyUiWorkflow, nodeId: Anima3NodeId, modeLabel: string): Record<string, unknown> {
+  const inputs = getOptionalComfyUiNodeInputs(workflow, nodeId);
+  if (!inputs) {
+    throw new Error(`ComfyUI Anima3 ${modeLabel} workflow is missing required node ${nodeId}.`);
+  }
+
+  return inputs;
+}
+
+function setOptionalComfyUiNodeInput(
+  workflow: ComfyUiWorkflow,
+  nodeId: Anima3NodeId,
+  inputName: string,
+  value: unknown,
+): void {
+  const inputs = getOptionalComfyUiNodeInputs(workflow, nodeId);
+  if (inputs) {
+    inputs[inputName] = value;
+  }
 }
 
 function buildReferenceImageDataUrl(options: ComfyUiGenerationOptions): string | null {
@@ -287,26 +314,31 @@ function applyAnima3CombinedPromptInputs(
 
   assertComfyUiWorkflowSupportsRequest(options, supports);
 
-  getComfyUiNodeInputs(workflow, "6").text = options.prompt;
+  requireComfyUiNodeInputs(workflow, "6", "image").text = options.prompt;
 
-  getComfyUiNodeInputs(workflow, "176").seed = seed;
-  getComfyUiNodeInputs(workflow, "186").seed = seed;
-  getComfyUiNodeInputs(workflow, "196").seed = seed;
+  setOptionalComfyUiNodeInput(workflow, "176", "seed", seed);
+  setOptionalComfyUiNodeInput(workflow, "186", "seed", seed);
+  setOptionalComfyUiNodeInput(workflow, "196", "seed", seed);
 
-  getComfyUiNodeInputs(workflow, "188").value = hasReference ? 1 : 0;
-  getComfyUiNodeInputs(workflow, "177").image_data = referenceImageDataUrl ?? "";
+  requireComfyUiNodeInputs(workflow, "188", "reference").value = hasReference ? 1 : 0;
+  requireComfyUiNodeInputs(workflow, "177", "reference").image_data = referenceImageDataUrl ?? "";
 
-  getComfyUiNodeInputs(workflow, "198").value = inpaint;
-  getComfyUiNodeInputs(workflow, "193").text = options.maskPrompt?.trim() || options.prompt;
+  if (inpaint) {
+    requireComfyUiNodeInputs(workflow, "198", "inpaint").value = true;
+    requireComfyUiNodeInputs(workflow, "193", "inpaint").text = options.maskPrompt?.trim() || options.prompt;
+  } else {
+    setOptionalComfyUiNodeInput(workflow, "198", "value", false);
+    setOptionalComfyUiNodeInput(workflow, "193", "text", options.maskPrompt?.trim() || options.prompt);
+  }
 
   log.info(
     `Prepared Anima3 ComfyUI payload ${JSON.stringify({
       hasReference,
       inpaint,
-      maskPrompt: getComfyUiNodeInputs(workflow, "193").text,
+      maskPrompt: getOptionalComfyUiNodeInputs(workflow, "193")?.text ?? null,
       seed,
-      refCount: getComfyUiNodeInputs(workflow, "188").value,
-      inpaintFlag: getComfyUiNodeInputs(workflow, "198").value,
+      refCount: getOptionalComfyUiNodeInputs(workflow, "188")?.value ?? null,
+      inpaintFlag: getOptionalComfyUiNodeInputs(workflow, "198")?.value ?? null,
     })}`,
   );
 }
@@ -373,7 +405,7 @@ async function generateWithComfyUi(
   }
 
   const preparedWorkflow = replaceWorkflowPlaceholders(workflow, placeholders) as ComfyUiWorkflow;
-  if (options.mode === "image" && hasAnima3CombinedPromptNodes(preparedWorkflow)) {
+  if (options.mode === "image" && hasAnima3CombinedPromptCoreNodes(preparedWorkflow)) {
     applyAnima3CombinedPromptInputs(preparedWorkflow, options, workflowSupports);
   } else if (options.inpaint === true) {
     throw new Error("Inpaint requires a ComfyUI workflow with Anima3 inpaint nodes.");
