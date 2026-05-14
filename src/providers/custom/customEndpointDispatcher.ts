@@ -257,17 +257,6 @@ function setOptionalComfyUiNodeInput(
   }
 }
 
-function summarizeDataUrl(value: unknown): { prefix: string | null; length: number } {
-  if (typeof value !== "string") {
-    return { prefix: null, length: 0 };
-  }
-
-  return {
-    prefix: value.slice(0, 40),
-    length: value.length,
-  };
-}
-
 function buildReferenceImageDataUrl(options: ComfyUiGenerationOptions): string | null {
   if (options.referenceImageDataUrl) {
     return options.referenceImageDataUrl;
@@ -350,8 +339,6 @@ function applyAnima3CombinedPromptInputs(
       seed,
       refCount: getOptionalComfyUiNodeInputs(workflow, "188")?.value ?? null,
       inpaintFlag: getOptionalComfyUiNodeInputs(workflow, "198")?.value ?? null,
-      imageReceiverImage: getOptionalComfyUiNodeInputs(workflow, "177")?.image ?? null,
-      imageReceiverImageData: summarizeDataUrl(getOptionalComfyUiNodeInputs(workflow, "177")?.image_data),
     })}`,
   );
 }

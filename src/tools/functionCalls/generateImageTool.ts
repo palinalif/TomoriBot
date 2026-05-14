@@ -309,16 +309,6 @@ export class GenerateImageTool extends BaseTool {
       log.info(
         `Found ${imageUrls.length} image(s) in message ${messageId} (${imageAttachments.size} attachment(s), ${imageUrls.length - imageAttachments.size} embed(s))`,
       );
-      log.info(
-        `GenerateImageTool resolved media sources ${JSON.stringify({
-          messageId,
-          sources: imageUrls.map((imageInfo) => ({
-            source: imageInfo.source,
-            mimeType: imageInfo.mimeType,
-            urlPrefix: imageInfo.url.slice(0, 80),
-          })),
-        })}`,
-      );
 
       // 5. Convert each image URL to base64
       const inlineDataArray: Array<{ mimeType: string; data: string }> = [];
@@ -343,13 +333,7 @@ export class GenerateImageTool extends BaseTool {
             data: base64ImageData,
           });
 
-          log.info(
-            `Successfully converted image from ${imageInfo.source} to base64 ${JSON.stringify({
-              mimeType: imageInfo.mimeType,
-              base64Length: base64ImageData.length,
-              dataUrlPrefix: `data:${imageInfo.mimeType};base64,${base64ImageData}`.slice(0, 40),
-            })}`,
-          );
+          log.info(`Successfully converted image from ${imageInfo.source} to base64`);
         } catch (imgErr) {
           log.warn(`Failed to process image from ${imageInfo.source}:`, imgErr as Error);
         }
@@ -632,20 +616,6 @@ export class GenerateImageTool extends BaseTool {
     const inpaint = this.shouldUseInpaint(args, prompt, usesReferences);
     const maskPrompt = (args.mask_prompt as string | undefined)?.trim() || null;
 
-    log.info(
-      `GenerateImageTool received request ${JSON.stringify({
-        prompt,
-        rawMediaId,
-        resolvedMessageId: messageId,
-        mediaIdWasOpaque: rawMediaId ? MessageIdMap.isOpaqueKey(rawMediaId) : false,
-        mediaIdResolved: rawMediaId ? !!messageId : null,
-        targetIdentity,
-        aspectRatio,
-        inpaint,
-        maskPrompt,
-      })}`,
-    );
-
     if (rawMediaId && !messageId) {
       return {
         success: false,
@@ -730,24 +700,10 @@ export class GenerateImageTool extends BaseTool {
       const referenceImages: Array<{ mimeType: string; data: string }> = [];
 
       if (messageId) {
-        log.info(
-          `Extracting images from message ${messageId} for image-to-image generation ${JSON.stringify({
-            rawMediaId,
-            inpaint,
-            maskPrompt,
-          })}`,
-        );
+        log.info(`Extracting images from message ${messageId} for image-to-image generation`);
         const messageImages = await this.extractImagesFromMessage(messageId, context);
         referenceImages.push(...messageImages);
-        log.info(
-          `Using ${messageImages.length} reference image(s) from message ${messageId} for generation ${JSON.stringify({
-            references: messageImages.map((image) => ({
-              mimeType: image.mimeType,
-              base64Length: image.data.length,
-              dataUrlPrefix: `data:${image.mimeType};base64,${image.data}`.slice(0, 40),
-            })),
-          })}`,
-        );
+        log.info(`Using ${messageImages.length} reference image(s) from message ${messageId} for generation`);
       }
 
       if (targetIdentity) {
