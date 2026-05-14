@@ -132,7 +132,7 @@ export type ImageGenerationRequest = {
   maskGrow?: number | null;
   maskFeather?: number | null;
   denoise?: number | null;
-  inpaintDenoise?: number | null;
+  referenceDenoise?: number | null;
   seed?: number | null;
 };
 

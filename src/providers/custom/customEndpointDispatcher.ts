@@ -34,7 +34,7 @@ interface ComfyUiGenerationOptions {
   maskGrow?: number | null;
   maskFeather?: number | null;
   denoise?: number | null;
-  inpaintDenoise?: number | null;
+  referenceDenoise?: number | null;
   seed?: number | null;
 }
 
@@ -58,7 +58,7 @@ type ComfyUiInpaintSettings = {
   maskThreshold: number;
   maskGrow: number;
   maskFeather: number;
-  inpaintDenoise: number;
+  referenceDenoise: number;
 };
 
 const HARDCODED_INPAINT_PRESETS: Record<ImageGenerationInpaintMode, ComfyUiInpaintSettings> = {
@@ -67,14 +67,14 @@ const HARDCODED_INPAINT_PRESETS: Record<ImageGenerationInpaintMode, ComfyUiInpai
     maskThreshold: 0.45,
     maskGrow: 8,
     maskFeather: 8,
-    inpaintDenoise: 0.3,
+    referenceDenoise: 0.3,
   },
   loose: {
     inpaintMode: "loose",
     maskThreshold: 0.35,
     maskGrow: 18,
     maskFeather: 16,
-    inpaintDenoise: 0.6,
+    referenceDenoise: 0.6,
   },
 };
 
@@ -117,7 +117,7 @@ function buildEnvBackedInpaintPreset(mode: ImageGenerationInpaintMode): ComfyUiI
     maskThreshold: readPresetNumberEnv(mode, "MASK_THRESHOLD") ?? fallback.maskThreshold,
     maskGrow: readPresetNumberEnv(mode, "MASK_GROW") ?? fallback.maskGrow,
     maskFeather: readPresetNumberEnv(mode, "MASK_FEATHER") ?? fallback.maskFeather,
-    inpaintDenoise: readPresetNumberEnv(mode, "DENOISE") ?? fallback.inpaintDenoise,
+    referenceDenoise: readPresetNumberEnv(mode, "DENOISE") ?? fallback.referenceDenoise,
   };
 }
 
@@ -130,7 +130,8 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
     maskThreshold: options.maskThreshold ?? preset.maskThreshold ?? HARDCODED_INPAINT_PRESETS[mode].maskThreshold,
     maskGrow: options.maskGrow ?? preset.maskGrow ?? HARDCODED_INPAINT_PRESETS[mode].maskGrow,
     maskFeather: options.maskFeather ?? preset.maskFeather ?? HARDCODED_INPAINT_PRESETS[mode].maskFeather,
-    inpaintDenoise: options.inpaintDenoise ?? preset.inpaintDenoise ?? HARDCODED_INPAINT_PRESETS[mode].inpaintDenoise,
+    referenceDenoise:
+      options.referenceDenoise ?? preset.referenceDenoise ?? HARDCODED_INPAINT_PRESETS[mode].referenceDenoise,
   };
 }
 
@@ -139,13 +140,13 @@ function resolveComfyUiDenoise(options: ComfyUiGenerationOptions): number {
     return 1;
   }
 
-  const rawDenoise = options.denoise ?? options.inpaintDenoise ?? null;
+  const rawDenoise = options.denoise ?? options.referenceDenoise ?? null;
   if (rawDenoise !== null) {
     return Number.isFinite(rawDenoise) ? clampNumber(rawDenoise, 0, 1) : DEFAULT_COMFYUI_REFERENCE_DENOISE;
   }
 
   if (options.inpaint === true) {
-    return resolveComfyUiInpaintSettings(options).inpaintDenoise;
+    return resolveComfyUiInpaintSettings(options).referenceDenoise;
   }
 
   const envDenoise = readOptionalNumberEnv("COMFYUI_REFERENCE_DENOISE");
@@ -479,7 +480,7 @@ async function generateWithComfyUi(
         maskThreshold: inpaintSettings.maskThreshold,
         maskGrow: inpaintSettings.maskGrow,
         maskFeather: inpaintSettings.maskFeather,
-        inpaintDenoise: denoise,
+        referenceDenoise: denoise,
       })}`,
     );
   }
@@ -586,7 +587,7 @@ export async function generateCustomImageViaEndpoint(params: {
   maskGrow?: number | null;
   maskFeather?: number | null;
   denoise?: number | null;
-  inpaintDenoise?: number | null;
+  referenceDenoise?: number | null;
   seed?: number | null;
 }): Promise<ProviderNativeImageGenerationResult> {
   const {
@@ -603,7 +604,7 @@ export async function generateCustomImageViaEndpoint(params: {
     maskGrow,
     maskFeather,
     denoise,
-    inpaintDenoise,
+    referenceDenoise,
     seed,
   } = params;
 
@@ -621,12 +622,15 @@ export async function generateCustomImageViaEndpoint(params: {
       maskGrow,
       maskFeather,
       denoise,
-      inpaintDenoise,
+      referenceDenoise,
       seed,
     });
     const diagnosticMaskFiles = files.filter(isComfyUiInpaintMaskAsset);
     const imageFiles = files.filter((file) => !isComfyUiInpaintMaskAsset(file));
-    const firstFile = imageFiles[0] ?? files[0];
+    const firstFile = imageFiles[0];
+    if (!firstFile) {
+      throw new Error("ComfyUI workflow returned only diagnostic inpaint mask outputs and no final image output.");
+    }
     const imageBuffer = await downloadComfyUiAsset(endpoint, apiKey, firstFile);
     const diagnosticImages = await Promise.all(
       diagnosticMaskFiles.map(async (file) => {
