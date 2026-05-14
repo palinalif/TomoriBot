@@ -6,6 +6,7 @@ import type {
   ProviderNativeVideoGenerationResult,
 } from "@/types/provider/featureInterfaces";
 import { buildCustomHeaders } from "@/providers/custom/customOpenAICompatibleUtils";
+import { log } from "@/utils/misc/logger";
 import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 
 type ComfyUiGenerationMode = "image" | "video";
@@ -24,9 +25,29 @@ interface ComfyUiGenerationOptions {
   resolution?: string;
   generateAudio?: boolean;
   referenceImages?: ComfyUiReferenceImage[];
+  referenceImageDataUrl?: string | null;
+  inpaint?: boolean;
+  maskPrompt?: string | null;
+  seed?: number | null;
 }
 
 type WorkflowPlaceholderValue = string | number | boolean | null | Record<string, unknown> | Array<unknown>;
+type ComfyUiWorkflow = Record<string, unknown>;
+type ComfyUiApiNode = {
+  inputs?: Record<string, unknown>;
+};
+type ComfyUiWorkflowSupports = {
+  txt2img: boolean;
+  img2img: boolean;
+  inpaint: boolean;
+};
+
+const ANIMA3_REQUIRED_NODE_IDS = ["6", "176", "186", "196", "188", "177", "198", "193"] as const;
+const DEFAULT_COMFYUI_WORKFLOW_SUPPORTS: ComfyUiWorkflowSupports = {
+  txt2img: true,
+  img2img: true,
+  inpaint: false,
+};
 
 const COMFYUI_IMAGE_TARGET_AREA = (() => {
   const parsed = Number.parseInt(process.env.COMFYUI_IMAGE_TARGET_AREA || "1048576", 10);
@@ -181,6 +202,115 @@ function replaceWorkflowPlaceholders(value: unknown, placeholders: Record<string
   return value;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function deepCloneWorkflow(workflow: Record<string, unknown>): ComfyUiWorkflow {
+  return structuredClone(workflow) as ComfyUiWorkflow;
+}
+
+function hasComfyUiVisualWorkflowShape(workflow: ComfyUiWorkflow): boolean {
+  return Array.isArray(workflow.nodes) || Array.isArray(workflow.links) || Array.isArray(workflow.groups);
+}
+
+function hasAnima3CombinedPromptNodes(workflow: ComfyUiWorkflow): boolean {
+  return ANIMA3_REQUIRED_NODE_IDS.every((nodeId) => isRecord(workflow[nodeId]));
+}
+
+function getComfyUiNodeInputs(
+  workflow: ComfyUiWorkflow,
+  nodeId: (typeof ANIMA3_REQUIRED_NODE_IDS)[number],
+): Record<string, unknown> {
+  const node = workflow[nodeId] as ComfyUiApiNode;
+  if (!isRecord(node.inputs)) {
+    node.inputs = {};
+  }
+
+  return node.inputs;
+}
+
+function buildReferenceImageDataUrl(options: ComfyUiGenerationOptions): string | null {
+  if (options.referenceImageDataUrl) {
+    return options.referenceImageDataUrl;
+  }
+
+  const firstReferenceImage = options.referenceImages?.[0];
+  if (!firstReferenceImage) {
+    return null;
+  }
+
+  return `data:${firstReferenceImage.mimeType};base64,${firstReferenceImage.data}`;
+}
+
+function readComfyUiWorkflowSupports(endpoint: CustomEndpointRow): ComfyUiWorkflowSupports {
+  const rawSupports = endpoint.extra_config.workflow_supports;
+  if (!isRecord(rawSupports)) {
+    return DEFAULT_COMFYUI_WORKFLOW_SUPPORTS;
+  }
+
+  return {
+    txt2img:
+      typeof rawSupports.txt2img === "boolean" ? rawSupports.txt2img : DEFAULT_COMFYUI_WORKFLOW_SUPPORTS.txt2img,
+    img2img:
+      typeof rawSupports.img2img === "boolean" ? rawSupports.img2img : DEFAULT_COMFYUI_WORKFLOW_SUPPORTS.img2img,
+    inpaint:
+      typeof rawSupports.inpaint === "boolean" ? rawSupports.inpaint : DEFAULT_COMFYUI_WORKFLOW_SUPPORTS.inpaint,
+  };
+}
+
+function assertComfyUiWorkflowSupportsRequest(options: ComfyUiGenerationOptions, supports: ComfyUiWorkflowSupports): void {
+  const hasReference = !!buildReferenceImageDataUrl(options);
+  if (options.inpaint === true && !hasReference) {
+    throw new Error("Inpaint requires a reference image.");
+  }
+  if (options.inpaint === true && !supports.inpaint) {
+    throw new Error("This ComfyUI workflow is not configured to support inpaint requests.");
+  }
+  if (hasReference && options.inpaint !== true && !supports.img2img) {
+    throw new Error("This ComfyUI workflow is not configured to support reference-image requests.");
+  }
+  if (!hasReference && !supports.txt2img) {
+    throw new Error("This ComfyUI workflow is not configured to support text-to-image requests.");
+  }
+}
+
+function applyAnima3CombinedPromptInputs(
+  workflow: ComfyUiWorkflow,
+  options: ComfyUiGenerationOptions,
+  supports: ComfyUiWorkflowSupports,
+): void {
+  const referenceImageDataUrl = buildReferenceImageDataUrl(options);
+  const hasReference = !!referenceImageDataUrl;
+  const inpaint = hasReference && options.inpaint === true;
+  const seed = options.seed ?? Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+
+  assertComfyUiWorkflowSupportsRequest(options, supports);
+
+  getComfyUiNodeInputs(workflow, "6").text = options.prompt;
+
+  getComfyUiNodeInputs(workflow, "176").seed = seed;
+  getComfyUiNodeInputs(workflow, "186").seed = seed;
+  getComfyUiNodeInputs(workflow, "196").seed = seed;
+
+  getComfyUiNodeInputs(workflow, "188").value = hasReference ? 1 : 0;
+  getComfyUiNodeInputs(workflow, "177").image_data = referenceImageDataUrl ?? "";
+
+  getComfyUiNodeInputs(workflow, "198").value = inpaint;
+  getComfyUiNodeInputs(workflow, "193").text = options.maskPrompt?.trim() || options.prompt;
+
+  log.info(
+    `Prepared Anima3 ComfyUI payload ${JSON.stringify({
+      hasReference,
+      inpaint,
+      maskPrompt: getComfyUiNodeInputs(workflow, "193").text,
+      seed,
+      refCount: getComfyUiNodeInputs(workflow, "188").value,
+      inpaintFlag: getComfyUiNodeInputs(workflow, "198").value,
+    })}`,
+  );
+}
+
 function buildComfyUiPlaceholderMap(
   endpoint: CustomEndpointRow,
   options: ComfyUiGenerationOptions,
@@ -233,36 +363,33 @@ async function generateWithComfyUi(
   const dimensions = buildComfyUiDimensions(options);
   const referencePayload = buildComfyUiReferencePayload(options.referenceImages ?? []);
   const placeholders = buildComfyUiPlaceholderMap(endpoint, options, dimensions, referencePayload);
-  const workflow = replaceWorkflowPlaceholders(savedWorkflow, placeholders);
+  const workflowSupports = readComfyUiWorkflowSupports(endpoint);
+  const workflow = deepCloneWorkflow(savedWorkflow as Record<string, unknown>);
+  if (hasComfyUiVisualWorkflowShape(workflow)) {
+    throw new Error("ComfyUI workflow must be exported in API prompt format, not visual workflow format.");
+  }
+  if (options.mode === "image") {
+    assertComfyUiWorkflowSupportsRequest(options, workflowSupports);
+  }
+
+  const preparedWorkflow = replaceWorkflowPlaceholders(workflow, placeholders) as ComfyUiWorkflow;
+  if (options.mode === "image" && hasAnima3CombinedPromptNodes(preparedWorkflow)) {
+    applyAnima3CombinedPromptInputs(preparedWorkflow, options, workflowSupports);
+  } else if (options.inpaint === true) {
+    throw new Error("Inpaint requires a ComfyUI workflow with Anima3 inpaint nodes.");
+  }
+
   const postHeaders = buildCustomHeaders(apiKey);
   const getHeaders = { ...postHeaders };
   delete getHeaders["Content-Type"];
+  const clientId = `tomoribot-${Date.now()}`;
 
   const promptResponse = await fetchUserRemoteUrl(`${endpoint.endpoint_url.replace(/\/+$/, "")}/prompt`, {
     method: "POST",
     headers: postHeaders,
     body: JSON.stringify({
-      prompt: workflow,
-      client_id: `tomoribot-${Date.now()}`,
-      extra_data: {
-        extra_pnginfo: {
-          tomori_prompt: options.prompt,
-          tomori_model: endpoint.model_name ?? endpoint.display_name,
-          tomori_mode: options.mode,
-          tomori_aspect_ratio: placeholders.TOMORI_ASPECT_RATIO,
-          tomori_width: dimensions.width,
-          tomori_height: dimensions.height,
-          tomori_size: `${dimensions.width}x${dimensions.height}`,
-          tomori_reference_image_count: referencePayload.length,
-          ...(options.mode === "video"
-            ? {
-                tomori_video_duration: options.durationSeconds ?? 0,
-                tomori_video_resolution: options.resolution ?? "",
-                tomori_generate_audio: options.generateAudio ?? false,
-              }
-            : {}),
-        },
-      },
+      prompt: preparedWorkflow,
+      client_id: clientId,
     }),
   });
 
@@ -346,8 +473,13 @@ export async function generateCustomImageViaEndpoint(params: {
   prompt: string;
   aspectRatio: string;
   referenceImages?: ProviderNativeImageGenerationRequest["referenceImages"];
+  referenceImageDataUrl?: string | null;
+  inpaint?: boolean;
+  maskPrompt?: string | null;
+  seed?: number | null;
 }): Promise<ProviderNativeImageGenerationResult> {
-  const { endpoint, apiKey, prompt, aspectRatio, referenceImages } = params;
+  const { endpoint, apiKey, prompt, aspectRatio, referenceImages, referenceImageDataUrl, inpaint, maskPrompt, seed } =
+    params;
 
   if (endpoint.api_style === "comfyui") {
     const files = await generateWithComfyUi(endpoint, apiKey, {
@@ -355,6 +487,10 @@ export async function generateCustomImageViaEndpoint(params: {
       prompt,
       aspectRatio,
       referenceImages,
+      referenceImageDataUrl,
+      inpaint,
+      maskPrompt,
+      seed,
     });
     const firstFile = files[0];
     const imageBuffer = await downloadComfyUiAsset(endpoint, apiKey, firstFile);

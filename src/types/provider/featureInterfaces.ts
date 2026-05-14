@@ -120,10 +120,17 @@ export interface ProviderNativeImageReference {
   data: string;
 }
 
-export interface ProviderNativeImageGenerationRequest {
+export type ImageGenerationRequest = {
+  prompt: string;
+  referenceImageDataUrl?: string | null;
+  inpaint?: boolean;
+  maskPrompt?: string | null;
+  seed?: number | null;
+};
+
+export interface ProviderNativeImageGenerationRequest extends ImageGenerationRequest {
   apiKey: string;
   model: string;
-  prompt: string;
   aspectRatio: string;
   endpointUrl?: string;
   referenceImages?: ProviderNativeImageReference[];
