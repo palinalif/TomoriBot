@@ -657,6 +657,16 @@ export class GenerateImageTool extends BaseTool {
         const referenceSourceCount = Number(messageId ? 1 : 0) + Number(targetIdentity ? 1 : 0);
         const referencedMessageUrl = messageId ? buildReferencedMessageUrl(context, messageId) : null;
         const extraNoticeLines: string[] = [];
+        const imageModeKey = inpaint
+          ? "genai.image.mode_inpaint"
+          : usesReferences
+            ? "genai.image.mode_img2img"
+            : "genai.image.mode_txt2img";
+        extraNoticeLines.push(
+          localizer(context.locale, "genai.image.notice_mode_line", {
+            mode: localizer(context.locale, imageModeKey),
+          }),
+        );
         if (referencedMessageUrl) {
           extraNoticeLines.push(
             localizer(context.locale, "genai.image.notice_reference_line", {

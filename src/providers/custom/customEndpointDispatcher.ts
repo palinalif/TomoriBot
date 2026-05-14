@@ -6,7 +6,6 @@ import type {
   ProviderNativeVideoGenerationResult,
 } from "@/types/provider/featureInterfaces";
 import { buildCustomHeaders } from "@/providers/custom/customOpenAICompatibleUtils";
-import { log } from "@/utils/misc/logger";
 import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 
 type ComfyUiGenerationMode = "image" | "video";
@@ -33,17 +32,12 @@ interface ComfyUiGenerationOptions {
 
 type WorkflowPlaceholderValue = string | number | boolean | null | Record<string, unknown> | Array<unknown>;
 type ComfyUiWorkflow = Record<string, unknown>;
-type ComfyUiApiNode = {
-  inputs?: Record<string, unknown>;
-};
 type ComfyUiWorkflowSupports = {
   txt2img: boolean;
   img2img: boolean;
   inpaint: boolean;
 };
 
-const ANIMA3_NODE_IDS = ["6", "176", "186", "196", "188", "177", "198", "193"] as const;
-type Anima3NodeId = (typeof ANIMA3_NODE_IDS)[number];
 const DEFAULT_COMFYUI_WORKFLOW_SUPPORTS: ComfyUiWorkflowSupports = {
   txt2img: true,
   img2img: true,
@@ -215,48 +209,6 @@ function hasComfyUiVisualWorkflowShape(workflow: ComfyUiWorkflow): boolean {
   return Array.isArray(workflow.nodes) || Array.isArray(workflow.links) || Array.isArray(workflow.groups);
 }
 
-function hasAnima3CombinedPromptCoreNodes(workflow: ComfyUiWorkflow): boolean {
-  return ["6", "177", "188"].every((nodeId) => isRecord(workflow[nodeId]));
-}
-
-function getComfyUiNodeInputs(workflow: ComfyUiWorkflow, nodeId: Anima3NodeId): Record<string, unknown> {
-  const node = workflow[nodeId] as ComfyUiApiNode;
-  if (!isRecord(node.inputs)) {
-    node.inputs = {};
-  }
-
-  return node.inputs;
-}
-
-function getOptionalComfyUiNodeInputs(workflow: ComfyUiWorkflow, nodeId: Anima3NodeId): Record<string, unknown> | null {
-  if (!isRecord(workflow[nodeId])) {
-    return null;
-  }
-
-  return getComfyUiNodeInputs(workflow, nodeId);
-}
-
-function requireComfyUiNodeInputs(workflow: ComfyUiWorkflow, nodeId: Anima3NodeId, modeLabel: string): Record<string, unknown> {
-  const inputs = getOptionalComfyUiNodeInputs(workflow, nodeId);
-  if (!inputs) {
-    throw new Error(`ComfyUI Anima3 ${modeLabel} workflow is missing required node ${nodeId}.`);
-  }
-
-  return inputs;
-}
-
-function setOptionalComfyUiNodeInput(
-  workflow: ComfyUiWorkflow,
-  nodeId: Anima3NodeId,
-  inputName: string,
-  value: unknown,
-): void {
-  const inputs = getOptionalComfyUiNodeInputs(workflow, nodeId);
-  if (inputs) {
-    inputs[inputName] = value;
-  }
-}
-
 function buildReferenceImageDataUrl(options: ComfyUiGenerationOptions): string | null {
   if (options.referenceImageDataUrl) {
     return options.referenceImageDataUrl;
@@ -302,62 +254,37 @@ function assertComfyUiWorkflowSupportsRequest(options: ComfyUiGenerationOptions,
   }
 }
 
-function applyAnima3CombinedPromptInputs(
-  workflow: ComfyUiWorkflow,
-  options: ComfyUiGenerationOptions,
-  supports: ComfyUiWorkflowSupports,
-): void {
-  const referenceImageDataUrl = buildReferenceImageDataUrl(options);
-  const hasReference = !!referenceImageDataUrl;
-  const inpaint = hasReference && options.inpaint === true;
-  const seed = options.seed ?? Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
-
-  assertComfyUiWorkflowSupportsRequest(options, supports);
-
-  requireComfyUiNodeInputs(workflow, "6", "image").text = options.prompt;
-
-  setOptionalComfyUiNodeInput(workflow, "176", "seed", seed);
-  setOptionalComfyUiNodeInput(workflow, "186", "seed", seed);
-  setOptionalComfyUiNodeInput(workflow, "196", "seed", seed);
-
-  requireComfyUiNodeInputs(workflow, "188", "reference").value = hasReference ? 1 : 0;
-  requireComfyUiNodeInputs(workflow, "177", "reference").image_data = referenceImageDataUrl ?? "";
-
-  if (inpaint) {
-    requireComfyUiNodeInputs(workflow, "198", "inpaint").value = true;
-    requireComfyUiNodeInputs(workflow, "193", "inpaint").text = options.maskPrompt?.trim() || options.prompt;
-  } else {
-    setOptionalComfyUiNodeInput(workflow, "198", "value", false);
-    setOptionalComfyUiNodeInput(workflow, "193", "text", options.maskPrompt?.trim() || options.prompt);
-  }
-
-  log.info(
-    `Prepared Anima3 ComfyUI payload ${JSON.stringify({
-      hasReference,
-      inpaint,
-      maskPrompt: getOptionalComfyUiNodeInputs(workflow, "193")?.text ?? null,
-      seed,
-      refCount: getOptionalComfyUiNodeInputs(workflow, "188")?.value ?? null,
-      inpaintFlag: getOptionalComfyUiNodeInputs(workflow, "198")?.value ?? null,
-    })}`,
-  );
-}
-
 function buildComfyUiPlaceholderMap(
   endpoint: CustomEndpointRow,
   options: ComfyUiGenerationOptions,
   dimensions: { width: number; height: number },
   referencePayload: Array<Record<string, unknown>>,
 ): Record<string, WorkflowPlaceholderValue> {
+  const referenceImageDataUrl = buildReferenceImageDataUrl(options);
+  const hasReference = !!referenceImageDataUrl;
+  const inpaint = hasReference && options.inpaint === true;
+  const maskPrompt = options.maskPrompt?.trim() || options.prompt;
+  const seed = options.seed ?? Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+  const firstReferenceImage = referencePayload[0];
   const placeholderMap: Record<string, WorkflowPlaceholderValue> = {
     TOMORI_PROMPT: options.prompt,
     TOMORI_MODEL: endpoint.model_name ?? endpoint.display_name,
     TOMORI_MODEL_NAME: endpoint.model_name ?? endpoint.display_name,
     TOMORI_MODE: options.mode,
+    TOMORI_IMAGE_MODE: inpaint ? "inpaint" : hasReference ? "img2img" : "txt2img",
     TOMORI_ASPECT_RATIO: options.aspectRatio ?? (options.mode === "video" ? "16:9" : "1:1"),
     TOMORI_WIDTH: dimensions.width,
     TOMORI_HEIGHT: dimensions.height,
     TOMORI_SIZE: `${dimensions.width}x${dimensions.height}`,
+    TOMORI_SEED: seed,
+    TOMORI_HAS_REFERENCE_IMAGE: hasReference,
+    TOMORI_REFERENCE_IMAGE_DATA_URL: referenceImageDataUrl ?? "",
+    TOMORI_REFERENCE_IMAGE_BASE64:
+      firstReferenceImage && typeof firstReferenceImage.data === "string" ? firstReferenceImage.data : "",
+    TOMORI_REFERENCE_IMAGE_MIME_TYPE:
+      firstReferenceImage && typeof firstReferenceImage.mimeType === "string" ? firstReferenceImage.mimeType : "",
+    TOMORI_INPAINT: inpaint,
+    TOMORI_MASK_PROMPT: maskPrompt,
     TOMORI_REFERENCE_IMAGE_COUNT: referencePayload.length,
     TOMORI_REFERENCE_IMAGES: referencePayload,
     TOMORI_REFERENCE_IMAGES_JSON: JSON.stringify(referencePayload),
@@ -367,6 +294,10 @@ function buildComfyUiPlaceholderMap(
     TOMORI_RESOLUTION: options.resolution ?? "",
     TOMORI_GENERATE_AUDIO: options.generateAudio ?? false,
   };
+
+  placeholderMap.TOMORI_REFERENCE_IMAGE_1_DATA_URL = placeholderMap.TOMORI_REFERENCE_IMAGE_DATA_URL;
+  placeholderMap.TOMORI_REFERENCE_IMAGE_1_BASE64 = placeholderMap.TOMORI_REFERENCE_IMAGE_BASE64;
+  placeholderMap.TOMORI_REFERENCE_IMAGE_1_MIME_TYPE = placeholderMap.TOMORI_REFERENCE_IMAGE_MIME_TYPE;
 
   for (const referenceImage of referencePayload) {
     const index = referenceImage.index as number;
@@ -405,12 +336,6 @@ async function generateWithComfyUi(
   }
 
   const preparedWorkflow = replaceWorkflowPlaceholders(workflow, placeholders) as ComfyUiWorkflow;
-  if (options.mode === "image" && hasAnima3CombinedPromptCoreNodes(preparedWorkflow)) {
-    applyAnima3CombinedPromptInputs(preparedWorkflow, options, workflowSupports);
-  } else if (options.inpaint === true) {
-    throw new Error("Inpaint requires a ComfyUI workflow with Anima3 inpaint nodes.");
-  }
-
   const postHeaders = buildCustomHeaders(apiKey);
   const getHeaders = { ...postHeaders };
   delete getHeaders["Content-Type"];
