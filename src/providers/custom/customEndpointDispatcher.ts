@@ -257,6 +257,14 @@ function setOptionalComfyUiNodeInput(
   }
 }
 
+function prepareImageReceiverInputs(inputs: Record<string, unknown>, referenceImageDataUrl: string | null): void {
+  inputs.image = "tomoribot_reference.png";
+  inputs.link_id = typeof inputs.link_id === "number" ? inputs.link_id : 0;
+  inputs.save_to_workflow = true;
+  inputs.image_data = referenceImageDataUrl ?? "";
+  inputs.trigger_always = true;
+}
+
 function buildReferenceImageDataUrl(options: ComfyUiGenerationOptions): string | null {
   if (options.referenceImageDataUrl) {
     return options.referenceImageDataUrl;
@@ -321,7 +329,7 @@ function applyAnima3CombinedPromptInputs(
   setOptionalComfyUiNodeInput(workflow, "196", "seed", seed);
 
   requireComfyUiNodeInputs(workflow, "188", "reference").value = hasReference ? 1 : 0;
-  requireComfyUiNodeInputs(workflow, "177", "reference").image_data = referenceImageDataUrl ?? "";
+  prepareImageReceiverInputs(requireComfyUiNodeInputs(workflow, "177", "reference"), referenceImageDataUrl);
 
   if (inpaint) {
     requireComfyUiNodeInputs(workflow, "198", "inpaint").value = true;
@@ -339,6 +347,10 @@ function applyAnima3CombinedPromptInputs(
       seed,
       refCount: getOptionalComfyUiNodeInputs(workflow, "188")?.value ?? null,
       inpaintFlag: getOptionalComfyUiNodeInputs(workflow, "198")?.value ?? null,
+      imageReceiverImageDataLength:
+        typeof getOptionalComfyUiNodeInputs(workflow, "177")?.image_data === "string"
+          ? (getOptionalComfyUiNodeInputs(workflow, "177")?.image_data as string).length
+          : 0,
     })}`,
   );
 }
