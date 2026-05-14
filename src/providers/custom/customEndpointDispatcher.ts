@@ -1,11 +1,13 @@
 import type { CustomEndpointRow } from "@/types/db/schema";
 import type {
+  ImageGenerationInpaintMode,
   ProviderNativeImageGenerationRequest,
   ProviderNativeImageGenerationResult,
   ProviderNativeVideoGenerationRequest,
   ProviderNativeVideoGenerationResult,
 } from "@/types/provider/featureInterfaces";
 import { buildCustomHeaders } from "@/providers/custom/customOpenAICompatibleUtils";
+import { log } from "@/utils/misc/logger";
 import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
 
 type ComfyUiGenerationMode = "image" | "video";
@@ -27,11 +29,18 @@ interface ComfyUiGenerationOptions {
   referenceImageDataUrl?: string | null;
   inpaint?: boolean;
   maskPrompt?: string | null;
+  inpaintMode?: ImageGenerationInpaintMode | null;
+  maskThreshold?: number | null;
+  maskGrow?: number | null;
+  maskFeather?: number | null;
+  denoise?: number | null;
+  inpaintDenoise?: number | null;
   seed?: number | null;
 }
 
 type WorkflowPlaceholderValue = string | number | boolean | null | Record<string, unknown> | Array<unknown>;
 type ComfyUiWorkflow = Record<string, unknown>;
+type ComfyUiAsset = { filename: string; subfolder?: string; type?: string };
 type ComfyUiWorkflowSupports = {
   txt2img: boolean;
   img2img: boolean;
@@ -44,11 +53,108 @@ const DEFAULT_COMFYUI_WORKFLOW_SUPPORTS: ComfyUiWorkflowSupports = {
   inpaint: false,
 };
 
+type ComfyUiInpaintSettings = {
+  inpaintMode: ImageGenerationInpaintMode;
+  maskThreshold: number;
+  maskGrow: number;
+  maskFeather: number;
+  inpaintDenoise: number;
+};
+
+const HARDCODED_INPAINT_PRESETS: Record<ImageGenerationInpaintMode, ComfyUiInpaintSettings> = {
+  tight: {
+    inpaintMode: "tight",
+    maskThreshold: 0.45,
+    maskGrow: 8,
+    maskFeather: 8,
+    inpaintDenoise: 0.3,
+  },
+  loose: {
+    inpaintMode: "loose",
+    maskThreshold: 0.35,
+    maskGrow: 18,
+    maskFeather: 16,
+    inpaintDenoise: 0.6,
+  },
+};
+
 const COMFYUI_IMAGE_TARGET_AREA = (() => {
   const parsed = Number.parseInt(process.env.COMFYUI_IMAGE_TARGET_AREA || "1048576", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1024 * 1024;
 })();
 const COMFYUI_DIMENSION_MULTIPLE = 64;
+const DEFAULT_COMFYUI_REFERENCE_DENOISE = 0.4;
+const COMFYUI_INPAINT_MASK_FILENAME_PREFIX = "tomoribot_inpaint_mask";
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function readOptionalNumberEnv(name: string): number | null {
+  const rawValue = process.env[name];
+  if (rawValue === undefined || rawValue.trim() === "") {
+    return null;
+  }
+
+  const parsed = Number(rawValue);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function readPresetNumberEnv(
+  mode: ImageGenerationInpaintMode,
+  settingName: "MASK_THRESHOLD" | "MASK_GROW" | "MASK_FEATHER" | "DENOISE",
+): number | null {
+  return (
+    readOptionalNumberEnv(`COMFYUI_INPAINT_${mode.toUpperCase()}_${settingName}`) ??
+    readOptionalNumberEnv(`ANIMA3_INPAINT_${mode.toUpperCase()}_${settingName}`)
+  );
+}
+
+function buildEnvBackedInpaintPreset(mode: ImageGenerationInpaintMode): ComfyUiInpaintSettings {
+  const fallback = HARDCODED_INPAINT_PRESETS[mode];
+  return {
+    inpaintMode: mode,
+    maskThreshold: readPresetNumberEnv(mode, "MASK_THRESHOLD") ?? fallback.maskThreshold,
+    maskGrow: readPresetNumberEnv(mode, "MASK_GROW") ?? fallback.maskGrow,
+    maskFeather: readPresetNumberEnv(mode, "MASK_FEATHER") ?? fallback.maskFeather,
+    inpaintDenoise: readPresetNumberEnv(mode, "DENOISE") ?? fallback.inpaintDenoise,
+  };
+}
+
+function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): ComfyUiInpaintSettings {
+  const mode = options.inpaintMode ?? "tight";
+  const preset = buildEnvBackedInpaintPreset(mode);
+
+  return {
+    inpaintMode: mode,
+    maskThreshold: options.maskThreshold ?? preset.maskThreshold ?? HARDCODED_INPAINT_PRESETS[mode].maskThreshold,
+    maskGrow: options.maskGrow ?? preset.maskGrow ?? HARDCODED_INPAINT_PRESETS[mode].maskGrow,
+    maskFeather: options.maskFeather ?? preset.maskFeather ?? HARDCODED_INPAINT_PRESETS[mode].maskFeather,
+    inpaintDenoise: options.inpaintDenoise ?? preset.inpaintDenoise ?? HARDCODED_INPAINT_PRESETS[mode].inpaintDenoise,
+  };
+}
+
+function resolveComfyUiDenoise(options: ComfyUiGenerationOptions): number {
+  if (!buildReferenceImageDataUrl(options)) {
+    return 1;
+  }
+
+  const rawDenoise = options.denoise ?? options.inpaintDenoise ?? null;
+  if (rawDenoise !== null) {
+    return Number.isFinite(rawDenoise) ? clampNumber(rawDenoise, 0, 1) : DEFAULT_COMFYUI_REFERENCE_DENOISE;
+  }
+
+  if (options.inpaint === true) {
+    return resolveComfyUiInpaintSettings(options).inpaintDenoise;
+  }
+
+  const envDenoise = readOptionalNumberEnv("COMFYUI_REFERENCE_DENOISE");
+  if (envDenoise !== null) {
+    return clampNumber(envDenoise, 0, 1);
+  }
+
+  return DEFAULT_COMFYUI_REFERENCE_DENOISE;
+}
 
 function getComfyUiTimeoutMs(): number {
   const parsed = Number.parseInt(process.env.COMFYUI_POLL_TIMEOUT_MS ?? "300000", 10);
@@ -142,6 +248,11 @@ function buildComfyUiReferencePayload(referenceImages: ComfyUiReferenceImage[]):
     dataUrl: `data:${referenceImage.mimeType};base64,${referenceImage.data}`,
     ...(referenceImage.url ? { url: referenceImage.url } : {}),
   }));
+}
+
+function isComfyUiInpaintMaskAsset(asset: ComfyUiAsset): boolean {
+  const path = [asset.subfolder, asset.filename].filter(Boolean).join("/").toLowerCase();
+  return path.includes(COMFYUI_INPAINT_MASK_FILENAME_PREFIX) || path.includes("inpaint_mask");
 }
 
 function stringifyWorkflowPlaceholder(value: WorkflowPlaceholderValue): string {
@@ -243,6 +354,9 @@ function assertComfyUiWorkflowSupportsRequest(options: ComfyUiGenerationOptions,
   if (options.inpaint === true && !hasReference) {
     throw new Error("Inpaint requires a reference image.");
   }
+  if (options.inpaint === true && !options.maskPrompt?.trim()) {
+    throw new Error("Inpaint requires a mask_prompt describing the region to edit.");
+  }
   if (options.inpaint === true && !supports.inpaint) {
     throw new Error("This ComfyUI workflow is not configured to support inpaint requests.");
   }
@@ -265,6 +379,8 @@ function buildComfyUiPlaceholderMap(
   const inpaint = hasReference && options.inpaint === true;
   const maskPrompt = options.maskPrompt?.trim() || options.prompt;
   const seed = options.seed ?? Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+  const inpaintSettings = resolveComfyUiInpaintSettings(options);
+  const denoise = resolveComfyUiDenoise(options);
   const firstReferenceImage = referencePayload[0];
   const placeholderMap: Record<string, WorkflowPlaceholderValue> = {
     TOMORI_PROMPT: options.prompt,
@@ -285,6 +401,14 @@ function buildComfyUiPlaceholderMap(
       firstReferenceImage && typeof firstReferenceImage.mimeType === "string" ? firstReferenceImage.mimeType : "",
     TOMORI_INPAINT: inpaint,
     TOMORI_MASK_PROMPT: maskPrompt,
+    TOMORI_INPAINT_MODE: inpaintSettings.inpaintMode,
+    TOMORI_INPAINT_MASK_THRESHOLD: inpaintSettings.maskThreshold,
+    TOMORI_INPAINT_MASK_GROW: inpaintSettings.maskGrow,
+    TOMORI_INPAINT_MASK_FEATHER: inpaintSettings.maskFeather,
+    TOMORI_DENOISE: denoise,
+    TOMORI_IMG2IMG_DENOISE: denoise,
+    TOMORI_INPAINT_DENOISE: denoise,
+    TOMORI_INPAINT_MASK_FILENAME_PREFIX: COMFYUI_INPAINT_MASK_FILENAME_PREFIX,
     TOMORI_REFERENCE_IMAGE_COUNT: referencePayload.length,
     TOMORI_REFERENCE_IMAGES: referencePayload,
     TOMORI_REFERENCE_IMAGES_JSON: JSON.stringify(referencePayload),
@@ -317,25 +441,49 @@ async function generateWithComfyUi(
   endpoint: CustomEndpointRow,
   apiKey: string,
   options: ComfyUiGenerationOptions,
-): Promise<{ filename: string; subfolder?: string; type?: string }[]> {
+): Promise<ComfyUiAsset[]> {
   const savedWorkflow = endpoint.extra_config.workflow;
   if (!savedWorkflow || typeof savedWorkflow !== "object") {
     throw new Error("ComfyUI workflow JSON is missing.");
   }
 
-  const dimensions = buildComfyUiDimensions(options);
-  const referencePayload = buildComfyUiReferencePayload(options.referenceImages ?? []);
-  const placeholders = buildComfyUiPlaceholderMap(endpoint, options, dimensions, referencePayload);
+  const seed = options.seed ?? Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+  const generationOptions = { ...options, seed };
+  const dimensions = buildComfyUiDimensions(generationOptions);
+  const referencePayload = buildComfyUiReferencePayload(generationOptions.referenceImages ?? []);
+  const placeholders = buildComfyUiPlaceholderMap(endpoint, generationOptions, dimensions, referencePayload);
   const workflowSupports = readComfyUiWorkflowSupports(endpoint);
   const workflow = deepCloneWorkflow(savedWorkflow as Record<string, unknown>);
   if (hasComfyUiVisualWorkflowShape(workflow)) {
     throw new Error("ComfyUI workflow must be exported in API prompt format, not visual workflow format.");
   }
-  if (options.mode === "image") {
-    assertComfyUiWorkflowSupportsRequest(options, workflowSupports);
+  if (generationOptions.mode === "image") {
+    assertComfyUiWorkflowSupportsRequest(generationOptions, workflowSupports);
   }
 
   const preparedWorkflow = replaceWorkflowPlaceholders(workflow, placeholders) as ComfyUiWorkflow;
+  if (generationOptions.mode === "image") {
+    const referenceImageDataUrl = buildReferenceImageDataUrl(generationOptions);
+    const hasReference = !!referenceImageDataUrl;
+    const inpaint = hasReference && generationOptions.inpaint === true;
+    const inpaintSettings = resolveComfyUiInpaintSettings(generationOptions);
+    const denoise = resolveComfyUiDenoise(generationOptions);
+    log.info(
+      `Prepared ComfyUI image generation payload ${JSON.stringify({
+        hasReference,
+        inpaint,
+        maskPrompt: generationOptions.maskPrompt?.trim() ?? null,
+        seed,
+        denoise,
+        inpaintMode: inpaintSettings.inpaintMode,
+        maskThreshold: inpaintSettings.maskThreshold,
+        maskGrow: inpaintSettings.maskGrow,
+        maskFeather: inpaintSettings.maskFeather,
+        inpaintDenoise: denoise,
+      })}`,
+    );
+  }
+
   const postHeaders = buildCustomHeaders(apiKey);
   const getHeaders = { ...postHeaders };
   delete getHeaders["Content-Type"];
@@ -402,7 +550,7 @@ async function generateWithComfyUi(
 async function downloadComfyUiAsset(
   endpoint: CustomEndpointRow,
   apiKey: string,
-  asset: { filename: string; subfolder?: string; type?: string },
+  asset: ComfyUiAsset,
 ): Promise<Buffer> {
   const url = new URL(`${endpoint.endpoint_url.replace(/\/+$/, "")}/view`);
   url.searchParams.set("filename", asset.filename);
@@ -433,10 +581,31 @@ export async function generateCustomImageViaEndpoint(params: {
   referenceImageDataUrl?: string | null;
   inpaint?: boolean;
   maskPrompt?: string | null;
+  inpaintMode?: ImageGenerationInpaintMode | null;
+  maskThreshold?: number | null;
+  maskGrow?: number | null;
+  maskFeather?: number | null;
+  denoise?: number | null;
+  inpaintDenoise?: number | null;
   seed?: number | null;
 }): Promise<ProviderNativeImageGenerationResult> {
-  const { endpoint, apiKey, prompt, aspectRatio, referenceImages, referenceImageDataUrl, inpaint, maskPrompt, seed } =
-    params;
+  const {
+    endpoint,
+    apiKey,
+    prompt,
+    aspectRatio,
+    referenceImages,
+    referenceImageDataUrl,
+    inpaint,
+    maskPrompt,
+    inpaintMode,
+    maskThreshold,
+    maskGrow,
+    maskFeather,
+    denoise,
+    inpaintDenoise,
+    seed,
+  } = params;
 
   if (endpoint.api_style === "comfyui") {
     const files = await generateWithComfyUi(endpoint, apiKey, {
@@ -447,13 +616,33 @@ export async function generateCustomImageViaEndpoint(params: {
       referenceImageDataUrl,
       inpaint,
       maskPrompt,
+      inpaintMode,
+      maskThreshold,
+      maskGrow,
+      maskFeather,
+      denoise,
+      inpaintDenoise,
       seed,
     });
-    const firstFile = files[0];
+    const diagnosticMaskFiles = files.filter(isComfyUiInpaintMaskAsset);
+    const imageFiles = files.filter((file) => !isComfyUiInpaintMaskAsset(file));
+    const firstFile = imageFiles[0] ?? files[0];
     const imageBuffer = await downloadComfyUiAsset(endpoint, apiKey, firstFile);
+    const diagnosticImages = await Promise.all(
+      diagnosticMaskFiles.map(async (file) => {
+        const maskBuffer = await downloadComfyUiAsset(endpoint, apiKey, file);
+        return {
+          label: "Inpaint mask",
+          imageData: maskBuffer.toString("base64"),
+          mimeType: "image/png",
+          filename: file.filename,
+        };
+      }),
+    );
     return {
       imageData: imageBuffer.toString("base64"),
       mimeType: "image/png",
+      ...(diagnosticImages.length > 0 ? { diagnosticImages } : {}),
     };
   }
 

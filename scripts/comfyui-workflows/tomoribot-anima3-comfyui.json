@@ -112,7 +112,7 @@
   },
   "52": {
     "inputs": {
-      "seed": 202611300506928
+      "seed": "{TOMORI_SEED}"
     },
     "class_type": "SeedGenerator",
     "_meta": {
@@ -161,7 +161,7 @@
       "steps_to_run": -1,
       "denoise": 0.15,
       "cfg": 4,
-      "seed": 837826685572747,
+      "seed": ["52", 0],
       "sampler_mode": "standard",
       "bongmath": true,
       "model": ["16", 0],
@@ -341,9 +341,9 @@
       "scheduler": "sgm_uniform",
       "steps": 24,
       "steps_to_run": -1,
-      "denoise": 0.6,
+      "denoise": "{TOMORI_IMG2IMG_DENOISE}",
       "cfg": 5,
-      "seed": 837826685572747,
+      "seed": ["52", 0],
       "sampler_mode": "standard",
       "bongmath": true,
       "model": ["16", 0],

@@ -120,11 +120,19 @@ export interface ProviderNativeImageReference {
   data: string;
 }
 
+export type ImageGenerationInpaintMode = "tight" | "loose";
+
 export type ImageGenerationRequest = {
   prompt: string;
   referenceImageDataUrl?: string | null;
   inpaint?: boolean;
   maskPrompt?: string | null;
+  inpaintMode?: ImageGenerationInpaintMode | null;
+  maskThreshold?: number | null;
+  maskGrow?: number | null;
+  maskFeather?: number | null;
+  denoise?: number | null;
+  inpaintDenoise?: number | null;
   seed?: number | null;
 };
 
@@ -139,6 +147,12 @@ export interface ProviderNativeImageGenerationRequest extends ImageGenerationReq
 export interface ProviderNativeImageGenerationResult {
   imageData: string | null;
   mimeType: string | null;
+  diagnosticImages?: Array<{
+    label: string;
+    imageData: string;
+    mimeType: string;
+    filename?: string;
+  }>;
 }
 
 export interface SupportsEmbeddings {

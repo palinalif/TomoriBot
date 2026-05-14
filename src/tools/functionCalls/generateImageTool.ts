@@ -27,6 +27,8 @@ import { formatCustomEndpointModelDisplay } from "@/utils/provider/customProvide
 import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
 import { safeDownload } from "@/utils/security/safeDownload";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
+import type { ImageGenerationInpaintMode } from "@/types/provider/featureInterfaces";
+import type { ProviderNativeImageGenerationResult } from "@/types/provider/featureInterfaces";
 
 /**
  * Tool for generating images using the active provider's native image API
@@ -60,6 +62,12 @@ export class GenerateImageTool extends BaseTool {
         type: "string",
         description:
           "Optional: Short phrase describing the region to edit when inpaint is true, such as 'chair', 'blue chest piece', or 'background'. Keep this focused on the existing object/area to mask, not the desired replacement.",
+      },
+      inpaint_mode: {
+        type: "string",
+        description:
+          "Optional: Inpaint preset to use when inpaint is true. Use 'tight' for recolors and small contained edits, or 'loose' for larger object replacement. Defaults to 'tight'.",
+        enum: ["tight", "loose"],
       },
       target_identity: {
         type: "string",
@@ -101,10 +109,7 @@ export class GenerateImageTool extends BaseTool {
     return context.tomoriState.config.imagegen_enabled;
   }
 
-  private shouldUseInpaint(args: Record<string, unknown>, prompt: string, hasReference: boolean): boolean {
-    if (!hasReference) {
-      return false;
-    }
+  private shouldUseInpaint(args: Record<string, unknown>): boolean {
     if (args.inpaint === true) {
       return true;
     }
@@ -112,7 +117,15 @@ export class GenerateImageTool extends BaseTool {
       return args.inpaint.toLowerCase() === "true";
     }
 
-    return /\binpaint(?:ing)?\b|\bmask(?:ed)?\b|\bedit only\b|\bchange only\b/i.test(prompt);
+    return false;
+  }
+
+  private parseInpaintMode(value: unknown): ImageGenerationInpaintMode | null {
+    if (value === undefined || value === null || value === "") {
+      return null;
+    }
+
+    return value === "tight" || value === "loose" ? value : null;
   }
 
   private resolveMediaId(rawMediaId: string | undefined, context: ToolContext): string | undefined {
@@ -123,6 +136,64 @@ export class GenerateImageTool extends BaseTool {
     return MessageIdMap.isOpaqueKey(rawMediaId)
       ? (context.messageIdMap ?? context.streamContext?.messageIdMap)?.resolve(rawMediaId)
       : rawMediaId;
+  }
+
+  private shouldSuppressThoughtLogDiagnostic(context: ToolContext): boolean {
+    if (!context.tomoriState.config.thought_log_channel_disc_id) {
+      return true;
+    }
+    if ("isDMBased" in context.channel && typeof context.channel.isDMBased === "function" && context.channel.isDMBased()) {
+      return true;
+    }
+
+    const privateChannelIds = context.tomoriState.config.private_channel_ids ?? [];
+    const parentId = context.channel.isThread() ? context.channel.parentId : null;
+    return privateChannelIds.includes(context.channel.id) || (parentId !== null && privateChannelIds.includes(parentId));
+  }
+
+  private async sendDiagnosticImagesToThoughtLog(
+    context: ToolContext,
+    diagnostics: ProviderNativeImageGenerationResult["diagnosticImages"],
+    prompt: string,
+  ): Promise<void> {
+    if (!diagnostics?.length || this.shouldSuppressThoughtLogDiagnostic(context)) {
+      return;
+    }
+
+    const thoughtLogChannelId = context.tomoriState.config.thought_log_channel_disc_id;
+    if (!thoughtLogChannelId) {
+      return;
+    }
+
+    const thoughtLogChannel = await context.client.channels.fetch(thoughtLogChannelId).catch(() => null);
+    if (
+      !thoughtLogChannel ||
+      !("send" in thoughtLogChannel) ||
+      typeof thoughtLogChannel.send !== "function" ||
+      ("isDMBased" in thoughtLogChannel &&
+        typeof thoughtLogChannel.isDMBased === "function" &&
+        thoughtLogChannel.isDMBased())
+    ) {
+      log.warn(`GenerateImageTool: Thought log channel ${thoughtLogChannelId} is missing. Skipping diagnostic image.`);
+      return;
+    }
+
+    const promptPreview = prompt.length > 700 ? `${prompt.slice(0, 697).trimEnd()}...` : prompt;
+    const sourceLine = context.message?.url ?? context.channel.toString();
+    for (const [index, diagnostic] of diagnostics.entries()) {
+      const extension = diagnostic.mimeType === "image/jpeg" ? "jpg" : "png";
+      const attachment = new AttachmentBuilder(Buffer.from(diagnostic.imageData, "base64"), {
+        name: diagnostic.filename ?? `inpaint_mask_${index + 1}.${extension}`,
+      });
+      await thoughtLogChannel.send({
+        content: [
+          `**Image generation diagnostic:** ${diagnostic.label}`,
+          `Source: ${sourceLine}`,
+          `Prompt: ${promptPreview}`,
+        ].join("\n"),
+        files: [attachment],
+      });
+    }
   }
 
   /**
@@ -613,13 +684,38 @@ export class GenerateImageTool extends BaseTool {
     const targetIdentity = (args.target_identity as string | undefined) ?? (args.user_id as string | undefined);
     const aspectRatio = (args.aspect_ratio as string) || "1:1";
     const usesReferences = !!(messageId || targetIdentity);
-    const inpaint = this.shouldUseInpaint(args, prompt, usesReferences);
+    const inpaint = this.shouldUseInpaint(args);
     const maskPrompt = (args.mask_prompt as string | undefined)?.trim() || null;
+    const inpaintMode = this.parseInpaintMode(args.inpaint_mode) ?? "tight";
 
     if (rawMediaId && !messageId) {
       return {
         success: false,
         error: `Unknown media_id: "${rawMediaId}".`,
+      };
+    }
+    if (inpaint && !usesReferences) {
+      return {
+        success: false,
+        error: "Inpaint requires media_id or target_identity.",
+      };
+    }
+    if (
+      inpaint &&
+      args.inpaint_mode !== undefined &&
+      args.inpaint_mode !== null &&
+      args.inpaint_mode !== "" &&
+      !this.parseInpaintMode(args.inpaint_mode)
+    ) {
+      return {
+        success: false,
+        error: "inpaint_mode must be either \"tight\" or \"loose\".",
+      };
+    }
+    if (inpaint && !maskPrompt) {
+      return {
+        success: false,
+        error: "Inpaint requires mask_prompt describing the existing region to edit.",
       };
     }
 
@@ -746,6 +842,13 @@ export class GenerateImageTool extends BaseTool {
       log.info(
         `Generating image with ${executionProvider} via ${displayModelName}: "${prompt.substring(0, 100)}${prompt.length > 100 ? "..." : ""}" (aspect ratio: ${aspectRatio})`,
       );
+      log.info(
+        `GenerateImageTool inpaint settings ${JSON.stringify({
+          inpaint,
+          maskPrompt,
+          inpaintMode: inpaint ? inpaintMode : null,
+        })}`,
+      );
 
       let generatedImageData: string | null = null;
       let referenceImagesUsed = referenceImages.length > 0;
@@ -765,8 +868,10 @@ export class GenerateImageTool extends BaseTool {
           referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
           inpaint,
           maskPrompt,
+          inpaintMode: inpaint ? inpaintMode : null,
         });
         generatedImageData = result.imageData;
+        await this.sendDiagnosticImagesToThoughtLog(context, result.diagnosticImages, prompt);
       } else if (nativeImageProvider) {
         const result = await nativeImageProvider.generateNativeImage({
           apiKey,
