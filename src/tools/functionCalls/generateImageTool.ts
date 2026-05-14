@@ -26,6 +26,7 @@ import { getResolvedCapabilityModelId, resolveCapabilityCredentials } from "@/ut
 import { formatCustomEndpointModelDisplay } from "@/utils/provider/customProviderUtils";
 import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
 import { safeDownload } from "@/utils/security/safeDownload";
+import { MessageIdMap } from "@/utils/text/messageIdMap";
 
 /**
  * Tool for generating images using the active provider's native image API
@@ -112,6 +113,16 @@ export class GenerateImageTool extends BaseTool {
     }
 
     return /\binpaint(?:ing)?\b|\bmask(?:ed)?\b|\bedit only\b|\bchange only\b/i.test(prompt);
+  }
+
+  private resolveMediaId(rawMediaId: string | undefined, context: ToolContext): string | undefined {
+    if (!rawMediaId) {
+      return undefined;
+    }
+
+    return MessageIdMap.isOpaqueKey(rawMediaId)
+      ? (context.messageIdMap ?? context.streamContext?.messageIdMap)?.resolve(rawMediaId)
+      : rawMediaId;
   }
 
   /**
@@ -298,6 +309,16 @@ export class GenerateImageTool extends BaseTool {
       log.info(
         `Found ${imageUrls.length} image(s) in message ${messageId} (${imageAttachments.size} attachment(s), ${imageUrls.length - imageAttachments.size} embed(s))`,
       );
+      log.info(
+        `GenerateImageTool resolved media sources ${JSON.stringify({
+          messageId,
+          sources: imageUrls.map((imageInfo) => ({
+            source: imageInfo.source,
+            mimeType: imageInfo.mimeType,
+            urlPrefix: imageInfo.url.slice(0, 80),
+          })),
+        })}`,
+      );
 
       // 5. Convert each image URL to base64
       const inlineDataArray: Array<{ mimeType: string; data: string }> = [];
@@ -322,7 +343,13 @@ export class GenerateImageTool extends BaseTool {
             data: base64ImageData,
           });
 
-          log.info(`Successfully converted image from ${imageInfo.source} to base64`);
+          log.info(
+            `Successfully converted image from ${imageInfo.source} to base64 ${JSON.stringify({
+              mimeType: imageInfo.mimeType,
+              base64Length: base64ImageData.length,
+              dataUrlPrefix: `data:${imageInfo.mimeType};base64,${base64ImageData}`.slice(0, 40),
+            })}`,
+          );
         } catch (imgErr) {
           log.warn(`Failed to process image from ${imageInfo.source}:`, imgErr as Error);
         }
@@ -597,12 +624,34 @@ export class GenerateImageTool extends BaseTool {
 
     // Extract arguments
     const prompt = args.prompt as string;
-    const messageId = args.media_id as string | undefined;
+    const rawMediaId = args.media_id as string | undefined;
+    const messageId = this.resolveMediaId(rawMediaId, context);
     const targetIdentity = (args.target_identity as string | undefined) ?? (args.user_id as string | undefined);
     const aspectRatio = (args.aspect_ratio as string) || "1:1";
     const usesReferences = !!(messageId || targetIdentity);
     const inpaint = this.shouldUseInpaint(args, prompt, usesReferences);
     const maskPrompt = (args.mask_prompt as string | undefined)?.trim() || null;
+
+    log.info(
+      `GenerateImageTool received request ${JSON.stringify({
+        prompt,
+        rawMediaId,
+        resolvedMessageId: messageId,
+        mediaIdWasOpaque: rawMediaId ? MessageIdMap.isOpaqueKey(rawMediaId) : false,
+        mediaIdResolved: rawMediaId ? !!messageId : null,
+        targetIdentity,
+        aspectRatio,
+        inpaint,
+        maskPrompt,
+      })}`,
+    );
+
+    if (rawMediaId && !messageId) {
+      return {
+        success: false,
+        error: `Unknown media_id: "${rawMediaId}".`,
+      };
+    }
 
     try {
       // Get the diffusion model codename from database
@@ -681,10 +730,24 @@ export class GenerateImageTool extends BaseTool {
       const referenceImages: Array<{ mimeType: string; data: string }> = [];
 
       if (messageId) {
-        log.info(`Extracting images from message ${messageId} for image-to-image generation`);
+        log.info(
+          `Extracting images from message ${messageId} for image-to-image generation ${JSON.stringify({
+            rawMediaId,
+            inpaint,
+            maskPrompt,
+          })}`,
+        );
         const messageImages = await this.extractImagesFromMessage(messageId, context);
         referenceImages.push(...messageImages);
-        log.info(`Using ${messageImages.length} reference image(s) from message ${messageId} for generation`);
+        log.info(
+          `Using ${messageImages.length} reference image(s) from message ${messageId} for generation ${JSON.stringify({
+            references: messageImages.map((image) => ({
+              mimeType: image.mimeType,
+              base64Length: image.data.length,
+              dataUrlPrefix: `data:${image.mimeType};base64,${image.data}`.slice(0, 40),
+            })),
+          })}`,
+        );
       }
 
       if (targetIdentity) {
