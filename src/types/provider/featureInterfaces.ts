@@ -120,7 +120,7 @@ export interface ProviderNativeImageReference {
   data: string;
 }
 
-export type ImageGenerationInpaintMode = "tight" | "loose";
+export type ImageGenerationInpaintMode = string;
 
 export type ImageGenerationRequest = {
   prompt: string;
@@ -152,6 +152,7 @@ export interface ProviderNativeImageGenerationResult {
     imageData: string;
     mimeType: string;
     filename?: string;
+    details?: string;
   }>;
 }
 

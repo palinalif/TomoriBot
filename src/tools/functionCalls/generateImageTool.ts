@@ -36,7 +36,7 @@ import type { ProviderNativeImageGenerationResult } from "@/types/provider/featu
 export class GenerateImageTool extends BaseTool {
   name = "generate_image";
   description =
-    "Generate an AI image using the active provider's native image model. Use this only when the user explicitly asks you to make, draw, generate, create, edit, or continue an image; do not call it for casual visual discussion. If the user asks you to make/draw/generate an image and this tool is available, call this tool instead of only describing the image. Provide a detailed text prompt describing what image you want to create. If you provide a media_id or target_identity reference, focus the prompt on edits or additions only and avoid re-describing the reference image. You can also specify an aspect ratio (default is 1:1). After generating, the image will be sent directly to the Discord channel.";
+    "Generate an AI image using the active provider's native image model. Use this only when the user explicitly asks you to make, draw, generate, create, edit, or continue an image; do not call it for casual visual discussion. If the user asks you to make/draw/generate an image and this tool is available, call this tool instead of only describing the image. Provide a detailed text prompt describing what image you want to create. If you provide a media_id or target_identity reference for normal image-to-image, focus the prompt on edits or additions only and avoid re-describing the reference image. For inpainting, describe only what should change inside the masked region or the desired final appearance of that region; do not re-describe the whole subject/reference image. The mask_prompt must be a short phrase naming the existing region to mask, not the desired replacement. You can also specify an aspect ratio (default is 1:1). After generating, the image will be sent directly to the Discord channel.";
   category = "utility" as const;
   requiresFeatureFlag = "image_gen";
 
@@ -46,7 +46,7 @@ export class GenerateImageTool extends BaseTool {
       prompt: {
         type: "string",
         description:
-          "A detailed text description of the image you want to generate. Be specific about style, composition, colors, mood, and any important details. For image-to-image, describe only the modifications or additions you want and avoid re-describing the reference image.",
+          "A detailed text description of the image you want to generate. Be specific about style, composition, colors, mood, and any important details. For normal image-to-image, describe only the modifications or additions you want and avoid re-describing the reference image. For inpainting, describe what should change inside the masked area or the desired final appearance of that area, such as 'make the fur longer, softer, and fluffier' or 'soft pastel green knitted fabric with the same folds and lighting'. Do not re-describe the whole subject/reference image, and do not put the mask target here unless it is needed to explain the edit.",
       },
       media_id: {
         type: "string",
@@ -61,13 +61,12 @@ export class GenerateImageTool extends BaseTool {
       mask_prompt: {
         type: "string",
         description:
-          "Optional: Short phrase describing the region to edit when inpaint is true, such as 'chair', 'blue chest piece', or 'background'. Keep this focused on the existing object/area to mask, not the desired replacement.",
+          "Optional: Short phrase describing the existing region to edit when inpaint is true, such as 'cat', 'fur', 'chair', 'blue chest piece', or 'background'. Keep this to the object/area that should be masked. Do not describe the requested change here; for example, use 'cat' or 'fur', not 'a super fluffy orange tabby kitten'.",
       },
       inpaint_mode: {
         type: "string",
         description:
-          "Optional: Inpaint preset to use when inpaint is true. Use 'tight' for recolors and small contained edits, or 'loose' for larger object replacement. Defaults to 'tight'.",
-        enum: ["tight", "loose"],
+          "Optional: Inpaint preset to use when inpaint is true. Built-ins: 'tight' is best for tiny contained edits where preserving surrounding pixels matters, such as accessories, logos, small clothing details, and minor touch-ups; 'balanced' is best for most object or clothing recolors where the mask is accurate but the edit needs enough strength to visibly change; 'loose' is best for broad replacements, stubborn color/style changes, or cases where preserving the exact original shape is less important than getting a visible edit. Servers may define custom preset names for specific edit styles. Defaults to 'tight'.",
       },
       target_identity: {
         type: "string",
@@ -125,7 +124,12 @@ export class GenerateImageTool extends BaseTool {
       return null;
     }
 
-    return value === "tight" || value === "loose" ? value : null;
+    if (typeof value !== "string") {
+      return null;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    return /^[a-z0-9][a-z0-9_-]{0,31}$/.test(normalized) ? normalized : null;
   }
 
   private resolveMediaId(rawMediaId: string | undefined, context: ToolContext): string | undefined {
@@ -142,13 +146,19 @@ export class GenerateImageTool extends BaseTool {
     if (!context.tomoriState.config.thought_log_channel_disc_id) {
       return true;
     }
-    if ("isDMBased" in context.channel && typeof context.channel.isDMBased === "function" && context.channel.isDMBased()) {
+    if (
+      "isDMBased" in context.channel &&
+      typeof context.channel.isDMBased === "function" &&
+      context.channel.isDMBased()
+    ) {
       return true;
     }
 
     const privateChannelIds = context.tomoriState.config.private_channel_ids ?? [];
     const parentId = context.channel.isThread() ? context.channel.parentId : null;
-    return privateChannelIds.includes(context.channel.id) || (parentId !== null && privateChannelIds.includes(parentId));
+    return (
+      privateChannelIds.includes(context.channel.id) || (parentId !== null && privateChannelIds.includes(parentId))
+    );
   }
 
   private async sendDiagnosticImagesToThoughtLog(
@@ -188,6 +198,7 @@ export class GenerateImageTool extends BaseTool {
       await thoughtLogChannel.send({
         content: [
           `**Image generation diagnostic:** ${diagnostic.label}`,
+          ...(diagnostic.details ? [`Settings: ${diagnostic.details}`] : []),
           `Source: ${sourceLine}`,
           `Prompt: ${promptPreview}`,
         ].join("\n"),
@@ -709,7 +720,7 @@ export class GenerateImageTool extends BaseTool {
     ) {
       return {
         success: false,
-        error: "inpaint_mode must be either \"tight\" or \"loose\".",
+        error: 'inpaint_mode must be a preset name like "tight", "balanced", "loose", or a configured custom preset.',
       };
     }
     if (inpaint && !maskPrompt) {
@@ -763,6 +774,13 @@ export class GenerateImageTool extends BaseTool {
             mode: localizer(context.locale, imageModeKey),
           }),
         );
+        if (inpaint) {
+          extraNoticeLines.push(
+            localizer(context.locale, "genai.image.notice_inpaint_preset_line", {
+              preset: inpaintMode,
+            }),
+          );
+        }
         if (referencedMessageUrl) {
           extraNoticeLines.push(
             localizer(context.locale, "genai.image.notice_reference_line", {
