@@ -26,7 +26,6 @@ import { sql } from "@/utils/db/client";
 import { resolveActiveSpeechEndpoint } from "@/utils/provider/speechEndpointResolver";
 import { VOICE_TOOL_VARIANTS, type VoiceScriptMarkup } from "@/tools/functionCalls/generateVoiceMessageTool";
 import { shouldUseVoiceDesignForPersona } from "@/providers/custom/styles/ttsVoiceDesignAdapter";
-import { resolveCustomEndpointForProvider } from "@/utils/provider/customEndpointService";
 
 /**
  * Minimal state interface for context building operations
@@ -90,58 +89,6 @@ function resolveOpaqueIds(args: Record<string, unknown>, messageIdMap?: MessageI
   }
 
   return resolvedArgs ?? args;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function buildCustomInpaintPresetLines(extraConfig: unknown): string[] {
-  if (!isRecord(extraConfig) || !isRecord(extraConfig.comfyui_image_parameters)) {
-    return [];
-  }
-
-  const rawInpaint = extraConfig.comfyui_image_parameters.inpaint;
-  if (!isRecord(rawInpaint)) {
-    return [];
-  }
-
-  return Object.entries(rawInpaint)
-    .filter(([name, preset]) => {
-      if (name === "tight" || name === "balanced" || name === "loose") {
-        return false;
-      }
-      return isRecord(preset) && typeof preset.description === "string" && preset.description.trim().length > 0;
-    })
-    .slice(0, 12)
-    .map(([name, preset]) => `${name}: ${(preset as { description: string }).description.trim()}`);
-}
-
-function addCustomInpaintPresetGuidance(tool: Tool, presetLines: string[]): Tool {
-  if (tool.name !== "generate_image" || presetLines.length === 0) {
-    return tool;
-  }
-
-  return Object.create(tool, {
-    parameters: {
-      value: {
-        ...tool.parameters,
-        properties: {
-          ...tool.parameters.properties,
-          inpaint_mode: {
-            ...tool.parameters.properties.inpaint_mode,
-            description: [
-              tool.parameters.properties.inpaint_mode?.description,
-              `Custom server presets: ${presetLines.join("; ")}.`,
-            ]
-              .filter(Boolean)
-              .join(" "),
-          },
-        },
-      },
-      enumerable: true,
-    },
-  });
 }
 
 // Re-export ToolContext for external use
@@ -503,30 +450,6 @@ class ToolRegistryImpl implements ToolRegistryInterface {
           builtInTools = builtInTools.filter((tool) => tool.name !== "generate_image");
           if (builtInTools.length < beforeCount) {
             log.info("Excluded generate_image (no standard image slot configured)");
-          }
-        } else {
-          try {
-            const diffusionModelId = stateForContext.diffusion_model_id ?? toolConfigRow?.diffusion_model_id ?? null;
-            if (diffusionModelId) {
-              const [imageModelRow] = await sql<[{ provider: string | null }]>`
-                SELECT provider
-                FROM image_diffusion_models
-                WHERE diffusion_model_id = ${diffusionModelId}
-                LIMIT 1
-              `;
-              const imageProvider = imageModelRow?.provider ? String(imageModelRow.provider).toLowerCase() : null;
-              const customEndpoint = imageProvider
-                ? await resolveCustomEndpointForProvider(imageProvider, "image")
-                : null;
-              if (customEndpoint?.api_style === "comfyui") {
-                const presetLines = buildCustomInpaintPresetLines(customEndpoint.extra_config);
-                if (presetLines.length > 0) {
-                  builtInTools = builtInTools.map((tool) => addCustomInpaintPresetGuidance(tool, presetLines));
-                }
-              }
-            }
-          } catch (error) {
-            log.warn("Failed to append custom inpaint preset guidance to generate_image tool", error as Error);
           }
         }
 

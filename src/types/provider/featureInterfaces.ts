@@ -120,17 +120,15 @@ export interface ProviderNativeImageReference {
   data: string;
 }
 
-export type ImageGenerationInpaintMode = string;
-
 export type ImageGenerationRequest = {
   prompt: string;
   referenceImageDataUrl?: string | null;
   inpaint?: boolean;
   maskPrompt?: string | null;
-  inpaintMode?: ImageGenerationInpaintMode | null;
   maskThreshold?: number | null;
   maskGrow?: number | null;
   maskFeather?: number | null;
+  cfg?: number | null;
   denoise?: number | null;
   referenceDenoise?: number | null;
   seed?: number | null;

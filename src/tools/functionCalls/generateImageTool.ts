@@ -27,7 +27,6 @@ import { formatCustomEndpointModelDisplay } from "@/utils/provider/customProvide
 import { MEDIA_LIMITS } from "@/utils/security/rateLimiter";
 import { safeDownload } from "@/utils/security/safeDownload";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
-import type { ImageGenerationInpaintMode } from "@/types/provider/featureInterfaces";
 import type { ProviderNativeImageGenerationResult } from "@/types/provider/featureInterfaces";
 
 /**
@@ -63,10 +62,30 @@ export class GenerateImageTool extends BaseTool {
         description:
           "Optional: Short phrase describing the existing region to edit when inpaint is true, such as 'cat', 'fur', 'chair', 'blue chest piece', or 'background'. Keep this to the object/area that should be masked. Do not describe the requested change here; for example, use 'cat' or 'fur', not 'a super fluffy orange tabby kitten'.",
       },
-      inpaint_mode: {
-        type: "string",
+      mask_threshold: {
+        type: "number",
         description:
-          "Optional: Inpaint preset to use when inpaint is true. Built-ins: 'tight' is best for tiny contained edits where preserving surrounding pixels matters, such as accessories, logos, small clothing details, and minor touch-ups; 'balanced' is best for most object or clothing recolors where the mask is accurate but the edit needs enough strength to visibly change; 'loose' is best for broad replacements, stubborn color/style changes, or cases where preserving the exact original shape is less important than getting a visible edit. Servers may define custom preset names for specific edit styles. Defaults to 'tight'.",
+          "Optional inpaint tuning: CLIPSeg mask threshold from 0 to 10. Lower values include more of the image; higher values make a tighter mask. Use around 0.45 for tiny precise edits, 0.28 for normal recolors, and 0.22 or lower for stubborn broad edits.",
+      },
+      mask_grow: {
+        type: "number",
+        description:
+          "Optional inpaint tuning: mask expansion in pixels from 0 to 128. Small values like 4-8 are precise; 12-32 gives recolors room; 48+ is loose and may change surrounding areas.",
+      },
+      mask_feather: {
+        type: "number",
+        description:
+          "Optional inpaint tuning: mask blur/feather from 0 to 100. Lower values like 2-8 preserve edges; 12-28 blends broader edits but can bleed into nearby pixels.",
+      },
+      cfg: {
+        type: "number",
+        description:
+          "Optional inpaint tuning: prompt guidance from 0 to 30. Use about 6-8 for most edits, higher for stubborn requested changes, lower if the result overpowers the reference.",
+      },
+      denoise: {
+        type: "number",
+        description:
+          "Optional img2img/inpaint tuning: strength from 0 to 1. Lower values preserve the reference more; higher values allow stronger visible changes. Try 0.3 for tiny touch-ups, 0.6-0.8 for recolors, and 0.9 for stubborn broad changes.",
       },
       target_identity: {
         type: "string",
@@ -119,17 +138,17 @@ export class GenerateImageTool extends BaseTool {
     return false;
   }
 
-  private parseInpaintMode(value: unknown): ImageGenerationInpaintMode | null {
+  private parseClampedNumber(value: unknown, min: number, max: number): number | null {
     if (value === undefined || value === null || value === "") {
       return null;
     }
 
-    if (typeof value !== "string") {
+    const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+    if (!Number.isFinite(parsed)) {
       return null;
     }
 
-    const normalized = value.trim().toLowerCase();
-    return /^[a-z0-9][a-z0-9_-]{0,31}$/.test(normalized) ? normalized : null;
+    return Math.min(max, Math.max(min, parsed));
   }
 
   private resolveMediaId(rawMediaId: string | undefined, context: ToolContext): string | undefined {
@@ -697,7 +716,11 @@ export class GenerateImageTool extends BaseTool {
     const usesReferences = !!(messageId || targetIdentity);
     const inpaint = this.shouldUseInpaint(args);
     const maskPrompt = (args.mask_prompt as string | undefined)?.trim() || null;
-    const inpaintMode = this.parseInpaintMode(args.inpaint_mode) ?? "tight";
+    const maskThreshold = this.parseClampedNumber(args.mask_threshold, 0, 10);
+    const maskGrow = this.parseClampedNumber(args.mask_grow, 0, 128);
+    const maskFeather = this.parseClampedNumber(args.mask_feather, 0, 100);
+    const cfg = this.parseClampedNumber(args.cfg, 0, 30);
+    const denoise = this.parseClampedNumber(args.denoise, 0, 1);
 
     if (rawMediaId && !messageId) {
       return {
@@ -709,18 +732,6 @@ export class GenerateImageTool extends BaseTool {
       return {
         success: false,
         error: "Inpaint requires media_id or target_identity.",
-      };
-    }
-    if (
-      inpaint &&
-      args.inpaint_mode !== undefined &&
-      args.inpaint_mode !== null &&
-      args.inpaint_mode !== "" &&
-      !this.parseInpaintMode(args.inpaint_mode)
-    ) {
-      return {
-        success: false,
-        error: 'inpaint_mode must be a preset name like "tight", "balanced", "loose", or a configured custom preset.',
       };
     }
     if (inpaint && !maskPrompt) {
@@ -774,13 +785,6 @@ export class GenerateImageTool extends BaseTool {
             mode: localizer(context.locale, imageModeKey),
           }),
         );
-        if (inpaint) {
-          extraNoticeLines.push(
-            localizer(context.locale, "genai.image.notice_inpaint_preset_line", {
-              preset: inpaintMode,
-            }),
-          );
-        }
         if (referencedMessageUrl) {
           extraNoticeLines.push(
             localizer(context.locale, "genai.image.notice_reference_line", {
@@ -864,7 +868,11 @@ export class GenerateImageTool extends BaseTool {
         `GenerateImageTool inpaint settings ${JSON.stringify({
           inpaint,
           maskPrompt,
-          inpaintMode: inpaint ? inpaintMode : null,
+          maskThreshold: inpaint ? maskThreshold : null,
+          maskGrow: inpaint ? maskGrow : null,
+          maskFeather: inpaint ? maskFeather : null,
+          cfg: inpaint ? cfg : null,
+          denoise: usesReferences ? denoise : null,
         })}`,
       );
 
@@ -886,7 +894,11 @@ export class GenerateImageTool extends BaseTool {
           referenceImages: referenceImages.length > 0 ? referenceImages : undefined,
           inpaint,
           maskPrompt,
-          inpaintMode: inpaint ? inpaintMode : null,
+          maskThreshold,
+          maskGrow,
+          maskFeather,
+          cfg,
+          denoise,
         });
         generatedImageData = result.imageData;
         await this.sendDiagnosticImagesToThoughtLog(context, result.diagnosticImages, prompt);

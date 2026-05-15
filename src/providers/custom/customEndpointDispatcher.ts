@@ -1,6 +1,5 @@
 import type { CustomEndpointRow } from "@/types/db/schema";
 import type {
-  ImageGenerationInpaintMode,
   ProviderNativeImageGenerationRequest,
   ProviderNativeImageGenerationResult,
   ProviderNativeVideoGenerationRequest,
@@ -29,7 +28,6 @@ interface ComfyUiGenerationOptions {
   referenceImageDataUrl?: string | null;
   inpaint?: boolean;
   maskPrompt?: string | null;
-  inpaintMode?: ImageGenerationInpaintMode | null;
   maskThreshold?: number | null;
   maskGrow?: number | null;
   maskFeather?: number | null;
@@ -37,7 +35,6 @@ interface ComfyUiGenerationOptions {
   denoise?: number | null;
   referenceDenoise?: number | null;
   seed?: number | null;
-  imageParameters?: ComfyUiImageParameterOverrides | null;
 }
 
 type WorkflowPlaceholderValue = string | number | boolean | null | Record<string, unknown> | Array<unknown>;
@@ -56,7 +53,6 @@ const DEFAULT_COMFYUI_WORKFLOW_SUPPORTS: ComfyUiWorkflowSupports = {
 };
 
 type ComfyUiInpaintSettings = {
-  inpaintMode: ImageGenerationInpaintMode;
   maskThreshold: number;
   maskGrow: number;
   maskFeather: number;
@@ -64,60 +60,19 @@ type ComfyUiInpaintSettings = {
   referenceDenoise: number;
 };
 
-type ComfyUiImageParameterPreset = {
-  maskThreshold?: number | null;
-  maskGrow?: number | null;
-  maskFeather?: number | null;
-  cfg?: number | null;
-  referenceDenoise?: number | null;
-  description?: string | null;
-};
-
-type ComfyUiImageParameterOverrides = {
-  referenceDenoise?: number | null;
-  inpaint?: Record<string, ComfyUiImageParameterPreset | undefined> | null;
-};
-
-const BUILT_IN_INPAINT_MODES = ["tight", "balanced", "loose"] as const;
-type BuiltInInpaintMode = (typeof BUILT_IN_INPAINT_MODES)[number];
-
-const HARDCODED_INPAINT_PRESETS: Record<BuiltInInpaintMode, ComfyUiInpaintSettings> = {
-  tight: {
-    inpaintMode: "tight",
-    maskThreshold: 0.45,
-    maskGrow: 8,
-    maskFeather: 8,
-    cfg: 8,
-    referenceDenoise: 0.3,
-  },
-  loose: {
-    inpaintMode: "loose",
-    maskThreshold: 0.22,
-    maskGrow: 48,
-    maskFeather: 28,
-    cfg: 6,
-    referenceDenoise: 0.9,
-  },
-  balanced: {
-    inpaintMode: "balanced",
-    maskThreshold: 0.28,
-    maskGrow: 32,
-    maskFeather: 20,
-    cfg: 6,
-    referenceDenoise: 0.8,
-  },
-};
-
-function isBuiltInInpaintMode(mode: string): mode is BuiltInInpaintMode {
-  return (BUILT_IN_INPAINT_MODES as readonly string[]).includes(mode);
-}
-
 const COMFYUI_IMAGE_TARGET_AREA = (() => {
   const parsed = Number.parseInt(process.env.COMFYUI_IMAGE_TARGET_AREA || "1048576", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1024 * 1024;
 })();
 const COMFYUI_DIMENSION_MULTIPLE = 64;
 const DEFAULT_COMFYUI_REFERENCE_DENOISE = 0.4;
+const DEFAULT_COMFYUI_INPAINT_SETTINGS: ComfyUiInpaintSettings = {
+  maskThreshold: 0.45,
+  maskGrow: 8,
+  maskFeather: 8,
+  cfg: 8,
+  referenceDenoise: DEFAULT_COMFYUI_REFERENCE_DENOISE,
+};
 const COMFYUI_INPAINT_MASK_FILENAME_PREFIX = "tomoribot_inpaint_mask";
 const COMFYUI_INPAINT_RESULT_DEBUG_FILENAME_PREFIX = "tomoribot_inpaint_result_debug";
 
@@ -135,98 +90,49 @@ function readOptionalNumberEnv(name: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function readPresetNumberEnv(
-  mode: BuiltInInpaintMode,
-  settingName: "MASK_THRESHOLD" | "MASK_GROW" | "MASK_FEATHER" | "CFG" | "DENOISE",
-): number | null {
-  return (
-    readOptionalNumberEnv(`COMFYUI_INPAINT_${mode.toUpperCase()}_${settingName}`) ??
-    readOptionalNumberEnv(`ANIMA3_INPAINT_${mode.toUpperCase()}_${settingName}`)
-  );
-}
-
-function readOptionalFiniteNumber(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return null;
-  }
-
-  return value;
-}
-
-function readOptionalString(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed || null;
-}
-
-function readComfyUiImageParameters(endpoint: CustomEndpointRow): ComfyUiImageParameterOverrides | null {
-  const rawParameters = endpoint.extra_config.comfyui_image_parameters;
-  if (!isRecord(rawParameters)) {
-    return null;
-  }
-
-  const rawInpaint = isRecord(rawParameters.inpaint) ? rawParameters.inpaint : {};
-  const inpaint: Record<string, ComfyUiImageParameterPreset> = {};
-  for (const [mode, rawPreset] of Object.entries(rawInpaint)) {
-    if (!isRecord(rawPreset)) {
-      continue;
-    }
-
-    inpaint[mode] = {
-      maskThreshold: readOptionalFiniteNumber(rawPreset.mask_threshold),
-      maskGrow: readOptionalFiniteNumber(rawPreset.mask_grow),
-      maskFeather: readOptionalFiniteNumber(rawPreset.mask_feather),
-      cfg: readOptionalFiniteNumber(rawPreset.cfg),
-      referenceDenoise: readOptionalFiniteNumber(rawPreset.denoise),
-      description: readOptionalString(rawPreset.description),
-    };
-  }
-
-  return {
-    referenceDenoise: readOptionalFiniteNumber(rawParameters.reference_denoise),
-    inpaint,
-  };
-}
-
-function buildEnvBackedInpaintPreset(
-  mode: BuiltInInpaintMode,
-  endpointPreset: ComfyUiImageParameterPreset | null | undefined,
-): ComfyUiInpaintSettings {
-  const fallback = HARDCODED_INPAINT_PRESETS[mode];
-  return {
-    inpaintMode: mode,
-    maskThreshold:
-      endpointPreset?.maskThreshold ?? readPresetNumberEnv(mode, "MASK_THRESHOLD") ?? fallback.maskThreshold,
-    maskGrow: endpointPreset?.maskGrow ?? readPresetNumberEnv(mode, "MASK_GROW") ?? fallback.maskGrow,
-    maskFeather: endpointPreset?.maskFeather ?? readPresetNumberEnv(mode, "MASK_FEATHER") ?? fallback.maskFeather,
-    cfg: endpointPreset?.cfg ?? readPresetNumberEnv(mode, "CFG") ?? fallback.cfg,
-    referenceDenoise:
-      endpointPreset?.referenceDenoise ?? readPresetNumberEnv(mode, "DENOISE") ?? fallback.referenceDenoise,
-  };
-}
-
 function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): ComfyUiInpaintSettings {
-  const mode = options.inpaintMode ?? "tight";
-  const preset = isBuiltInInpaintMode(mode)
-    ? buildEnvBackedInpaintPreset(mode, options.imageParameters?.inpaint?.[mode])
-    : options.imageParameters?.inpaint?.[mode];
-
-  if (!preset) {
-    throw new Error(`Unknown ComfyUI inpaint preset "${mode}".`);
-  }
-
-  const fallback = isBuiltInInpaintMode(mode) ? HARDCODED_INPAINT_PRESETS[mode] : HARDCODED_INPAINT_PRESETS.tight;
-
   return {
-    inpaintMode: mode,
-    maskThreshold: clampNumber(options.maskThreshold ?? preset.maskThreshold ?? fallback.maskThreshold, 0, 10),
-    maskGrow: clampNumber(options.maskGrow ?? preset.maskGrow ?? fallback.maskGrow, 0, 128),
-    maskFeather: clampNumber(options.maskFeather ?? preset.maskFeather ?? fallback.maskFeather, 0, 100),
-    cfg: clampNumber(options.cfg ?? preset.cfg ?? fallback.cfg, 0, 30),
-    referenceDenoise: clampNumber(options.referenceDenoise ?? preset.referenceDenoise ?? fallback.referenceDenoise, 0, 1),
+    maskThreshold: clampNumber(
+      options.maskThreshold ??
+        readOptionalNumberEnv("COMFYUI_INPAINT_MASK_THRESHOLD") ??
+        readOptionalNumberEnv("ANIMA3_INPAINT_MASK_THRESHOLD") ??
+        DEFAULT_COMFYUI_INPAINT_SETTINGS.maskThreshold,
+      0,
+      10,
+    ),
+    maskGrow: clampNumber(
+      options.maskGrow ??
+        readOptionalNumberEnv("COMFYUI_INPAINT_MASK_GROW") ??
+        readOptionalNumberEnv("ANIMA3_INPAINT_MASK_GROW") ??
+        DEFAULT_COMFYUI_INPAINT_SETTINGS.maskGrow,
+      0,
+      128,
+    ),
+    maskFeather: clampNumber(
+      options.maskFeather ??
+        readOptionalNumberEnv("COMFYUI_INPAINT_MASK_FEATHER") ??
+        readOptionalNumberEnv("ANIMA3_INPAINT_MASK_FEATHER") ??
+        DEFAULT_COMFYUI_INPAINT_SETTINGS.maskFeather,
+      0,
+      100,
+    ),
+    cfg: clampNumber(
+      options.cfg ??
+        readOptionalNumberEnv("COMFYUI_INPAINT_CFG") ??
+        readOptionalNumberEnv("ANIMA3_INPAINT_CFG") ??
+        DEFAULT_COMFYUI_INPAINT_SETTINGS.cfg,
+      0,
+      30,
+    ),
+    referenceDenoise: clampNumber(
+      options.referenceDenoise ??
+        options.denoise ??
+        readOptionalNumberEnv("COMFYUI_INPAINT_DENOISE") ??
+        readOptionalNumberEnv("ANIMA3_INPAINT_DENOISE") ??
+        DEFAULT_COMFYUI_INPAINT_SETTINGS.referenceDenoise,
+      0,
+      1,
+    ),
   };
 }
 
@@ -242,10 +148,6 @@ function resolveComfyUiDenoise(options: ComfyUiGenerationOptions): number {
 
   if (options.inpaint === true) {
     return resolveComfyUiInpaintSettings(options).referenceDenoise;
-  }
-
-  if (options.imageParameters?.referenceDenoise !== null && options.imageParameters?.referenceDenoise !== undefined) {
-    return clampNumber(options.imageParameters.referenceDenoise, 0, 1);
   }
 
   const envDenoise = readOptionalNumberEnv("COMFYUI_REFERENCE_DENOISE");
@@ -558,7 +460,6 @@ function buildComfyUiPlaceholderMap(
       firstReferenceImage && typeof firstReferenceImage.mimeType === "string" ? firstReferenceImage.mimeType : "",
     TOMORI_INPAINT: inpaint,
     TOMORI_MASK_PROMPT: maskPrompt,
-    TOMORI_INPAINT_MODE: inpaintSettings.inpaintMode,
     TOMORI_INPAINT_MASK_THRESHOLD: inpaintSettings.maskThreshold,
     TOMORI_INPAINT_MASK_GROW: inpaintSettings.maskGrow,
     TOMORI_INPAINT_MASK_FEATHER: inpaintSettings.maskFeather,
@@ -608,8 +509,7 @@ async function generateWithComfyUi(
   }
 
   const seed = options.seed ?? Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
-  const imageParameters = readComfyUiImageParameters(endpoint);
-  const generationOptions = { ...options, seed, imageParameters };
+  const generationOptions = { ...options, seed };
   const dimensions = buildComfyUiDimensions(generationOptions);
   const referencePayload = buildComfyUiReferencePayload(generationOptions.referenceImages ?? []);
   const placeholders = buildComfyUiPlaceholderMap(endpoint, generationOptions, dimensions, referencePayload);
@@ -638,7 +538,6 @@ async function generateWithComfyUi(
         maskPrompt: generationOptions.maskPrompt?.trim() ?? null,
         seed,
         denoise,
-        inpaintMode: inpaintSettings.inpaintMode,
         maskThreshold: inpaintSettings.maskThreshold,
         maskGrow: inpaintSettings.maskGrow,
         maskFeather: inpaintSettings.maskFeather,
@@ -744,7 +643,6 @@ export async function generateCustomImageViaEndpoint(params: {
   referenceImageDataUrl?: string | null;
   inpaint?: boolean;
   maskPrompt?: string | null;
-  inpaintMode?: ImageGenerationInpaintMode | null;
   maskThreshold?: number | null;
   maskGrow?: number | null;
   maskFeather?: number | null;
@@ -762,7 +660,6 @@ export async function generateCustomImageViaEndpoint(params: {
     referenceImageDataUrl,
     inpaint,
     maskPrompt,
-    inpaintMode,
     maskThreshold,
     maskGrow,
     maskFeather,
@@ -781,7 +678,6 @@ export async function generateCustomImageViaEndpoint(params: {
       referenceImageDataUrl,
       inpaint,
       maskPrompt,
-      inpaintMode,
       maskThreshold,
       maskGrow,
       maskFeather,
@@ -810,7 +706,6 @@ export async function generateCustomImageViaEndpoint(params: {
       referenceImageDataUrl,
       inpaint,
       maskPrompt,
-      inpaintMode,
       maskThreshold,
       maskGrow,
       maskFeather,
@@ -818,13 +713,11 @@ export async function generateCustomImageViaEndpoint(params: {
       denoise,
       referenceDenoise,
       seed,
-      imageParameters: readComfyUiImageParameters(endpoint),
     };
     const diagnosticInpaintSettings = resolveComfyUiInpaintSettings(diagnosticOptions);
     const diagnosticReferenceDenoise = resolveComfyUiDenoise(diagnosticOptions);
     const diagnosticMaskPrompt = maskPrompt?.trim() || prompt;
     const diagnosticDetails = [
-      `preset=${diagnosticInpaintSettings.inpaintMode}`,
       `mask_prompt=${JSON.stringify(diagnosticMaskPrompt)}`,
       `threshold=${diagnosticInpaintSettings.maskThreshold}`,
       `grow=${diagnosticInpaintSettings.maskGrow}`,
