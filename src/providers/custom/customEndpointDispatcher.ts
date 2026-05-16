@@ -236,10 +236,19 @@ function isComfyUiHairMaskPrompt(maskPrompt: string | null | undefined): boolean
   );
 }
 
+function isComfyUiClothingMaskPrompt(maskPrompt: string | null | undefined): boolean {
+  return /\b(?:shirt|top|hoodie|cardigan|sweater|jacket|coat|dress|skirt|pants|trousers|shorts|clothing|garment)\b/i.test(
+    maskPrompt ?? "",
+  );
+}
+
 function normalizeComfyUiTargetMaskPrompt(maskPrompt: string): string {
   const normalized = maskPrompt.trim();
   if (isComfyUiHairMaskPrompt(normalized)) {
     return "hair, excluding face and skin";
+  }
+  if (isComfyUiClothingMaskPrompt(normalized)) {
+    return `${normalized}, excluding face, skin, hair, eyes, and neck`;
   }
   if (isComfyUiEyeMaskPrompt(normalized)) {
     return "both eyes";
@@ -252,6 +261,7 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
   const preset = COMFYUI_INPAINT_PRESETS[inferredPreset] ?? DEFAULT_COMFYUI_INPAINT_SETTINGS;
   const eyeMaskPrompt = isComfyUiEyeMaskPrompt(options.maskPrompt);
   const hairMaskPrompt = isComfyUiHairMaskPrompt(options.maskPrompt);
+  const clothingMaskPrompt = isComfyUiClothingMaskPrompt(options.maskPrompt);
   const inpaintMode = normalizeComfyUiInpaintMode(options.inpaintMode);
 
   const baseMaskThreshold = clampNumber(
@@ -298,8 +308,20 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
           maskThreshold: Math.min(baseMaskThreshold, 0.45),
           maskGrow: Math.min(baseMaskGrow, 3),
           maskFeather: Math.min(baseMaskFeather, 2),
-          cfg: 8,
-          referenceDenoise: 0.6,
+          cfg: 9,
+          referenceDenoise: 0.72,
+        }
+      : null;
+
+  const clothingRecolorAdjustments =
+    inferredPreset === "broad_recolor" && clothingMaskPrompt && inpaintMode !== "extend"
+      ? {
+          // Keep recolor on clothing while still strong enough to visibly change color.
+          maskThreshold: Math.max(baseMaskThreshold, 0.5),
+          maskGrow: Math.min(baseMaskGrow, 6),
+          maskFeather: Math.min(baseMaskFeather, 3),
+          cfg: 10,
+          referenceDenoise: 0.72,
         }
       : null;
 
@@ -321,13 +343,19 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
 
   const maskThreshold =
     hairExtendAdjustments?.maskThreshold ??
+    clothingRecolorAdjustments?.maskThreshold ??
     hairRecolorAdjustments?.maskThreshold ??
     eyeMaskAdjustments?.maskThreshold ??
     baseMaskThreshold;
   const maskGrow =
-    hairExtendAdjustments?.maskGrow ?? hairRecolorAdjustments?.maskGrow ?? eyeMaskAdjustments?.maskGrow ?? baseMaskGrow;
+    hairExtendAdjustments?.maskGrow ??
+    clothingRecolorAdjustments?.maskGrow ??
+    hairRecolorAdjustments?.maskGrow ??
+    eyeMaskAdjustments?.maskGrow ??
+    baseMaskGrow;
   const maskFeather =
     hairExtendAdjustments?.maskFeather ??
+    clothingRecolorAdjustments?.maskFeather ??
     hairRecolorAdjustments?.maskFeather ??
     eyeMaskAdjustments?.maskFeather ??
     baseMaskFeather;
@@ -338,6 +366,7 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
     maskFeather,
     cfg: clampNumber(
       hairExtendAdjustments?.cfg ??
+        clothingRecolorAdjustments?.cfg ??
         hairRecolorAdjustments?.cfg ??
         options.cfg ??
         readOptionalNumberEnv("COMFYUI_INPAINT_CFG") ??
@@ -348,6 +377,7 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
     ),
     referenceDenoise: clampNumber(
       hairExtendAdjustments?.referenceDenoise ??
+        clothingRecolorAdjustments?.referenceDenoise ??
         hairRecolorAdjustments?.referenceDenoise ??
         options.referenceDenoise ??
         options.denoise ??
