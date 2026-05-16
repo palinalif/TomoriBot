@@ -127,7 +127,7 @@ const COMFYUI_INPAINT_PRESETS: Record<string, ComfyUiInpaintSettings> = {
   },
   background: {
     maskThreshold: 0.45,
-    maskGrow: 0,
+    maskGrow: 8,
     maskFeather: 4,
     cfg: 11,
     referenceDenoise: 0.95,
@@ -832,10 +832,7 @@ function buildComfyUiPlaceholderMap(
   const firstReferenceImage = referencePayload[0];
   const maskMode = inpaint ? normalizeComfyUiMaskMode(options.inpaintMaskMode) : "target";
   const invertInpaintMask = maskMode === "background" && !isComfyUiBackgroundMaskPrompt(maskPrompt);
-  const inpaintSettings = {
-    ...resolveComfyUiInpaintSettings(options),
-    ...(maskMode === "background" && !invertInpaintMask && options.maskGrow == null ? { maskGrow: 0 } : {}),
-  };
+  const inpaintSettings = resolveComfyUiInpaintSettings(options);
   const denoise = resolveComfyUiEffectiveDenoise(options, inpaint, maskMode);
   const inpaintMode = inpaint ? normalizeComfyUiInpaintMode(options.inpaintMode) : "normal";
   const inpaintPreset = inpaint ? inferComfyUiInpaintPreset(options) : "";
