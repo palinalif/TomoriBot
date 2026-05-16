@@ -127,10 +127,10 @@ const COMFYUI_INPAINT_PRESETS: Record<string, ComfyUiInpaintSettings> = {
   },
   background: {
     maskThreshold: 0.45,
-    maskGrow: 8,
-    maskFeather: 4,
-    cfg: 11,
-    referenceDenoise: 0.95,
+    maskGrow: 4,
+    maskFeather: 3,
+    cfg: 9,
+    referenceDenoise: 0.85,
     extendPixels: 96,
     extendGrow: 0,
     extendFeather: 4,
@@ -376,7 +376,9 @@ function buildComfyUiPromptWithDefaults(
       "the new surroundings must fill the entire editable canvas edge to edge, all the way to every image border",
       `apply the requested scene change only to ${editableRegion}`,
       `keep the protected ${protectedRegion} unchanged, same shape, color, lighting, position, and style`,
-      "clean edge transition, no halo, no outline, no glow, no bubble around the protected subject, no inset panel or framed rectangle",
+      "flat continuous background behind the protected subject, clean edge transition",
+      "no halo, no outline, no glow, no bubble, no glass dome, no capsule, no transparent shell, no reflection around or over the protected subject",
+      "no inset panel or framed rectangle",
     ].join(", ");
   }
 
@@ -449,6 +451,11 @@ function buildComfyUiNegativePrompt(options: ComfyUiGenerationOptions, inpaint: 
       "halo around protected subject",
       "glow around protected subject",
       "bubble around protected subject",
+      "glass dome around protected subject",
+      "transparent shell around protected subject",
+      "capsule around protected subject",
+      "reflection over protected subject",
+      "specular highlight over protected subject",
       "outline around protected subject",
       "old background, original background, unchanged background",
       "centered background panel",
@@ -507,7 +514,7 @@ function resolveComfyUiEffectiveDenoise(options: ComfyUiGenerationOptions, inpai
   const backgroundMinDenoise = clampNumber(
     readOptionalNumberEnv("COMFYUI_BACKGROUND_INPAINT_MIN_DENOISE") ??
       readOptionalNumberEnv("ANIMA3_BACKGROUND_INPAINT_MIN_DENOISE") ??
-      0.95,
+      0.8,
     0,
     1,
   );
