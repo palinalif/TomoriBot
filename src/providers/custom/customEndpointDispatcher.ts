@@ -38,6 +38,7 @@ interface ComfyUiGenerationOptions {
   seed?: number | null;
   inpaintMaskMode?: string | null;
   inpaintMode?: string | null;
+  inpaintPreset?: string | null;
   inpaintExtendDirection?: string | null;
   inpaintExtendPixels?: number | null;
   inpaintExtendGrow?: number | null;
@@ -90,6 +91,63 @@ const DEFAULT_COMFYUI_INPAINT_SETTINGS: ComfyUiInpaintSettings = {
   extendFeather: 4,
   extendPadding: 8,
 };
+const COMFYUI_INPAINT_PRESETS: Record<string, ComfyUiInpaintSettings> = {
+  small_detail: {
+    maskThreshold: 0.5,
+    maskGrow: 4,
+    maskFeather: 4,
+    cfg: 8,
+    referenceDenoise: 0.45,
+    extendPixels: 64,
+    extendGrow: 0,
+    extendFeather: 4,
+    extendPadding: 4,
+  },
+  object_recolor: {
+    maskThreshold: 0.45,
+    maskGrow: 12,
+    maskFeather: 8,
+    cfg: 10,
+    referenceDenoise: 0.85,
+    extendPixels: 96,
+    extendGrow: 0,
+    extendFeather: 4,
+    extendPadding: 8,
+  },
+  garment_recolor: {
+    maskThreshold: 0.4,
+    maskGrow: 24,
+    maskFeather: 16,
+    cfg: 11,
+    referenceDenoise: 0.9,
+    extendPixels: 128,
+    extendGrow: 0,
+    extendFeather: 6,
+    extendPadding: 12,
+  },
+  background: {
+    maskThreshold: 0.45,
+    maskGrow: 0,
+    maskFeather: 4,
+    cfg: 11,
+    referenceDenoise: 0.95,
+    extendPixels: 96,
+    extendGrow: 0,
+    extendFeather: 4,
+    extendPadding: 8,
+  },
+  extend: {
+    maskThreshold: 0.4,
+    maskGrow: 16,
+    maskFeather: 12,
+    cfg: 10,
+    referenceDenoise: 0.9,
+    extendPixels: 128,
+    extendGrow: 8,
+    extendFeather: 8,
+    extendPadding: 12,
+  },
+};
 const COMFYUI_MAX_RANDOM_SEED = 2 ** 32;
 const COMFYUI_INPAINT_MASK_FILENAME_PREFIX = "tomoribot_inpaint_mask";
 const COMFYUI_INPAINT_RESULT_DEBUG_FILENAME_PREFIX = "tomoribot_inpaint_result_debug";
@@ -116,13 +174,48 @@ function readOptionalStringEnv(name: string): string | null {
   return trimmed ? trimmed : null;
 }
 
+function normalizeComfyUiInpaintPreset(preset: string | null | undefined): string | null {
+  const normalized = preset?.trim().toLowerCase().replace(/[-\s]+/g, "_") ?? "";
+  return normalized && normalized in COMFYUI_INPAINT_PRESETS ? normalized : null;
+}
+
+function inferComfyUiInpaintPreset(options: ComfyUiGenerationOptions): string {
+  const explicitPreset = normalizeComfyUiInpaintPreset(options.inpaintPreset);
+  if (explicitPreset) {
+    return explicitPreset;
+  }
+
+  const maskMode = normalizeComfyUiMaskMode(options.inpaintMaskMode);
+  if (maskMode === "background") {
+    return "background";
+  }
+
+  if (normalizeComfyUiInpaintMode(options.inpaintMode) === "extend") {
+    return "extend";
+  }
+
+  const promptText = `${options.prompt} ${options.maskPrompt ?? ""}`.toLowerCase();
+  if (/\b(?:dress|shirt|skirt|pants|coat|jacket|hoodie|cardigan|sweater|uniform|clothing|garment|fabric)\b/.test(promptText)) {
+    return "garment_recolor";
+  }
+  if (/\b(?:color|colour|recolor|recolour|red|blue|green|yellow|pink|purple|black|white|brown|orange|cyan|teal)\b/.test(promptText)) {
+    return "object_recolor";
+  }
+  if (/\b(?:eye|eyes|button|buttons|logo|badge|gem|jewel|earring|ring|small|tiny)\b/.test(promptText)) {
+    return "small_detail";
+  }
+
+  return "object_recolor";
+}
+
 function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): ComfyUiInpaintSettings {
+  const preset = COMFYUI_INPAINT_PRESETS[inferComfyUiInpaintPreset(options)] ?? DEFAULT_COMFYUI_INPAINT_SETTINGS;
   return {
     maskThreshold: clampNumber(
       options.maskThreshold ??
         readOptionalNumberEnv("COMFYUI_INPAINT_MASK_THRESHOLD") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_MASK_THRESHOLD") ??
-        DEFAULT_COMFYUI_INPAINT_SETTINGS.maskThreshold,
+        preset.maskThreshold,
       0,
       1,
     ),
@@ -130,7 +223,7 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
       options.maskGrow ??
         readOptionalNumberEnv("COMFYUI_INPAINT_MASK_GROW") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_MASK_GROW") ??
-        DEFAULT_COMFYUI_INPAINT_SETTINGS.maskGrow,
+        preset.maskGrow,
       0,
       128,
     ),
@@ -138,7 +231,7 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
       options.maskFeather ??
         readOptionalNumberEnv("COMFYUI_INPAINT_MASK_FEATHER") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_MASK_FEATHER") ??
-        DEFAULT_COMFYUI_INPAINT_SETTINGS.maskFeather,
+        preset.maskFeather,
       0,
       100,
     ),
@@ -146,7 +239,7 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
       options.cfg ??
         readOptionalNumberEnv("COMFYUI_INPAINT_CFG") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_CFG") ??
-        DEFAULT_COMFYUI_INPAINT_SETTINGS.cfg,
+        preset.cfg,
       0,
       30,
     ),
@@ -155,7 +248,7 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
         options.denoise ??
         readOptionalNumberEnv("COMFYUI_INPAINT_DENOISE") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_DENOISE") ??
-        DEFAULT_COMFYUI_INPAINT_SETTINGS.referenceDenoise,
+        preset.referenceDenoise,
       0,
       1,
     ),
@@ -163,7 +256,7 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
       options.inpaintExtendPixels ??
         readOptionalNumberEnv("COMFYUI_INPAINT_EXTEND_PIXELS") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_EXTEND_PIXELS") ??
-        DEFAULT_COMFYUI_INPAINT_SETTINGS.extendPixels,
+        preset.extendPixels,
       0,
       512,
     ),
@@ -171,7 +264,7 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
       options.inpaintExtendGrow ??
         readOptionalNumberEnv("COMFYUI_INPAINT_EXTEND_GROW") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_EXTEND_GROW") ??
-        DEFAULT_COMFYUI_INPAINT_SETTINGS.extendGrow,
+        preset.extendGrow,
       0,
       256,
     ),
@@ -179,7 +272,7 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
       options.inpaintExtendFeather ??
         readOptionalNumberEnv("COMFYUI_INPAINT_EXTEND_FEATHER") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_EXTEND_FEATHER") ??
-        DEFAULT_COMFYUI_INPAINT_SETTINGS.extendFeather,
+        preset.extendFeather,
       0,
       100,
     ),
@@ -187,7 +280,7 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
       options.inpaintExtendPadding ??
         readOptionalNumberEnv("COMFYUI_INPAINT_EXTEND_PADDING") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_EXTEND_PADDING") ??
-        DEFAULT_COMFYUI_INPAINT_SETTINGS.extendPadding,
+        preset.extendPadding,
       0,
       256,
     ),
@@ -387,7 +480,7 @@ function resolveComfyUiEffectiveDenoise(options: ComfyUiGenerationOptions, inpai
   const backgroundMinDenoise = clampNumber(
     readOptionalNumberEnv("COMFYUI_BACKGROUND_INPAINT_MIN_DENOISE") ??
       readOptionalNumberEnv("ANIMA3_BACKGROUND_INPAINT_MIN_DENOISE") ??
-      1,
+      0.95,
     0,
     1,
   );
@@ -709,12 +802,16 @@ function buildComfyUiPlaceholderMap(
   const inpaint = hasReference && options.inpaint === true;
   const maskPrompt = options.maskPrompt?.trim() || options.prompt;
   const seed = options.seed ?? generateComfyUiSeed();
-  const inpaintSettings = resolveComfyUiInpaintSettings(options);
   const firstReferenceImage = referencePayload[0];
   const maskMode = inpaint ? normalizeComfyUiMaskMode(options.inpaintMaskMode) : "target";
   const invertInpaintMask = maskMode === "background" && !isComfyUiBackgroundMaskPrompt(maskPrompt);
+  const inpaintSettings = {
+    ...resolveComfyUiInpaintSettings(options),
+    ...(maskMode === "background" && !invertInpaintMask && options.maskGrow == null ? { maskGrow: 0 } : {}),
+  };
   const denoise = resolveComfyUiEffectiveDenoise(options, inpaint, maskMode);
   const inpaintMode = inpaint ? normalizeComfyUiInpaintMode(options.inpaintMode) : "normal";
+  const inpaintPreset = inpaint ? inferComfyUiInpaintPreset(options) : "";
   const extendDirection = normalizeComfyUiExtendDirection(options.inpaintExtendDirection);
   const extendOffset = resolveComfyUiExtendOffset(extendDirection, inpaintSettings.extendPixels);
   const placeholderMap: Record<string, WorkflowPlaceholderValue> = {
@@ -738,6 +835,7 @@ function buildComfyUiPlaceholderMap(
       firstReferenceImage && typeof firstReferenceImage.mimeType === "string" ? firstReferenceImage.mimeType : "",
     TOMORI_INPAINT: inpaint,
     TOMORI_INPAINT_MASK_MODE: maskMode,
+    TOMORI_INPAINT_PRESET: inpaintPreset,
     TOMORI_INPAINT_INVERT_MASK: invertInpaintMask,
     TOMORI_INPAINT_MODE: inpaintMode,
     TOMORI_MASK_PROMPT: maskPrompt,
@@ -949,6 +1047,7 @@ export async function generateCustomImageViaEndpoint(params: {
   seed?: number | null;
   inpaintMaskMode?: string | null;
   inpaintMode?: string | null;
+  inpaintPreset?: string | null;
   inpaintExtendDirection?: string | null;
   inpaintExtendPixels?: number | null;
   inpaintExtendGrow?: number | null;
@@ -973,6 +1072,7 @@ export async function generateCustomImageViaEndpoint(params: {
     seed,
     inpaintMaskMode,
     inpaintMode,
+    inpaintPreset,
     inpaintExtendDirection,
     inpaintExtendPixels,
     inpaintExtendGrow,
@@ -998,6 +1098,7 @@ export async function generateCustomImageViaEndpoint(params: {
       seed,
       inpaintMaskMode,
       inpaintMode,
+      inpaintPreset,
       inpaintExtendDirection,
       inpaintExtendPixels,
       inpaintExtendGrow,
@@ -1034,6 +1135,7 @@ export async function generateCustomImageViaEndpoint(params: {
       seed,
       inpaintMaskMode,
       inpaintMode,
+      inpaintPreset,
       inpaintExtendDirection,
       inpaintExtendPixels,
       inpaintExtendGrow,
@@ -1052,6 +1154,7 @@ export async function generateCustomImageViaEndpoint(params: {
       `mask_prompt=${JSON.stringify(diagnosticMaskPrompt)}`,
       `seed=${comfyUiSeed}`,
       `mask_mode=${diagnosticMaskMode}`,
+      `preset=${inferComfyUiInpaintPreset(diagnosticOptions)}`,
       `mode=${normalizeComfyUiInpaintMode(inpaintMode)}`,
       `extend_direction=${normalizeComfyUiExtendDirection(inpaintExtendDirection)}`,
       `threshold=${diagnosticInpaintSettings.maskThreshold}`,

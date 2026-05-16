@@ -93,6 +93,12 @@ export class GenerateImageTool extends BaseTool {
           "Optional for inpainting: Use 'target' to edit the detected mask_prompt region itself. Use 'background' for background/setting edits. In background mode, either set mask_prompt to the foreground object to protect, such as 'apple', 'person', or 'main subject', or to the existing background/scene if that is easier to detect.",
         enum: ["target", "background"],
       },
+      inpaint_preset: {
+        type: "string",
+        description:
+          "Optional inpaint edit category. Prefer this over hand-picking raw tuning values. Use 'small_detail' for eyes/buttons/tiny accessories, 'object_recolor' for simple objects, 'garment_recolor' for clothing/fabric recolors, 'background' for backdrop/setting/location edits, or 'extend' for edits that grow beyond the current silhouette.",
+        enum: ["small_detail", "object_recolor", "garment_recolor", "background", "extend"],
+      },
       inpaint_mode: {
         type: "string",
         description:
@@ -151,6 +157,9 @@ export class GenerateImageTool extends BaseTool {
   }
 
   private shouldUseInpaint(args: Record<string, unknown>): boolean {
+    if (typeof args.mask_mode === "string" || typeof args.mask_prompt === "string" || typeof args.inpaint_preset === "string") {
+      return true;
+    }
     if (typeof args.inpaint_mode === "string" && args.inpaint_mode.toLowerCase() === "extend") {
       return true;
     }
@@ -748,6 +757,7 @@ export class GenerateImageTool extends BaseTool {
     const cfg = this.parseClampedNumber(args.cfg, 0, 30);
     const denoise = this.parseClampedNumber(args.denoise, 0, 1);
     const maskMode = typeof args.mask_mode === "string" ? args.mask_mode : null;
+    const inpaintPreset = typeof args.inpaint_preset === "string" ? args.inpaint_preset : null;
     const inpaintMode = typeof args.inpaint_mode === "string" ? args.inpaint_mode : null;
     const extendDirection = typeof args.extend_direction === "string" ? args.extend_direction : null;
     const extendPixels = this.parseClampedNumber(args.extend_pixels, 0, 512);
@@ -936,6 +946,7 @@ export class GenerateImageTool extends BaseTool {
           cfg,
           denoise,
           inpaintMaskMode: maskMode,
+          inpaintPreset,
           inpaintMode,
           inpaintExtendDirection: extendDirection,
           inpaintExtendPixels: extendPixels,
