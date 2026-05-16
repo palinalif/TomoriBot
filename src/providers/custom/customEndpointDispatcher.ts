@@ -535,6 +535,24 @@ function resolveComfyUiEffectiveDenoise(options: ComfyUiGenerationOptions, inpai
   return Math.max(denoise, backgroundMinDenoise);
 }
 
+function resolveComfyUiEffectiveInpaintSettings(
+  settings: ComfyUiInpaintSettings,
+  inpaint: boolean,
+  maskMode: "target" | "background",
+): ComfyUiInpaintSettings {
+  if (!inpaint || maskMode !== "background") {
+    return settings;
+  }
+
+  // Background edits are prone to halo/shell artifacts when the editable area bleeds
+  // into the protected subject edge. Keep this path crisp and minimally expanded.
+  return {
+    ...settings,
+    maskGrow: Math.min(settings.maskGrow, 1),
+    maskFeather: 0,
+  };
+}
+
 function getComfyUiTimeoutMs(): number {
   const parsed = Number.parseInt(process.env.COMFYUI_POLL_TIMEOUT_MS ?? "300000", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 300000;
@@ -855,7 +873,8 @@ function buildComfyUiPlaceholderMap(
   const workflowMaskPrompt = resolveComfyUiWorkflowMaskPrompt(maskPrompt, maskMode);
   const invertInpaintMask = maskMode === "background";
   const promptOptions = workflowMaskPrompt === maskPrompt ? options : { ...options, maskPrompt: workflowMaskPrompt };
-  const inpaintSettings = resolveComfyUiInpaintSettings(options);
+  const rawInpaintSettings = resolveComfyUiInpaintSettings(options);
+  const inpaintSettings = resolveComfyUiEffectiveInpaintSettings(rawInpaintSettings, inpaint, maskMode);
   const denoise = resolveComfyUiEffectiveDenoise(options, inpaint, maskMode);
   const inpaintMode = inpaint ? normalizeComfyUiInpaintMode(options.inpaintMode) : "normal";
   const inpaintPreset = inpaint ? inferComfyUiInpaintPreset(options) : "";
