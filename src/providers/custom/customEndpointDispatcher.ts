@@ -299,7 +299,34 @@ function isComfyUiBackgroundMaskPrompt(maskPrompt: string): boolean {
   return /\b(?:background|backdrop|surroundings|environment|scene|setting)\b/i.test(maskPrompt);
 }
 
-function resolveComfyUiWorkflowMaskPrompt(maskPrompt: string, maskMode: "target" | "background"): string {
+function inferComfyUiForegroundMaskPrompt(prompt: string): string {
+  const normalized = prompt.toLowerCase();
+  const foregroundTerms: Array<[RegExp, string]> = [
+    [/\b(?:lady|girl|woman|boy|man|person|character|anime\s+(?:lady|girl|woman|boy|man|character))\b/, "person"],
+    [/\b(?:people|couple|friends|group|characters)\b/, "people"],
+    [/\bapple\b/, "apple"],
+    [/\b(?:cat|kitten)\b/, "cat"],
+    [/\b(?:dog|puppy)\b/, "dog"],
+    [/\b(?:bunny|rabbit)\b/, "rabbit"],
+    [/\b(?:plush|plushie|stuffed animal|stuffed toy|toy)\b/, "toy"],
+    [/\b(?:car|vehicle)\b/, "car"],
+    [/\b(?:chair|bench|sofa|couch)\b/, "furniture"],
+  ];
+
+  for (const [pattern, maskPrompt] of foregroundTerms) {
+    if (pattern.test(normalized)) {
+      return maskPrompt;
+    }
+  }
+
+  return "main foreground object";
+}
+
+function resolveComfyUiWorkflowMaskPrompt(
+  maskPrompt: string,
+  maskMode: "target" | "background",
+  prompt: string,
+): string {
   if (maskMode !== "background") {
     return maskPrompt;
   }
@@ -307,7 +334,7 @@ function resolveComfyUiWorkflowMaskPrompt(maskPrompt: string, maskMode: "target"
   // Generic background terms are poor detection targets for subject-preserving edits.
   // In those cases we detect the foreground subject and invert the mask downstream.
   if (isComfyUiBackgroundMaskPrompt(maskPrompt)) {
-    return "main foreground object";
+    return inferComfyUiForegroundMaskPrompt(prompt);
   }
 
   return maskPrompt;
@@ -870,7 +897,7 @@ function buildComfyUiPlaceholderMap(
   const seed = options.seed ?? generateComfyUiSeed();
   const firstReferenceImage = referencePayload[0];
   const maskMode = inpaint ? normalizeComfyUiMaskMode(options.inpaintMaskMode) : "target";
-  const workflowMaskPrompt = resolveComfyUiWorkflowMaskPrompt(maskPrompt, maskMode);
+  const workflowMaskPrompt = resolveComfyUiWorkflowMaskPrompt(maskPrompt, maskMode, options.prompt);
   const invertInpaintMask = maskMode === "background";
   const promptOptions = workflowMaskPrompt === maskPrompt ? options : { ...options, maskPrompt: workflowMaskPrompt };
   const rawInpaintSettings = resolveComfyUiInpaintSettings(options);
@@ -1225,9 +1252,17 @@ export async function generateCustomImageViaEndpoint(params: {
       inpaint === true,
       diagnosticMaskMode,
     );
-    const diagnosticMaskPrompt = maskPrompt?.trim() || prompt;
+    const diagnosticRequestedMaskPrompt = maskPrompt?.trim() || prompt;
+    const diagnosticWorkflowMaskPrompt = resolveComfyUiWorkflowMaskPrompt(
+      diagnosticRequestedMaskPrompt,
+      diagnosticMaskMode,
+      prompt,
+    );
     const diagnosticDetails = [
-      `mask_prompt=${JSON.stringify(diagnosticMaskPrompt)}`,
+      `mask_prompt=${JSON.stringify(diagnosticWorkflowMaskPrompt)}`,
+      ...(diagnosticWorkflowMaskPrompt !== diagnosticRequestedMaskPrompt
+        ? [`requested_mask_prompt=${JSON.stringify(diagnosticRequestedMaskPrompt)}`]
+        : []),
       `seed=${comfyUiSeed}`,
       `mask_mode=${diagnosticMaskMode}`,
       `preset=${inferComfyUiInpaintPreset(diagnosticOptions)}`,
