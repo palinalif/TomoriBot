@@ -307,7 +307,7 @@ function resolveComfyUiWorkflowMaskPrompt(maskPrompt: string, maskMode: "target"
   // Generic background terms are poor detection targets for subject-preserving edits.
   // In those cases we detect the foreground subject and invert the mask downstream.
   if (isComfyUiBackgroundMaskPrompt(maskPrompt)) {
-    return "foreground subject";
+    return "main foreground object";
   }
 
   return maskPrompt;

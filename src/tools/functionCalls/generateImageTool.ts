@@ -90,7 +90,7 @@ export class GenerateImageTool extends BaseTool {
       mask_mode: {
         type: "string",
         description:
-          "Optional for inpainting: Use 'target' to edit the detected mask_prompt region itself. Use 'background' for background/setting edits. In background mode, either set mask_prompt to the foreground object to protect, such as 'apple', 'person', or 'main subject', or to the existing background/scene if that is easier to detect.",
+          "Optional for inpainting: Use 'target' to edit the detected mask_prompt region itself. Use 'background' for background/setting edits. In background mode, set mask_prompt to the existing foreground object to protect, such as 'apple', 'person', 'car', or 'main foreground object'. Avoid using 'background' as the mask_prompt unless no foreground subject can be named.",
         enum: ["target", "background"],
       },
       inpaint_preset: {
