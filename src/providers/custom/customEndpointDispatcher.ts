@@ -5,6 +5,7 @@ import type {
   ProviderNativeVideoGenerationRequest,
   ProviderNativeVideoGenerationResult,
 } from "@/types/provider/featureInterfaces";
+import { randomInt } from "node:crypto";
 import { buildCustomHeaders } from "@/providers/custom/customOpenAICompatibleUtils";
 import { log } from "@/utils/misc/logger";
 import { fetchUserRemoteUrl } from "@/utils/security/userRemoteFetch";
@@ -35,11 +36,19 @@ interface ComfyUiGenerationOptions {
   denoise?: number | null;
   referenceDenoise?: number | null;
   seed?: number | null;
+  inpaintMaskMode?: string | null;
+  inpaintMode?: string | null;
+  inpaintExtendDirection?: string | null;
+  inpaintExtendPixels?: number | null;
+  inpaintExtendGrow?: number | null;
+  inpaintExtendFeather?: number | null;
+  inpaintExtendPadding?: number | null;
 }
 
 type WorkflowPlaceholderValue = string | number | boolean | null | Record<string, unknown> | Array<unknown>;
 type ComfyUiWorkflow = Record<string, unknown>;
 type ComfyUiAsset = { filename: string; subfolder?: string; type?: string };
+type ComfyUiGenerationResponse = { files: ComfyUiAsset[]; seed: number };
 type ComfyUiWorkflowSupports = {
   txt2img: boolean;
   img2img: boolean;
@@ -58,6 +67,10 @@ type ComfyUiInpaintSettings = {
   maskFeather: number;
   cfg: number;
   referenceDenoise: number;
+  extendPixels: number;
+  extendGrow: number;
+  extendFeather: number;
+  extendPadding: number;
 };
 
 const COMFYUI_IMAGE_TARGET_AREA = (() => {
@@ -70,11 +83,18 @@ const DEFAULT_COMFYUI_INPAINT_SETTINGS: ComfyUiInpaintSettings = {
   maskThreshold: 0.45,
   maskGrow: 8,
   maskFeather: 8,
-  cfg: 8,
-  referenceDenoise: DEFAULT_COMFYUI_REFERENCE_DENOISE,
+  cfg: 10,
+  referenceDenoise: 0.9,
+  extendPixels: 96,
+  extendGrow: 0,
+  extendFeather: 4,
+  extendPadding: 8,
 };
+const COMFYUI_MAX_RANDOM_SEED = 2 ** 32;
 const COMFYUI_INPAINT_MASK_FILENAME_PREFIX = "tomoribot_inpaint_mask";
 const COMFYUI_INPAINT_RESULT_DEBUG_FILENAME_PREFIX = "tomoribot_inpaint_result_debug";
+const COMFYUI_BASE_NEGATIVE_PROMPT =
+  "low quality, worst quality, low detail, bad drawing, bad quality, oldest, (score_3, score_2, score_1:0.25), jpeg artifacts, watermark, signature, artist name, missing head, missing limb, bad anatomy, bad proportions, bad hands, missing fingers, spiral eyes, multiple views, duplicate face, extra face, second character, collage, inset image, tiny subject, distant subject, small subject, excessive empty space, subject too small";
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -90,6 +110,12 @@ function readOptionalNumberEnv(name: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function readOptionalStringEnv(name: string): string | null {
+  const rawValue = process.env[name];
+  const trimmed = rawValue?.trim();
+  return trimmed ? trimmed : null;
+}
+
 function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): ComfyUiInpaintSettings {
   return {
     maskThreshold: clampNumber(
@@ -98,7 +124,7 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
         readOptionalNumberEnv("ANIMA3_INPAINT_MASK_THRESHOLD") ??
         DEFAULT_COMFYUI_INPAINT_SETTINGS.maskThreshold,
       0,
-      10,
+      1,
     ),
     maskGrow: clampNumber(
       options.maskGrow ??
@@ -133,7 +159,188 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
       0,
       1,
     ),
+    extendPixels: clampNumber(
+      options.inpaintExtendPixels ??
+        readOptionalNumberEnv("COMFYUI_INPAINT_EXTEND_PIXELS") ??
+        readOptionalNumberEnv("ANIMA3_INPAINT_EXTEND_PIXELS") ??
+        DEFAULT_COMFYUI_INPAINT_SETTINGS.extendPixels,
+      0,
+      512,
+    ),
+    extendGrow: clampNumber(
+      options.inpaintExtendGrow ??
+        readOptionalNumberEnv("COMFYUI_INPAINT_EXTEND_GROW") ??
+        readOptionalNumberEnv("ANIMA3_INPAINT_EXTEND_GROW") ??
+        DEFAULT_COMFYUI_INPAINT_SETTINGS.extendGrow,
+      0,
+      256,
+    ),
+    extendFeather: clampNumber(
+      options.inpaintExtendFeather ??
+        readOptionalNumberEnv("COMFYUI_INPAINT_EXTEND_FEATHER") ??
+        readOptionalNumberEnv("ANIMA3_INPAINT_EXTEND_FEATHER") ??
+        DEFAULT_COMFYUI_INPAINT_SETTINGS.extendFeather,
+      0,
+      100,
+    ),
+    extendPadding: clampNumber(
+      options.inpaintExtendPadding ??
+        readOptionalNumberEnv("COMFYUI_INPAINT_EXTEND_PADDING") ??
+        readOptionalNumberEnv("ANIMA3_INPAINT_EXTEND_PADDING") ??
+        DEFAULT_COMFYUI_INPAINT_SETTINGS.extendPadding,
+      0,
+      256,
+    ),
   };
+}
+
+function normalizeComfyUiInpaintMode(mode: string | null | undefined): "normal" | "extend" {
+  return mode?.trim().toLowerCase() === "extend" ? "extend" : "normal";
+}
+
+function normalizeComfyUiMaskMode(mode: string | null | undefined): "target" | "background" {
+  return mode?.trim().toLowerCase() === "background" ? "background" : "target";
+}
+
+function normalizeComfyUiExtendDirection(direction: string | null | undefined): string {
+  const normalized = direction?.trim().toLowerCase() || "down";
+  return [
+    "down",
+    "up",
+    "left",
+    "right",
+    "down_left",
+    "down_right",
+    "up_left",
+    "up_right",
+    "all",
+  ].includes(normalized)
+    ? normalized
+    : "down";
+}
+
+function resolveComfyUiExtendOffset(direction: string, pixels: number): { x: number; y: number } {
+  switch (direction) {
+    case "up":
+      return { x: 0, y: -pixels };
+    case "left":
+      return { x: -pixels, y: 0 };
+    case "right":
+      return { x: pixels, y: 0 };
+    case "down_left":
+      return { x: -pixels, y: pixels };
+    case "down_right":
+      return { x: pixels, y: pixels };
+    case "up_left":
+      return { x: -pixels, y: -pixels };
+    case "up_right":
+      return { x: pixels, y: -pixels };
+    case "all":
+      return { x: 0, y: 0 };
+    case "down":
+    default:
+      return { x: 0, y: pixels };
+  }
+}
+
+function buildComfyUiPromptWithDefaults(options: ComfyUiGenerationOptions, inpaint: boolean, maskMode: string): string {
+  const prompt = options.prompt.trim();
+  const qualityPrefix = "masterpiece, best quality, newest, (score_9, score_8, score_7:0.25)";
+  if (!inpaint) {
+    return `${qualityPrefix}, well-composed, main subject clearly visible, ${prompt}`;
+  }
+
+  const maskPrompt = options.maskPrompt?.trim() || "masked region";
+  if (maskMode === "background") {
+    return [
+      qualityPrefix,
+      `surroundings-only inpainting edit: ${prompt}`,
+      "replace the editable surroundings with the requested background, environment, location, atmosphere, or setting",
+      `apply the requested scene change only outside the protected ${maskPrompt}`,
+      `keep the protected ${maskPrompt} unchanged, same shape, color, lighting, position, and style`,
+      "clean edge transition, no halo, no outline, no glow, no bubble around the protected subject",
+    ].join(", ");
+  }
+
+  return [
+    qualityPrefix,
+    `localized inpainting edit for the masked ${maskPrompt}: ${prompt}`,
+    "change only the masked area",
+    "preserve the unmasked image exactly, same lighting and style",
+  ].join(", ");
+}
+
+function extractNegatedPromptTerms(prompt: string): string[] {
+  const colorTerms = [
+    "white",
+    "blue",
+    "cyan",
+    "teal",
+    "green",
+    "yellow",
+    "orange",
+    "red",
+    "pink",
+    "purple",
+    "violet",
+    "brown",
+    "black",
+    "gray",
+    "grey",
+    "beige",
+  ];
+  const settingTerms = [
+    "indoor",
+    "indoors",
+    "outdoor",
+    "outdoors",
+    "interior",
+    "exterior",
+    "room",
+    "studio",
+    "plain",
+    "empty",
+    "blank",
+  ];
+  const terms = [...colorTerms, ...settingTerms];
+  const negatedClauses = [...prompt.matchAll(/\b(?:not|no|without)\s+([^,.]+)/gi)].map((match) =>
+    match[1]?.toLowerCase() ?? "",
+  );
+  const negatedTerms = new Set<string>();
+  for (const clause of negatedClauses) {
+    for (const term of terms) {
+      if (new RegExp(`\\b${term}\\b`, "i").test(clause)) {
+        negatedTerms.add(term);
+      }
+    }
+  }
+  return [...negatedTerms];
+}
+
+function buildComfyUiNegativePrompt(options: ComfyUiGenerationOptions, inpaint: boolean, maskMode: string): string {
+  if (!inpaint) {
+    return COMFYUI_BASE_NEGATIVE_PROMPT;
+  }
+
+  const negativeParts = [COMFYUI_BASE_NEGATIVE_PROMPT, "unrequested changes, changed unmasked area"];
+  if (maskMode === "background") {
+    negativeParts.push(
+      "changed protected foreground subject",
+      "altered protected subject color",
+      "altered protected subject shape",
+      "halo around protected subject",
+      "glow around protected subject",
+      "bubble around protected subject",
+      "outline around protected subject",
+      "old background, original background, unchanged background",
+    );
+
+    for (const term of extractNegatedPromptTerms(options.prompt)) {
+      negativeParts.push(`${term} background`, `${term} backdrop`, `${term} environment`, `${term} setting`);
+    }
+  }
+
+  return negativeParts.join(", ");
 }
 
 function resolveComfyUiDenoise(options: ComfyUiGenerationOptions): number {
@@ -158,9 +365,29 @@ function resolveComfyUiDenoise(options: ComfyUiGenerationOptions): number {
   return DEFAULT_COMFYUI_REFERENCE_DENOISE;
 }
 
+function resolveComfyUiEffectiveDenoise(options: ComfyUiGenerationOptions, inpaint: boolean, maskMode: string): number {
+  const denoise = resolveComfyUiDenoise(options);
+  if (!inpaint || maskMode !== "background") {
+    return denoise;
+  }
+
+  const backgroundMinDenoise = clampNumber(
+    readOptionalNumberEnv("COMFYUI_BACKGROUND_INPAINT_MIN_DENOISE") ??
+      readOptionalNumberEnv("ANIMA3_BACKGROUND_INPAINT_MIN_DENOISE") ??
+      1,
+    0,
+    1,
+  );
+  return Math.max(denoise, backgroundMinDenoise);
+}
+
 function getComfyUiTimeoutMs(): number {
   const parsed = Number.parseInt(process.env.COMFYUI_POLL_TIMEOUT_MS ?? "300000", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 300000;
+}
+
+function generateComfyUiSeed(): number {
+  return randomInt(0, COMFYUI_MAX_RANDOM_SEED);
 }
 
 function parseAspectRatio(
@@ -262,6 +489,23 @@ function isComfyUiInpaintResultDebugAsset(asset: ComfyUiAsset): boolean {
 
 function isComfyUiDiagnosticAsset(asset: ComfyUiAsset): boolean {
   return isComfyUiInpaintMaskAsset(asset) || isComfyUiInpaintResultDebugAsset(asset);
+}
+
+function getComfyUiDiagnosticLabel(asset: ComfyUiAsset): string {
+  const filename = asset.filename.toLowerCase();
+  if (isComfyUiInpaintResultDebugAsset(asset)) {
+    return "Inpaint result debug";
+  }
+  if (filename.startsWith(`${COMFYUI_INPAINT_MASK_FILENAME_PREFIX}_detected`)) {
+    return "Detected inpaint mask";
+  }
+  if (filename.startsWith(`${COMFYUI_INPAINT_MASK_FILENAME_PREFIX}_overlay`)) {
+    return "Inpaint mask overlay";
+  }
+  if (isComfyUiInpaintMaskAsset(asset)) {
+    return "Final inpaint mask";
+  }
+  return "ComfyUI diagnostic";
 }
 
 function describeComfyUiAssets(files: ComfyUiAsset[]): string {
@@ -384,9 +628,14 @@ function assertComfyUiWorkflowSupportsRequest(
   }
 }
 
-function applyComfyUiImageInputDefaults(workflow: ComfyUiWorkflow, options: ComfyUiGenerationOptions): number {
+function applyComfyUiImageInputDefaults(
+  workflow: ComfyUiWorkflow,
+  options: ComfyUiGenerationOptions & { seed: number },
+): number {
   const inpaintSettings = resolveComfyUiInpaintSettings(options);
-  const referenceDenoise = resolveComfyUiDenoise(options);
+  const inpaint = !!buildReferenceImageDataUrl(options) && options.inpaint === true;
+  const maskMode = inpaint ? normalizeComfyUiMaskMode(options.inpaintMaskMode) : "target";
+  const referenceDenoise = resolveComfyUiEffectiveDenoise(options, inpaint, maskMode);
   let defaultsApplied = 0;
 
   for (const node of Object.values(workflow)) {
@@ -414,6 +663,15 @@ function applyComfyUiImageInputDefaults(workflow: ComfyUiWorkflow, options: Comf
     }
 
     const looksLikeSampler = classType.includes("ksampler") || ("sampler_name" in inputs && "latent_image" in inputs);
+    const looksLikeSeedNode = classType.includes("seedgenerator");
+    if ((looksLikeSampler || looksLikeSeedNode) && "seed" in inputs && !Array.isArray(inputs.seed)) {
+      inputs.seed = options.seed;
+      defaultsApplied += 1;
+    }
+    if (looksLikeSampler && "noise_seed" in inputs && !Array.isArray(inputs.noise_seed)) {
+      inputs.noise_seed = options.seed;
+      defaultsApplied += 1;
+    }
     if (looksLikeSampler && inputs.denoise == null) {
       inputs.denoise = referenceDenoise;
       defaultsApplied += 1;
@@ -437,12 +695,18 @@ function buildComfyUiPlaceholderMap(
   const hasReference = !!referenceImageDataUrl;
   const inpaint = hasReference && options.inpaint === true;
   const maskPrompt = options.maskPrompt?.trim() || options.prompt;
-  const seed = options.seed ?? Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+  const seed = options.seed ?? generateComfyUiSeed();
   const inpaintSettings = resolveComfyUiInpaintSettings(options);
-  const denoise = resolveComfyUiDenoise(options);
   const firstReferenceImage = referencePayload[0];
+  const maskMode = inpaint ? normalizeComfyUiMaskMode(options.inpaintMaskMode) : "target";
+  const denoise = resolveComfyUiEffectiveDenoise(options, inpaint, maskMode);
+  const inpaintMode = inpaint ? normalizeComfyUiInpaintMode(options.inpaintMode) : "normal";
+  const extendDirection = normalizeComfyUiExtendDirection(options.inpaintExtendDirection);
+  const extendOffset = resolveComfyUiExtendOffset(extendDirection, inpaintSettings.extendPixels);
   const placeholderMap: Record<string, WorkflowPlaceholderValue> = {
     TOMORI_PROMPT: options.prompt,
+    TOMORI_PROMPT_WITH_DEFAULTS: buildComfyUiPromptWithDefaults(options, inpaint, maskMode),
+    TOMORI_NEGATIVE_PROMPT: buildComfyUiNegativePrompt(options, inpaint, maskMode),
     TOMORI_MODEL: endpoint.model_name ?? endpoint.display_name,
     TOMORI_MODEL_NAME: endpoint.model_name ?? endpoint.display_name,
     TOMORI_MODE: options.mode,
@@ -459,10 +723,26 @@ function buildComfyUiPlaceholderMap(
     TOMORI_REFERENCE_IMAGE_MIME_TYPE:
       firstReferenceImage && typeof firstReferenceImage.mimeType === "string" ? firstReferenceImage.mimeType : "",
     TOMORI_INPAINT: inpaint,
+    TOMORI_INPAINT_MASK_MODE: maskMode,
+    TOMORI_INPAINT_INVERT_MASK: maskMode === "background",
+    TOMORI_INPAINT_MODE: inpaintMode,
     TOMORI_MASK_PROMPT: maskPrompt,
+    TOMORI_GROUNDINGDINO_MODEL:
+      readOptionalStringEnv("COMFYUI_GROUNDINGDINO_MODEL") ??
+      readOptionalStringEnv("ANIMA3_GROUNDINGDINO_MODEL") ??
+      "GroundingDINO_SwinT_OGC (694MB)",
+    TOMORI_SAM_MODEL:
+      readOptionalStringEnv("COMFYUI_SAM_MODEL") ?? readOptionalStringEnv("ANIMA3_SAM_MODEL") ?? "sam_vit_b (375MB)",
     TOMORI_INPAINT_MASK_THRESHOLD: inpaintSettings.maskThreshold,
     TOMORI_INPAINT_MASK_GROW: inpaintSettings.maskGrow,
     TOMORI_INPAINT_MASK_FEATHER: inpaintSettings.maskFeather,
+    TOMORI_INPAINT_EXTEND_DIRECTION: extendDirection,
+    TOMORI_INPAINT_EXTEND_PIXELS: inpaintSettings.extendPixels,
+    TOMORI_INPAINT_EXTEND_X: extendOffset.x,
+    TOMORI_INPAINT_EXTEND_Y: extendOffset.y,
+    TOMORI_INPAINT_EXTEND_GROW: inpaintSettings.extendGrow,
+    TOMORI_INPAINT_EXTEND_FEATHER: inpaintSettings.extendFeather,
+    TOMORI_INPAINT_EXTEND_PADDING: inpaintSettings.extendPadding,
     TOMORI_CFG: inpaint ? inpaintSettings.cfg : 0,
     TOMORI_INPAINT_CFG: inpaintSettings.cfg,
     TOMORI_DENOISE: denoise,
@@ -502,13 +782,13 @@ async function generateWithComfyUi(
   endpoint: CustomEndpointRow,
   apiKey: string,
   options: ComfyUiGenerationOptions,
-): Promise<ComfyUiAsset[]> {
+): Promise<ComfyUiGenerationResponse> {
   const savedWorkflow = endpoint.extra_config.workflow;
   if (!savedWorkflow || typeof savedWorkflow !== "object") {
     throw new Error("ComfyUI workflow JSON is missing.");
   }
 
-  const seed = options.seed ?? Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+  const seed = options.seed ?? generateComfyUiSeed();
   const generationOptions = { ...options, seed };
   const dimensions = buildComfyUiDimensions(generationOptions);
   const referencePayload = buildComfyUiReferencePayload(generationOptions.referenceImages ?? []);
@@ -530,7 +810,8 @@ async function generateWithComfyUi(
     const hasReference = !!referenceImageDataUrl;
     const inpaint = hasReference && generationOptions.inpaint === true;
     const inpaintSettings = resolveComfyUiInpaintSettings(generationOptions);
-    const denoise = resolveComfyUiDenoise(generationOptions);
+    const maskMode = inpaint ? normalizeComfyUiMaskMode(generationOptions.inpaintMaskMode) : "target";
+    const denoise = resolveComfyUiEffectiveDenoise(generationOptions, inpaint, maskMode);
     log.info(
       `Prepared ComfyUI image generation payload ${JSON.stringify({
         hasReference,
@@ -538,6 +819,8 @@ async function generateWithComfyUi(
         maskPrompt: generationOptions.maskPrompt?.trim() ?? null,
         seed,
         denoise,
+        maskMode,
+        inpaintMode: normalizeComfyUiInpaintMode(generationOptions.inpaintMode),
         maskThreshold: inpaintSettings.maskThreshold,
         maskGrow: inpaintSettings.maskGrow,
         maskFeather: inpaintSettings.maskFeather,
@@ -603,7 +886,7 @@ async function generateWithComfyUi(
         ...(output.videos ?? []),
       ]);
       if (files.length > 0) {
-        return files;
+        return { files, seed };
       }
     }
 
@@ -650,6 +933,13 @@ export async function generateCustomImageViaEndpoint(params: {
   denoise?: number | null;
   referenceDenoise?: number | null;
   seed?: number | null;
+  inpaintMaskMode?: string | null;
+  inpaintMode?: string | null;
+  inpaintExtendDirection?: string | null;
+  inpaintExtendPixels?: number | null;
+  inpaintExtendGrow?: number | null;
+  inpaintExtendFeather?: number | null;
+  inpaintExtendPadding?: number | null;
 }): Promise<ProviderNativeImageGenerationResult> {
   const {
     endpoint,
@@ -667,10 +957,17 @@ export async function generateCustomImageViaEndpoint(params: {
     denoise,
     referenceDenoise,
     seed,
+    inpaintMaskMode,
+    inpaintMode,
+    inpaintExtendDirection,
+    inpaintExtendPixels,
+    inpaintExtendGrow,
+    inpaintExtendFeather,
+    inpaintExtendPadding,
   } = params;
 
   if (endpoint.api_style === "comfyui") {
-    const files = await generateWithComfyUi(endpoint, apiKey, {
+    const { files, seed: comfyUiSeed } = await generateWithComfyUi(endpoint, apiKey, {
       mode: "image",
       prompt,
       aspectRatio,
@@ -685,8 +982,16 @@ export async function generateCustomImageViaEndpoint(params: {
       denoise,
       referenceDenoise,
       seed,
+      inpaintMaskMode,
+      inpaintMode,
+      inpaintExtendDirection,
+      inpaintExtendPixels,
+      inpaintExtendGrow,
+      inpaintExtendFeather,
+      inpaintExtendPadding,
     });
-    const diagnosticFiles = files.filter(isComfyUiDiagnosticAsset);
+    const includeDiagnostics = inpaint === true;
+    const diagnosticFiles = includeDiagnostics ? files.filter(isComfyUiDiagnosticAsset) : [];
     const imageFiles = files.filter((file) => !isComfyUiDiagnosticAsset(file));
     const firstFile = imageFiles[0];
     if (!firstFile) {
@@ -713,22 +1018,40 @@ export async function generateCustomImageViaEndpoint(params: {
       denoise,
       referenceDenoise,
       seed,
+      inpaintMaskMode,
+      inpaintMode,
+      inpaintExtendDirection,
+      inpaintExtendPixels,
+      inpaintExtendGrow,
+      inpaintExtendFeather,
+      inpaintExtendPadding,
     };
     const diagnosticInpaintSettings = resolveComfyUiInpaintSettings(diagnosticOptions);
-    const diagnosticReferenceDenoise = resolveComfyUiDenoise(diagnosticOptions);
+    const diagnosticMaskMode = normalizeComfyUiMaskMode(inpaintMaskMode);
+    const diagnosticReferenceDenoise = resolveComfyUiEffectiveDenoise(
+      diagnosticOptions,
+      inpaint === true,
+      diagnosticMaskMode,
+    );
     const diagnosticMaskPrompt = maskPrompt?.trim() || prompt;
     const diagnosticDetails = [
       `mask_prompt=${JSON.stringify(diagnosticMaskPrompt)}`,
+      `seed=${comfyUiSeed}`,
+      `mask_mode=${diagnosticMaskMode}`,
+      `mode=${normalizeComfyUiInpaintMode(inpaintMode)}`,
+      `extend_direction=${normalizeComfyUiExtendDirection(inpaintExtendDirection)}`,
       `threshold=${diagnosticInpaintSettings.maskThreshold}`,
       `grow=${diagnosticInpaintSettings.maskGrow}`,
       `feather=${diagnosticInpaintSettings.maskFeather}`,
+      `extend_pixels=${diagnosticInpaintSettings.extendPixels}`,
+      `extend_padding=${diagnosticInpaintSettings.extendPadding}`,
       `cfg=${diagnosticInpaintSettings.cfg}`,
       `denoise=${diagnosticReferenceDenoise}`,
     ].join(", ");
     const diagnosticImages = await Promise.all(
       diagnosticFiles.map(async (file) => {
         const diagnosticBuffer = await downloadComfyUiAsset(endpoint, apiKey, file);
-        const label = isComfyUiInpaintResultDebugAsset(file) ? "Inpaint result debug" : "Inpaint mask";
+        const label = getComfyUiDiagnosticLabel(file);
         return {
           label,
           imageData: diagnosticBuffer.toString("base64"),
@@ -783,7 +1106,7 @@ export async function generateCustomVideoViaEndpoint(params: {
   const { endpoint, apiKey, prompt, aspectRatio, durationSeconds, resolution, referenceImages, generateAudio } = params;
 
   if (endpoint.api_style === "comfyui") {
-    const files = await generateWithComfyUi(endpoint, apiKey, {
+    const { files } = await generateWithComfyUi(endpoint, apiKey, {
       mode: "video",
       prompt,
       aspectRatio,

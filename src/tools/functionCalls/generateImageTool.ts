@@ -35,7 +35,7 @@ import type { ProviderNativeImageGenerationResult } from "@/types/provider/featu
 export class GenerateImageTool extends BaseTool {
   name = "generate_image";
   description =
-    "Generate an AI image using the active provider's native image model. Use this only when the user explicitly asks you to make, draw, generate, create, edit, or continue an image; do not call it for casual visual discussion. If the user asks you to make/draw/generate an image and this tool is available, call this tool instead of only describing the image. Provide a detailed text prompt describing what image you want to create. If you provide a media_id or target_identity reference for normal image-to-image, focus the prompt on edits or additions only and avoid re-describing the reference image. For inpainting, describe only what should change inside the masked region or the desired final appearance of that region; do not re-describe the whole subject/reference image. The mask_prompt must be a short phrase naming the existing region to mask, not the desired replacement. You can also specify an aspect ratio (default is 1:1). After generating, the image will be sent directly to the Discord channel.";
+    "Generate an AI image using the active provider's native image model. Use this only when the user explicitly asks you to make, draw, generate, create, edit, or continue an image; do not call it for casual visual discussion. If the user asks you to make/draw/generate an image and this tool is available, call this tool instead of only describing the image. Provide a detailed text prompt describing what image you want to create. For text-to-image requests, creatively expand sparse user ideas into one coherent finished image with a clear subject, setting, pose, outfit, colors, mood, and lighting. If you provide a media_id or target_identity reference for normal image-to-image, focus the prompt on edits or additions only and avoid re-describing the reference image. For inpainting, describe only what should change inside the masked region or the desired final appearance of that region; do not re-describe the whole subject/reference image. For background-mode inpainting, describe the desired new surroundings explicitly, including the target background color, environment, location, atmosphere, lighting, or setting, and name any old surroundings that should not remain. The mask_prompt must be a short phrase naming the existing region to mask, not the desired replacement. You can also specify an aspect ratio (default is 1:1). After generating, the image will be sent directly to the Discord channel.";
   category = "utility" as const;
   requiresFeatureFlag = "image_gen";
 
@@ -45,7 +45,7 @@ export class GenerateImageTool extends BaseTool {
       prompt: {
         type: "string",
         description:
-          "A detailed text description of the image you want to generate. Be specific about style, composition, colors, mood, and any important details. For normal image-to-image, describe only the modifications or additions you want and avoid re-describing the reference image. For inpainting, describe what should change inside the masked area or the desired final appearance of that area, such as 'make the fur longer, softer, and fluffier' or 'soft pastel green knitted fabric with the same folds and lighting'. Do not re-describe the whole subject/reference image, and do not put the mask target here unless it is needed to explain the edit.",
+          "A detailed text description of the image you want to generate. For text-to-image, expand the user's idea into a complete, visually interesting final image: specify a single main subject or group, setting, action/pose, outfit, hair/eye colors when relevant, color palette, lighting, mood, camera framing, subject scale, and art style. For single-object prompts, specify a close or medium-close composition where the object is clearly visible and not tiny in an empty canvas. Avoid character sheets, multiple views, duplicate panels, or reference-sheet layouts unless the user explicitly asks for them. For normal image-to-image, describe only the modifications or additions you want and avoid re-describing the reference image. For inpainting, describe what should change inside the masked area or the desired final appearance of that area, such as 'make the fur longer, softer, and fluffier' or 'soft pastel green knitted fabric with the same folds and lighting'. For background-mode inpainting, state the desired new surroundings strongly: color, environment, location, atmosphere, lighting, or setting, plus anything from the old background that should not remain. For recolors, name the desired new color/material strongly and explicitly exclude the old color if known, such as 'deep purple apple, not red, same shape and lighting'. Do not re-describe the whole subject/reference image, and do not put the mask target here unless it is needed to explain the edit.",
       },
       media_id: {
         type: "string",
@@ -65,7 +65,7 @@ export class GenerateImageTool extends BaseTool {
       mask_threshold: {
         type: "number",
         description:
-          "Optional inpaint tuning: CLIPSeg mask threshold from 0 to 10. Lower values include more of the image; higher values make a tighter mask. Use around 0.45 for tiny precise edits, 0.28 for normal recolors, and 0.22 or lower for stubborn broad edits.",
+          "Optional inpaint tuning: GroundingDINO/SAM detection threshold from 0 to 10. Lower values include more candidate detections; higher values make detection stricter. Use around 0.45 for precise edits, lower values for small or stubborn targets.",
       },
       mask_grow: {
         type: "number",
@@ -80,12 +80,35 @@ export class GenerateImageTool extends BaseTool {
       cfg: {
         type: "number",
         description:
-          "Optional inpaint tuning: prompt guidance from 0 to 30. Use about 6-8 for most edits, higher for stubborn requested changes, lower if the result overpowers the reference.",
+          "Optional inpaint tuning: prompt guidance from 0 to 30. Use about 8-10 for most edits, 10-14 for stubborn color/material changes, lower if the result overpowers the reference.",
       },
       denoise: {
         type: "number",
         description:
-          "Optional img2img/inpaint tuning: strength from 0 to 1. Lower values preserve the reference more; higher values allow stronger visible changes. Try 0.3 for tiny touch-ups, 0.6-0.8 for recolors, and 0.9 for stubborn broad changes.",
+          "Optional img2img/inpaint tuning: strength from 0 to 1. Lower values preserve the reference more; higher values allow stronger visible changes. Try 0.3 for tiny touch-ups, 0.85-0.95 for recolors or material changes, and 0.9-1.0 for stubborn broad changes.",
+      },
+      mask_mode: {
+        type: "string",
+        description:
+          "Optional for inpainting: Use 'target' to edit the detected mask_prompt region itself. Use 'background' to edit everything around the detected foreground subject; in background mode, set mask_prompt to the foreground object to protect, such as 'apple', 'person', or 'main subject', not to 'background'.",
+        enum: ["target", "background"],
+      },
+      inpaint_mode: {
+        type: "string",
+        description:
+          "Optional: Inpaint behavior. Use 'normal' to edit the detected region itself, or 'extend' when the edit must grow beyond the current silhouette into nearby space, such as lengthening hair, extending clothing, or adding a dangling accessory.",
+        enum: ["normal", "extend"],
+      },
+      extend_direction: {
+        type: "string",
+        description:
+          "Optional for inpaint_mode='extend': Direction to extend the editable mask from the detected region.",
+        enum: ["down", "up", "left", "right", "down_left", "down_right", "up_left", "up_right", "all"],
+      },
+      extend_pixels: {
+        type: "number",
+        description:
+          "Optional for inpaint_mode='extend': Approximate number of pixels to extend the editable mask from the detected region. Use 64-128 for small accessories or hair/clothing extensions, higher for broad extensions.",
       },
       target_identity: {
         type: "string",
@@ -128,6 +151,9 @@ export class GenerateImageTool extends BaseTool {
   }
 
   private shouldUseInpaint(args: Record<string, unknown>): boolean {
+    if (typeof args.inpaint_mode === "string" && args.inpaint_mode.toLowerCase() === "extend") {
+      return true;
+    }
     if (args.inpaint === true) {
       return true;
     }
@@ -716,11 +742,15 @@ export class GenerateImageTool extends BaseTool {
     const usesReferences = !!(messageId || targetIdentity);
     const inpaint = this.shouldUseInpaint(args);
     const maskPrompt = (args.mask_prompt as string | undefined)?.trim() || null;
-    const maskThreshold = this.parseClampedNumber(args.mask_threshold, 0, 10);
+    const maskThreshold = this.parseClampedNumber(args.mask_threshold, 0, 1);
     const maskGrow = this.parseClampedNumber(args.mask_grow, 0, 128);
     const maskFeather = this.parseClampedNumber(args.mask_feather, 0, 100);
     const cfg = this.parseClampedNumber(args.cfg, 0, 30);
     const denoise = this.parseClampedNumber(args.denoise, 0, 1);
+    const maskMode = typeof args.mask_mode === "string" ? args.mask_mode : null;
+    const inpaintMode = typeof args.inpaint_mode === "string" ? args.inpaint_mode : null;
+    const extendDirection = typeof args.extend_direction === "string" ? args.extend_direction : null;
+    const extendPixels = this.parseClampedNumber(args.extend_pixels, 0, 512);
 
     if (rawMediaId && !messageId) {
       return {
@@ -899,6 +929,10 @@ export class GenerateImageTool extends BaseTool {
           maskFeather,
           cfg,
           denoise,
+          inpaintMaskMode: maskMode,
+          inpaintMode,
+          inpaintExtendDirection: extendDirection,
+          inpaintExtendPixels: extendPixels,
         });
         generatedImageData = result.imageData;
         await this.sendDiagnosticImagesToThoughtLog(context, result.diagnosticImages, prompt);
