@@ -118,8 +118,8 @@ const COMFYUI_INPAINT_PRESETS: Record<string, ComfyUiInpaintSettings> = {
     maskThreshold: 0.42,
     maskGrow: 12,
     maskFeather: 6,
-    cfg: 8,
-    referenceDenoise: 0.55,
+    cfg: 9,
+    referenceDenoise: 0.65,
     extendPixels: 128,
     extendGrow: 0,
     extendFeather: 6,
@@ -239,7 +239,7 @@ function isComfyUiHairMaskPrompt(maskPrompt: string | null | undefined): boolean
 function normalizeComfyUiTargetMaskPrompt(maskPrompt: string): string {
   const normalized = maskPrompt.trim();
   if (isComfyUiHairMaskPrompt(normalized)) {
-    return "hair strands";
+    return "hair";
   }
   if (isComfyUiEyeMaskPrompt(normalized)) {
     return "both eyes";
@@ -295,9 +295,9 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
     inferredPreset === "tight_recolor" && hairMaskPrompt && inpaintMode !== "extend"
       ? {
           // Balance between over-selecting subject vs empty detections.
-          maskThreshold: Math.max(baseMaskThreshold, 0.5),
-          maskGrow: Math.min(baseMaskGrow, 4),
-          maskFeather: Math.min(baseMaskFeather, 3),
+          maskThreshold: Math.min(baseMaskThreshold, 0.45),
+          maskGrow: Math.min(baseMaskGrow, 3),
+          maskFeather: Math.min(baseMaskFeather, 2),
           cfg: 8,
           referenceDenoise: 0.6,
         }
