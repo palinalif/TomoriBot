@@ -127,10 +127,10 @@ const COMFYUI_INPAINT_PRESETS: Record<string, ComfyUiInpaintSettings> = {
   },
   background: {
     maskThreshold: 0.45,
-    maskGrow: 4,
-    maskFeather: 3,
-    cfg: 9,
-    referenceDenoise: 0.85,
+    maskGrow: 2,
+    maskFeather: 2,
+    cfg: 10,
+    referenceDenoise: 0.9,
     extendPixels: 96,
     extendGrow: 0,
     extendFeather: 4,
@@ -297,6 +297,20 @@ function normalizeComfyUiMaskMode(mode: string | null | undefined): "target" | "
 
 function isComfyUiBackgroundMaskPrompt(maskPrompt: string): boolean {
   return /\b(?:background|backdrop|surroundings|environment|scene|setting)\b/i.test(maskPrompt);
+}
+
+function resolveComfyUiWorkflowMaskPrompt(maskPrompt: string, maskMode: "target" | "background"): string {
+  if (maskMode !== "background") {
+    return maskPrompt;
+  }
+
+  // Generic background terms are poor detection targets for subject-preserving edits.
+  // In those cases we detect the foreground subject and invert the mask downstream.
+  if (isComfyUiBackgroundMaskPrompt(maskPrompt)) {
+    return "foreground subject";
+  }
+
+  return maskPrompt;
 }
 
 function normalizeComfyUiExtendDirection(direction: string | null | undefined): string {
@@ -838,7 +852,9 @@ function buildComfyUiPlaceholderMap(
   const seed = options.seed ?? generateComfyUiSeed();
   const firstReferenceImage = referencePayload[0];
   const maskMode = inpaint ? normalizeComfyUiMaskMode(options.inpaintMaskMode) : "target";
-  const invertInpaintMask = maskMode === "background" && !isComfyUiBackgroundMaskPrompt(maskPrompt);
+  const workflowMaskPrompt = resolveComfyUiWorkflowMaskPrompt(maskPrompt, maskMode);
+  const invertInpaintMask = maskMode === "background";
+  const promptOptions = workflowMaskPrompt === maskPrompt ? options : { ...options, maskPrompt: workflowMaskPrompt };
   const inpaintSettings = resolveComfyUiInpaintSettings(options);
   const denoise = resolveComfyUiEffectiveDenoise(options, inpaint, maskMode);
   const inpaintMode = inpaint ? normalizeComfyUiInpaintMode(options.inpaintMode) : "normal";
@@ -848,7 +864,7 @@ function buildComfyUiPlaceholderMap(
   const placeholderMap: Record<string, WorkflowPlaceholderValue> = {
     TOMORI_PROMPT: options.prompt,
     TOMORI_PROMPT_WITH_DEFAULTS: buildComfyUiPromptWithDefaults(
-      options,
+      promptOptions,
       inpaint,
       maskMode,
       invertInpaintMask,
@@ -875,7 +891,7 @@ function buildComfyUiPlaceholderMap(
     TOMORI_INPAINT_PRESET: inpaintPreset,
     TOMORI_INPAINT_INVERT_MASK: invertInpaintMask,
     TOMORI_INPAINT_MODE: inpaintMode,
-    TOMORI_MASK_PROMPT: maskPrompt,
+    TOMORI_MASK_PROMPT: workflowMaskPrompt,
     TOMORI_GROUNDINGDINO_MODEL:
       readOptionalStringEnv("COMFYUI_GROUNDINGDINO_MODEL") ??
       readOptionalStringEnv("ANIMA3_GROUNDINGDINO_MODEL") ??
