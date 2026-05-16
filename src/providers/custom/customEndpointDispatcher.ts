@@ -230,10 +230,18 @@ function isComfyUiEyeMaskPrompt(maskPrompt: string | null | undefined): boolean 
   return /\b(?:eye|eyes|iris|irises|pupil|pupils)\b/i.test(maskPrompt ?? "");
 }
 
+function isComfyUiHairMaskPrompt(maskPrompt: string | null | undefined): boolean {
+  return /\b(?:hair|bangs|fringe|ponytail|braid|braids|pigtail|pigtails|hairstyle|locks|strands)\b/i.test(
+    maskPrompt ?? "",
+  );
+}
+
 function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): ComfyUiInpaintSettings {
   const inferredPreset = inferComfyUiInpaintPreset(options);
   const preset = COMFYUI_INPAINT_PRESETS[inferredPreset] ?? DEFAULT_COMFYUI_INPAINT_SETTINGS;
   const eyeMaskPrompt = isComfyUiEyeMaskPrompt(options.maskPrompt);
+  const hairMaskPrompt = isComfyUiHairMaskPrompt(options.maskPrompt);
+  const inpaintMode = normalizeComfyUiInpaintMode(options.inpaintMode);
 
   const baseMaskThreshold = clampNumber(
     options.maskThreshold ??
@@ -270,12 +278,56 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
         }
       : null;
 
+  // Hair recolors were frequently too sparse or noisy. Give them a slightly
+  // wider but still bounded detection profile.
+  const hairRecolorAdjustments =
+    inferredPreset === "tight_recolor" && hairMaskPrompt && inpaintMode !== "extend"
+      ? {
+          maskThreshold: Math.min(baseMaskThreshold, 0.47),
+          maskGrow: Math.max(baseMaskGrow, 2),
+          maskFeather: Math.max(baseMaskFeather, 2),
+          cfg: 9,
+          referenceDenoise: 0.62,
+        }
+      : null;
+
+  // Hair extension should start from hair, not full-subject regions.
+  const hairExtendAdjustments =
+    inferredPreset === "extend" && hairMaskPrompt && inpaintMode === "extend"
+      ? {
+          maskThreshold: Math.max(baseMaskThreshold, 0.52),
+          maskGrow: Math.min(baseMaskGrow, 2),
+          maskFeather: Math.min(baseMaskFeather, 4),
+          cfg: 9,
+          referenceDenoise: 0.78,
+          extendPixels: 72,
+          extendGrow: 2,
+          extendFeather: 4,
+          extendPadding: 6,
+        }
+      : null;
+
+  const maskThreshold =
+    hairExtendAdjustments?.maskThreshold ??
+    hairRecolorAdjustments?.maskThreshold ??
+    eyeMaskAdjustments?.maskThreshold ??
+    baseMaskThreshold;
+  const maskGrow =
+    hairExtendAdjustments?.maskGrow ?? hairRecolorAdjustments?.maskGrow ?? eyeMaskAdjustments?.maskGrow ?? baseMaskGrow;
+  const maskFeather =
+    hairExtendAdjustments?.maskFeather ??
+    hairRecolorAdjustments?.maskFeather ??
+    eyeMaskAdjustments?.maskFeather ??
+    baseMaskFeather;
+
   return {
-    maskThreshold: eyeMaskAdjustments?.maskThreshold ?? baseMaskThreshold,
-    maskGrow: eyeMaskAdjustments?.maskGrow ?? baseMaskGrow,
-    maskFeather: eyeMaskAdjustments?.maskFeather ?? baseMaskFeather,
+    maskThreshold,
+    maskGrow,
+    maskFeather,
     cfg: clampNumber(
-      options.cfg ??
+      hairExtendAdjustments?.cfg ??
+        hairRecolorAdjustments?.cfg ??
+        options.cfg ??
         readOptionalNumberEnv("COMFYUI_INPAINT_CFG") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_CFG") ??
         preset.cfg,
@@ -283,7 +335,9 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
       30,
     ),
     referenceDenoise: clampNumber(
-      options.referenceDenoise ??
+      hairExtendAdjustments?.referenceDenoise ??
+        hairRecolorAdjustments?.referenceDenoise ??
+        options.referenceDenoise ??
         options.denoise ??
         readOptionalNumberEnv("COMFYUI_INPAINT_DENOISE") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_DENOISE") ??
@@ -292,7 +346,8 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
       1,
     ),
     extendPixels: clampNumber(
-      options.inpaintExtendPixels ??
+      hairExtendAdjustments?.extendPixels ??
+        options.inpaintExtendPixels ??
         readOptionalNumberEnv("COMFYUI_INPAINT_EXTEND_PIXELS") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_EXTEND_PIXELS") ??
         preset.extendPixels,
@@ -300,7 +355,8 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
       512,
     ),
     extendGrow: clampNumber(
-      options.inpaintExtendGrow ??
+      hairExtendAdjustments?.extendGrow ??
+        options.inpaintExtendGrow ??
         readOptionalNumberEnv("COMFYUI_INPAINT_EXTEND_GROW") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_EXTEND_GROW") ??
         preset.extendGrow,
@@ -308,7 +364,8 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
       256,
     ),
     extendFeather: clampNumber(
-      options.inpaintExtendFeather ??
+      hairExtendAdjustments?.extendFeather ??
+        options.inpaintExtendFeather ??
         readOptionalNumberEnv("COMFYUI_INPAINT_EXTEND_FEATHER") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_EXTEND_FEATHER") ??
         preset.extendFeather,
@@ -316,7 +373,8 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
       100,
     ),
     extendPadding: clampNumber(
-      options.inpaintExtendPadding ??
+      hairExtendAdjustments?.extendPadding ??
+        options.inpaintExtendPadding ??
         readOptionalNumberEnv("COMFYUI_INPAINT_EXTEND_PADDING") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_EXTEND_PADDING") ??
         preset.extendPadding,
@@ -944,7 +1002,12 @@ function buildComfyUiPlaceholderMap(
   const denoise = resolveComfyUiEffectiveDenoise(options, inpaint, maskMode);
   const inpaintMode = inpaint ? normalizeComfyUiInpaintMode(options.inpaintMode) : "normal";
   const inpaintPreset = inpaint ? inferComfyUiInpaintPreset(options) : "";
-  const extendDirection = normalizeComfyUiExtendDirection(options.inpaintExtendDirection);
+  const maskPromptIsHair = isComfyUiHairMaskPrompt(maskPrompt);
+  const requestedExtendDirection = normalizeComfyUiExtendDirection(options.inpaintExtendDirection);
+  const extendDirection =
+    inpaintMode === "extend" && maskPromptIsHair && requestedExtendDirection === "all"
+      ? "down"
+      : requestedExtendDirection;
   const extendOffset = resolveComfyUiExtendOffset(extendDirection, inpaintSettings.extendPixels);
   const placeholderMap: Record<string, WorkflowPlaceholderValue> = {
     TOMORI_PROMPT: options.prompt,
