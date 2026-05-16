@@ -524,6 +524,8 @@ function buildComfyUiPromptWithDefaults(
     qualityPrefix,
     `localized inpainting edit for the masked ${maskPrompt}: ${prompt}`,
     "change only the masked area",
+    "do not alter any unmasked regions, including face, skin, clothing, pose, body, or background",
+    "if the user prompt mentions full-scene or full-character details, treat those as style hints for the masked area only",
     "preserve the unmasked image exactly, same lighting and style",
   ].join(", ");
 }
