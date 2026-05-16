@@ -79,7 +79,7 @@ const COMFYUI_IMAGE_TARGET_AREA = (() => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1024 * 1024;
 })();
 const COMFYUI_DIMENSION_MULTIPLE = 64;
-const DEFAULT_COMFYUI_REFERENCE_DENOISE = 0.4;
+const DEFAULT_COMFYUI_REFERENCE_DENOISE = 0.75;
 const DEFAULT_COMFYUI_INPAINT_SETTINGS: ComfyUiInpaintSettings = {
   maskThreshold: 0.45,
   maskGrow: 8,
@@ -345,9 +345,20 @@ function buildComfyUiPromptWithDefaults(
   inpaint: boolean,
   maskMode: string,
   invertMask: boolean,
+  hasReference: boolean,
 ): string {
   const prompt = options.prompt.trim();
   const qualityPrefix = "masterpiece, best quality, newest, (score_9, score_8, score_7:0.25)";
+  if (hasReference && !inpaint) {
+    return [
+      qualityPrefix,
+      `reference-inspired image generation: ${prompt}`,
+      "use the reference image as loose visual inspiration for subject, composition, palette, or style",
+      "create a new similar image with the requested changes clearly visible",
+      "do not copy the reference exactly, allow meaningful variation while preserving the user's requested intent",
+    ].join(", ");
+  }
+
   if (!inpaint) {
     return `${qualityPrefix}, well-composed, main subject clearly visible, ${prompt}`;
   }
@@ -476,6 +487,12 @@ function resolveComfyUiDenoise(options: ComfyUiGenerationOptions): number {
   const envDenoise = readOptionalNumberEnv("COMFYUI_REFERENCE_DENOISE");
   if (envDenoise !== null) {
     return clampNumber(envDenoise, 0, 1);
+  }
+
+  const img2imgDenoise =
+    readOptionalNumberEnv("COMFYUI_IMG2IMG_DENOISE") ?? readOptionalNumberEnv("ANIMA3_IMG2IMG_DENOISE");
+  if (img2imgDenoise !== null) {
+    return clampNumber(img2imgDenoise, 0, 1);
   }
 
   return DEFAULT_COMFYUI_REFERENCE_DENOISE;
@@ -826,7 +843,13 @@ function buildComfyUiPlaceholderMap(
   const extendOffset = resolveComfyUiExtendOffset(extendDirection, inpaintSettings.extendPixels);
   const placeholderMap: Record<string, WorkflowPlaceholderValue> = {
     TOMORI_PROMPT: options.prompt,
-    TOMORI_PROMPT_WITH_DEFAULTS: buildComfyUiPromptWithDefaults(options, inpaint, maskMode, invertInpaintMask),
+    TOMORI_PROMPT_WITH_DEFAULTS: buildComfyUiPromptWithDefaults(
+      options,
+      inpaint,
+      maskMode,
+      invertInpaintMask,
+      hasReference,
+    ),
     TOMORI_NEGATIVE_PROMPT: buildComfyUiNegativePrompt(options, inpaint, maskMode),
     TOMORI_MODEL: endpoint.model_name ?? endpoint.display_name,
     TOMORI_MODEL_NAME: endpoint.model_name ?? endpoint.display_name,
