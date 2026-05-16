@@ -113,7 +113,7 @@ export class GenerateImageTool extends BaseTool {
       target_identity: {
         type: "string",
         description:
-          "Optional: User or persona identity whose profile picture/avatar should be used as a reference image. Accepts 'self', an exact persona nickname, or a natural user name from the current conversation or server. Deprecated raw IDs are still accepted at execution time for compatibility. Can be combined with media_id references.",
+          "Optional: User or persona identity whose profile picture/avatar should be used as a reference image. Accepts 'self', an exact persona nickname, or a natural user name from the current conversation or server. Deprecated raw IDs are still accepted at execution time for compatibility. Do not set this when media_id already points to the image to edit, unless the user explicitly asks to include the avatar/profile picture as an additional reference.",
       },
       aspect_ratio: {
         type: "string",
@@ -879,14 +879,20 @@ export class GenerateImageTool extends BaseTool {
           log.info(`Added profile picture reference for ${avatarTypeLabel} ${avatarData.username} (${targetIdentity})`);
         } catch (avatarErr) {
           log.error(`Failed to fetch profile picture for identity ${targetIdentity}`, avatarErr as Error);
-          return {
-            success: false,
-            error: "Failed to fetch profile picture for target_identity",
-            message:
-              avatarErr instanceof Error
-                ? avatarErr.message
-                : "Could not fetch an avatar for that identity. Please confirm the name or persona and try again.",
-          };
+          if (referenceImages.length > 0) {
+            log.warn(
+              `Continuing image generation without target_identity "${targetIdentity}" because message reference image(s) are available`,
+            );
+          } else {
+            return {
+              success: false,
+              error: "Failed to fetch profile picture for target_identity",
+              message:
+                avatarErr instanceof Error
+                  ? avatarErr.message
+                  : "Could not fetch an avatar for that identity. Please confirm the name or persona and try again.",
+            };
+          }
         }
       }
 
@@ -1133,6 +1139,15 @@ export class GenerateImageTool extends BaseTool {
    * Fetch an image URL and convert to base64 (used for profile pictures)
    */
   private async fetchAndConvertImageToBase64(imageUrl: string): Promise<string> {
+    const dataUrlMatches = imageUrl.match(/^data:image\/[^;]+;base64,(.+)$/);
+    if (dataUrlMatches?.[1]) {
+      return dataUrlMatches[1];
+    }
+
+    if (!imageUrl.startsWith("http://") && !imageUrl.startsWith("https://")) {
+      throw new Error(`Profile picture URL is not fetchable: ${imageUrl.split(":")[0] || "unknown"} protocol`);
+    }
+
     const response = await safeDownload(imageUrl, {
       maxSizeMB: MEDIA_LIMITS.MAX_MEDIA_SIZE_MB,
       timeoutMs: 15_000,
