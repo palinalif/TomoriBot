@@ -239,7 +239,7 @@ function isComfyUiHairMaskPrompt(maskPrompt: string | null | undefined): boolean
 function normalizeComfyUiTargetMaskPrompt(maskPrompt: string): string {
   const normalized = maskPrompt.trim();
   if (isComfyUiHairMaskPrompt(normalized)) {
-    return "head hair";
+    return "hair only";
   }
   if (isComfyUiEyeMaskPrompt(normalized)) {
     return "both eyes";
