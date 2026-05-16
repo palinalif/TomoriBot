@@ -96,8 +96,8 @@ export class GenerateImageTool extends BaseTool {
       inpaint_preset: {
         type: "string",
         description:
-          "Optional inpaint edit category. Prefer this over hand-picking raw tuning values. Use 'small_detail' for eyes/buttons/tiny accessories, 'object_recolor' for simple objects, 'garment_recolor' for clothing/fabric recolors, 'background' for backdrop/setting/location edits, or 'extend' for edits that grow beyond the current silhouette.",
-        enum: ["small_detail", "object_recolor", "garment_recolor", "background", "extend"],
+          "Optional inpaint edit category. Prefer this over hand-picking raw tuning values. Use 'tight_recolor' when the edit should stay confined to a smaller region (examples: eye color, hair color, bangs, braids, small accessories, logos, badges, jewelry details, compact object accents). Use 'broad_recolor' when the edit should cover larger connected regions (examples: full shirt/hoodie/cardigan recolor, entire dress or skirt recolor, pants recolor, large object recolor, bigger foreground props, broad scene element recolors). Use 'background' for backdrop/setting/location edits and 'extend' for edits that grow beyond the current silhouette.",
+        enum: ["small_detail", "tight_recolor", "broad_recolor", "background", "extend"],
       },
       inpaint_mode: {
         type: "string",

@@ -103,27 +103,27 @@ const COMFYUI_INPAINT_PRESETS: Record<string, ComfyUiInpaintSettings> = {
     extendFeather: 4,
     extendPadding: 4,
   },
-  object_recolor: {
-    maskThreshold: 0.45,
-    maskGrow: 12,
-    maskFeather: 8,
-    cfg: 10,
-    referenceDenoise: 0.85,
-    extendPixels: 96,
+  tight_recolor: {
+    maskThreshold: 0.5,
+    maskGrow: 4,
+    maskFeather: 3,
+    cfg: 9,
+    referenceDenoise: 0.6,
+    extendPixels: 64,
     extendGrow: 0,
     extendFeather: 4,
-    extendPadding: 8,
+    extendPadding: 4,
   },
-  garment_recolor: {
-    maskThreshold: 0.4,
-    maskGrow: 24,
-    maskFeather: 16,
-    cfg: 11,
+  broad_recolor: {
+    maskThreshold: 0.42,
+    maskGrow: 18,
+    maskFeather: 10,
+    cfg: 10,
     referenceDenoise: 0.9,
     extendPixels: 128,
     extendGrow: 0,
     extendFeather: 6,
-    extendPadding: 12,
+    extendPadding: 10,
   },
   background: {
     maskThreshold: 0.45,
@@ -176,7 +176,22 @@ function readOptionalStringEnv(name: string): string | null {
 
 function normalizeComfyUiInpaintPreset(preset: string | null | undefined): string | null {
   const normalized = preset?.trim().toLowerCase().replace(/[-\s]+/g, "_") ?? "";
-  return normalized && normalized in COMFYUI_INPAINT_PRESETS ? normalized : null;
+  if (!normalized) {
+    return null;
+  }
+  if (normalized in COMFYUI_INPAINT_PRESETS) {
+    return normalized;
+  }
+
+  // Backward compatibility for older prompt/tool labels.
+  if (normalized === "object_recolor" || normalized === "hair_recolor") {
+    return "tight_recolor";
+  }
+  if (normalized === "garment_recolor") {
+    return "broad_recolor";
+  }
+
+  return null;
 }
 
 function inferComfyUiInpaintPreset(options: ComfyUiGenerationOptions): string {
@@ -196,16 +211,19 @@ function inferComfyUiInpaintPreset(options: ComfyUiGenerationOptions): string {
 
   const promptText = `${options.prompt} ${options.maskPrompt ?? ""}`.toLowerCase();
   if (/\b(?:dress|shirt|skirt|pants|coat|jacket|hoodie|cardigan|sweater|uniform|clothing|garment|fabric)\b/.test(promptText)) {
-    return "garment_recolor";
+    return "broad_recolor";
+  }
+  if (/\b(?:hair|bangs|fringe|ponytail|braid|braids|pigtail|pigtails)\b/.test(promptText)) {
+    return "tight_recolor";
   }
   if (/\b(?:color|colour|recolor|recolour|red|blue|green|yellow|pink|purple|black|white|brown|orange|cyan|teal)\b/.test(promptText)) {
-    return "object_recolor";
+    return "broad_recolor";
   }
   if (/\b(?:eye|eyes|button|buttons|logo|badge|gem|jewel|earring|ring|small|tiny)\b/.test(promptText)) {
-    return "small_detail";
+    return "tight_recolor";
   }
 
-  return "object_recolor";
+  return "broad_recolor";
 }
 
 function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): ComfyUiInpaintSettings {
