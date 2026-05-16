@@ -107,8 +107,8 @@ const COMFYUI_INPAINT_PRESETS: Record<string, ComfyUiInpaintSettings> = {
     maskThreshold: 0.5,
     maskGrow: 4,
     maskFeather: 3,
-    cfg: 9,
-    referenceDenoise: 0.6,
+    cfg: 8,
+    referenceDenoise: 0.5,
     extendPixels: 64,
     extendGrow: 0,
     extendFeather: 4,
@@ -116,10 +116,10 @@ const COMFYUI_INPAINT_PRESETS: Record<string, ComfyUiInpaintSettings> = {
   },
   broad_recolor: {
     maskThreshold: 0.42,
-    maskGrow: 18,
-    maskFeather: 10,
-    cfg: 10,
-    referenceDenoise: 0.9,
+    maskGrow: 12,
+    maskFeather: 6,
+    cfg: 8,
+    referenceDenoise: 0.55,
     extendPixels: 128,
     extendGrow: 0,
     extendFeather: 6,
@@ -535,6 +535,8 @@ function buildComfyUiPromptWithDefaults(
     qualityPrefix,
     `localized inpainting edit for the masked ${maskPrompt}: ${prompt}`,
     "change only the masked area",
+    "recolor-only edit when changing colors or materials: keep the same object identity, same garment type, same cut, same fit, same seams, same folds, same silhouette, and same shading structure",
+    "do not redesign or replace the masked object unless the user explicitly asks for a redesign",
     "do not alter any unmasked regions, including face, skin, clothing, pose, body, or background",
     "if the user prompt mentions full-scene or full-character details, treat those as style hints for the masked area only",
     "preserve the unmasked image exactly, same lighting and style",
@@ -623,6 +625,24 @@ function buildComfyUiNegativePrompt(options: ComfyUiGenerationOptions, inpaint: 
     for (const term of extractNegatedPromptTerms(options.prompt)) {
       negativeParts.push(`${term} background`, `${term} backdrop`, `${term} environment`, `${term} setting`);
     }
+  } else {
+    negativeParts.push(
+      "garment redesign",
+      "different clothing type",
+      "changed neckline",
+      "changed sleeves",
+      "changed hem",
+      "changed fit",
+      "new accessories",
+      "removed accessories",
+      "changed body anatomy",
+      "changed pose",
+      "changed face",
+      "changed hairstyle shape",
+      "new pattern not requested",
+      "logo added",
+      "text added",
+    );
   }
 
   return negativeParts.join(", ");
