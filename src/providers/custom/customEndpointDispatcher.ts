@@ -674,6 +674,7 @@ function resolveComfyUiEffectiveInpaintSettings(
   // into the protected subject edge. Keep this path crisp and minimally expanded.
   return {
     ...settings,
+    maskThreshold: Math.min(settings.maskThreshold, 0.4),
     maskGrow: 0,
     maskFeather: 0,
   };
