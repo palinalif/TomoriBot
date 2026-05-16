@@ -620,5 +620,22 @@
     "inputs": {
       "value": "{TOMORI_INPAINT_INVERT_MASK}"
     }
+  },
+  "227": {
+    "class_type": "GrowMaskWithBlur",
+    "inputs": {
+      "mask": [
+        "222",
+        0
+      ],
+      "expand": 0,
+      "incremental_expandrate": 0,
+      "tapered_corners": true,
+      "flip_input": false,
+      "blur_radius": "{TOMORI_INPAINT_MASK_FEATHER}",
+      "lerp_alpha": 1,
+      "decay_factor": 1,
+      "fill_holes": false
+    }
   }
 }
