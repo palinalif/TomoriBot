@@ -239,7 +239,7 @@ function isComfyUiHairMaskPrompt(maskPrompt: string | null | undefined): boolean
 function normalizeComfyUiTargetMaskPrompt(maskPrompt: string): string {
   const normalized = maskPrompt.trim();
   if (isComfyUiHairMaskPrompt(normalized)) {
-    return "visible hair";
+    return "hair strands";
   }
   if (isComfyUiEyeMaskPrompt(normalized)) {
     return "both eyes";
@@ -294,12 +294,12 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
   const hairRecolorAdjustments =
     inferredPreset === "tight_recolor" && hairMaskPrompt && inpaintMode !== "extend"
       ? {
-          // Keep hair recolors tightly localized to visible strands.
-          maskThreshold: Math.max(baseMaskThreshold, 0.62),
-          maskGrow: Math.min(baseMaskGrow, 2),
-          maskFeather: Math.min(baseMaskFeather, 2),
+          // Balance between over-selecting subject vs empty detections.
+          maskThreshold: Math.max(baseMaskThreshold, 0.5),
+          maskGrow: Math.min(baseMaskGrow, 4),
+          maskFeather: Math.min(baseMaskFeather, 3),
           cfg: 8,
-          referenceDenoise: 0.55,
+          referenceDenoise: 0.6,
         }
       : null;
 
