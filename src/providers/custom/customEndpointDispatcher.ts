@@ -1112,7 +1112,7 @@ function buildComfyUiPlaceholderMap(
     TOMORI_SAM_MODEL:
       readOptionalStringEnv("COMFYUI_SAM_MODEL") ??
       readOptionalStringEnv("ANIMA3_SAM_MODEL") ??
-      "sam_hq_vit_b (379MB)",
+      "sam_hq_vit_h (2.57GB)",
     TOMORI_INPAINT_MASK_THRESHOLD: inpaintSettings.maskThreshold,
     TOMORI_INPAINT_MASK_GROW: inpaintSettings.maskGrow,
     TOMORI_INPAINT_MASK_FEATHER: inpaintSettings.maskFeather,
