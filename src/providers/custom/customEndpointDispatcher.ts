@@ -226,33 +226,54 @@ function inferComfyUiInpaintPreset(options: ComfyUiGenerationOptions): string {
   return "broad_recolor";
 }
 
+function isComfyUiEyeMaskPrompt(maskPrompt: string | null | undefined): boolean {
+  return /\b(?:eye|eyes|iris|irises|pupil|pupils)\b/i.test(maskPrompt ?? "");
+}
+
 function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): ComfyUiInpaintSettings {
-  const preset = COMFYUI_INPAINT_PRESETS[inferComfyUiInpaintPreset(options)] ?? DEFAULT_COMFYUI_INPAINT_SETTINGS;
+  const inferredPreset = inferComfyUiInpaintPreset(options);
+  const preset = COMFYUI_INPAINT_PRESETS[inferredPreset] ?? DEFAULT_COMFYUI_INPAINT_SETTINGS;
+  const eyeMaskPrompt = isComfyUiEyeMaskPrompt(options.maskPrompt);
+
+  const baseMaskThreshold = clampNumber(
+    options.maskThreshold ??
+      readOptionalNumberEnv("COMFYUI_INPAINT_MASK_THRESHOLD") ??
+      readOptionalNumberEnv("ANIMA3_INPAINT_MASK_THRESHOLD") ??
+      preset.maskThreshold,
+    0,
+    1,
+  );
+  const baseMaskGrow = clampNumber(
+    options.maskGrow ??
+      readOptionalNumberEnv("COMFYUI_INPAINT_MASK_GROW") ??
+      readOptionalNumberEnv("ANIMA3_INPAINT_MASK_GROW") ??
+      preset.maskGrow,
+    0,
+    128,
+  );
+  const baseMaskFeather = clampNumber(
+    options.maskFeather ??
+      readOptionalNumberEnv("COMFYUI_INPAINT_MASK_FEATHER") ??
+      readOptionalNumberEnv("ANIMA3_INPAINT_MASK_FEATHER") ??
+      preset.maskFeather,
+    0,
+    100,
+  );
+
+  // Eye edits often under-select only tiny iris fragments; widen just this case.
+  const eyeMaskAdjustments =
+    inferredPreset === "tight_recolor" && eyeMaskPrompt
+      ? {
+          maskThreshold: Math.min(baseMaskThreshold, 0.42),
+          maskGrow: Math.max(baseMaskGrow, 8),
+          maskFeather: Math.max(baseMaskFeather, 4),
+        }
+      : null;
+
   return {
-    maskThreshold: clampNumber(
-      options.maskThreshold ??
-        readOptionalNumberEnv("COMFYUI_INPAINT_MASK_THRESHOLD") ??
-        readOptionalNumberEnv("ANIMA3_INPAINT_MASK_THRESHOLD") ??
-        preset.maskThreshold,
-      0,
-      1,
-    ),
-    maskGrow: clampNumber(
-      options.maskGrow ??
-        readOptionalNumberEnv("COMFYUI_INPAINT_MASK_GROW") ??
-        readOptionalNumberEnv("ANIMA3_INPAINT_MASK_GROW") ??
-        preset.maskGrow,
-      0,
-      128,
-    ),
-    maskFeather: clampNumber(
-      options.maskFeather ??
-        readOptionalNumberEnv("COMFYUI_INPAINT_MASK_FEATHER") ??
-        readOptionalNumberEnv("ANIMA3_INPAINT_MASK_FEATHER") ??
-        preset.maskFeather,
-      0,
-      100,
-    ),
+    maskThreshold: eyeMaskAdjustments?.maskThreshold ?? baseMaskThreshold,
+    maskGrow: eyeMaskAdjustments?.maskGrow ?? baseMaskGrow,
+    maskFeather: eyeMaskAdjustments?.maskFeather ?? baseMaskFeather,
     cfg: clampNumber(
       options.cfg ??
         readOptionalNumberEnv("COMFYUI_INPAINT_CFG") ??
@@ -961,7 +982,9 @@ function buildComfyUiPlaceholderMap(
       readOptionalStringEnv("ANIMA3_GROUNDINGDINO_MODEL") ??
       "GroundingDINO_SwinT_OGC (694MB)",
     TOMORI_SAM_MODEL:
-      readOptionalStringEnv("COMFYUI_SAM_MODEL") ?? readOptionalStringEnv("ANIMA3_SAM_MODEL") ?? "sam_vit_b (375MB)",
+      readOptionalStringEnv("COMFYUI_SAM_MODEL") ??
+      readOptionalStringEnv("ANIMA3_SAM_MODEL") ??
+      "sam_hq_vit_b (379MB)",
     TOMORI_INPAINT_MASK_THRESHOLD: inpaintSettings.maskThreshold,
     TOMORI_INPAINT_MASK_GROW: inpaintSettings.maskGrow,
     TOMORI_INPAINT_MASK_FEATHER: inpaintSettings.maskFeather,
