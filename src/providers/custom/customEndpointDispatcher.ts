@@ -236,6 +236,17 @@ function isComfyUiHairMaskPrompt(maskPrompt: string | null | undefined): boolean
   );
 }
 
+function normalizeComfyUiTargetMaskPrompt(maskPrompt: string): string {
+  const normalized = maskPrompt.trim();
+  if (isComfyUiHairMaskPrompt(normalized)) {
+    return "head hair";
+  }
+  if (isComfyUiEyeMaskPrompt(normalized)) {
+    return "both eyes";
+  }
+  return normalized;
+}
+
 function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): ComfyUiInpaintSettings {
   const inferredPreset = inferComfyUiInpaintPreset(options);
   const preset = COMFYUI_INPAINT_PRESETS[inferredPreset] ?? DEFAULT_COMFYUI_INPAINT_SETTINGS;
@@ -283,11 +294,11 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
   const hairRecolorAdjustments =
     inferredPreset === "tight_recolor" && hairMaskPrompt && inpaintMode !== "extend"
       ? {
-          maskThreshold: Math.min(baseMaskThreshold, 0.47),
-          maskGrow: Math.max(baseMaskGrow, 2),
-          maskFeather: Math.max(baseMaskFeather, 2),
+          maskThreshold: Math.min(baseMaskThreshold, 0.4),
+          maskGrow: Math.max(baseMaskGrow, 6),
+          maskFeather: Math.max(baseMaskFeather, 3),
           cfg: 9,
-          referenceDenoise: 0.62,
+          referenceDenoise: 0.65,
         }
       : null;
 
@@ -295,15 +306,15 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
   const hairExtendAdjustments =
     inferredPreset === "extend" && hairMaskPrompt && inpaintMode === "extend"
       ? {
-          maskThreshold: Math.max(baseMaskThreshold, 0.52),
-          maskGrow: Math.min(baseMaskGrow, 2),
-          maskFeather: Math.min(baseMaskFeather, 4),
+          maskThreshold: Math.max(baseMaskThreshold, 0.6),
+          maskGrow: Math.min(baseMaskGrow, 0),
+          maskFeather: Math.min(baseMaskFeather, 2),
           cfg: 9,
-          referenceDenoise: 0.78,
-          extendPixels: 72,
-          extendGrow: 2,
-          extendFeather: 4,
-          extendPadding: 6,
+          referenceDenoise: 0.75,
+          extendPixels: 64,
+          extendGrow: 0,
+          extendFeather: 2,
+          extendPadding: 4,
         }
       : null;
 
@@ -425,7 +436,7 @@ function resolveComfyUiWorkflowMaskPrompt(
   prompt: string,
 ): string {
   if (maskMode !== "background") {
-    return maskPrompt;
+    return normalizeComfyUiTargetMaskPrompt(maskPrompt);
   }
 
   // Generic background terms are poor detection targets for subject-preserving edits.
