@@ -204,7 +204,7 @@
     "class_type": "ImpactConditionalBranch",
     "inputs": {
       "tt_value": [
-        "197",
+        "229",
         0
       ],
       "ff_value": [
@@ -636,6 +636,43 @@
       "lerp_alpha": 1,
       "decay_factor": 1,
       "fill_holes": false
+    }
+  },
+  "228": {
+    "class_type": "ImageCompositeMasked",
+    "inputs": {
+      "destination": [
+        "197",
+        0
+      ],
+      "source": [
+        "178",
+        0
+      ],
+      "x": 0,
+      "y": 0,
+      "resize_source": true,
+      "mask": [
+        "215",
+        0
+      ]
+    }
+  },
+  "229": {
+    "class_type": "ImpactConditionalBranch",
+    "inputs": {
+      "tt_value": [
+        "228",
+        0
+      ],
+      "ff_value": [
+        "197",
+        0
+      ],
+      "cond": [
+        "223",
+        3
+      ]
     }
   }
 }

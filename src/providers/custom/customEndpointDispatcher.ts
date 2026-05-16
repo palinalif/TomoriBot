@@ -129,8 +129,8 @@ const COMFYUI_INPAINT_PRESETS: Record<string, ComfyUiInpaintSettings> = {
     maskThreshold: 0.45,
     maskGrow: 2,
     maskFeather: 2,
-    cfg: 10,
-    referenceDenoise: 0.9,
+    cfg: 12,
+    referenceDenoise: 1,
     extendPixels: 96,
     extendGrow: 0,
     extendFeather: 4,
@@ -528,7 +528,7 @@ function resolveComfyUiEffectiveDenoise(options: ComfyUiGenerationOptions, inpai
   const backgroundMinDenoise = clampNumber(
     readOptionalNumberEnv("COMFYUI_BACKGROUND_INPAINT_MIN_DENOISE") ??
       readOptionalNumberEnv("ANIMA3_BACKGROUND_INPAINT_MIN_DENOISE") ??
-      0.8,
+      1,
     0,
     1,
   );
@@ -548,7 +548,7 @@ function resolveComfyUiEffectiveInpaintSettings(
   // into the protected subject edge. Keep this path crisp and minimally expanded.
   return {
     ...settings,
-    maskGrow: Math.min(settings.maskGrow, 1),
+    maskGrow: 0,
     maskFeather: 0,
   };
 }
@@ -1214,8 +1214,12 @@ export async function generateCustomImageViaEndpoint(params: {
       inpaintExtendFeather,
       inpaintExtendPadding,
     };
-    const diagnosticInpaintSettings = resolveComfyUiInpaintSettings(diagnosticOptions);
     const diagnosticMaskMode = normalizeComfyUiMaskMode(inpaintMaskMode);
+    const diagnosticInpaintSettings = resolveComfyUiEffectiveInpaintSettings(
+      resolveComfyUiInpaintSettings(diagnosticOptions),
+      inpaint === true,
+      diagnosticMaskMode,
+    );
     const diagnosticReferenceDenoise = resolveComfyUiEffectiveDenoise(
       diagnosticOptions,
       inpaint === true,
