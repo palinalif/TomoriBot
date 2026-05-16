@@ -173,6 +173,11 @@ export class GenerateImageTool extends BaseTool {
     return false;
   }
 
+  private formatNoticeValue(value: string, maxLength = 120): string {
+    const cleaned = value.replaceAll("`", "'").replace(/\s+/g, " ").trim();
+    return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength - 3).trimEnd()}...` : cleaned;
+  }
+
   private parseClampedNumber(value: unknown, min: number, max: number): number | null {
     if (value === undefined || value === null || value === "") {
       return null;
@@ -825,6 +830,9 @@ export class GenerateImageTool extends BaseTool {
             mode: localizer(context.locale, imageModeKey),
           }),
         );
+        if (inpaint && maskPrompt) {
+          extraNoticeLines.push(`Mask: \`${this.formatNoticeValue(maskPrompt)}\``);
+        }
         if (referencedMessageUrl) {
           extraNoticeLines.push(
             localizer(context.locale, "genai.image.notice_reference_line", {

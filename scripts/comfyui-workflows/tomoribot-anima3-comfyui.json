@@ -625,7 +625,7 @@
     "class_type": "InvertMask",
     "inputs": {
       "mask": [
-        "222",
+        "215",
         0
       ]
     }
@@ -645,8 +645,25 @@
       "y": 0,
       "resize_source": true,
       "mask": [
+        "226",
+        0
+      ]
+    }
+  },
+  "226": {
+    "class_type": "ImpactConditionalBranch",
+    "inputs": {
+      "tt_value": [
+        "215",
+        0
+      ],
+      "ff_value": [
         "224",
         0
+      ],
+      "cond": [
+        "223",
+        3
       ]
     }
   }
