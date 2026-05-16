@@ -294,11 +294,12 @@ function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): Comfy
   const hairRecolorAdjustments =
     inferredPreset === "tight_recolor" && hairMaskPrompt && inpaintMode !== "extend"
       ? {
-          maskThreshold: Math.min(baseMaskThreshold, 0.4),
-          maskGrow: Math.max(baseMaskGrow, 6),
-          maskFeather: Math.max(baseMaskFeather, 3),
-          cfg: 9,
-          referenceDenoise: 0.65,
+          // Keep hair recolors tightly localized to visible strands.
+          maskThreshold: Math.max(baseMaskThreshold, 0.62),
+          maskGrow: Math.min(baseMaskGrow, 2),
+          maskFeather: Math.min(baseMaskFeather, 2),
+          cfg: 8,
+          referenceDenoise: 0.55,
         }
       : null;
 
