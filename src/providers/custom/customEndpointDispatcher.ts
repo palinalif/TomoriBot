@@ -362,9 +362,10 @@ function buildComfyUiPromptWithDefaults(
       qualityPrefix,
       `surroundings-only inpainting edit: ${prompt}`,
       "replace the editable surroundings with the requested background, environment, location, atmosphere, or setting",
+      "the new surroundings must fill the entire editable canvas edge to edge, all the way to every image border",
       `apply the requested scene change only to ${editableRegion}`,
       `keep the protected ${protectedRegion} unchanged, same shape, color, lighting, position, and style`,
-      "clean edge transition, no halo, no outline, no glow, no bubble around the protected subject",
+      "clean edge transition, no halo, no outline, no glow, no bubble around the protected subject, no inset panel or framed rectangle",
     ].join(", ");
   }
 
@@ -439,6 +440,15 @@ function buildComfyUiNegativePrompt(options: ComfyUiGenerationOptions, inpaint: 
       "bubble around protected subject",
       "outline around protected subject",
       "old background, original background, unchanged background",
+      "centered background panel",
+      "inset rectangle",
+      "framed rectangle",
+      "picture frame",
+      "border around background",
+      "margin around background",
+      "blank outer area",
+      "empty outer area",
+      "background only behind subject",
     );
 
     for (const term of extractNegatedPromptTerms(options.prompt)) {

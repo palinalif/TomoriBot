@@ -204,7 +204,7 @@
     "class_type": "ImpactConditionalBranch",
     "inputs": {
       "tt_value": [
-        "197",
+        "225",
         0
       ],
       "ff_value": [
@@ -619,6 +619,35 @@
     "class_type": "ImpactConvertDataType",
     "inputs": {
       "value": "{TOMORI_INPAINT_INVERT_MASK}"
+    }
+  },
+  "224": {
+    "class_type": "InvertMask",
+    "inputs": {
+      "mask": [
+        "222",
+        0
+      ]
+    }
+  },
+  "225": {
+    "class_type": "ImageCompositeMasked",
+    "inputs": {
+      "destination": [
+        "197",
+        0
+      ],
+      "source": [
+        "178",
+        0
+      ],
+      "x": 0,
+      "y": 0,
+      "resize_source": true,
+      "mask": [
+        "224",
+        0
+      ]
     }
   }
 }
