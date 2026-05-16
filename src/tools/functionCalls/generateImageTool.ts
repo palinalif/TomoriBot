@@ -70,7 +70,7 @@ export class GenerateImageTool extends BaseTool {
       mask_grow: {
         type: "number",
         description:
-          "Optional inpaint tuning: mask expansion in pixels from -128 to 128. Negative values shrink the detected mask for stricter containment, 0 keeps the raw detection, small positive values like 2-8 expand slightly, and larger values like 12-32 give broad recolors room but may spill into nearby areas.",
+          "Optional inpaint tuning: mask expansion in pixels from 0 to 128. Small values like 4-8 are precise; 12-32 gives recolors room; 48+ is loose and may change surrounding areas.",
       },
       mask_feather: {
         type: "number",
@@ -757,7 +757,7 @@ export class GenerateImageTool extends BaseTool {
     const inpaint = this.shouldUseInpaint(args);
     const maskPrompt = (args.mask_prompt as string | undefined)?.trim() || null;
     const maskThreshold = this.parseClampedNumber(args.mask_threshold, 0, 1);
-    const maskGrow = this.parseClampedNumber(args.mask_grow, -128, 128);
+    const maskGrow = this.parseClampedNumber(args.mask_grow, 0, 128);
     const maskFeather = this.parseClampedNumber(args.mask_feather, 0, 100);
     const cfg = this.parseClampedNumber(args.cfg, 0, 30);
     const denoise = this.parseClampedNumber(args.denoise, 0, 1);

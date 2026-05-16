@@ -104,11 +104,11 @@ const COMFYUI_INPAINT_PRESETS: Record<string, ComfyUiInpaintSettings> = {
     extendPadding: 4,
   },
   tight_recolor: {
-    maskThreshold: 0.6,
-    maskGrow: 0,
-    maskFeather: 1,
+    maskThreshold: 0.5,
+    maskGrow: 4,
+    maskFeather: 3,
     cfg: 9,
-    referenceDenoise: 0.55,
+    referenceDenoise: 0.6,
     extendPixels: 64,
     extendGrow: 0,
     extendFeather: 4,
@@ -226,75 +226,50 @@ function inferComfyUiInpaintPreset(options: ComfyUiGenerationOptions): string {
   return "broad_recolor";
 }
 
-function isComfyUiHairMaskPrompt(maskPrompt: string | null | undefined): boolean {
-  return /\b(?:hair|bangs|fringe|ponytail|braid|braids|pigtail|pigtails|hairstyle|locks|strands)\b/i.test(
-    maskPrompt ?? "",
-  );
-}
-
 function resolveComfyUiInpaintSettings(options: ComfyUiGenerationOptions): ComfyUiInpaintSettings {
-  const inferredPreset = inferComfyUiInpaintPreset(options);
-  const preset = COMFYUI_INPAINT_PRESETS[inferredPreset] ?? DEFAULT_COMFYUI_INPAINT_SETTINGS;
-  const hairMaskPrompt = isComfyUiHairMaskPrompt(options.maskPrompt);
-  const maskThreshold = clampNumber(
+  const preset = COMFYUI_INPAINT_PRESETS[inferComfyUiInpaintPreset(options)] ?? DEFAULT_COMFYUI_INPAINT_SETTINGS;
+  return {
+    maskThreshold: clampNumber(
       options.maskThreshold ??
         readOptionalNumberEnv("COMFYUI_INPAINT_MASK_THRESHOLD") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_MASK_THRESHOLD") ??
         preset.maskThreshold,
       0,
       1,
-    );
-  const maskGrow = clampNumber(
+    ),
+    maskGrow: clampNumber(
       options.maskGrow ??
         readOptionalNumberEnv("COMFYUI_INPAINT_MASK_GROW") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_MASK_GROW") ??
         preset.maskGrow,
-      -128,
+      0,
       128,
-    );
-  const maskFeather = clampNumber(
+    ),
+    maskFeather: clampNumber(
       options.maskFeather ??
         readOptionalNumberEnv("COMFYUI_INPAINT_MASK_FEATHER") ??
         readOptionalNumberEnv("ANIMA3_INPAINT_MASK_FEATHER") ??
         preset.maskFeather,
       0,
       100,
-    );
-  const cfg = clampNumber(
-    options.cfg ??
-      readOptionalNumberEnv("COMFYUI_INPAINT_CFG") ??
-      readOptionalNumberEnv("ANIMA3_INPAINT_CFG") ??
-      preset.cfg,
-    0,
-    30,
-  );
-  const referenceDenoise = clampNumber(
-    options.referenceDenoise ??
-      options.denoise ??
-      readOptionalNumberEnv("COMFYUI_INPAINT_DENOISE") ??
-      readOptionalNumberEnv("ANIMA3_INPAINT_DENOISE") ??
-      preset.referenceDenoise,
-    0,
-    1,
-  );
-
-  const tightenedHairSettings =
-    inferredPreset === "tight_recolor" && hairMaskPrompt
-      ? {
-          maskThreshold: Math.max(maskThreshold, 0.62),
-          maskGrow: Math.min(maskGrow, -2),
-          maskFeather: Math.min(maskFeather, 1),
-          cfg: Math.min(cfg, 9),
-          referenceDenoise: Math.min(referenceDenoise, 0.55),
-        }
-      : null;
-
-  return {
-    maskThreshold: tightenedHairSettings?.maskThreshold ?? maskThreshold,
-    maskGrow: tightenedHairSettings?.maskGrow ?? maskGrow,
-    maskFeather: tightenedHairSettings?.maskFeather ?? maskFeather,
-    cfg: clampNumber(tightenedHairSettings?.cfg ?? cfg, 0, 30),
-    referenceDenoise: clampNumber(tightenedHairSettings?.referenceDenoise ?? referenceDenoise, 0, 1),
+    ),
+    cfg: clampNumber(
+      options.cfg ??
+        readOptionalNumberEnv("COMFYUI_INPAINT_CFG") ??
+        readOptionalNumberEnv("ANIMA3_INPAINT_CFG") ??
+        preset.cfg,
+      0,
+      30,
+    ),
+    referenceDenoise: clampNumber(
+      options.referenceDenoise ??
+        options.denoise ??
+        readOptionalNumberEnv("COMFYUI_INPAINT_DENOISE") ??
+        readOptionalNumberEnv("ANIMA3_INPAINT_DENOISE") ??
+        preset.referenceDenoise,
+      0,
+      1,
+    ),
     extendPixels: clampNumber(
       options.inpaintExtendPixels ??
         readOptionalNumberEnv("COMFYUI_INPAINT_EXTEND_PIXELS") ??
