@@ -202,6 +202,10 @@ function normalizeComfyUiMaskMode(mode: string | null | undefined): "target" | "
   return mode?.trim().toLowerCase() === "background" ? "background" : "target";
 }
 
+function isComfyUiBackgroundMaskPrompt(maskPrompt: string): boolean {
+  return /\b(?:background|backdrop|surroundings|environment|scene|setting)\b/i.test(maskPrompt);
+}
+
 function normalizeComfyUiExtendDirection(direction: string | null | undefined): string {
   const normalized = direction?.trim().toLowerCase() || "down";
   return [
@@ -243,7 +247,12 @@ function resolveComfyUiExtendOffset(direction: string, pixels: number): { x: num
   }
 }
 
-function buildComfyUiPromptWithDefaults(options: ComfyUiGenerationOptions, inpaint: boolean, maskMode: string): string {
+function buildComfyUiPromptWithDefaults(
+  options: ComfyUiGenerationOptions,
+  inpaint: boolean,
+  maskMode: string,
+  invertMask: boolean,
+): string {
   const prompt = options.prompt.trim();
   const qualityPrefix = "masterpiece, best quality, newest, (score_9, score_8, score_7:0.25)";
   if (!inpaint) {
@@ -252,12 +261,16 @@ function buildComfyUiPromptWithDefaults(options: ComfyUiGenerationOptions, inpai
 
   const maskPrompt = options.maskPrompt?.trim() || "masked region";
   if (maskMode === "background") {
+    const protectedRegion = invertMask ? maskPrompt : "main foreground subject";
+    const editableRegion = invertMask
+      ? `the surroundings outside the protected ${maskPrompt}`
+      : "the detected background/surroundings region";
     return [
       qualityPrefix,
       `surroundings-only inpainting edit: ${prompt}`,
       "replace the editable surroundings with the requested background, environment, location, atmosphere, or setting",
-      `apply the requested scene change only outside the protected ${maskPrompt}`,
-      `keep the protected ${maskPrompt} unchanged, same shape, color, lighting, position, and style`,
+      `apply the requested scene change only to ${editableRegion}`,
+      `keep the protected ${protectedRegion} unchanged, same shape, color, lighting, position, and style`,
       "clean edge transition, no halo, no outline, no glow, no bubble around the protected subject",
     ].join(", ");
   }
@@ -699,13 +712,14 @@ function buildComfyUiPlaceholderMap(
   const inpaintSettings = resolveComfyUiInpaintSettings(options);
   const firstReferenceImage = referencePayload[0];
   const maskMode = inpaint ? normalizeComfyUiMaskMode(options.inpaintMaskMode) : "target";
+  const invertInpaintMask = maskMode === "background" && !isComfyUiBackgroundMaskPrompt(maskPrompt);
   const denoise = resolveComfyUiEffectiveDenoise(options, inpaint, maskMode);
   const inpaintMode = inpaint ? normalizeComfyUiInpaintMode(options.inpaintMode) : "normal";
   const extendDirection = normalizeComfyUiExtendDirection(options.inpaintExtendDirection);
   const extendOffset = resolveComfyUiExtendOffset(extendDirection, inpaintSettings.extendPixels);
   const placeholderMap: Record<string, WorkflowPlaceholderValue> = {
     TOMORI_PROMPT: options.prompt,
-    TOMORI_PROMPT_WITH_DEFAULTS: buildComfyUiPromptWithDefaults(options, inpaint, maskMode),
+    TOMORI_PROMPT_WITH_DEFAULTS: buildComfyUiPromptWithDefaults(options, inpaint, maskMode, invertInpaintMask),
     TOMORI_NEGATIVE_PROMPT: buildComfyUiNegativePrompt(options, inpaint, maskMode),
     TOMORI_MODEL: endpoint.model_name ?? endpoint.display_name,
     TOMORI_MODEL_NAME: endpoint.model_name ?? endpoint.display_name,
@@ -724,7 +738,7 @@ function buildComfyUiPlaceholderMap(
       firstReferenceImage && typeof firstReferenceImage.mimeType === "string" ? firstReferenceImage.mimeType : "",
     TOMORI_INPAINT: inpaint,
     TOMORI_INPAINT_MASK_MODE: maskMode,
-    TOMORI_INPAINT_INVERT_MASK: maskMode === "background",
+    TOMORI_INPAINT_INVERT_MASK: invertInpaintMask,
     TOMORI_INPAINT_MODE: inpaintMode,
     TOMORI_MASK_PROMPT: maskPrompt,
     TOMORI_GROUNDINGDINO_MODEL:
