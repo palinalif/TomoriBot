@@ -269,7 +269,7 @@
         0
       ],
       "mask": [
-        "222",
+        "227",
         0
       ],
       "noise_mask": true
@@ -349,7 +349,7 @@
       "incremental_expandrate": 0,
       "tapered_corners": true,
       "flip_input": false,
-      "blur_radius": "{TOMORI_INPAINT_MASK_FEATHER}",
+      "blur_radius": 0,
       "lerp_alpha": 1,
       "decay_factor": 1,
       "fill_holes": false
@@ -359,7 +359,7 @@
     "class_type": "MaskToImage",
     "inputs": {
       "mask": [
-        "222",
+        "227",
         0
       ]
     }
@@ -382,7 +382,7 @@
         0
       ],
       "mask": [
-        "222",
+        "227",
         0
       ]
     }
@@ -435,7 +435,7 @@
       "y": 0,
       "resize_source": true,
       "mask": [
-        "222",
+        "227",
         0
       ]
     }
@@ -625,7 +625,7 @@
     "class_type": "InvertMask",
     "inputs": {
       "mask": [
-        "215",
+        "227",
         0
       ]
     }
@@ -645,25 +645,8 @@
       "y": 0,
       "resize_source": true,
       "mask": [
-        "227",
-        0
-      ]
-    }
-  },
-  "226": {
-    "class_type": "ImpactConditionalBranch",
-    "inputs": {
-      "tt_value": [
-        "215",
-        0
-      ],
-      "ff_value": [
         "224",
         0
-      ],
-      "cond": [
-        "223",
-        3
       ]
     }
   },
@@ -671,14 +654,14 @@
     "class_type": "GrowMaskWithBlur",
     "inputs": {
       "mask": [
-        "226",
+        "222",
         0
       ],
-      "expand": -4,
+      "expand": 0,
       "incremental_expandrate": 0,
       "tapered_corners": true,
       "flip_input": false,
-      "blur_radius": 0,
+      "blur_radius": "{TOMORI_INPAINT_MASK_FEATHER}",
       "lerp_alpha": 1,
       "decay_factor": 1,
       "fill_holes": false
