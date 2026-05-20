@@ -2112,7 +2112,7 @@ This means users must invoke personas more deliberately instead of accidentally 
         title: `Deliberate Tool Mode Guide`,
         embed_description: `Deliberate Tool Mode keeps tool declarations out of ordinary chat turns unless the message looks like it needs a tool.`,
         what_title: `What It Does`,
-        what_description: `When deliberate tool mode is active, I first checks the message for explicit tool intent. If no intent is found, tool declarations are removed for that turn, which reduces prompt size and helps smaller/local models answer faster.`,
+        what_description: `When deliberate tool mode is active, I first check the message for explicit tool intent. If no intent is found, tool declarations are removed for that turn, which reduces prompt size and helps smaller/local models answer faster.`,
         intent_title: `What Counts As Tool Intent`,
         intent_description: `Built-in triggers cover common requests like reminders, web search, memory updates, cross-channel messages, image/video/voice generation, media analysis, thread creation, and message actions.
 
