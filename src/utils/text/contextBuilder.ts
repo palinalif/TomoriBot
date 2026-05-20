@@ -1406,6 +1406,16 @@ async function buildContextNative({
         .toLowerCase()
     : null;
 
+  // Returns true if the memory's channel tags (tags starting with '#') allow it in the current channel.
+  // Memories with no channel tags are always allowed. Channel tags must exactly match the channel name.
+  const isChannelAllowed = (tags: string[]): boolean => {
+    if (!tomoriConfig.channel_memory_enabled) return true;
+    const normalizedTags = tags.map((t) => t.replace(/^["']+|["']+$/g, ""));
+    const channelTags = normalizedTags.filter((t) => t.startsWith("#"));
+    if (channelTags.length === 0) return true;
+    return channelTags.some((t) => t.slice(1).toLowerCase() === channelName.toLowerCase());
+  };
+
   // 4. Server Memories / Conversation Memories
   // Skip server memories for user impersonation (bot-specific knowledge should not leak)
   if (
@@ -1429,15 +1439,15 @@ async function buildContextNative({
 				ORDER BY created_at DESC
 			`;
 
-      const filteredServerRows = conversationCorpus
-        ? serverMemoryRows.filter(
-            (row) =>
-              (row.tags ?? []).length > 0 &&
-              (row.tags ?? []).some((tag) =>
-                conversationCorpus.includes(tag.replace(/^["']+|["']+$/g, "").toLowerCase()),
-              ),
-          )
-        : serverMemoryRows;
+      const filteredServerRows = serverMemoryRows.filter((row) => {
+        const tags = row.tags ?? [];
+        const normalizedTags = tags.map((t) => t.replace(/^["']+|["']+$/g, ""));
+        const contentTags = normalizedTags.filter((t) => !t.startsWith("#"));
+        const passesTagFilter = conversationCorpus
+          ? contentTags.length > 0 && contentTags.some((tag) => conversationCorpus.includes(tag.toLowerCase()))
+          : true;
+        return passesTagFilter && isChannelAllowed(tags);
+      });
 
       serverMemoryLines = filteredServerRows.map((row) =>
         formatMemoryWithId(row.server_memory_id, row.content, row.tags ?? []),
@@ -1930,15 +1940,15 @@ async function buildContextNative({
           const activeLineageId =
             personaLineageId ?? snapshot?.tomoriState?.persona_lineage_id ?? tomoriState?.persona_lineage_id ?? 0;
           const personalMemoryRows = await loadPersonalMemoriesForUserLineage(userRow.user_id, activeLineageId, true);
-          const filteredPersonalRows = conversationCorpus
-            ? personalMemoryRows.filter(
-                (row) =>
-                  (row.tags ?? []).length > 0 &&
-                  (row.tags ?? []).some((tag) =>
-                    conversationCorpus.includes(tag.replace(/^["']+|["']+$/g, "").toLowerCase()),
-                  ),
-              )
-            : personalMemoryRows;
+          const filteredPersonalRows = personalMemoryRows.filter((row) => {
+            const tags = row.tags ?? [];
+            const normalizedTags = tags.map((t) => t.replace(/^["']+|["']+$/g, ""));
+            const contentTags = normalizedTags.filter((t) => !t.startsWith("#"));
+            const passesTagFilter = conversationCorpus
+              ? contentTags.length > 0 && contentTags.some((tag) => conversationCorpus.includes(tag.toLowerCase()))
+              : true;
+            return passesTagFilter && isChannelAllowed(tags);
+          });
           if (filteredPersonalRows.length > 0) {
             const processedMemories = await Promise.all(
               filteredPersonalRows.map(async (memoryRow, index) => {
@@ -2241,6 +2251,7 @@ async function buildContextNative({
               apiKey: creds.apiKey,
               maxResults: DOCUMENT_MAX_RESULTS,
               minSimilarity: DOCUMENT_MIN_SIMILARITY,
+              channelName: tomoriConfig.channel_memory_enabled ? channelName : undefined,
             });
 
             const documentContext = formatRetrievedChunksForPrompt(chunks);

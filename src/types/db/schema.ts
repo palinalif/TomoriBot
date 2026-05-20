@@ -480,6 +480,7 @@ export const tomoriConfigSchema = z.object({
   web_search_enabled: z.boolean().default(true), // New: Added for Web Search permission (Brave Search)
   personal_memories_enabled: z.boolean().default(true),
   memory_tagging_enabled: z.boolean().default(false),
+  channel_memory_enabled: z.boolean().default(false),
   humanizer_degree: z.nativeEnum(HumanizerDegree).default(HumanizerDegree.LIGHT),
   thinking_level: z.enum(THINKING_LEVEL_VALUES).default(DEFAULT_THINKING_LEVEL), // Added April 2026 - General reasoning/thinking effort hint
   user_byok_mode: z.boolean().default(false), // Added April 2026 - Require per-user personal providers for user-attributed triggers

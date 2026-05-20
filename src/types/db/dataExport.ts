@@ -176,6 +176,7 @@ export const serverConfigExportSchema = z.object({
   tool_use_enabled: z.boolean().optional(),
   prompt_snapshot_enabled: z.boolean().optional(),
   memory_tagging_enabled: z.boolean().optional(),
+  channel_memory_enabled: z.boolean().optional(),
 });
 
 export type ServerConfigExport = z.infer<typeof serverConfigExportSchema>;

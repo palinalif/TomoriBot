@@ -399,6 +399,7 @@ CREATE TABLE IF NOT EXISTS tomori_configs (
   self_teaching_enabled BOOLEAN DEFAULT true,
   personal_memories_enabled BOOLEAN DEFAULT true,
   memory_tagging_enabled BOOLEAN DEFAULT false,
+  channel_memory_enabled BOOLEAN DEFAULT false,
   imagegen_enabled BOOLEAN DEFAULT true,
   videogen_enabled BOOLEAN DEFAULT false,
   thread_creation_enabled BOOLEAN DEFAULT true,
@@ -2676,3 +2677,6 @@ SELECT add_column_if_not_exists('user_saved_provider_configs', 'llm_max_output_t
 
 -- Memory tag filtering toggle (May 2026)
 SELECT add_column_if_not_exists('tomori_configs', 'memory_tagging_enabled', 'BOOLEAN', 'false');
+
+-- Channel memory toggle (May 2026)
+SELECT add_column_if_not_exists('tomori_configs', 'channel_memory_enabled', 'BOOLEAN', 'false');
