@@ -97,6 +97,7 @@ export const tomoriSchema = z.object({
   speech_voice_sample_id: z.number().int().nullable().optional(), // Added Phase 4.1 - FK → voice_samples; used for local TTS clone path
   speech_voice_id: z.string().nullable().optional(), // Added Phase 4.1 - Preset voice ID for provider-hosted voices (e.g. ElevenLabs)
   speech_voice_name: z.string().nullable().optional(), // Added Phase 4.1 - Cached friendly voice display name (either path)
+  speech_voice_design_prompt: z.string().nullable().optional(), // Added May 2026 - Persona voice-design prompt for instruct-capable local TTS endpoints
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
@@ -546,6 +547,8 @@ export const tomoriConfigSchema = z.object({
   self_teaching_enabled: z.boolean().default(true),
   web_search_enabled: z.boolean().default(true), // New: Added for Web Search permission (Brave Search)
   personal_memories_enabled: z.boolean().default(true),
+  memory_tagging_enabled: z.boolean().default(false),
+  channel_memory_enabled: z.boolean().default(false),
   humanizer_degree: z.nativeEnum(HumanizerDegree).default(HumanizerDegree.LIGHT),
   thinking_level: z.enum(THINKING_LEVEL_VALUES).default(DEFAULT_THINKING_LEVEL), // Added April 2026 - General reasoning/thinking effort hint
   user_byok_mode: z.boolean().default(false), // Added April 2026 - Require per-user personal providers for user-attributed triggers
@@ -722,6 +725,7 @@ export const serverMemorySchema = z.object({
   }, z.number().int().nonnegative()),
   user_id: z.number().nullable(), // Nullable - set to NULL if user deleted
   content: z.string(),
+  tags: z.preprocess((v) => (Array.isArray(v) ? v : []), z.array(z.string().max(32)).max(5)),
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });
@@ -764,6 +768,7 @@ export const personalMemorySchema = z.object({
     return value;
   }, z.number().int().nonnegative()),
   content: z.string(),
+  tags: z.preprocess((v) => (Array.isArray(v) ? v : []), z.array(z.string().max(32)).max(5)),
   created_at: z.date().optional(),
   updated_at: z.date().optional(),
 });

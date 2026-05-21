@@ -228,10 +228,17 @@ export async function execute(
         const chosenSample = isClear ? null : (sampleRows.find((s) => String(s.sample_id) === chosenValue) ?? null);
         const sampleIdToAssign = chosenSample?.sample_id ?? null;
 
+        const voiceNameIfDesignPromptRemains = selectedPersona.speech_voice_design_prompt?.trim()
+          ? "VoiceDesign"
+          : null;
         const updatedTomori = await updateTomori(selectedPersona.tomori_id, {
           speech_voice_sample_id: sampleIdToAssign,
-          // Clear preset voice fields when assigning a local sample.
-          ...(isClear ? {} : { speech_voice_id: null, speech_voice_name: null }),
+          // Keep any saved VoiceDesign prompt as reusable persona data. In auto
+          // endpoint mode, speech_voice_name marks which saved voice type is
+          // active, so assigning a sample makes clone synthesis the active path.
+          ...(isClear
+            ? { speech_voice_name: voiceNameIfDesignPromptRemains }
+            : { speech_voice_id: null, speech_voice_name: chosenSample?.name ?? null }),
         });
 
         if (!updatedTomori) {
@@ -362,7 +369,8 @@ export async function execute(
 
       const updatedTomori = await updateTomori(selectedPersona.tomori_id, {
         speech_voice_id: chosenVoice?.voiceId ?? null,
-        speech_voice_name: chosenVoice?.name ?? null,
+        speech_voice_name:
+          chosenVoice?.name ?? (selectedPersona.speech_voice_design_prompt?.trim() ? "VoiceDesign" : null),
         elevenlabs_voice_id: chosenVoice?.voiceId ?? null,
         elevenlabs_voice_name: chosenVoice?.name ?? null,
         speech_voice_sample_id: null,

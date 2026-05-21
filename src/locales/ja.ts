@@ -366,6 +366,15 @@ export default {
       "voice-assign": {
         description: `ペルソナに音声出力用の声を割り当てます。`,
       },
+      "voice-design": {
+        description: `ペルソナの VoiceDesign プロンプトを管理します。`,
+        set: {
+          description: `ペルソナに VoiceDesign 用の声質プロンプトを設定します。`,
+        },
+        remove: {
+          description: `ペルソナの VoiceDesign プロンプトを削除します。`,
+        },
+      },
       elevenlabs: {
         description: `ElevenLabs の音声生成と文字起こしを接続します。`,
         key_description: `ElevenLabs APIキー。`,
@@ -374,7 +383,7 @@ export default {
         key_validation_failed_title: `キー検証に失敗しました`,
         key_validation_failed_description: `この ElevenLabs キーを検証できませんでした。キーを確認して再試行してください。`,
         success_title: `ElevenLabs を接続しました`,
-        success_description: `ElevenLabs の音声生成と文字起こしエンドポイントを接続しました。\`/config speech voice-assign\` でペルソナに声を割り当てます。`,
+        success_description: `ElevenLabs の音声生成と文字起こしエンドポイントを接続しました。\`/speech voice-assign\` でペルソナに声を割り当てます。`,
       },
       chatterbox: {
         description: `Chatterbox の音声設定を管理します。`,
@@ -436,9 +445,9 @@ export default {
       voice_assign: {
         description: `ペルソナに音声出力用の声を割り当てます。`,
         no_speech_endpoint_title: `音声エンドポイントがありません`,
-        no_speech_endpoint_description: `まず \`/config custom-endpoint add\` で音声エンドポイントを登録してください。`,
+        no_speech_endpoint_description: `まず \`/provider custom-endpoint add\` で音声エンドポイントを登録してください。`,
         no_sample_title: `音声サンプルがありません`,
-        no_sample_description: `まず \`/config speech voice-add\` でローカル音声サンプルを追加してください。`,
+        no_sample_description: `まず \`/speech voice-add\` でローカル音声サンプルを追加してください。`,
         select_persona_title: `音声を設定するペルソナを選択`,
         clear_choice_label: `音声を無効化`,
         clear_choice_description: `このペルソナの現在の音声設定を削除します。`,
@@ -452,6 +461,23 @@ export default {
         success_description: `**{persona}** は今後、ボイスメッセージで **{voice}** を使用します。`,
         cleared_title: `ペルソナの音声を解除しました`,
         cleared_description: `**{persona}** の音声設定を削除しました。`,
+      },
+      voice_design: {
+        description: `ペルソナに VoiceDesign 用の声質プロンプトを設定します。`,
+        prompt_description: `任意の声質説明。省略すると大きめの入力欄を開きます。`,
+        unsupported_endpoint_title: `VoiceDesign エンドポイントが有効ではありません`,
+        unsupported_endpoint_description: `VoiceDesign プロンプトを設定する前に、Supports Instruct が有効なローカルTTSエンドポイントを選択してください。`,
+        select_persona_title: `VoiceDesign を設定するペルソナを選択`,
+        modal_title: `VoiceDesign プロンプト`,
+        update_modal_title: `VoiceDesign プロンプトを更新`,
+        prompt_label: `声質説明`,
+        prompt_help: `話者の年齢、声色、質感、アクセント、速度、感情、話し方を説明してください。`,
+        prompt_placeholder: `落ち着いた大人のナレーター。ゆっくりめで、柔らかく息成分のある、安心感のある話し方。`,
+        prompt_required_description: `VoiceDesign プロンプトを入力してください。`,
+        success_title: `VoiceDesign プロンプトを設定しました`,
+        success_description: `**{persona}** はローカルボイスメッセージで次の VoiceDesign プロンプトを使用します:\n\n> {preview}`,
+        cleared_title: `VoiceDesign プロンプトを削除しました`,
+        cleared_description: `**{persona}** から VoiceDesign プロンプトを削除しました。`,
       },
       validation: {
         sample_not_found: `音声サンプルが見つかりません。`,
@@ -480,7 +506,8 @@ export default {
         file_too_large_description: `プリセットファイルは{max_size} MB以下にしてください。`,
         download_failed: `添付ファイルのダウンロードに失敗しました。もう一度お試しください。`,
         invalid_json: `ファイルを有効なJSONとして解析できませんでした。`,
-        not_a_preset: `これは対応しているSillyTavernプリセットではないようです — Prompt Manager の\`prompts\`配列、または legacy の\`context.story_string\` + \`sysprompt.content\` が必要です。`,
+        not_a_preset_title: `未対応のプリセット形式`,
+        not_a_preset_description: `これは対応しているSillyTavernプリセットではないようです。対応しているのは **Chat Completions** プリセットのみです — Prompt Manager の \`prompts\` 配列、または \`context.story_string\` + \`sysprompt.content\` を使った旧形式のみです。\n\n**Text-completions プリセット**（\`instruct\` ブロックを使用するもの）は対応していません。`,
         no_nodes: `このプリセットに使用可能なプロンプトノードが見つかりませんでした。`,
         success_title: `プリセットをインポートしました`,
         success_description: `**{name}**をインポートしました。
@@ -1539,7 +1566,7 @@ export default {
         },
         qwen3tts: {
           title: `Qwen3-TTS 音声`,
-          description: `Qwen3-TTS 12Hz Base は中国語・英語・日本語・韓国語・ドイツ語・フランス語・ロシア語・ポルトガル語・スペイン語・イタリア語の 10 言語に対応した多言語音声クローンサーバーです。感情マークアップなしのプレーンテキストのみ受け付けます。登録時は **Script Markup（スクリプトマークアップ）** を **Plain（通常テキスト）** に設定してください。`,
+          description: `Qwen3-TTS 12Hz Base は中国語・英語・日本語・韓国語・ドイツ語・フランス語・ロシア語・ポルトガル語・スペイン語・イタリア語の 10 言語に対応した多言語音声クローンサーバーです。同じ Qwen3-TTS サーバーで、自然言語の声質説明を使う VoiceDesign モデルを起動したり、1つのエンドポイントURLでクローンと VoiceDesign のリクエストを自動判定したりできます。どのモードも感情マークアップなしのプレーンテキストのみ受け付けます。登録時は **Script Markup（スクリプトマークアップ）** を **Plain（通常テキスト）** に設定してください。`,
           steps_title: `設定手順`,
           steps_description: `**前提条件**
 • Python 3.10+
@@ -1551,9 +1578,9 @@ export default {
 3. \`requirements.txt\` をインストールします。
 4. *(GPU)* PyTorch を再インストール: \`pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124\`
 5. *(任意)* 高速化のため flash-attn をインストール — 手順 4 の後 \`pip install wheel\`、次に \`pip install flash-attn --no-build-isolation\` (Winは20-40分)。初回はスキップ。
-6. \`server.py\` を起動します。
-7. {custom_endpoint_add} で登録: Capability（機能）は \`Speech\`、API Style（API スタイル）は \`TTS-Clone\`、Script Markup（スクリプトマークアップ）は \`Plain\` を選択。
-8. {model_speech} で選択し、{voice_add} と {voice_assign} を実行します。`,
+6. 音声クローンには \`server.py\`、Qwen3-TTS VoiceDesign のみには \`server.py --mode voice-design\`、1つのURLでリクエストごとにクローン/VoiceDesignを判定するには \`server.py --mode auto\` を起動します。
+7. {custom_endpoint_add} で登録: Capability（機能）は \`Speech\`、API Style（API スタイル）は \`TTS-Clone\`、Script Markup（スクリプトマークアップ）は \`Plain\` を選択。VoiceDesign では音声ソースモードに \`VoiceDesign\` を選ぶと、TomoriBot が自動的に instruct 対応として扱います。auto モードでは、同じサーバーURLを指すクローン用と VoiceDesign 用のエンドポイントを登録できます。
+8. {model_speech} で選択します。クローンモードでは {voice_add} と {voice_assign}、VoiceDesign では各ペルソナに {voice_design_set} を実行します。`,
         },
         irodoritts: {
           title: `IrodoriTTS 音声`,
@@ -3044,7 +3071,9 @@ Prompt Guidance Rescale: {cfg_rescale}
           auth_token_description: `保護されたエンドポイント用のBearerトークン（任意）。`,
           success_title: `カスタムエンドポイントを追加しました`,
           success_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。\`/config model\` から選択できます。`,
-          speech_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。次に \`/config speech voice-add\` で音声サンプルを追加し、\`/config speech voice-assign\` で割り当ててください。`,
+          speech_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。次に \`/speech voice-add\` で音声サンプルを追加し、\`/speech voice-assign\` で割り当ててください。`,
+          speech_voice_design_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。次に \`/model speech\` で選択し、\`/speech voice-design set\` でペルソナの声質プロンプトを設定してください。`,
+          speech_auto_next_steps_description: `**{display_name}** をラベル **{label}** の **{capability}** として追加しました。次に \`/model speech\` で選択してください。クローン用ペルソナは \`/speech voice-add\` と \`/speech voice-assign\`、VoiceDesign 用ペルソナは \`/speech voice-design set\` を使用します。`,
         },
         edit: {
           description: `登録済みのラベル付きカスタムエンドポイントを編集します。`,
@@ -3098,6 +3127,7 @@ Prompt Guidance Rescale: {cfg_rescale}
         validation: {
           invalid_label: `ラベルは英小文字・数字・アンダースコア・ハイフンのみ使用でき、長さは1〜40文字です。`,
           unreachable: `そのエンドポイントに接続できませんでした: {reason}`,
+          local_address_blocked: `パーソナルエンドポイントはデフォルトでlocalhostとプライベートIPをブロックします。セルフホストの場合は、ローカルアドレスを許可するために \`.env\` に \`ALLOW_PERSONAL_LOCAL_ENDPOINTS=true\` を設定してください。`,
           workflow_required: `ComfyUI の画像/動画エンドポイントではワークフローJSONの添付が必要です。`,
           model_name_required: `テキストと埋め込みのエンドポイントではモデル名が必要です。`,
           transcription_model_required: `文字起こしエンドポイントには \`large-v3\` や \`whisper-1\` などのモデル識別子が必要です。`,
@@ -3129,6 +3159,14 @@ Prompt Guidance Rescale: {cfg_rescale}
           text_cap_vision_description: `メッセージに添付された画像を解析できる`,
           text_cap_structoutput: `構造化出力`,
           text_cap_structoutput_description: `制約付きJSONスキーマ出力に対応している`,
+          voice_mode_label: `音声ソースモード`,
+          voice_mode_description: `アップロード済み参照音声を使うか、自然言語の声質プロンプトを使うか`,
+          voice_mode_clone: `音声クローン`,
+          voice_mode_clone_description: `アップロード済み音声サンプルを話者参照として使用`,
+          voice_mode_design: `VoiceDesign`,
+          voice_mode_design_description: `ペルソナの声質プロンプトを instruct として送信`,
+          voice_mode_auto: `自動`,
+          voice_mode_auto_description: `各ペルソナの設定に応じて、音声サンプルまたは VoiceDesign プロンプトを使用`,
           script_markup_label: `スクリプトマークアップ形式`,
           script_markup_description: `このエンドポイントに送信するスピーチテキストでのマークアップ形式`,
           script_markup_plain: `プレーン`,
@@ -3138,7 +3176,7 @@ Prompt Guidance Rescale: {cfg_rescale}
           script_markup_emoji: `絵文字`,
           script_markup_emoji_description: `絵文字感情キュー（😊、😢など）をそのまま渡す`,
           supports_instruct_label: `指示対応`,
-          supports_instruct_description: `スピーチスクリプトと共に音声指示テキストを受け付けるか`,
+          supports_instruct_description: `スピーチスクリプトと共に音声指示テキストを受け付けるか。VoiceDesign モードでは自動的に有効になります。`,
           transcription_model_label: `モデル識別子`,
           transcription_model_placeholder: `例: large-v3, whisper-1`,
           transcription_language_label: `言語ヒント`,
@@ -3471,6 +3509,8 @@ Prompt Guidance Rescale: {cfg_rescale}
         current_byok_disabled_value: `無効。個人プロバイダーが有効でない場合は、ユーザー発言でもサーバープロバイダーを使えます。{toggle_command} で切り替えられます。`,
         already_setup_next_steps_field: `次のステップ`,
         already_setup_next_steps_value: `{provider_add_command} で別のサーバープロバイダーを保存し、{model_text_command} でアクティブなテキストモデルを切り替え、{byok_toggle_command} でBYOKモードを切り替えられます。メンバー向けの個人プロバイダー手順は {help_personal_provider} を確認してください。`,
+        broken_state_title: `設定が破損しています`,
+        broken_state_description: `このサーバーにはペルソナが存在しますが、設定が不完全です。サーバー設定またはAIモデルの参照が見つからないか、削除されています。\n\n{model_text_command} で有効なモデルを割り当てるか、{provider_add_command} で新しいプロバイダーを登録してください。問題が解決しない場合は、サーバー管理者にお問い合わせください。`,
         already_setup_description: `このサーバーでは既に設定が完了しています。設定を変更するには、\`/config\`、\`/persona\`、\`/memory\`、\`/server\`などの他のコマンドを使用してください。
 
 				プロバイダーを変更したい場合は、\`/config provider add\`で新しいプロバイダーを登録し、\`/config model text\`でアクティブにしてください。`,
@@ -3802,11 +3842,11 @@ Prompt Guidance Rescale: {cfg_rescale}
           success_title: `ElevenLabs APIキーが設定されました`,
           success_description: `ElevenLabs APIキーが正常に検証、暗号化、保存されました。設定されている場所では音声文字起こしとペルソナの音声出力が利用可能になります。`,
           success_voices_title: `プリメイド音声（無料プラン対応）`,
-          success_voices_description: `プリメイド音声は無料プランでも利用できます。一覧は [ElevenLabs Premade Voices](https://elevenlabs-sdk.mintlify.app/voices/premade-voices) で確認し、/config speech voice-assign で各ペルソナに割り当てましょう。`,
+          success_voices_description: `プリメイド音声は無料プランでも利用できます。一覧は [ElevenLabs Premade Voices](https://elevenlabs-sdk.mintlify.app/voices/premade-voices) で確認し、/speech voice-assign で各ペルソナに割り当てましょう。`,
           success_custom_voices_title: `ライブラリ音声・カスタム音声（有料プラン必須）`,
-          success_custom_voices_description: `ライブラリ音声とカスタム（クローン・生成）音声はどちらもElevenLabsの有料プランが必要です。アカウントに追加した音声は /config speech voice-assign に自動で表示されます。`,
+          success_custom_voices_description: `ライブラリ音声とカスタム（クローン・生成）音声はどちらもElevenLabsの有料プランが必要です。アカウントに追加した音声は /speech voice-assign に自動で表示されます。`,
           success_transcript_mode_title: `音声トランスクリプトモード`,
-          success_transcript_mode_description: `/config speech transcripts を使うと、音声メッセージのトランスクリプトをWebhook経由でチャットメッセージとして投稿できます。`,
+          success_transcript_mode_description: `/speech transcripts を使うと、音声メッセージのトランスクリプトをWebhook経由でチャットメッセージとして投稿できます。`,
         },
         remove: {
           description: `現在設定されているElevenLabs APIキーを削除します。`,
@@ -4334,7 +4374,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
         conversion_error_title: `変換エラー`,
         conversion_error_description: `画像の処理に失敗しました。別の画像ファイルを試してください。`,
         api_error_title: `APIエラー`,
-        api_error_description: `Discord APIを通じてアバターの更新に失敗しました。アバターを短時間で変更しすぎたことによるレート制限が原因であることが多いです。しばらく待ってから再度お試しください。`,
+        api_error_description: `Discord APIを通じてアバターの更新に失敗しました。アバターを短時間で変更しすぎたことによるレート制限が原因であることが多いです。しばらく待ってから再度お試しください。\n-# {details}`,
         error_download_timeout: `アバターのダウンロードが15秒後にタイムアウトしました。もう一度お試しください。`,
         error_api_timeout: `Discord API呼び出しが15秒後にタイムアウトしました。もう一度お試しください。`,
       },
@@ -4937,6 +4977,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
           scope_description: `ドキュメントをペルソナ専用にするか、サーバー全体で共有するかを選択します。`,
           scope_choice_persona: `ペルソナ`,
           scope_choice_serverwide: `サーバー全体`,
+          channels_description: `任意：特定チャンネルのみに制限（カンマ区切り、例: #general,#bot-chat）。空白の場合は全チャンネルで利用可能。`,
         },
         remove: {
           description: `ドキュメントを記憶から削除します。`,
@@ -5099,6 +5140,21 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
         },
         remove: {
           description: `サーバー記憶を削除します。`,
+        },
+      },
+      tagging: {
+        description: `タグ付き記憶モードを管理します。`,
+        set: {
+          description: `タグ付き記憶モードに切り替えます`,
+          modal_title: `記憶タグ設定`,
+          select_label: `タグモード`,
+          select_description: `有効にすると会話タグで記憶をフィルタリングし、無効にするとすべての記憶を含めます。`,
+          select_placeholder: `モードを選択...`,
+          channel_select_label: `チャンネルタグ`,
+          channel_select_description: `有効にすると特定の#チャンネルに記憶をタグ付けできます。タグなしの記憶は引き続きすべてのチャンネルで機能します。`,
+          channel_select_placeholder: `モードを選択...`,
+          success_title: `記憶タグ設定が更新されました`,
+          success_description: `記憶タグ設定が保存されました。`,
         },
       },
     },
@@ -5510,7 +5566,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
       speech: {
         description: `有効な音声生成エンドポイントを選択します。`,
         no_endpoints_title: `音声エンドポイントがありません`,
-        no_endpoints_description: `まず \`/config custom-endpoint add\` または \`/speech elevenlabs\` で音声エンドポイントを登録してください。`,
+        no_endpoints_description: `まず \`/provider custom-endpoint add\` または \`/speech elevenlabs\` で音声エンドポイントを登録してください。`,
         modal_title: `音声エンドポイントを選択`,
         select_label: `音声エンドポイント`,
         select_description: `ペルソナのボイスメッセージ生成に使うエンドポイントを選択します。`,
@@ -5526,7 +5582,7 @@ RP設定を無効化したチャンネル **{disabled_count}** 件: {disabled_ch
       transcription: {
         description: `有効な文字起こしエンドポイントを選択します。`,
         no_endpoints_title: `文字起こしエンドポイントがありません`,
-        no_endpoints_description: `まず \`/config custom-endpoint add\` または \`/speech elevenlabs\` で文字起こしエンドポイントを登録してください。`,
+        no_endpoints_description: `まず \`/provider custom-endpoint add\` または \`/speech elevenlabs\` で文字起こしエンドポイントを登録してください。`,
         modal_title: `文字起こしエンドポイントを選択`,
         select_label: `文字起こしエンドポイント`,
         select_description: `音声添付の文字起こしに使うエンドポイントを選択します。`,

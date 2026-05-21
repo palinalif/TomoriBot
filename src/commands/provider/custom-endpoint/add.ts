@@ -208,7 +208,11 @@ export async function execute(
 
       let extraConfig: Record<string, unknown> = {};
       if (capability === "speech") {
-        extraConfig = { script_markup: parsed.scriptMarkup, supports_instruct: parsed.supportsInstruct };
+        extraConfig = {
+          voice_mode: parsed.voiceMode,
+          script_markup: parsed.scriptMarkup,
+          supports_instruct: parsed.supportsInstruct,
+        };
       } else if (capability === "transcription") {
         extraConfig = { model: parsed.transcriptionModel ?? "whisper-1", language: parsed.transcriptionLanguage };
       }
@@ -241,11 +245,17 @@ export async function execute(
       invalidateTomoriStateCache(interaction.guild?.id ?? interaction.user.id);
 
       const isTtsCloneSpeech = capability === "speech" && apiStyle === "tts-clone";
+      const isVoiceDesignSpeech = isTtsCloneSpeech && parsed.voiceMode === "voice-design";
+      const isAutoSpeech = isTtsCloneSpeech && parsed.voiceMode === "auto";
       await replyInfoEmbed(modalSubmit, locale, {
         titleKey: "commands.config.custom_models.add.success_title",
-        descriptionKey: isTtsCloneSpeech
-          ? "commands.config.custom_models.add.speech_next_steps_description"
-          : "commands.config.custom_models.add.success_description",
+        descriptionKey: isAutoSpeech
+          ? "commands.config.custom_models.add.speech_auto_next_steps_description"
+          : isVoiceDesignSpeech
+            ? "commands.config.custom_models.add.speech_voice_design_next_steps_description"
+            : isTtsCloneSpeech
+              ? "commands.config.custom_models.add.speech_next_steps_description"
+              : "commands.config.custom_models.add.success_description",
         descriptionVars: { display_name: displayName, label, capability },
         color: ColorCode.SUCCESS,
       });
@@ -256,12 +266,12 @@ export async function execute(
         tomoriId: tomoriState.tomori_id,
         errorType: "CommandExecutionError",
         metadata: {
-          command: "config custom-endpoint add",
+          command: "provider custom-endpoint add",
           guildId: interaction.guild?.id,
           executorDiscordId: interaction.user.id,
         },
       };
-      await log.error("Error executing /config custom-endpoint add (modal path)", error as Error, context);
+      await log.error("Error executing /provider custom-endpoint add (modal path)", error as Error, context);
       await replyInfoEmbed(modalSubmit, locale, {
         titleKey: "general.errors.unknown_error_title",
         descriptionKey: "general.errors.unknown_error_description",
@@ -374,12 +384,12 @@ export async function execute(
       tomoriId: tomoriState.tomori_id,
       errorType: "CommandExecutionError",
       metadata: {
-        command: "config custom-endpoint add",
+        command: "provider custom-endpoint add",
         guildId: interaction.guild?.id,
         executorDiscordId: interaction.user.id,
       },
     };
-    await log.error("Error executing /config custom-endpoint add (image/video path)", error as Error, context);
+    await log.error("Error executing /provider custom-endpoint add (image/video path)", error as Error, context);
     await replyInfoEmbed(modalSubmit, locale, {
       titleKey: "general.errors.unknown_error_title",
       descriptionKey: "general.errors.unknown_error_description",

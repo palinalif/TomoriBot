@@ -88,6 +88,17 @@ function normalizeTtsWhitespace(text: string): string {
     .trim();
 }
 
+function stringifyErrorDetail(detail: unknown): string | null {
+  if (!detail) return null;
+  if (typeof detail === "string") return detail;
+
+  try {
+    return JSON.stringify(detail);
+  } catch {
+    return String(detail);
+  }
+}
+
 function stripUnsupportedChatterboxTurboTags(text: string): string {
   return normalizeTtsWhitespace(
     text.replace(ANY_BRACKET_TAG_REGEX, (match, rawTag: string) => {
@@ -239,8 +250,9 @@ export async function synthesizeSpeechViaTtsClone(request: TtsCloneRequest): Pro
   if (!response.ok) {
     let errorDetails = `HTTP ${response.status}`;
     try {
-      const errorBody = (await response.json()) as { error?: string };
-      if (errorBody.error) errorDetails += `: ${errorBody.error}`;
+      const errorBody = (await response.json()) as { error?: unknown; detail?: unknown };
+      const structuredDetail = stringifyErrorDetail(errorBody.error ?? errorBody.detail);
+      if (structuredDetail) errorDetails += `: ${structuredDetail}`;
     } catch {
       // Ignore JSON parse failures on error responses.
     }
