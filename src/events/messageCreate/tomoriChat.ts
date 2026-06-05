@@ -70,6 +70,8 @@ import {
   resolveDeliberateToolContextTurns,
   resolveDeliberateToolMode,
   type DeliberateToolIntentMatch,
+  type DeliberateToolIntentResult,
+  type DeliberateToolTriggerMap,
 } from "@/utils/tools/deliberateToolMode";
 import { routeHiddenToolNotice } from "@/utils/discord/toolProgressNotice";
 import { sql } from "@/utils/db/client";
@@ -1553,6 +1555,7 @@ function formatAudioAttachmentHint(filename: string): string {
 function getRecentToolAffordanceNames(
   recentMessages: Message[],
   currentMessageId: string,
+  customTriggers?: DeliberateToolTriggerMap | null,
   clientUserId?: string | null,
 ): string[] {
   const toolNames: string[] = [];
@@ -1566,7 +1569,7 @@ function getRecentToolAffordanceNames(
     const isPersonaOutput = Boolean(msg.webhookId) || (Boolean(clientUserId) && msg.author.id === clientUserId);
 
     if (!isPersonaOutput) {
-      const recentIntentResult = getDeliberateToolIntentResult(msg.content);
+      const recentIntentResult = getDeliberateToolIntentResult(msg.content, customTriggers);
       toolNames.push(...recentIntentResult.allowedToolNames);
       if (toolNames.length > 0) break;
       continue;
@@ -1592,41 +1595,44 @@ function getRecentToolAffordanceNames(
   return Array.from(new Set(toolNames));
 }
 
-type RetainedToolAffordance = {
-  remainingTurns: number;
-};
-
-const retainedToolAffordancesByChannel = new Map<string, Map<string, RetainedToolAffordance>>();
-
-function retainSuccessfulToolAffordance(channelId: string, toolName: string, turns: number): void {
-  if (turns <= 0) return;
-
-  let channelAffordances = retainedToolAffordancesByChannel.get(channelId);
-  if (!channelAffordances) {
-    channelAffordances = new Map<string, RetainedToolAffordance>();
-    retainedToolAffordancesByChannel.set(channelId, channelAffordances);
+function getRecentTriggeredToolIntentResult(
+  recentMessages: Message[],
+  currentMessageId: string,
+  customTriggers: DeliberateToolTriggerMap | null | undefined,
+  lookbackMessageCount: number,
+  clientUserId?: string | null,
+): DeliberateToolIntentResult {
+  if (lookbackMessageCount <= 0) {
+    return { allowedToolNames: [], matches: [] };
   }
 
-  channelAffordances.set(toolName, { remainingTurns: turns });
-}
+  const allowedToolNames: string[] = [];
+  const matches: DeliberateToolIntentMatch[] = [];
+  const lookbackMessages = recentMessages
+    .filter((recentMessage) => recentMessage.id !== currentMessageId)
+    .slice(-lookbackMessageCount);
 
-function consumeRetainedToolAffordanceNames(channelId: string): string[] {
-  const channelAffordances = retainedToolAffordancesByChannel.get(channelId);
-  if (!channelAffordances) return [];
+  for (const msg of lookbackMessages) {
+    const isPersonaOutput = Boolean(msg.webhookId) || (Boolean(clientUserId) && msg.author.id === clientUserId);
+    if (msg.author.bot || isPersonaOutput) continue;
 
-  const toolNames = [...channelAffordances.keys()];
-  for (const [toolName, affordance] of channelAffordances.entries()) {
-    affordance.remainingTurns -= 1;
-    if (affordance.remainingTurns <= 0) {
-      channelAffordances.delete(toolName);
-    }
+    const recentIntentResult = getDeliberateToolIntentResult(msg.content, customTriggers);
+    allowedToolNames.push(...recentIntentResult.allowedToolNames);
+    matches.push(
+      ...recentIntentResult.matches.map((match) => ({
+        ...match,
+        trigger: `recent message: ${match.trigger}`,
+        source: "follow-up" as const,
+      })),
+    );
   }
 
-  if (channelAffordances.size === 0) {
-    retainedToolAffordancesByChannel.delete(channelId);
-  }
-
-  return toolNames;
+  return {
+    allowedToolNames: Array.from(new Set(allowedToolNames)),
+    matches: Array.from(
+      new Map(matches.map((match) => [`${match.toolName}\0${match.trigger}\0${match.source}`, match])).values(),
+    ),
+  };
 }
 
 function buildRecentMessageMetadataInline(createdAt: number): string {
@@ -5570,21 +5576,26 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
           const deliberateToolTriggerMatches: DeliberateToolIntentMatch[] = [...deliberateToolIntentResult.matches];
           const followUpToolIntentResult = getFollowUpToolIntentResult(
             deliberateToolIntentText,
-            getRecentToolAffordanceNames(relevantMessagesArray, message.id, client.user?.id),
+            getRecentToolAffordanceNames(
+              relevantMessagesArray,
+              message.id,
+              effectiveTomoriState.config.deliberate_tool_triggers,
+              client.user?.id,
+            ),
           );
           deliberateToolAllowedNames.push(...followUpToolIntentResult.allowedToolNames);
           deliberateToolAllowedNames.push(...(streamingContext.endTurnAfterTools ?? []));
           deliberateToolTriggerMatches.push(...followUpToolIntentResult.matches);
-          const retainedToolNames = consumeRetainedToolAffordanceNames(channel.id);
+          const recentTriggeredToolIntentResult = getRecentTriggeredToolIntentResult(
+            relevantMessagesArray,
+            message.id,
+            effectiveTomoriState.config.deliberate_tool_triggers,
+            resolveDeliberateToolContextTurns(effectiveTomoriState.config.deliberate_tool_context_turns),
+            client.user?.id,
+          );
           if (deliberateToolModeActive) {
-            deliberateToolAllowedNames.push(...retainedToolNames);
-            deliberateToolTriggerMatches.push(
-              ...retainedToolNames.map((toolName) => ({
-                toolName,
-                trigger: "recent successful tool",
-                source: "follow-up" as const,
-              })),
-            );
+            deliberateToolAllowedNames.push(...recentTriggeredToolIntentResult.allowedToolNames);
+            deliberateToolTriggerMatches.push(...recentTriggeredToolIntentResult.matches);
           }
           if (reminderData && (reminderRecipientID || reminderData.self_reminder)) {
             if (/\b(voice|audio|speech|say\s+(?:it|this)\s+out\s+loud|spoken)\b/i.test(reminderData.reminder_purpose)) {
@@ -7319,14 +7330,6 @@ It's just 300 yen. Please. Just buy the damn audio so Bredrumb can pay the bills
                       `Deliberate tool mode blocked unexposed tool call "${funcName}" in channel ${channel.id}. Allowed: ${[...deliberateAllowedSet].join(", ")}`,
                     );
                   }
-                  if (toolResult.success) {
-                    retainSuccessfulToolAffordance(
-                      channel.id,
-                      funcName,
-                      resolveDeliberateToolContextTurns(effectiveTomoriState.config.deliberate_tool_context_turns),
-                    );
-                  }
-
                   if (deliberateToolModeActive && deliberateToolTriggerMatch) {
                     const safeTrigger = deliberateToolTriggerMatch.trigger.replace(/`/g, "'");
                     await routeHiddenToolNotice(
