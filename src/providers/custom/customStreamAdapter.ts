@@ -2,10 +2,11 @@ import { OpenAICompatibleStreamAdapter } from "@/providers/openaiCompatible/open
 import type { OpenAICompatibleStreamConfig } from "@/providers/openaiCompatible/openaiCompatibleTypes";
 import { GemmaToolCallParser } from "@/providers/custom/customGemmaToolParser";
 import { GemmaThinkingParser, GEMMA_THINKING_PARSER_ENABLED } from "@/providers/custom/customGemmaThinkingParser";
-import type { ProcessedChunk, RawStreamChunk } from "@/types/stream/interfaces";
+import type { ProcessedChunk, RawStreamChunk, StreamConfig, StreamContext } from "@/types/stream/interfaces";
 import type { ThoughtLogEntry } from "@/types/provider/interfaces";
 import { log } from "@/utils/misc/logger";
 import { buildCustomThinkingRequest } from "@/utils/provider/thinkingControl";
+import { waitForTextModelHandoffBeforeTextRequest } from "@/utils/provider/textModelComfyUiHandoff";
 
 /**
  * When true, the stream adapter scans `delta.content` for Gemma 4's hallucinated
@@ -92,6 +93,14 @@ export class CustomStreamAdapter extends OpenAICompatibleStreamAdapter {
         }
       },
     });
+  }
+
+  override async *startStream(
+    config: StreamConfig,
+    context: StreamContext,
+  ): AsyncGenerator<RawStreamChunk, void, unknown> {
+    await waitForTextModelHandoffBeforeTextRequest((config as CustomStreamConfig).customEndpointId);
+    yield* super.startStream(config, context);
   }
 
   /**

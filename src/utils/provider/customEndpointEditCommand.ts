@@ -166,6 +166,12 @@ function buildEndpointSummaryEmbed(locale: string, endpoint: CustomEndpointRow):
         `**${localizer(locale, "commands.config.custom_models.capability_modal.num_ctx_label")}:** ${endpoint.num_ctx}`,
       );
     }
+    if (endpoint.capability === "text") {
+      const handoffStrategy = extra.handoff_strategy;
+      if (handoffStrategy === "koboldcpp" || handoffStrategy === "ollama") {
+        lines.push(`**VRAM Handoff:** ${handoffStrategy === "koboldcpp" ? "KoboldCpp" : "Ollama"}`);
+      }
+    }
   }
 
   if (endpoint.capability === "speech") {
@@ -338,6 +344,7 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
       supportsInstruct: extra.supports_instruct as boolean | undefined,
       transcriptionModel: extra.model as string | null,
       transcriptionLanguage: extra.language as string | null,
+      handoffStrategy: extra.handoff_strategy as string | null,
     },
     isComfyUiMediaEndpoint(existingEndpoint),
   );
@@ -392,7 +399,9 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
 
     // Build extra_config (merge with existing).
     let extraConfig = { ...(existingEndpoint.extra_config as Record<string, unknown>) };
-    if (existingEndpoint.capability === "speech") {
+    if (existingEndpoint.capability === "text") {
+      extraConfig = { ...extraConfig, handoff_strategy: parsed.handoffStrategy };
+    } else if (existingEndpoint.capability === "speech") {
       extraConfig = {
         ...extraConfig,
         voice_mode: parsed.voiceMode,

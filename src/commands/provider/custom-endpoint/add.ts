@@ -256,6 +256,8 @@ export async function execute(
         };
       } else if (capability === "transcription") {
         extraConfig = { model: parsed.transcriptionModel ?? "whisper-1", language: parsed.transcriptionLanguage };
+      } else if (capability === "text") {
+        extraConfig = { handoff_strategy: parsed.handoffStrategy };
       }
 
       const registered = await registerCustomEndpoint({
