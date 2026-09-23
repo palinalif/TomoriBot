@@ -69,6 +69,7 @@ interface ComfyUiGenerationOptions {
   negativePrompt?: string | null;
   aspectRatio?: string;
   durationSeconds?: number;
+  fps?: number;
   resolution?: string;
   generateAudio?: boolean;
   audioPrompt?: string;
@@ -206,7 +207,14 @@ function readOptionalStringEnv(name: string): string | null {
 function resolveDefaultComfyUiVideoWorkflowPath(): string {
   const candidates = [
     path.join(import.meta.dir, "comfyui-workflows", COMFYUI_DEFAULT_VIDEO_WORKFLOW_FILENAME),
-    path.join(process.cwd(), "src", "providers", "custom", "comfyui-workflows", COMFYUI_DEFAULT_VIDEO_WORKFLOW_FILENAME),
+    path.join(
+      process.cwd(),
+      "src",
+      "providers",
+      "custom",
+      "comfyui-workflows",
+      COMFYUI_DEFAULT_VIDEO_WORKFLOW_FILENAME,
+    ),
     path.join(process.cwd(), "providers", "custom", "comfyui-workflows", COMFYUI_DEFAULT_VIDEO_WORKFLOW_FILENAME),
   ];
 
@@ -233,6 +241,62 @@ function resolveComfyUiRuntimeWorkflowPath(endpoint: CustomEndpointRow, mode: Co
   }
 
   return null;
+}
+
+function readOptionalBooleanEnv(name: string): boolean | null {
+  const rawValue = process.env[name];
+  if (rawValue === undefined || rawValue.trim() === "") {
+    return null;
+  }
+
+  const normalized = rawValue.trim().toLowerCase();
+  if (["1", "true", "yes", "y", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "n", "off"].includes(normalized)) {
+    return false;
+  }
+  return null;
+}
+
+function shouldUnloadComfyUiModelsAfterSuccessfulGeneration(): boolean {
+  return (
+    readOptionalBooleanEnv("COMFYUI_UNLOAD_MODELS_AFTER_SUCCESS") ??
+    readOptionalBooleanEnv("TOMORI_COMFYUI_UNLOAD_MODELS_AFTER_SUCCESS") ??
+    false
+  );
+}
+
+async function unloadComfyUiModelsAfterSuccessfulGeneration(
+  endpoint: CustomEndpointRow,
+  apiKey: string,
+  mode: ComfyUiGenerationMode,
+): Promise<void> {
+  if (!shouldUnloadComfyUiModelsAfterSuccessfulGeneration()) {
+    return;
+  }
+
+  try {
+    const response = await fetchUserRemoteUrl(`${endpoint.endpoint_url.replace(/\/+$/, "")}/free`, {
+      method: "POST",
+      headers: buildCustomHeaders(apiKey),
+      body: JSON.stringify({
+        unload_models: true,
+        free_memory: true,
+      }),
+    });
+
+    if (!response.ok) {
+      log.warn(
+        `ComfyUI model unload after successful ${mode} generation failed: ${response.status} ${response.statusText}`,
+      );
+      return;
+    }
+
+    log.info(`ComfyUI models unloaded after successful ${mode} generation.`);
+  } catch (error) {
+    log.warn(`ComfyUI model unload after successful ${mode} generation failed`, error);
+  }
 }
 
 function loadComfyUiWorkflowFromPath(path: string): Record<string, unknown> {
@@ -1339,14 +1403,17 @@ function resolveComfyUiVideoDurationSeconds(durationSeconds: number | undefined)
   return clampNumber(capped, 1, 60);
 }
 
-function resolveComfyUiVideoFps(): number {
-  return clampNumber(
-    readOptionalNumberEnv("COMFYUI_VIDEO_FPS") ??
-      readOptionalNumberEnv("TOMORI_COMFYUI_VIDEO_FPS") ??
-      COMFYUI_DEFAULT_VIDEO_FPS,
-    1,
-    120,
-  );
+function resolveComfyUiVideoFps(requestedFps: number | undefined): number {
+  // Honor a user-supplied FPS (from the /generate video modal) when valid,
+  //    mirroring how resolveComfyUiVideoDurationSeconds() prioritizes the request.
+  // Otherwise fall back through the operator env overrides to the built-in default.
+  const requested =
+    typeof requestedFps === "number" && Number.isFinite(requestedFps) && requestedFps > 0
+      ? requestedFps
+      : (readOptionalNumberEnv("COMFYUI_VIDEO_FPS") ??
+        readOptionalNumberEnv("TOMORI_COMFYUI_VIDEO_FPS") ??
+        COMFYUI_DEFAULT_VIDEO_FPS);
+  return clampNumber(requested, 1, 120);
 }
 
 function resolveComfyUiVideoOutputFps(baseFps: number): number {
@@ -1560,7 +1627,9 @@ async function uploadComfyUiReferenceImage(
     subfolder?: string;
     type?: string;
   };
-  const metadata = await sharp(buffer).metadata().catch(() => null);
+  const metadata = await sharp(buffer)
+    .metadata()
+    .catch(() => null);
 
   return {
     ...referenceImage,
@@ -2184,9 +2253,9 @@ function buildComfyUiPlaceholderMap(
     outpaintPixels,
   );
   const videoDurationSeconds = resolveComfyUiVideoDurationSeconds(options.durationSeconds);
-  const videoFps = resolveComfyUiVideoFps();
+  const videoFps = resolveComfyUiVideoFps(options.fps);
   const videoOutputFps = resolveComfyUiVideoOutputFps(videoFps);
-  const videoFrameCount = resolveComfyUiVideoFrameCount(videoDurationSeconds, videoFps);
+  const videoFrameCount = resolveComfyUiVideoFrameCount(videoDurationSeconds, videoOutputFps);
   const videoOutputDurationSeconds = videoFrameCount / videoOutputFps;
   const videoSteps = resolveComfyUiVideoSteps();
   const videoCfg = resolveComfyUiVideoCfg();
@@ -2233,8 +2302,8 @@ function buildComfyUiPlaceholderMap(
     ),
     TOMORI_NEGATIVE_PROMPT: buildComfyUiNegativePrompt(options, inpaint, maskMode),
     TOMORI_VIDEO_NEGATIVE_PROMPT: buildComfyUiVideoNegativePrompt(),
-    TOMORI_MODEL: endpoint.model_name ?? endpoint.display_name,
-    TOMORI_MODEL_NAME: endpoint.model_name ?? endpoint.display_name,
+    TOMORI_MODEL: endpoint.model_name ?? endpoint.display_name ?? null,
+    TOMORI_MODEL_NAME: endpoint.model_name ?? endpoint.display_name ?? null,
     TOMORI_MODE: options.mode,
     TOMORI_IMAGE_MODE: inpaint ? "inpaint" : hasReference ? "img2img" : "txt2img",
     TOMORI_ASPECT_RATIO: options.aspectRatio ?? (options.mode === "video" ? "16:9" : "1:1"),
@@ -2577,11 +2646,7 @@ function normalizeComfyUiAsset(value: unknown, fallback?: ComfyUiMediaKind): Com
   };
 }
 
-function collectComfyUiAssetsFromValue(
-  value: unknown,
-  fallback?: ComfyUiMediaKind,
-  depth = 0,
-): ComfyUiAsset[] {
+function collectComfyUiAssetsFromValue(value: unknown, fallback?: ComfyUiMediaKind, depth = 0): ComfyUiAsset[] {
   if (depth > 6) {
     return [];
   }
@@ -3336,6 +3401,7 @@ export async function generateComfyUiImageViaEndpoint(params: {
       };
     }),
   );
+  await unloadComfyUiModelsAfterSuccessfulGeneration(endpoint, apiKey, "image");
   return {
     imageData: imageBuffer.toString("base64"),
     mimeType: "image/png",
@@ -3349,6 +3415,7 @@ export async function generateComfyUiVideoViaEndpoint(params: {
   prompt: string;
   aspectRatio?: string;
   durationSeconds?: number;
+  fps?: number;
   resolution?: string;
   referenceImages?: ProviderNativeVideoGenerationRequest["referenceImages"];
   generateAudio?: boolean;
@@ -3361,6 +3428,7 @@ export async function generateComfyUiVideoViaEndpoint(params: {
     prompt,
     aspectRatio,
     durationSeconds,
+    fps,
     resolution,
     referenceImages,
     generateAudio,
@@ -3373,6 +3441,7 @@ export async function generateComfyUiVideoViaEndpoint(params: {
     prompt,
     aspectRatio,
     durationSeconds,
+    fps,
     resolution,
     referenceImages,
     generateAudio,
@@ -3402,6 +3471,7 @@ export async function generateComfyUiVideoViaEndpoint(params: {
       signature: describeVideoBufferSignature(videoBuffer),
     })}`,
   );
+  await unloadComfyUiModelsAfterSuccessfulGeneration(endpoint, apiKey, "video");
   return {
     videoData: videoBuffer,
     mimeType,

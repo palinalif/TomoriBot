@@ -8,6 +8,7 @@ import type {
   Message,
 } from "discord.js";
 import { StreamOrchestrator } from "@/utils/discord/streamOrchestrator";
+import { buildStreamContext } from "@/utils/provider/streamContext";
 import { deepseekProviderInfo } from "@/providers/deepseek/providerInfo";
 import { DeepseekStreamAdapter, type DeepseekStreamConfig } from "@/providers/deepseek/deepseekStreamAdapter";
 import { getDeepseekToolAdapter } from "@/providers/deepseek/deepseekToolAdapter";
@@ -53,11 +54,13 @@ import type { ProviderError, StreamContext } from "@/types/stream/interfaces";
 import { DISCORD_STREAMING_CONSTANTS } from "@/types/stream/types";
 import type { StreamingContext } from "@/types/tool/interfaces";
 import { type ToolStateForContext, getAvailableToolsWithMCP } from "@/tools/toolRegistry";
+import { applyStreamContextAvailability } from "@/tools/availability";
 import { log } from "@/utils/misc/logger";
 import { buildRuntimeLogitBiasMapForLlm } from "@/utils/provider/logitBiasResolver";
 import { applyDeliberateToolAllowlist } from "@/utils/tools/deliberateToolMode";
+import { resolveToolsEnabled } from "@/utils/tools/toolUseGate";
 
-const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
+const DEFAULT_DEEPSEEK_MODEL = "deepseek-v4-flash";
 const DEEPSEEK_CHAT_COMPLETIONS_URL = "https://api.deepseek.com/chat/completions";
 const DEEPSEEK_BETA_CHAT_COMPLETIONS_URL = "https://api.deepseek.com/beta/chat/completions";
 
@@ -120,12 +123,19 @@ export class DeepseekProvider
     return await callDeepseekStructuredJSON(request, responseSchema, zodSchema);
   }
 
+  getExpressionInitializationBatchSize(): number {
+    const parsed = Number.parseInt(process.env.DEEPSEEK_EXPRESSION_BATCH_SIZE || "20", 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 20;
+  }
+
   async getTools(
     tomoriState: TomoriState,
     streamingContext?: StreamingContext,
   ): Promise<Array<Record<string, unknown>>> {
-    if (!tomoriState.llm.has_tools) {
-      log.info("DeepSeek provider: Model does not support tools (seeded capability)");
+    if (!resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
+      log.info(
+        `DeepSeek provider: Tools unavailable (tool_use_enabled=${tomoriState.config.tool_use_enabled}, has_tools=${tomoriState.llm.has_tools})`,
+      );
       return [];
     }
 
@@ -158,6 +168,8 @@ export class DeepseekProvider
           imagegen_enabled: tomoriState.config.imagegen_enabled,
           videogen_enabled: tomoriState.config.videogen_enabled,
           voice_message_enabled: tomoriState.config.voice_message_enabled,
+          user_blocking_enabled: tomoriState.config.user_blocking_enabled,
+          user_info_updates_enabled: tomoriState.config.user_info_updates_enabled,
           thread_creation_enabled: tomoriState.config.thread_creation_enabled,
         },
       };
@@ -168,31 +180,14 @@ export class DeepseekProvider
         totalCount,
       } = await getAvailableToolsWithMCP("deepseek", toolStateForContext);
 
-      let finalBuiltInTools = availableBuiltInTools;
+      let finalBuiltInTools = applyStreamContextAvailability({
+        providerLabel: "DeepSeek provider",
+        provider: "deepseek",
+        builtInTools: availableBuiltInTools,
+        streamContext: streamingContext,
+        tomoriState,
+      });
       let finalMcpFunctionNames = availableMcpFunctionNames;
-      if (streamingContext) {
-        const minimalContext = {
-          streamContext: streamingContext,
-          provider: "deepseek" as const,
-          channel: {} as BaseGuildTextChannel,
-          client: {} as Client,
-          tomoriState,
-          locale: "en-US",
-        };
-
-        finalBuiltInTools = availableBuiltInTools.filter((tool) => {
-          const isContextAvailable =
-            "isAvailableForContext" in tool && typeof tool.isAvailableForContext === "function"
-              ? tool.isAvailableForContext("deepseek", minimalContext)
-              : true;
-
-          return isContextAvailable;
-        });
-
-        log.info(
-          `Applied DeepSeek streaming context filtering: ${availableBuiltInTools.length} -> ${finalBuiltInTools.length} built-in tools`,
-        );
-      }
 
       ({ builtInTools: finalBuiltInTools, mcpFunctionNames: finalMcpFunctionNames } = applyDeliberateToolAllowlist({
         providerLabel: "DeepSeek provider",
@@ -237,13 +232,12 @@ export class DeepseekProvider
       ...samplingParams,
     };
 
-    // Attach runtime logit_bias map if the server has any active entries for this model
     const runtimeLogitBias = buildRuntimeLogitBiasMapForLlm(tomoriState.config.llm_logit_biases ?? [], tomoriState.llm);
     if (Object.keys(runtimeLogitBias).length > 0) {
       config.logitBias = runtimeLogitBias;
     }
 
-    if (tomoriState.llm.has_tools) {
+    if (resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
       config.tools = await this.getTools(tomoriState);
     }
 
@@ -297,12 +291,13 @@ export class DeepseekProvider
         log.info("DeepseekProvider: Using beta endpoint for assistant prefix completion");
       }
 
-      if (streamingContext && tomoriState.llm.has_tools) {
+      if (streamingContext && resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
         log.info("DeepseekProvider: Reloading tools with streaming context for context-aware availability");
         streamConfig.tools = await this.getTools(tomoriState, streamingContext);
       }
 
-      const streamContext: StreamContext = {
+      const streamContext: StreamContext = buildStreamContext({
+        provider: "deepseek",
         channel,
         client,
         initialInteraction,
@@ -312,26 +307,15 @@ export class DeepseekProvider
         currentTurnModelParts,
         emojiStrings,
         functionInteractionHistory,
-        provider: "deepseek",
-        locale: userLocale ?? "en-US",
-        suppressUserErrors: streamingContext?.suppressUserErrors,
-        rotationKeyRetriesUsed: streamingContext?.rotationKeyRetriesUsed,
-        outputPrefill: streamingContext?.outputPrefill,
-        outputPrefillState: streamingContext?.outputPrefillState,
-        replyNoticeState: streamingContext?.replyNoticeState,
+        userLocale,
+        streamingContext,
         webhook,
         personaAvatarUrl,
         personaUsername,
         prefixStrippingName,
-        forcedMentions: streamingContext?.forcedMentions,
 
         // External abort signal for SDK call timeout cancellation
-        abortSignal: streamingContext?.abortSignal,
-
-        // Opaque message ID map for snowflake ID abstraction in LLM-visible text
-        messageIdMap: streamingContext?.messageIdMap,
-        recordTurnOutputMessage: streamingContext?.recordTurnOutputMessage,
-      };
+      });
 
       const orchestrator = new StreamOrchestrator();
       const adapter = new DeepseekStreamAdapter();
@@ -402,6 +386,8 @@ export class DeepseekProvider
         imagegen_enabled: false,
         videogen_enabled: false,
         voice_message_enabled: false,
+        user_blocking_enabled: false,
+        user_info_updates_enabled: false,
         thread_creation_enabled: false,
       },
     };

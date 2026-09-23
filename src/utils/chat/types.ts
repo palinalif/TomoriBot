@@ -1,4 +1,4 @@
-import type { BaseGuildTextChannel, Client, Guild, GuildMember, Message, Webhook } from "discord.js";
+import type { BaseGuildTextChannel, Client, Guild, GuildMember, Message, Sticker, Webhook } from "discord.js";
 import type { ForcedMention } from "@/types/discord/mentions";
 import type { ServerEmojiRow, ServerStickerRow, TomoriState, UserRow } from "@/types/db/schema";
 import type { RequestSnapshot, StructuredContextItem } from "@/types/misc/context";
@@ -12,6 +12,7 @@ import type { StreamingContext } from "@/types/tool/interfaces";
 import type { DeliberateToolIntentMatch } from "@/utils/tools/deliberateToolMode";
 import type { ThoughtLogOwner } from "@/utils/discord/thoughtLog";
 import type { FastRegenerationRecorder } from "@/utils/discord/fastRegeneration";
+import type { ReunionPresenceScope } from "@/utils/chat/reunionPresence";
 import type { MessageIdMap } from "@/utils/text/messageIdMap";
 import type { SimplifiedMessageForContext } from "@/utils/text/contextBuilder";
 import type { TextQuotaTriggerState } from "@/utils/chat/textQuotaState";
@@ -24,6 +25,17 @@ export interface ChatReminderData {
   self_reminder?: boolean;
 }
 
+export type QueuedMessageDiscardReason =
+  | "admission_rejected"
+  | "channel_queue_cleared"
+  | "queued_processing_failed"
+  | "stale_lock_release"
+  | "superseded_follow_up"
+  | "self_reply_work_cleared";
+
+export type ChatGenerationResultHandler = (result: GenerationTurnResult) => void | Promise<void>;
+export type QueuedMessageDiscardHandler = (reason: QueuedMessageDiscardReason) => void | Promise<void>;
+
 export interface ManualTriggerInvoker {
   userDiscId: string;
   username: string;
@@ -31,7 +43,25 @@ export interface ManualTriggerInvoker {
   member?: GuildMember | null;
 }
 
-/** Public input to tomoriChat() — optional fields apply defaults in normalizeChatInvocation. */
+export interface SystemTriggerIdentity {
+  serverDiscId: string;
+  userDiscId: string;
+}
+
+export interface SceneTurnSpeaker {
+  personaId: number;
+  personaName: string;
+}
+
+export interface SceneTurnMetadata {
+  commandId: string;
+  sequence: SceneTurnSpeaker[];
+  turnIndex: number;
+  totalTurns: number;
+  additionalInstructions?: string;
+}
+
+/** Public input to tomoriChat(): optional fields apply defaults in normalizeChatInvocation. */
 export interface TomoriChatInput {
   client: Client;
   message: Message;
@@ -61,7 +91,11 @@ export interface TomoriChatInput {
   injectedContextItems?: StructuredContextItem[];
   forcedMentions?: ForcedMention[];
   manualTriggerInvoker?: ManualTriggerInvoker;
+  systemTriggerIdentity?: SystemTriggerIdentity;
   manualStreamingContextOverrides?: Partial<StreamingContext>;
+  sceneTurn?: SceneTurnMetadata;
+  onGenerationResult?: ChatGenerationResultHandler;
+  onQueueDiscard?: QueuedMessageDiscardHandler;
 }
 
 export interface ChatIncoming {
@@ -93,12 +127,16 @@ export interface ChatIncoming {
   injectedContextItems?: StructuredContextItem[];
   forcedMentions?: ForcedMention[];
   manualTriggerInvoker?: ManualTriggerInvoker;
+  systemTriggerIdentity?: SystemTriggerIdentity;
   manualStreamingContextOverrides?: Partial<StreamingContext>;
+  sceneTurn?: SceneTurnMetadata;
+  onGenerationResult?: ChatGenerationResultHandler;
+  onQueueDiscard?: QueuedMessageDiscardHandler;
 }
 
 export type ChatAdmissionDisposition = "run" | "ignore" | "queued" | "blocked" | "error";
 
-export interface ChatAdmissionBase {
+interface ChatAdmissionBase {
   incoming: ChatIncoming;
   disposition: ChatAdmissionDisposition;
   locale: string;
@@ -161,6 +199,8 @@ export interface ChatTurn {
   userDiscId: string;
   cooldownUserDiscId: string;
   triggererName: string;
+  triggererFormattedName: string;
+  triggererAddressTerm: string;
   channelName: string;
   channelDescription: string | null;
   serverName: string;
@@ -187,6 +227,8 @@ export interface ChatTurnContext {
   locale: string;
   serverDiscId: string;
   userDiscId: string;
+  /** Internal users FK of the triggerer, resolved once at turn planning (no per-turn lookup). */
+  triggererUserId: number | undefined;
   isDMChannel: boolean;
   isFromQueue: boolean;
   isStopResponse: boolean;
@@ -195,6 +237,11 @@ export interface ChatTurnContext {
   isUserImpersonation: boolean;
   impersonatedUserId?: string;
   allPersonas: TomoriState[];
+  /**
+   * Direct-triggerer presence and any one-shot claim awaiting the post-turn
+   * success decision. Both phases live in `@/utils/chat/reunionPresence`.
+   */
+  reunionPresence: ReunionPresenceScope | null;
   currentPersona: TomoriState;
   tomoriState: TomoriState;
   requestSnapshot: RequestSnapshot;
@@ -210,6 +257,8 @@ export interface ChatTurnContext {
   serverName: string;
   serverDescription: string | null;
   triggererName: string;
+  triggererFormattedName: string;
+  triggererAddressTerm: string;
   textCredentialSource: "server" | "personal";
   personalRoutingUserId: number | null;
   personalTextProvider: string | null;
@@ -242,9 +291,14 @@ export interface ChatResponseSink {
   emitStreamResult(result: StreamResult): Promise<void>;
   emitError(error: unknown): Promise<void>;
   finalize(result: GenerationTurnResult): Promise<void>;
+  /**
+   * Releases per-turn resources (currently the temporary impersonation webhook) on every exit
+   * path, including the throws that bypass {@link ChatResponseSink.finalize}. Must be idempotent.
+   */
+  cleanup?(): Promise<void>;
 }
 
-export interface ChatPersonaResponse {
+interface ChatPersonaResponse {
   text: string;
   personaName: string;
   personaId?: number;
@@ -262,6 +316,9 @@ export interface GenerationTurnResult {
   status: StreamResult["status"] | "skipped";
   streamResults: StreamResult[];
   personaResponses: ChatPersonaResponse[];
+  /** A tool delivered the response directly even though no streamed text was captured. */
+  toolResponseDelivered?: boolean;
   thoughtLog?: ThoughtLogPayload;
   thoughtLogOwner?: ThoughtLogOwner;
+  selectedSticker?: Sticker;
 }

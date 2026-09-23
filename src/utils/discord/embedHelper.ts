@@ -1,6 +1,7 @@
 import {
   ActionRowBuilder,
   ButtonBuilder,
+  ButtonStyle,
   ComponentType,
   EmbedBuilder,
   type ButtonInteraction,
@@ -17,8 +18,9 @@ import {
 import { ColorCode, log } from "../misc/logger";
 import { localizer } from "../text/localizer";
 import { sendWebhookMessageWithIdentity } from "./webhookManager";
+import { attachTextDisplayModalCollector, buildTextDisplayModalButton } from "./textDisplayModal";
 import type { StandardEmbedOptions, SummaryEmbedOptions, TranslationEmbedOptions } from "../../types/discord/embed";
-import { TRANSLATOR_COLORS, TRANSLATOR_STYLES, TranslationProvider } from "../../types/discord/embed";
+import { TRANSLATOR_COLORS, TranslationProvider } from "../../types/discord/embed";
 
 type Provider = keyof typeof TRANSLATOR_COLORS;
 
@@ -26,6 +28,36 @@ type Provider = keyof typeof TRANSLATOR_COLORS;
  * Discord's maximum field value length for embeds
  */
 const MAX_FIELD_VALUE_LENGTH = 1024;
+
+/**
+ * Discord's maximum embed description length.
+ */
+export const MAX_EMBED_DESCRIPTION_LENGTH = 4096;
+
+/**
+ * Tip-item locale key for the Official Support Server link, appended to every rendered tip modal.
+ */
+export const SUPPORT_SERVER_TIP_KEY = "genai.tips.support_server";
+export const TIP_DETAILS_BUTTON_ID = "error_tip_details";
+const DEFAULT_TIP_BUTTON_TIMEOUT_MS = 86_400_000;
+export const TIP_BUTTON_TIMEOUT_MS = (() => {
+  const parsed = Number.parseInt(process.env.TIP_BUTTON_TIMEOUT_MS ?? "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TIP_BUTTON_TIMEOUT_MS;
+})();
+
+/**
+ * Truncates text so it fits within Discord's embed description limit, optionally reserving
+ * space for other content that shares the same description (e.g. a headline above the detail).
+ * @returns The value, truncated with a trailing ellipsis when it would otherwise overflow.
+ */
+export function truncateForEmbedDescription(value: string, reservedChars = 0): string {
+  const available = Math.max(0, MAX_EMBED_DESCRIPTION_LENGTH - reservedChars);
+  if (value.length <= available) {
+    return value;
+  }
+  // Reserve 3 characters for the ellipsis; if there is not even room for that, hard-cut.
+  return available <= 3 ? value.substring(0, available) : `${value.substring(0, available - 3)}...`;
+}
 
 export type WebhookEmbedContext = {
   webhook?: Webhook;
@@ -47,7 +79,6 @@ function canUseWebhookForChannel(
 /**
  * Truncates a field value to Discord's maximum allowed length.
  * Adds ellipsis if truncation occurs.
- * @param value - The field value to truncate
  * @returns Truncated value that fits within Discord's limits
  */
 function truncateFieldValue(value: string): string {
@@ -62,8 +93,6 @@ function truncateFieldValue(value: string): string {
  * Creates a standard info embed for non-interaction contexts.
  * This is a low-level utility - prefer using sendStandardEmbed for consistency.
  * @param locale - The locale to use for strings
- * @param options - Configuration for the embed
- * @returns EmbedBuilder instance
  */
 export function createStandardEmbed(locale: string, options: StandardEmbedOptions): EmbedBuilder {
   const {
@@ -103,6 +132,30 @@ export function createStandardEmbed(locale: string, options: StandardEmbedOption
   return embed;
 }
 
+/** Builds the localized markdown shown by a "What You Can Do" text modal. */
+export function createTipText(
+  locale: string,
+  tipKeys: string[],
+  tipVars: Record<string, string | number | boolean> = {},
+): string | null {
+  // Localize every tip item and drop any that resolve to empty text (e.g. an unset optional key).
+  const items = tipKeys
+    .filter((key) => key !== SUPPORT_SERVER_TIP_KEY)
+    .map((key) => localizer(locale, key, tipVars).trim())
+    .filter((text) => text.length > 0);
+  if (items.length === 0) {
+    return null;
+  }
+
+  // The support link gives every recovery modal an escape hatch without burdening each caller.
+  const supportItem = localizer(locale, SUPPORT_SERVER_TIP_KEY, tipVars).trim();
+  if (supportItem.length > 0) {
+    items.push(supportItem);
+  }
+
+  return items.map((item) => `- ${item}`).join("\n");
+}
+
 export function createSummaryEmbed(locale: string, options: SummaryEmbedOptions): EmbedBuilder {
   const {
     titleKey,
@@ -130,24 +183,23 @@ export function createSummaryEmbed(locale: string, options: SummaryEmbedOptions)
     .setTitle(localizer(locale, titleKey, titleVars))
     .setDescription(descriptionText)
     .addFields(
-      // 1. Map over the fields provided in options
+      // Map over the fields provided in options
       fields.map(
-        // 2. Define the transformation for each field
+        // Define the transformation for each field
         (field): APIEmbedField => {
-          // 3. Determine the field name: Use localized nameKey if present, otherwise use direct name, fallback to empty string
+          // Determine the field name: Use localized nameKey if present, otherwise use direct name, fallback to empty string
           const name = field.nameKey
             ? localizer(locale, field.nameKey, field.nameVars) // Use nameVars for name
             : (field.name ?? "");
 
-          // 4. Determine the field value: Use localized valueKey if present, otherwise use direct value
+          // Determine the field value: Use localized valueKey if present, otherwise use direct value
           const rawValue = field.valueKey
             ? localizer(locale, field.valueKey, field.valueVars) // Localize valueKey using valueVars
             : (field.value ?? ""); // Otherwise, use the value directly
 
-          // 5. Truncate value to Discord's maximum field value length (1024 chars)
+          // Truncate value to Discord's maximum field value length (1024 chars)
           const value = truncateFieldValue(rawValue);
 
-          // 6. Return the structured APIEmbedField object
           return {
             name,
             value,
@@ -177,10 +229,7 @@ export function createSummaryEmbed(locale: string, options: SummaryEmbedOptions)
 /**
  * Shows a standard embed in a text channel. This follows the pattern of interactionHelpers
  * by handling the sending of the embed directly.
- * @param channel - The channel to send the embed to
  * @param locale - The locale to use for strings
- * @param options - Configuration for the embed
- * @returns Promise<void>
  */
 export async function sendStandardEmbed(
   channel: TextChannel | NewsChannel | DMChannel | BaseGuildTextChannel | AnyThreadChannel | BaseGuildVoiceChannel,
@@ -189,18 +238,31 @@ export async function sendStandardEmbed(
   webhookContext?: WebhookEmbedContext,
 ): Promise<void> {
   const embed = createStandardEmbed(locale, options);
+  const tipText = options.tipKeys?.length ? createTipText(locale, options.tipKeys, options.tipVars) : null;
+  const activeTipRow = tipText
+    ? buildTextDisplayModalButton(TIP_DETAILS_BUTTON_ID, localizer(locale, "genai.tips.button"))
+    : undefined;
+  const disabledTipRow = tipText
+    ? buildTextDisplayModalButton(TIP_DETAILS_BUTTON_ID, localizer(locale, "genai.tips.button"), true)
+    : undefined;
+  const components = activeTipRow ? [activeTipRow] : [];
+  let sentMessage: Message;
+  let sentViaWebhook = false;
+  let threadId: string | undefined;
+
   if (
     webhookContext?.webhook &&
     webhookContext.personaUsername &&
     canUseWebhookForChannel(channel, webhookContext.webhook)
   ) {
-    const threadId =
+    threadId =
       "isThread" in channel && typeof channel.isThread === "function" && channel.isThread() ? channel.id : undefined;
     try {
-      await sendWebhookMessageWithIdentity(
+      sentMessage = await sendWebhookMessageWithIdentity(
         webhookContext.webhook,
         {
           embeds: [embed],
+          components,
           ...(threadId ? { threadId } : {}),
         },
         {
@@ -211,50 +273,66 @@ export async function sendStandardEmbed(
             : undefined,
         },
       );
-      return;
+      sentViaWebhook = true;
     } catch (error) {
       log.warn("Failed to send embed via webhook, falling back to bot message", error as Error);
+      sentMessage = await channel.send({ embeds: [embed], components });
     }
+  } else {
+    sentMessage = await channel.send({ embeds: [embed], components });
   }
 
-  await channel.send({ embeds: [embed] });
+  if (!tipText || !disabledTipRow) return;
+
+  attachTextDisplayModalCollector({
+    message: sentMessage,
+    customId: TIP_DETAILS_BUTTON_ID,
+    title: localizer(locale, "genai.tips.title"),
+    content: tipText,
+    timeoutMs: TIP_BUTTON_TIMEOUT_MS,
+    logLabel: "Error tips",
+    onExpire: async () => {
+      if (sentViaWebhook && webhookContext?.webhook) {
+        await webhookContext.webhook.editMessage(sentMessage.id, {
+          embeds: [embed],
+          components: [disabledTipRow],
+          ...(threadId ? { threadId } : {}),
+        });
+        return;
+      }
+      await sentMessage.edit({ embeds: [embed], components: [disabledTipRow] });
+    },
+  });
 }
 
 const TRANSLATION_TIMEOUT = 90000;
 /**
  * Creates an embed with translation buttons that cycle between different translations.
  * Returns a promise that resolves when the buttons are disabled (timeout or all providers shown).
- * @param message - The message to reply to
- * @param options - Configuration for the translation embed
- * @returns Promise<void>
  */
 export async function sendTranslationEmbed(message: Message, options: TranslationEmbedOptions): Promise<void> {
   const { translations, initialProvider = TranslationProvider.GOOGLE, timeout = TRANSLATION_TIMEOUT } = options;
 
-  // Create buttons for each provider with their brand colors
   const createButtons = (activeProvider: Provider) => {
     const buttons = Object.values(TranslationProvider).map((provider) => {
       return new ButtonBuilder()
         .setLabel(provider.charAt(0).toUpperCase() + provider.slice(1))
-        .setStyle(TRANSLATOR_STYLES[provider])
+        .setStyle(provider === activeProvider ? ButtonStyle.Primary : ButtonStyle.Secondary)
         .setCustomId(`${provider}-trans`)
         .setDisabled(provider === activeProvider);
     });
     return new ActionRowBuilder<ButtonBuilder>().addComponents(buttons);
   };
 
-  // Create embed with initial translation
   const embed = new EmbedBuilder()
     .setColor(TRANSLATOR_COLORS[initialProvider])
     .setDescription(translations[initialProvider]);
 
-  // Send initial message
   const sentMessage = await message.reply({
     embeds: [embed],
     components: [createButtons(initialProvider)],
   });
 
-  // Set up collector
   const collector = sentMessage.createMessageComponentCollector({
     componentType: ComponentType.Button,
     time: timeout,

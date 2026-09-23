@@ -1,11 +1,7 @@
-// locales/en-US/commands/persona.ts
-
 export default {
   persona: {
     description: `Manage personality presets`,
     "image-tags": {
-      description: `Set comma-separated image tags for a persona's physical appearance to assist image generation.`,
-      persona_select_title: `Select Persona`,
       modal_title: `Persona Image Tags`,
       tags_input_label: `Physical Appearance Tags`,
       tags_input_description: `Comma-separated imageboard-style tags for this persona's physical appearance. Leave empty to clear.`,
@@ -23,38 +19,34 @@ export default {
 \`\`\``,
       cleared_title: `Physical Appearance Cleared`,
       cleared_description: `Cleared physical appearance tags for **{persona_name}**.`,
-      no_permission_title: `🔴 Permission Denied`,
-      no_permission_description: `You need the **Manage Server** permission to edit persona image tags.`,
+    },
+    sprites: {
+      add: {
+        sprite_name_label: `Sprite Name`,
+        sprite_name_description: `Label used for the sprite. Reusing a label replaces the corresponding sprite.`,
+        sprite_name_placeholder: `mad`,
+        image_label: `Sprite Image`,
+        image_description: `Upload a PNG, JPG, or GIF. It will be converted to PNG.`,
+        instructions_label: `Usage Instructions`,
+        instructions_description: `Optional guidance for when this sprite should be used.`,
+        instructions_placeholder: `Use when angry, annoyed, or visibly upset.`,
+        identity_label: `Save as Identity`,
+        identity_description: `Show the decorated "Sprite (Persona)" name in Discord, useful for alter identities. Off = normal.`,
+      },
+      edit: {
+        image_description: `Optional. Upload PNG, JPG, or GIF to replace the sprite image.`,
+        identity_status_on: `Identity`,
+        identity_status_off: `Normal sprite`,
+      },
+      import: {
+        archive_label: `Sprite Archive`,
+        archive_description: `Upload a .zip created by /persona sprites export.`,
+      },
     },
     attribute: {
       description: `Manage persona attributes.`,
       add: {
         description: `Add an attribute to a persona.`,
-      },
-      edit: {
-        description: `Edit an attribute on a persona.`,
-        select_modal_title: `Select Attribute`,
-        select_label: `Attribute to Edit`,
-        select_description: `Choose which attribute to edit`,
-        select_placeholder: `Select an attribute...`,
-        confirm_title: `Edit Attribute?`,
-        confirm_description: `You selected this attribute:
-{attribute}
-
-Click **Confirm** to edit it.`,
-        modal_title: `Edit Attribute`,
-        attribute_input_label: `Updated Attribute`,
-        attribute_input_description: `Replace the selected attribute with new text.`,
-        attribute_input_placeholder: `{bot} likes mango floats`,
-        attribute_input_part2_label: `Attribute (Part 2, Optional)`,
-        public_checkbox_label: `Public attribute`,
-        public_checkbox_description: `Visible to other personas as well.`,
-        no_changes_title: `No Changes Made`,
-        no_changes_description: `That attribute is already set to this text.`,
-        duplicate_title: `Duplicate Attribute`,
-        duplicate_description: `This attribute '{attribute}' is already in my attribute list.`,
-        success_title: `Attribute Updated`,
-        success_description: `Successfully updated the attribute to: "{attribute}" Visibility: **{visibility}**.`,
       },
       remove: {
         description: `Remove an attribute from a persona.`,
@@ -74,36 +66,6 @@ Click **Confirm** to edit it.`,
       add: {
         description: `Add a sample user/bot dialogue pair to as an example for how I should respond.`,
       },
-      edit: {
-        description: `Edit a sample user/bot dialogue pair.`,
-        select_modal_title: `Select Sample Dialogue`,
-        select_label: `Dialogue to Edit`,
-        select_description: `Choose which dialogue pair to edit`,
-        select_placeholder: `Select a dialogue...`,
-        confirm_title: `Edit Sample Dialogue?`,
-        confirm_description: `You selected this dialogue pair:
-**User:**
-{input}
-**Me:**
-{output}
-
-Click **Confirm** to edit it.`,
-        modal_title: `Edit Sample Dialogue`,
-        user_input_label: `User's Line`,
-        user_input_description: `Update the user's example line.`,
-        user_input_placeholder: `What's your favorite food?`,
-        user_input_part2_label: `User's Line (Part 2, Optional)`,
-        bot_input_label: `My Response`,
-        bot_input_description: `Update my example response.`,
-        bot_input_placeholder: `I-I like mango floats...`,
-        bot_input_part2_label: `My Response (Part 2, Optional)`,
-        no_changes_title: `No Changes Made`,
-        no_changes_description: `That sample dialogue pair is already set to this text.`,
-        duplicate_title: `Duplicate Sample Dialogue`,
-        duplicate_description: `That sample dialogue pair already exists.`,
-        success_title: `Sample Dialogue Updated`,
-        success_description: `Successfully updated the dialogue pair: User: "{input}" -> Bot: "{output}"`,
-      },
       remove: {
         description: `Remove a sample user/bot dialogue pair from my memory.`,
       },
@@ -113,7 +75,7 @@ Click **Confirm** to edit it.`,
     export: {
       description: `Export current personality as a shareable PNG file`,
       export_json_select_label: `Export JSON`,
-      export_json_select_description: `Optional: export a readable JSON file`,
+      export_json_select_description: `Optional: export an importable JSON file instead (no avatar image)`,
       persona_modal_title: `Select Persona`,
       persona_select_label: `Persona`,
       persona_select_description: `Choose which persona to export.`,
@@ -122,23 +84,23 @@ Click **Confirm** to edit it.`,
       alter_persona_description: `Alter Persona`,
       success_title: `🟢 Persona Exported Successfully`,
       success_description: `Current persona **{nickname}** has been exported! Share this PNG file with others to spread this personality configuration.`,
-      success_description_json: `Current persona **{nickname}** has been exported as a readable JSON file.
+      success_description_json: `Current persona **{nickname}** has been exported as a JSON file.
 
-**Note:** This JSON export is for reference only and cannot be imported.`,
-      json_non_importable_note: `This JSON export is for reference only and cannot be imported.`,
+**Note:** This JSON can be re-imported with \`/persona import\`. It does not include the avatar image. Use the PNG export to share the avatar too.`,
+      json_importable_note: `This JSON export can be imported with /persona import. It does not include the avatar image; use the PNG export to share the avatar too.`,
       failed_title: `🔴 Export Failed`,
       avatar_failed_title: `🔴 Avatar Download Failed`,
       avatar_failed_description: `Failed to download the persona avatar. Please try again later.`,
       embed_failed_title: `🔴 PNG Processing Failed`,
       embed_failed_description: `Failed to embed metadata into the PNG file. Please try again.`,
-      error_no_server_data: `Server not found in database. Please run /config setup first.`,
-      error_no_preset_data: `Persona data not found. Please run /config setup first.`,
+      error_no_server_data: `Server not found in database. Please run /setup first.`,
+      error_no_preset_data: `Persona data not found. Please run /setup first.`,
       error_validation_failed: `Failed to validate export data structure`,
       error_export_failed: `Failed to export persona data`,
     },
     import: {
-      description: `Import a persona from a PNG or JSON file`,
-      file_description: `PNG or JSON file containing persona data`,
+      description: `Import a persona from a PNG, JSON, or CHARX file`,
+      file_description: `PNG, JSON, or CHARX file containing persona data`,
       type_description: `Import as main persona or alter persona`,
       triggers_description: `Optional extra triggers, comma-separated ("," or "、")`,
       memories_description: `Preserve this persona's user and server memories?`,
@@ -165,11 +127,11 @@ Triggers: {triggers}
 
 This persona will respond when these triggers appear in messages.`,
       alter_success_confirmation: `Successfully imported alter persona **{nickname}** with {trigger_count} unique trigger words! The detailed import information has been posted in the channel.`,
-      alter_avatar_fallback_main: `🟡 This import did not include an avatar image, so this alter is using **{nickname}**'s current main persona avatar as a fallback. You can use \`/persona avatar\` to change it.`,
+      alter_avatar_fallback_main: `🟡 This import did not include an avatar image, so this alter is using **{nickname}**'s current main persona avatar as a fallback. You can use \`/config\` > Persona > General to change it.`,
       alter_avatar_warning: `⚠️ Do not delete the avatar image embed above, or the alter persona avatar will be lost.`,
       alter_dm_not_allowed_title: `🔴 Alter Personas Not Allowed in DMs`,
       alter_dm_not_allowed_description: `Alter personas can only be imported in servers, not in Direct Messages. Please run this command in a server.`,
-      alter_no_triggers_warning: `⚠️ This persona has no trigger words. It won't respond to any messages until you add triggers using \`/server trigger add\`.`,
+      alter_no_triggers_warning: `⚠️ This persona has no trigger words. It won't respond to any messages until you add triggers using \`/config\` > Persona > General.`,
       alter_name_conflict_title: `🔴 Persona Name Already Exists`,
       alter_name_conflict_description: `A persona with the name **{name}** already exists on this server. Each persona must have a unique name.
 
@@ -178,12 +140,23 @@ Please edit the import file to use a different name, or remove the existing pers
       alter_limit_description: `This server already has {current} personas. The maximum allowed is {max}. Please remove an alter with \`/persona remove\` before importing a new one.`,
       failed_title: `🔴 Import Failed`,
       failed_description: `Failed to import the persona. Please check the file and try again.`,
+      sprite_snapshot_failed_description: `The import was cancelled because the current persona sprites could not be read. No persona data was changed. Please try again.`,
+      sprite_cleanup_failed_description: `The persona was imported, but its previous sprite rows could not be cleared. The import is incomplete. Please try again or contact an administrator.`,
+      sprite_storage_cleanup_partial_description: `The persona was imported, but {failed_count} previous sprite image(s) could not be deleted from storage.`,
       invalid_file_type_title: `🔴 Invalid File Type`,
-      invalid_file_type_description: `Please upload a valid .png or .json file containing persona data.`,
+      invalid_file_type_description: `Please upload a valid .png, .json, or .charx file containing persona data.`,
       file_too_large_title: `🔴 File Too Large`,
-      file_too_large_description: `The file is too large. Maximum file size is 10MB.`,
+      file_too_large_description: `The file is too large. Maximum file size is {max_size}MB.`,
       download_failed_title: `🔴 Download Failed`,
       download_failed_description: `Failed to download the attached file. Please try again.`,
+      invalid_charx_title: `🔴 Invalid Character Card Archive`,
+      invalid_charx_description: `This .charx file could not be read as a Character Card V3 archive. Download the card again from the site that hosts it, or export the card as a .png instead.`,
+      card_conversion_failed_title: `🟡 Character Card Detected, Conversion Failed`,
+      card_conversion_failed_description: `A card was decoded from **{source}**, but converting it to Tomori format failed. The decoded payload is attached for inspection. Please report this through \`/support discord\` and include the attached file.`,
+      charx_not_card_description: `This .charx archive opened, but the card inside is not a character card. Make sure the file is the character card itself and not another archive from the same download.`,
+      charx_too_large_description: `The card inside this archive is too large to import. Maximum card size is {max_size}MB.`,
+      charx_assets_too_large_description: `This card bundles more media than an import can inspect. Try a card exported without its image, audio, or video assets.`,
+      charx_assets_ignored_description: `🟡 This card's bundled images, sounds, and other media were not imported. Only the persona text was read. You can set an avatar with \`/server avatar\` and add sprites under \`/config\` > Persona > Sprites.`,
       invalid_png_title: `🔴 Invalid PNG File`,
       invalid_png_description: `The uploaded file is not a valid PNG image.`,
       no_metadata_title: `🔴 No Persona Data Found`,
@@ -200,7 +173,7 @@ Please edit the import file to use a different name, or remove the existing pers
       error_invalid_trigger_word: `Invalid trigger word: {details}`,
       error_dialogue_mismatch: `Sample dialogue arrays don't match in length`,
       error_invalid_config: `Invalid configuration fields in persona data`,
-      error_no_server_data: `Server not found in database. Please run \`/config setup\` first.`,
+      error_no_server_data: `Server not found in database. Please run \`/setup\` first.`,
       error_name_conflict: `A persona with the name **{name}** already exists on this server. Please use a different name.`,
       error_import_failed: `Failed to import persona data`,
       error_not_json: `The imported file must contain valid JSON data`,
@@ -208,7 +181,7 @@ Please edit the import file to use a different name, or remove the existing pers
       error_invalid_format: `Invalid persona file format`,
       error_invalid_type: `Invalid persona type: {type}. Expected "preset"`,
       avatar_update_skipped_dm: `Persona was imported successfully, except avatar and nickname updates which are not available in Direct Messages`,
-      refresh_reminder: `Run \`/tool refresh\` to apply persona update in this chat`,
+      refresh_reminder: `Run \`/refresh\` to apply persona update in this chat`,
     },
     remove: {
       description: `Remove an alter persona from the server`,
@@ -222,30 +195,10 @@ Please edit the import file to use a different name, or remove the existing pers
       success_title: `🟢 Alter Persona Removed`,
       success_description: `Successfully removed alter persona **{nickname}**.`,
     },
-    swap: {
-      description: `Swap the main persona with an alter persona`,
-      no_permission_title: `🔴 Permission Denied`,
-      no_permission_description: `You need the **Manage Server** permission to swap personas.`,
-      modal_title: `Swap Main Persona`,
-      select_label: `Alter Persona`,
-      select_placeholder: `Choose an alter persona to promote to main...`,
-      no_alters_error_title: `🟡 No Alter Personas`,
-      no_alters_error_description: `There are no alter personas to swap with. Import alter personas using \`/persona import type:alter\`.`,
-      success_title: `🟢 Personas Swapped Successfully`,
-      success_description: `**{new_main}** is now the main persona.
-**{old_main}** is now an alter persona.`,
-      nickname_update_success: `Server nickname has been updated.`,
-      nickname_update_failed: `🟡 Server nickname could not be updated, likely due to Discord rate limits. Please change it manually instead.`,
-      avatar_update_success: `Server avatar has been updated.`,
-      avatar_update_rate_limited: `🟡 Server avatar was not updated due to Discord rate limits. Please change it manually instead.`,
-      avatar_update_failed: `🟡 Server avatar could not be updated, likely due to Discord rate limits. Please change it manually instead.`,
-      avatar_embed_warning: `⚠️ Do not delete this embed, or the stored avatar URL may be lost.`,
-      avatar_stored_notice: `The former main persona's avatar has been stored for future use.`,
-    },
     default: {
       description: `Apply a preset personality configuration`,
       type_description: `Target main/default persona or create as alter persona`,
-      type_choice_default: `Default Persona`,
+      type_choice_default: `Main Persona (replaces current persona)`,
       type_choice_alter: `Alter Persona`,
       no_permission_title: `🔴 Permission Denied`,
       no_permission_description: `You need the **Manage Server** permission to apply personality presets.`,
@@ -296,48 +249,53 @@ Trigger Words ({trigger_word_count}): {triggers}`,
       field_web_search: `Search the Web?`,
       field_additional_inst: `Additional Instructions`,
       wrong_provider_title: `🔴 Incompatible Provider`,
-      wrong_provider_description: `Preset generation requires a compatible provider. Your current provider is **{current_provider}**. Use \`/model text\` to switch to a supported provider.`,
+      wrong_provider_description: `Preset generation requires a compatible provider. Your current provider is **{current_provider}**. Use \`/config\` > Models > Switch Models to switch to a supported provider.`,
       no_api_key_title: `🔴 No API Key`,
-      no_api_key_description: `No active provider is configured. Use \`/setup\` (first time) or \`/config provider add\` to register one.`,
+      no_api_key_description: `No active provider is configured. Use \`/setup\` (first time) or \`/providers\` to register one.`,
       model_incompatible_title: `Incompatible Model`,
       model_incompatible_description: `Your current model (**{model_name}**) does not support **STRUCTURED OUTPUT**, which is required for persona generation.
 
 **Next steps:**
-Use \`/model text\` to switch to a model that supports structured output (e.g., models with "STRUCT" capability).`,
+Use \`/config\` > Models > Switch Models to switch to a model that supports structured output (e.g., models with "STRUCT" capability).`,
       image_vision_required_title: `🔴 Image Vision Required`,
       image_vision_required_description: `You uploaded an image, but your current model (**{model_name}**) does not support **IMAGE VISION** and no vision model is configured.
 
 **Next steps:**
-1. Use \`/model vision\` to set a dedicated vision model, OR
-2. Use \`/model text\` to switch to a vision-capable model, OR
+1. Use \`/config\` > Models > Switch Models to set a dedicated vision model, OR
+2. Use \`/config\` > Models > Switch Models to switch to a vision-capable model, OR
 3. Remove the image and regenerate without it`,
-      vision_model_provider_unsupported_title: `🔴 Vision Model Provider Unsupported`,
-      vision_model_provider_unsupported_description: `Your vision model (**{vision_model_name}**) is on provider **{vision_provider}**, which does not support persona preset generation.
-
-**Next steps:**
-1. Use \`/model vision\` to set a vision model from a supported provider (Google, OpenRouter, DeepSeek, Z.ai, Custom, NVIDIA NIM), OR
-2. Use \`/model text\` to switch your primary model to one that supports both vision and preset generation`,
       web_search_tools_required_title: `🔴 Web Search Unavailable`,
       web_search_tools_required_description: `You selected web search, but the current model (**{model_name}**) does not support **TOOLS**.
 
 **Next steps:**
-1. Use \`/model text\` to switch to a tool-enabled model, OR
+1. Use \`/config\` > Models > Switch Models to switch to a tool-enabled model, OR
 2. Regenerate without web search (choose "No" when asked)`,
       api_key_decrypt_failed_title: `🔴 API Key Error`,
-      api_key_decrypt_failed_description: `Failed to decrypt the active provider credentials. Please reconfigure them using \`/config provider add\`.`,
+      api_key_decrypt_failed_description: `Failed to decrypt the active provider credentials. Please reconfigure them using \`/providers\`.`,
+      vision_credentials_unavailable_title: `🔴 Vision Model Credentials Unavailable`,
+      vision_credentials_unavailable_description: `Your vision model (**{vision_model_name}**) runs on provider **{vision_provider}**, but its saved API key could not be used to describe the image. Reconfigure that provider's credentials with \`/providers\`, or check \`/config\` > Models.`,
       invalid_image_title: `🔴 Invalid Image`,
       invalid_image_description: `Please upload a valid image file (PNG, JPG, JPEG, etc.).`,
-      error_file_too_large: `Avatar image must be under 10 MB.`,
+      error_file_too_large: `Avatar image must be {max_size}MB or smaller.`,
       error_download_timeout: `Avatar download timed out. Please try again.`,
       error_download_failed: `Failed to download avatar image.`,
       processing_title: `Generating Personality...`,
       processing_description: `This may take 1-2 minutes. Please wait while I generate the character...
 
 This may produce unexpected results. You can regenerate if needed.`,
+      captioning_title: `Describing Your Avatar...`,
+      captioning_description: `Your primary model cannot see images, so I am asking your vision model (**{model_name}**) to describe the uploaded avatar first. Your primary model then writes the personality from that description. This may take 1-2 minutes.`,
       generation_failed_title: `🔴 Generation Failed`,
       generation_failed_description: `Failed to generate personality: {error}
 
 Please try again with different inputs or check your API key.`,
+      vision_caption_failed_title: `🔴 Avatar Description Failed`,
+      vision_caption_failed_description: `Your vision model (**{vision_model_name}** on {vision_provider}) could not describe the uploaded avatar.
+
+**Next steps:**
+1. Check that provider's API key with \`/providers\`, OR
+2. Remove the image and regenerate, OR
+3. Set a different vision model under \`/config\` > Models`,
       validation_failed_title: `🔴 Validation Failed`,
       validation_failed_description: `The generated personality data failed validation. Please try again.`,
       image_processing_failed_title: `🔴 Image Processing Failed`,
@@ -358,8 +316,8 @@ Please try again with different inputs or check your API key.`,
 Or press the Import button`,
       success_next_steps_description_dm: `1. Download the attached PNG file
 2. Use \`/persona import\` with the PNG
-3. Run \`/tool refresh\` to apply my new personality`,
-      success_next_steps_footer: `You may edit me more with \`/persona\` commands after.`,
+3. Run \`/refresh\` to apply my new personality`,
+      success_next_steps_footer: `You may customize me further under \`/config\` after.`,
       avatar_update_skipped_dm: `Please note that avatar and nickname updates are not available to import in Direct Messages.`,
     },
     create: {
@@ -385,7 +343,7 @@ Or press the Import button`,
       field_example_bot: `Example Bot Reply`,
       invalid_image_title: `🔴 Invalid Image`,
       invalid_image_description: `Please upload a valid image file (PNG, JPG, JPEG, etc.).`,
-      error_file_too_large: `Avatar image must be under 10 MB.`,
+      error_file_too_large: `Avatar image must be {max_size}MB or smaller.`,
       error_download_timeout: `Avatar download timed out. Please try again.`,
       error_download_failed: `Failed to download avatar image.`,
       desc_too_long_title: `Description Too Long`,
@@ -410,64 +368,8 @@ Or press the Import button`,
       success_next_steps_description: `1. Download the attached PNG file on the right
 2. Use \`/persona import\` with the PNG
 Or press the Import button`,
-      success_next_steps_footer: `You may edit me more with \`/persona\` commands after.`,
+      success_next_steps_footer: `You may customize me further under \`/config\` after.`,
       avatar_update_skipped_dm: `Please note that avatar and nickname updates are not available in Direct Messages.`,
-    },
-    rename: {
-      no_permission_title: `🔴 Permission Denied`,
-      no_permission_description: `You must have the **Manage Server** permission to use this command in a server.`,
-      description: `Change my name on this server.`,
-      modal_title: `Rename Persona`,
-      persona_select_label: `Persona`,
-      persona_select_description: `Choose which persona to rename.`,
-      persona_select_placeholder: `Select a persona...`,
-      main_persona_description: `Main Persona`,
-      alter_persona_description: `Alter Persona`,
-      new_name_input_label: `New Name`,
-      new_name_input_description: `Enter the new name (2-32 characters).`,
-      new_name_input_placeholder: `Enter a new persona name...`,
-      invalid_length_title: `Invalid Name Length`,
-      invalid_length: `Name must be between 2 and 32 characters.`,
-      already_set_title: `Name Already Set`,
-      already_set_description: `My name is already set to \`{nickname}\`.`,
-      success_title: `Name Updated`,
-      success_description: `My name has been changed from \`{old_nickname}\` to \`{new_nickname}\`.`,
-      success_with_trigger_description: `My name has been changed from \`{old_nickname}\` to \`{new_nickname}\`. Trigger words updated accordingly.`,
-      success_with_discord_description: `My name has been changed from \`{old_nickname}\` to \`{new_nickname}\`, and my server nickname has been updated!`,
-      success_with_trigger_and_discord_description: `My name has been changed from \`{old_nickname}\` to \`{new_nickname}\`. Trigger words and server nickname updated!`,
-      nickname_update_failed_footer: `Note: Server nickname update failed (may require "Change Nickname" permission).`,
-      partial_success_title: `Name Updated with Issues`,
-      partial_success_description: `My name has been changed to \`{new_nickname}\`, but some trigger word updates failed.`,
-    },
-    avatar: {
-      description: `Set or remove avatar for a selected persona on this server.`,
-      no_permission_title: `🔴 Permission Denied`,
-      no_permission_description: `You need the **Manage Server** permission to update persona avatars.`,
-      image_description: `Image to set as avatar. Leave empty to clear the selected persona avatar instead.`,
-      image_label: `Avatar Image`,
-      persona_modal_title: `Select Persona`,
-      persona_select_label: `Persona`,
-      persona_select_description: `Choose which persona avatar to update.`,
-      persona_select_placeholder: `Select a persona...`,
-      main_persona_description: `Main Persona`,
-      alter_persona_description: `Alter Persona`,
-      success_title: `Avatar Updated`,
-      success_description: `Successfully updated my avatar for this server.`,
-      success_alter_description: `Successfully updated avatar for persona "{persona_name}".`,
-      removed_title: `Avatar Reset`,
-      removed_description: `Successfully reset my avatar to the default for this server.`,
-      removed_alter_description: `Successfully reset avatar for persona "{persona_name}".`,
-      invalid_image_title: `Invalid Image`,
-      invalid_image_description: `Please provide a valid image file.`,
-      file_too_large_description: `The image file is too large. Maximum file size is 8MB.`,
-      invalid_format_description: `Please provide a PNG, JPG, JPEG, or GIF image file.`,
-      conversion_error_title: `Conversion Error`,
-      conversion_error_description: `Failed to process the image. Please try a different image file.`,
-      api_error_title: `API Error`,
-      api_error_description: `Failed to update the avatar through Discord's API. This is often caused by changing avatars too quickly (rate limits). Please wait and try again.
--# {details}`,
-      error_download_timeout: `Avatar download timed out after 15 seconds. Please try again.`,
-      error_api_timeout: `Discord API call timed out after 15 seconds. Please try again.`,
     },
   },
 };

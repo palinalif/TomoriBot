@@ -1,5 +1,11 @@
 import { PrivacyLevel, type UserRow } from "@/types/db/schema";
-import { userRepository } from "@/utils/db/repositories";
+// Import the singleton directly from its defining module rather than the
+// repositories barrel: the barrel re-exports every repository, so importing it
+// here pulled all of them (and their transitive graph) into the user-cache
+// module and routed cycles through `repositories/index.ts`. The direct import
+// yields the same singleton (`UserRepository.ts` defines it) and narrows the
+// remaining cycle to the value-safe UserRepository <-> userCache pair.
+import { userRepository } from "@/utils/db/repositories/UserRepository";
 import { log } from "../misc/logger";
 
 /**
@@ -45,7 +51,6 @@ async function getOrCreateCacheEntry(userDiscId: string): Promise<UserCacheEntry
   const now = Date.now();
   const cachedEntry = cache.get(userDiscId);
 
-  // Check if cache is still fresh
   if (cachedEntry) {
     const cacheAge = now - cachedEntry.cachedAt;
     if (cacheAge < USER_CACHE_DURATION_MS) {
@@ -60,13 +65,11 @@ async function getOrCreateCacheEntry(userDiscId: string): Promise<UserCacheEntry
   cacheMisses++;
 
   try {
-    // Load user row and privacy level in parallel
     const [userRow, privacyLevel] = await Promise.all([
       userRepository.loadByDiscordId(userDiscId),
       userRepository.getPrivacyLevel(userDiscId),
     ]);
 
-    // Create new cache entry (preserve existing blacklist entries if available)
     const newEntry: UserCacheEntry = {
       userRow,
       privacyLevel,
@@ -79,21 +82,25 @@ async function getOrCreateCacheEntry(userDiscId: string): Promise<UserCacheEntry
   } catch (error) {
     log.error(`[User Cache] Error loading user data for ${userDiscId}:`, error);
 
-    // Return stale cache if available (graceful fallback)
+    // Stale data was read successfully at some point, so it beats a guess in either direction.
     if (cachedEntry) {
       log.warn(`[User Cache] Returning stale cache for user ${userDiscId} due to error`);
       return cachedEntry;
     }
 
-    // No cache available, return default entry
-    const defaultEntry: UserCacheEntry = {
+    // FULL rather than MINIMAL: with nothing readable and nothing cached, the user's own
+    // setting is unknown, and over-protecting for one call costs nothing while the reverse
+    // exposes someone who chose to be invisible.
+    //
+    // Deliberately not written to `cache`: storing it would pin the restrictive guess for the
+    // whole 30 minute TTL, so a blip measured in seconds turned into a half hour of degraded
+    // personalization. Leaving it out makes the next call retry the database.
+    return {
       userRow: null,
-      privacyLevel: PrivacyLevel.MINIMAL,
+      privacyLevel: PrivacyLevel.FULL,
       blacklistStatus: new Map(),
       cachedAt: now,
     };
-    cache.set(userDiscId, defaultEntry);
-    return defaultEntry;
   }
 }
 
@@ -133,14 +140,12 @@ export async function getCachedPrivacyLevel(userDiscId: string): Promise<Privacy
 export async function getCachedBlacklistStatus(serverDiscId: string, userDiscId: string): Promise<boolean> {
   const entry = await getOrCreateCacheEntry(userDiscId);
 
-  // Check if we have blacklist status cached for this server
   if (entry.blacklistStatus.has(serverDiscId)) {
     blacklistCacheHits++;
     // biome-ignore lint/style/noNonNullAssertion: has() check guarantees existence
     return entry.blacklistStatus.get(serverDiscId)!;
   }
 
-  // Blacklist status not cached for this server - query DB
   blacklistCacheMisses++;
 
   try {
@@ -148,9 +153,11 @@ export async function getCachedBlacklistStatus(serverDiscId: string, userDiscId:
     entry.blacklistStatus.set(serverDiscId, isUserBlacklisted);
     return isUserBlacklisted;
   } catch (error) {
+    // Treat the restriction as still in force, and do not record it: a moderation control that
+    // lifts itself on a database hiccup is not a control, but neither should an unreadable
+    // database pin a user as blacklisted once the database recovers.
     log.error(`[User Cache] Error checking blacklist for user ${userDiscId} in server ${serverDiscId}:`, error);
-    // Default to false on error to avoid blocking personalization unintentionally
-    return false;
+    return true;
   }
 }
 
@@ -178,8 +185,14 @@ export function invalidateUserBlacklistCache(serverDiscId: string, userDiscId: s
   }
 }
 
+/** Removes cached blacklist answers for a workspace while retaining unrelated user settings. */
+export function invalidateAllUserBlacklistCacheForServer(serverDiscId: string): void {
+  for (const entry of cache.values()) {
+    entry.blacklistStatus.delete(serverDiscId);
+  }
+}
+
 /**
- * Clears entire in-memory user cache.
  * Useful for testing or manual refresh operations.
  */
 export function clearUserCache(): void {
@@ -193,7 +206,6 @@ export function clearUserCache(): void {
 /**
  * Gets cache statistics for monitoring and debugging.
  *
- * @returns Object with cache hits, misses, hit rates, and cache size
  */
 export function getUserCacheStats(): {
   hits: number;

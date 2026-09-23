@@ -19,12 +19,12 @@ import { replyComponentsV2Status } from "@/utils/discord/ui/statusComponents";
 import { replyInfoEmbed } from "@/utils/discord/ui/embeds";
 import { getCachedTomoriState } from "@/utils/cache/tomoriStateCache";
 import { serverScheduleRepository } from "@/utils/db/repositories";
-import { isBridgeUserId } from "@/utils/bridges";
 import { validateFutureTime } from "@/utils/text/processors/timeUtils";
 import { formatTimeWithOffset, formatUTCOffset } from "@/utils/text/timezoneHelper";
 import type { SelectOption } from "@/types/discord/modal";
 import type { ErrorContext, TomoriState, UserRow } from "@/types/db/schema";
 import type { ReminderSelectionRow } from "@/utils/db/repositories";
+import { buildReminderOptionParts } from "@/commands/scheduled-task/reminderSelectOptions";
 
 const SELECT_MODAL_CUSTOM_ID = "scheduled_task_edit_select_modal";
 const EDIT_MODAL_CUSTOM_ID = "scheduled_task_edit_value_modal";
@@ -165,13 +165,18 @@ function formatReminderDetails(
   target_user: string;
   target_channel: string;
 } {
-  const reminderTime = formatTimeWithOffset(new Date(reminder.reminder_time), timezoneOffset, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const reminderTime = formatTimeWithOffset(
+    new Date(reminder.reminder_time),
+    timezoneOffset,
+    {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    },
+    locale,
+  );
   const repetitionInterval =
     typeof reminder.repetition_interval_hours === "number" && reminder.repetition_interval_hours >= 1
       ? `${reminder.repetition_interval_hours}`
@@ -217,7 +222,7 @@ async function performReminderEdit(
 
   const targetUserId = isReminderForInvoker ? userData.user_disc_id : (botUserId as string);
   const targetUserNickname = isReminderForInvoker
-    ? userData.user_nickname
+    ? (userData.user_nickname ?? replyInteraction.user.displayName)
     : (tomoriState.persona_nickname ?? client.user?.username ?? "Tomori");
 
   const updatedReminder = await serverScheduleRepository.updateReminder({
@@ -294,7 +299,6 @@ export async function execute(
     const timezoneOffset = tomoriState.config.timezone_offset ?? 0;
     const state = tomoriState;
 
-    // 1. Load all reminders for this server, tagged with their owning persona name
     const reminders = await serverScheduleRepository.loadReminderSelections(
       tomoriState.server_id,
       hasManagePermission ? undefined : userData.user_id,
@@ -310,46 +314,26 @@ export async function execute(
       return;
     }
 
-    // 2. Build select options — persona_id NULL means the main persona owns the reminder
     const reminderSelectOptions: SelectOption[] = reminders.map((reminder, index) => {
-      const personaName = reminder.persona_nickname ?? state.persona_nickname;
-      const formattedTime = formatTimeWithOffset(new Date(reminder.reminder_time), timezoneOffset, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
+      const parts = buildReminderOptionParts({
+        reminder,
+        state,
+        locale,
+        timezoneOffset,
+        hasManagePermission,
+        viewerUserId: userData.user_id,
+        repeatTextKey: "commands.scheduled-task.edit.select_repeat_text",
+        managerCreatedByKey: "commands.scheduled-task.edit.select_manager_created_by_text",
       });
-      const repeatText =
-        typeof reminder.repetition_interval_hours === "number" && reminder.repetition_interval_hours >= 1
-          ? localizer(locale, "commands.scheduled-task.edit.select_repeat_text", {
-              hours: reminder.repetition_interval_hours,
-            })
-          : "";
       const typeText = reminder.self_reminder
         ? localizer(locale, "commands.scheduled-task.edit.select_type_task")
         : localizer(locale, "commands.scheduled-task.edit.select_type_reminder", {
             user_nickname: reminder.user_nickname,
           });
-      const isMatrixReminder = reminder.created_by_user_id === null && isBridgeUserId(reminder.user_discord_id);
-      const creatorName = isMatrixReminder
-        ? `${reminder.user_nickname} (Matrix)`
-        : (reminder.created_by_nickname ??
-          (reminder.created_by_user_id ? `user #${reminder.created_by_user_id}` : "unknown"));
-      const managerCreatedByText =
-        hasManagePermission && reminder.created_by_user_id !== userData.user_id
-          ? localizer(locale, "commands.scheduled-task.edit.select_manager_created_by_text", {
-              creator_name: creatorName,
-            })
-          : "";
       const description = localizer(locale, "commands.scheduled-task.edit.select_option_description", {
-        persona_name: personaName,
-        reminder_time: formattedTime,
-        timezone: formatUTCOffset(timezoneOffset),
+        ...parts,
         target_channel: getChannelDisplay(interaction, reminder.channel_disc_id),
         reminder_type: typeText,
-        repeat_text: repeatText,
-        manager_created_by_text: managerCreatedByText,
       });
 
       return {
@@ -359,7 +343,6 @@ export async function execute(
       };
     });
 
-    // 3. Prompt user to pick a reminder
     const selectModalResult = await promptWithPaginatedModal(interaction, locale, {
       modalCustomId: SELECT_MODAL_CUSTOM_ID,
       modalTitleKey: "commands.scheduled-task.edit.select_modal_title",
@@ -397,9 +380,9 @@ export async function execute(
       return;
     }
 
-    // 4. Confirm which reminder will be edited.
+    // Confirm which reminder will be edited.
     // Pass selectModalInteraction directly (unacknowledged) so the confirmation becomes
-    // the one ephemeral message for this whole flow — success will update it in-place.
+    // the one ephemeral message for this whole flow, so success will update it in-place.
     const confirmationResult = await promptWithUnacknowledgedConfirmation(selectModalInteraction, locale, {
       embedTitleKey: "commands.scheduled-task.edit.confirm_title",
       embedDescriptionKey: "commands.scheduled-task.edit.confirm_description",
@@ -416,7 +399,6 @@ export async function execute(
       return;
     }
 
-    // 5. Open the edit modal pre-filled with current values (times in server timezone)
     const reminderForInvoker =
       selectedReminder.self_reminder !== true && selectedReminder.user_discord_id === userData.user_disc_id;
     const editModalResult = await promptWithRawModal(confirmationResult.interaction, locale, {
@@ -474,7 +456,6 @@ export async function execute(
       return;
     }
 
-    // 6. Validate all edited fields before saving
     const editedPurpose = editModalResult.values?.[PURPOSE_INPUT_ID]?.trim() ?? "";
     const editedTimeInput = editModalResult.values?.[TIME_INPUT_ID]?.trim() ?? "";
     const editedIntervalInput = editModalResult.values?.[INTERVAL_INPUT_ID]?.trim() ?? "";
@@ -529,7 +510,6 @@ export async function execute(
       return;
     }
 
-    // 7. Save and update the confirmation message in-place with the result
     const editSucceeded = await performReminderEdit(
       selectedReminder,
       editedPurpose,
@@ -550,19 +530,24 @@ export async function execute(
 
     const updatedDetails = {
       reminder_purpose: formatReminderPreview(editedPurpose, 240),
-      reminder_time: `${formatTimeWithOffset(editedReminderTime, timezoneOffset, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })} (${formatUTCOffset(timezoneOffset)})`,
+      reminder_time: `${formatTimeWithOffset(
+        editedReminderTime,
+        timezoneOffset,
+        {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        },
+        locale,
+      )} (${formatUTCOffset(timezoneOffset)})`,
       repetition_interval_hours: editedIntervalHours.toString(),
       reminder_type: editedReminderForInvoker
         ? localizer(locale, "commands.scheduled-task.edit.type_reminder")
         : localizer(locale, "commands.scheduled-task.edit.type_task"),
       target_user: editedReminderForInvoker
-        ? userData.user_nickname
+        ? (userData.user_nickname ?? interaction.user.displayName)
         : localizer(locale, "commands.scheduled-task.edit.target_none"),
       target_channel: getChannelDisplay(interaction, selectedReminder.channel_disc_id),
     };

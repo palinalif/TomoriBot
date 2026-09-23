@@ -1,5 +1,5 @@
-import { ButtonStyle } from "discord.js";
-import type { ButtonInteraction, ColorResolvable, APIEmbedField, EmbedField, MessageFlags } from "discord.js";
+import type { ButtonStyle } from "discord.js";
+import type { ButtonInteraction, ColorResolvable, EmbedBuilder, MessageFlags } from "discord.js";
 
 /**
  * Options for creating a standard info/status embed.
@@ -16,6 +16,13 @@ export interface StandardEmbedOptions {
   thumbnailUrl?: string;
   flags?: MessageFlags;
   timestamp?: boolean;
+  /**
+   * Optional atomic tip-item locale keys. When present, embed senders add a button that opens
+   * these keys as a dashed bullet list in a read-only text modal.
+   */
+  tipKeys?: string[];
+  /** Shared interpolation vars applied to every tip item in {@link tipKeys}. */
+  tipVars?: Record<string, string | number | boolean>;
 }
 
 /**
@@ -42,6 +49,8 @@ export interface ConfirmationOptions {
   continueCustomId: string;
   cancelCustomId: string;
   timeout?: number;
+  continueStyle?: ButtonStyle.Secondary | ButtonStyle.Danger;
+  cancelStyle?: ButtonStyle.Secondary | ButtonStyle.Danger;
 }
 
 /**
@@ -68,29 +77,9 @@ export const TRANSLATOR_COLORS = {
   [TranslationProvider.BING]: "#7DDA58", // Bing green
 } as const satisfies Record<TranslationProvider, ColorResolvable>;
 
-/**
- * Discord button styles for translation providers
- */
-export const TRANSLATOR_STYLES = {
-  [TranslationProvider.GOOGLE]: ButtonStyle.Danger,
-  [TranslationProvider.BING]: ButtonStyle.Success,
-} as const satisfies Record<TranslationProvider, ButtonStyle>;
-
-/**
- * Helper type for accessing translator properties
- */
-export type Provider = keyof typeof TRANSLATOR_COLORS;
-
-/**
- * Field pair for summary embeds
- */
-export interface SummaryField {
-  nameKey: string;
-  value: string | number | APIEmbedField | EmbedField;
-  vars?: Record<string, string | number>;
-}
-
 export interface SummaryEmbedOptions extends StandardEmbedOptions {
+  docsPath?: string;
+  docsLabelKey?: string;
   fields: Array<{
     nameKey?: string;
     name?: string; // Allow direct name string
@@ -100,6 +89,11 @@ export interface SummaryEmbedOptions extends StandardEmbedOptions {
     valueVars?: Record<string, string | number | boolean>; // Variables for the value localization
     inline?: boolean;
   }>;
+  /**
+   * Extra pre-built embeds to send alongside the summary embed in the same message
+   * (e.g. a separate yellow "notes" embed). Sent after the main embed, in order.
+   */
+  appendEmbeds?: EmbedBuilder[];
 }
 
 /**

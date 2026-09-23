@@ -25,10 +25,13 @@ import type {
   AnyThreadChannel,
 } from "discord.js";
 import { StreamOrchestrator } from "../../utils/discord/streamOrchestrator";
+import { buildStreamContext } from "@/utils/provider/streamContext";
+import { buildGeminiImagePromptParts } from "@/providers/utils/geminiImageParts";
 import { VertexStreamAdapter, type VertexStreamConfig } from "./vertexStreamAdapter";
 import type { ProviderError, StreamContext } from "../../types/stream/interfaces";
 import { DISCORD_STREAMING_CONSTANTS } from "../../types/stream/types";
 import { type ToolStateForContext, getAvailableToolsWithMCP } from "../../tools/toolRegistry";
+import { applyStreamContextAvailability } from "@/tools/availability";
 import type { StreamingContext } from "../../types/tool/interfaces";
 import type { TomoriState } from "../../types/db/schema";
 import type { StructuredContextItem } from "../../types/misc/context";
@@ -67,8 +70,10 @@ import { vertexProviderInfo } from "./providerInfo";
 import { callGoogleStructuredJSON } from "../google/googleStructuredOutput";
 import { generateConversationSummaryGoogle, generateRoleplaySummaryGoogle } from "../google/compactGenerator";
 import { generatePresetFromPrompt } from "../google/presetGenerator";
+import { validateGoogleModelsEndpoint } from "../google/googleCredentialValidation";
 import { getActiveTemperature, isParamDisabled } from "@/utils/provider/samplingControl";
 import { applyDeliberateToolAllowlist } from "@/utils/tools/deliberateToolMode";
+import { resolveToolsEnabled } from "@/utils/tools/toolUseGate";
 
 /**
  * Gets the default Vertex model with a robust fallback chain:
@@ -81,7 +86,6 @@ import { applyDeliberateToolAllowlist } from "@/utils/tools/deliberateToolMode";
 async function getDefaultVertexModel(): Promise<string> {
   const providerName = "vertex";
 
-  // 1. Try cache first (fastest, no DB query)
   if (isLLMCacheReady()) {
     const cachedDefault = getCachedDefaultLLM(providerName);
     if (cachedDefault) {
@@ -90,7 +94,6 @@ async function getDefaultVertexModel(): Promise<string> {
     }
   }
 
-  // 2. Query database for is_default model
   try {
     const dbDefault = await llmModelRepo.loadDefaultModel(providerName);
     if (dbDefault) {
@@ -103,7 +106,6 @@ async function getDefaultVertexModel(): Promise<string> {
     });
   }
 
-  // 3. Fallback to first non-deprecated model
   try {
     const availableModels = await llmModelRepo.loadAvailableModelsForProvider(providerName);
     if (availableModels && availableModels.length > 0) {
@@ -115,7 +117,6 @@ async function getDefaultVertexModel(): Promise<string> {
     log.error(`Failed to load available models for ${providerName}`, error as Error);
   }
 
-  // 4. No models found
   throw new Error(`No default model found for provider: ${providerName}. Please configure models in the database.`);
 }
 
@@ -157,22 +158,15 @@ export class VertexProvider
     return vertexProviderInfo;
   }
 
-  // ─── Client helper ──────────────────────────────────────────────────
-
   /**
    * Build a Vertex GoogleGenAI client from the composite key.
-   * @param compositeKey - The stored {project_id}::{location} string
-   * @returns GoogleGenAI client configured for Vertex AI
    */
   private buildClient(compositeKey: string): GoogleGenAI {
     const config = parseVertexCompositeKey(compositeKey);
     return createVertexClient(config);
   }
 
-  // ─── ApiKeyValidation ────────────────────────────────────────────────
-
   async validateApiKey(compositeKey: string): Promise<ApiKeyValidationResult> {
-    // 1. Parse and validate composite-key format
     let genAI: GoogleGenAI;
     try {
       genAI = this.buildClient(compositeKey);
@@ -185,31 +179,14 @@ export class VertexProvider
       return { valid: false, error: providerError };
     }
 
-    // 2. Test with a lightweight generateContent call
+    // Validate project, location, credentials, and endpoint access without
+    // coupling setup to whichever model is currently selected.
     try {
       log.info("Validating Vertex AI configuration...");
 
-      const defaultModel = await getDefaultVertexModel();
-      const response = await genAI.models.generateContent({
-        model: defaultModel,
-        contents: [
-          {
-            text: 'This is a test message for verifying configuration. Say "VALID"',
-          },
-        ],
-      });
+      await validateGoogleModelsEndpoint(genAI);
 
-      const responseText = response.text;
-
-      if (!responseText?.toLowerCase().includes("valid")) {
-        log.warn("Vertex validation response did not contain 'VALID'");
-        const adapter = new VertexStreamAdapter();
-        const error = new Error("Validation response did not contain expected confirmation");
-        const providerError = adapter.handleProviderError(error);
-        return { valid: false, error: providerError };
-      }
-
-      log.success("Vertex AI configuration validation successful");
+      log.success("Vertex AI configuration validation successful via models endpoint");
       return { valid: true };
     } catch (error) {
       const adapter = new VertexStreamAdapter();
@@ -227,14 +204,10 @@ export class VertexProvider
     }
   }
 
-  // ─── Error formatting ───────────────────────────────────────────────
-
   formatErrorDescription(error: ProviderError, locale: string): string | null {
     const adapter = new VertexStreamAdapter();
     return adapter.createErrorDescription(error, locale);
   }
-
-  // ─── SupportsEmbeddings ─────────────────────────────────────────────
 
   supportsEmbeddingTaskType(): boolean {
     return true;
@@ -276,8 +249,6 @@ export class VertexProvider
     return results.filter((values) => values.length > 0);
   }
 
-  // ─── SupportsStructuredOutput ────────────────────────────────────────
-
   getExpressionInitializationBatchSize(): number {
     return 30;
   }
@@ -291,10 +262,9 @@ export class VertexProvider
     return await callGoogleStructuredJSON(request, responseSchema, zodSchema, client);
   }
 
-  // ─── SupportsPresetGeneration ────────────────────────────────────────
-
   async generatePreset(request: ProviderPresetGenerationRequest): Promise<PresetGenerationResult> {
     const client = this.buildClient(request.apiKey);
+    const defaultSearchModelName = request.params.useWebSearch ? await this.getDefaultModel() : undefined;
     return await generatePresetFromPrompt(
       request.apiKey,
       {
@@ -303,10 +273,9 @@ export class VertexProvider
       },
       request.locale,
       client,
+      defaultSearchModelName,
     );
   }
-
-  // ─── SupportsConversationCompaction ──────────────────────────────────
 
   async generateConversationSummary(request: ProviderCompactSummaryRequest): Promise<CompactConversationResult> {
     const client = this.buildClient(request.apiKey);
@@ -326,13 +295,7 @@ export class VertexProvider
       model: request.model,
     });
 
-    // Build parts: reference images (as inlineData) followed by the text prompt.
-    // SendMessageParameters.message is PartListUnion — inline images must be
-    // passed as inlineData parts, not via a non-existent "media" field.
-    const messageParts: Array<{ inlineData: { mimeType: string; data: string } } | string> = [
-      ...(request.referenceImages ?? []).map((img) => ({ inlineData: { mimeType: img.mimeType, data: img.data } })),
-      request.prompt,
-    ];
+    const messageParts = buildGeminiImagePromptParts(request.prompt, request.referenceImages ?? []);
 
     const response = await chat.sendMessage({
       message: messageParts,
@@ -356,8 +319,6 @@ export class VertexProvider
 
     throw new Error("Vertex image generation response did not contain inline image data");
   }
-
-  // ─── Tools ──────────────────────────────────────────────────────────
 
   async getTools(
     tomoriState: TomoriState,
@@ -392,6 +353,8 @@ export class VertexProvider
           imagegen_enabled: tomoriState.config.imagegen_enabled,
           videogen_enabled: tomoriState.config.videogen_enabled,
           voice_message_enabled: tomoriState.config.voice_message_enabled,
+          user_blocking_enabled: tomoriState.config.user_blocking_enabled,
+          user_info_updates_enabled: tomoriState.config.user_info_updates_enabled,
           thread_creation_enabled: tomoriState.config.thread_creation_enabled,
         },
       };
@@ -402,32 +365,14 @@ export class VertexProvider
         totalCount,
       } = await getAvailableToolsWithMCP("vertex", toolStateForContext);
 
-      // Apply streaming context filtering if available
-      let finalBuiltInTools = availableBuiltInTools;
+      let finalBuiltInTools = applyStreamContextAvailability({
+        providerLabel: "Vertex provider",
+        provider: "vertex",
+        builtInTools: availableBuiltInTools,
+        streamContext: streamingContext,
+        tomoriState,
+      });
       let finalMcpFunctionNames = availableMcpFunctionNames;
-      if (streamingContext) {
-        const minimalContext = {
-          streamContext: streamingContext,
-          provider: "vertex" as const,
-          channel: {} as BaseGuildTextChannel,
-          client: {} as Client,
-          tomoriState: tomoriState,
-          locale: "en-US",
-        };
-
-        finalBuiltInTools = availableBuiltInTools.filter((tool) => {
-          const isContextAvailable =
-            "isAvailableForContext" in tool && typeof tool.isAvailableForContext === "function"
-              ? tool.isAvailableForContext("vertex", minimalContext)
-              : true;
-
-          return isContextAvailable;
-        });
-
-        log.info(
-          `Applied streaming context filtering: ${availableBuiltInTools.length} → ${finalBuiltInTools.length} built-in tools`,
-        );
-      }
 
       ({ builtInTools: finalBuiltInTools, mcpFunctionNames: finalMcpFunctionNames } = applyDeliberateToolAllowlist({
         providerLabel: "Vertex provider",
@@ -455,13 +400,9 @@ export class VertexProvider
     }
   }
 
-  // ─── Default model ──────────────────────────────────────────────────
-
   async getDefaultModel(): Promise<string> {
     return await getDefaultVertexModel();
   }
-
-  // ─── Config ─────────────────────────────────────────────────────────
 
   async createConfig(tomoriState: TomoriState, apiKey: string): Promise<VertexProviderConfig> {
     const maxOutputTokens =
@@ -513,14 +454,12 @@ export class VertexProvider
     };
 
     // Only attach tools for models that support function calling
-    if (tomoriState.llm.has_tools) {
+    if (resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
       config.tools = await this.getTools(tomoriState);
     }
 
     return config;
   }
-
-  // ─── Streaming ──────────────────────────────────────────────────────
 
   async streamToDiscord(
     channel: BaseGuildTextChannel | BaseGuildVoiceChannel | DMChannel | AnyThreadChannel,
@@ -597,17 +536,16 @@ export class VertexProvider
         log.info(`VertexProvider: Applied thinking config for model ${config.model}`);
       }
 
-      // Override tools with context-aware tools when streaming context is provided
-      if (streamingContext && tomoriState.llm.has_tools) {
+      if (streamingContext && resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
         log.info("VertexProvider: Reloading tools with streaming context for context-aware availability");
         const contextAwareTools = await this.getTools(tomoriState, streamingContext);
         streamConfig.tools = contextAwareTools;
-      } else if (streamingContext && !tomoriState.llm.has_tools) {
+      } else if (streamingContext && !resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
         log.info("VertexProvider: Skipping context-aware tool reload - model doesn't support tools");
       }
 
-      // Create streaming context
-      const streamContext: StreamContext = {
+      const streamContext: StreamContext = buildStreamContext({
+        provider: "vertex",
         channel,
         client,
         initialInteraction,
@@ -617,27 +555,13 @@ export class VertexProvider
         currentTurnModelParts,
         emojiStrings,
         functionInteractionHistory,
-        provider: "vertex",
-        locale: userLocale ?? "en-US",
-        suppressUserErrors: streamingContext?.suppressUserErrors,
-        suppressTextOutput: streamingContext?.suppressTextOutput,
-        rotationKeyRetriesUsed: streamingContext?.rotationKeyRetriesUsed,
-        outputPrefill: streamingContext?.outputPrefill,
-        outputPrefillState: streamingContext?.outputPrefillState,
-        replyNoticeState: streamingContext?.replyNoticeState,
+        userLocale,
+        streamingContext,
         webhook,
         personaAvatarUrl,
         personaUsername,
         prefixStrippingName,
-        forcedMentions: streamingContext?.forcedMentions,
-        abortSignal: streamingContext?.abortSignal,
-
-        // Opaque message ID map for snowflake ID abstraction in LLM-visible text
-        messageIdMap: streamingContext?.messageIdMap,
-        recordTurnOutputMessage: streamingContext?.recordTurnOutputMessage,
-      };
-
-      // Create streaming components
+      });
       const orchestrator = new StreamOrchestrator();
       const vertexAdapter = new VertexStreamAdapter();
 

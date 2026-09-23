@@ -73,7 +73,14 @@ function buildThoughtLogEmbeds(args: {
     attributionLine?.trim(),
   ].filter((line): line is string => Boolean(line?.trim()));
   const description = descriptionLines.join("\n").slice(0, EMBED_DESCRIPTION_LIMIT);
-  const provider = tomoriState.llm.llm_provider;
+  // For OpenRouter, the upstream serving backend (e.g. "minimax-cn") is appended so admins
+  // can identify a backend that bled reasoning into content and pin/avoid it.
+  const provider = thoughtLog.servingProvider
+    ? localizer(locale, "genai.thought_log.provider_with_serving", {
+        provider: tomoriState.llm.llm_provider,
+        serving_provider: thoughtLog.servingProvider,
+      })
+    : tomoriState.llm.llm_provider;
   const model = getLlmDisplayName(tomoriState.llm, tomoriState.config.custom_model_name);
   const hasThinkingContent = Boolean(
     normalizeThoughtLogText(thoughtLog.summary) || normalizeThoughtLogText(thoughtLog.raw),
@@ -153,7 +160,6 @@ function buildThoughtLogEmbeds(args: {
       continue;
     }
 
-    // Standard sections: split across multiple embeds if needed
     let remaining = section.content;
 
     while (remaining.length > 0) {
@@ -177,51 +183,6 @@ function buildThoughtLogEmbeds(args: {
   }
 
   return embeds;
-}
-
-function appendThoughtSection(existing?: string, incoming?: string): string | undefined {
-  const normalizedExisting = normalizeThoughtLogText(existing);
-  const normalizedIncoming = normalizeThoughtLogText(incoming);
-  if (!normalizedIncoming) {
-    return normalizedExisting;
-  }
-  if (!normalizedExisting || normalizedExisting === normalizedIncoming) {
-    return normalizedIncoming;
-  }
-  if (normalizedExisting.includes(normalizedIncoming)) {
-    return normalizedExisting;
-  }
-  if (normalizedIncoming.includes(normalizedExisting)) {
-    return normalizedIncoming;
-  }
-
-  return `${normalizedExisting}\n\n${normalizedIncoming}`;
-}
-
-export function mergeThoughtLogPayload(
-  base?: ThoughtLogPayload | null,
-  next?: ThoughtLogPayload | null,
-): ThoughtLogPayload | undefined {
-  const summary = appendThoughtSection(base?.summary, next?.summary);
-  const raw = appendThoughtSection(base?.raw, next?.raw);
-  const fetchedContent = appendThoughtSection(base?.fetchedContent, next?.fetchedContent);
-  const firstReplyUrl = base?.firstReplyUrl || next?.firstReplyUrl;
-  const generationDurationMs =
-    typeof base?.generationDurationMs === "number" || typeof next?.generationDurationMs === "number"
-      ? (base?.generationDurationMs ?? 0) + (next?.generationDurationMs ?? 0)
-      : undefined;
-
-  if (!summary && !raw && !fetchedContent && !firstReplyUrl && generationDurationMs === undefined) {
-    return undefined;
-  }
-
-  return {
-    summary,
-    raw,
-    fetchedContent,
-    firstReplyUrl,
-    generationDurationMs,
-  };
 }
 
 export function hasThoughtLogContent(payload?: ThoughtLogPayload | null): boolean {

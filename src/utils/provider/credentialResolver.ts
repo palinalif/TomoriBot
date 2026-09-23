@@ -10,7 +10,7 @@ import { configRepository, llmModelRepo, llmProviderRepo } from "@/utils/db/repo
 import { log } from "@/utils/misc/logger";
 import { resolveCustomEndpointForProvider } from "@/utils/provider/customEndpointService";
 import { decryptApiKey } from "@/utils/security/crypto";
-import { CUSTOM_ENDPOINT_PLACEHOLDER_KEY } from "@/utils/discord/customProviderModal";
+import { CUSTOM_ENDPOINT_PLACEHOLDER_KEY } from "@/utils/provider/legacyCustomProvider";
 import { isCustomProvider } from "@/utils/provider/customProviderUtils";
 
 export type Capability = "text" | "embedding" | "image-standard" | "image-nai" | "video" | "vision";
@@ -66,8 +66,9 @@ function mapCapabilityToPersonalCapability(capability: Capability): PersonalProv
     case "embedding":
       return "embedding";
     case "image-standard":
-    case "image-nai":
       return "image";
+    case "image-nai":
+      return "image_nai";
     case "video":
       return "video";
     case "vision":

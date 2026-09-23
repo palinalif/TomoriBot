@@ -1,15 +1,19 @@
 import type { Embed, Message, MessageReaction } from "discord.js";
+import { MessageType } from "discord.js";
 import type { TomoriState } from "@/types/db/schema";
 import type { ForcedMention } from "@/types/discord/mentions";
 import { ContextItemTag, type StructuredContextItem } from "@/types/misc/context";
 import { getCachedBlacklistStatus, getCachedUserRow } from "@/utils/cache/userCache";
 import { stripBridgePrefix } from "@/utils/bridges";
 import { resolvePreferredDiscordDisplayName } from "@/utils/discord/displayName";
+import { normalizeRenderModifierName, resolveRenderModifierSourcePersona } from "@/utils/discord/renderModifierParser";
+import { resolveSpriteMessageDisplayName } from "@/utils/discord/spriteMessageLabel";
 import { log } from "@/utils/misc/logger";
+import { parseIntegerEnvFlag } from "@/utils/misc/envFlags";
 import { compactWhitespace, normalizeTailDirective } from "@/utils/chat/contextDirectives";
 import type { SimplifiedMessageForContext } from "@/utils/text/contextBuilder";
 import { formatTimestampInline } from "@/utils/text/contextBuilder";
-import { getSupportedLocales, localizer } from "@/utils/text/localizer";
+import { matchesProtocolTemplateKey, classifyProtocolEmbed } from "@/utils/discord/embedProtocol";
 import { escapeRegExp } from "@/utils/text/processors/regexUtils";
 import type { MessageIdMap } from "@/utils/text/messageIdMap";
 import { normalizeTriggerWord } from "@/utils/text/triggerWords";
@@ -42,8 +46,6 @@ const SUPPORTED_VIDEO_MIME_TYPES = [
   "video/3gpp",
 ];
 const DISCORD_MESSAGE_LINK_PATTERN = /discord(?:app)?\.com\/channels\/(?:@me|\d+)\/(\d+)\/(\d+)/;
-const REPLY_CONTEXT_URL_SENTINEL = "https://discord.com/channels/0/0";
-const REPLY_CONTEXT_USER_SENTINEL = "__tomori_user__";
 
 export type ReactionContextBudgetState = {
   callsUsed: number;
@@ -97,8 +99,12 @@ export function buildRevealedMessageMetadataTailDirective(): string {
   return (
     "Recent message metadata has been revealed in the visible conversation turns. " +
     "Each annotated message now includes a `ref_N` handle and sent timestamp. " +
+    // The system prompt still documents `reveal_message_metadata` (macros expand
+    // once at context-build time, before the reveal), so without this line the
+    // model re-requests a reveal it has already been given.
+    "That reveal is already complete, so do not call `reveal_message_metadata` again for the rest of this turn: use the `ref_N` handles shown above. " +
     "`manage_message` can pin any recent message if Discord permissions allow it, and can edit or delete recent messages you or another character owns. " +
-    "`interact_with_recent_message` can react to a recent message with an emoji or send a short reply/backtrack comment about it."
+    "`interact_with_recent_message` can react to a recent message with an emoji or send a short reply/backtrack comment about it; replies targeting a known persona message use that persona identity when possible."
   );
 }
 
@@ -194,6 +200,50 @@ export function insertBeforeLatestDialoguePair(
   contextSegments.splice(insertAt, 0, injectedItem);
 }
 
+/**
+ * Injects an item into the dialogue history at a given depth from the bottom.
+ * depth=0 → appended after all dialogue (tail, right before model generates).
+ * depth=N → inserted before the Nth DIALOGUE_HISTORY item from the end.
+ *
+ * Only ContextItemTag.DIALOGUE_HISTORY items are counted: DIALOGUE_SAMPLE
+ * (sample/example dialogues) are intentionally excluded from the depth walk
+ * so they don't interfere with nudge positioning in real conversation history.
+ *
+ * If fewer real dialogue turns exist than requested depth, clamps to the
+ * earliest available position (just before the first real dialogue turn) rather
+ * than jumping to tail, keeping the nudge within the conversation area.
+ */
+export function insertAtDialogueDepth(
+  items: StructuredContextItem[],
+  nudge: StructuredContextItem,
+  depth: number,
+): void {
+  if (depth <= 0) {
+    items.push(nudge);
+    return;
+  }
+  let found = 0;
+  let lastFoundIndex = -1;
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (items[i].metadataTag === ContextItemTag.DIALOGUE_HISTORY) {
+      found++;
+      lastFoundIndex = i;
+      if (found === depth) {
+        items.splice(i, 0, nudge);
+        return;
+      }
+    }
+  }
+  // Fewer real dialogue turns than depth: clamp to the earliest found position.
+  // This keeps the nudge inside the conversation area rather than jumping to tail.
+  if (lastFoundIndex !== -1) {
+    items.splice(lastFoundIndex, 0, nudge);
+  } else {
+    // No dialogue history at all: tail is the only option
+    items.push(nudge);
+  }
+}
+
 export function findReplyContextTargetInMessage(
   message: Pick<Message, "embeds">,
 ): { channelId: string; messageId: string } | null {
@@ -210,26 +260,15 @@ function extractReplyContextTargetFromEmbed(embed: Embed): { channelId: string; 
   const description = embed.description?.trim() ?? "";
   const authorName = embed.author?.name?.trim() ?? "";
   const footerText = embed.footer?.text?.trim() ?? "";
-  const hasReplyDescription = matchesLocalizedReplyContextTemplate(
-    description,
+  const hasReplyMarker = classifyProtocolEmbed(embed) === "reply_context";
+  const hasReplyDescription = matchesProtocolTemplateKey(
     "genai.message_interaction.reply_context_description",
-    { message_url: REPLY_CONTEXT_URL_SENTINEL },
+    description,
   );
-  const hasReplyAuthor = matchesLocalizedReplyContextTemplate(
-    authorName,
-    "genai.message_interaction.reply_context_author",
-    { user: REPLY_CONTEXT_USER_SENTINEL },
-  );
-  const hasReplyFooter = matchesLocalizedReplyContextTemplate(
-    footerText,
-    "genai.message_interaction.reply_context_footer",
-    {
-      user: REPLY_CONTEXT_USER_SENTINEL,
-      message_url: REPLY_CONTEXT_URL_SENTINEL,
-    },
-  );
+  const hasReplyAuthor = matchesProtocolTemplateKey("genai.message_interaction.reply_context_author", authorName);
+  const hasReplyFooter = matchesProtocolTemplateKey("genai.message_interaction.reply_context_footer", footerText);
 
-  if (!hasReplyDescription && !hasReplyAuthor && !hasReplyFooter) {
+  if (!hasReplyMarker && !hasReplyDescription && !hasReplyAuthor && !hasReplyFooter) {
     return null;
   }
 
@@ -244,24 +283,6 @@ function extractReplyContextTargetFromEmbed(embed: Embed): { channelId: string; 
   };
 }
 
-function matchesLocalizedReplyContextTemplate(
-  text: string,
-  templateKey: string,
-  placeholderValues: Record<string, string>,
-): boolean {
-  for (const locale of getSupportedLocales()) {
-    const template = localizer(locale, templateKey, placeholderValues);
-    let pattern = escapeRegExp(template);
-    for (const placeholderValue of Object.values(placeholderValues)) {
-      pattern = pattern.replaceAll(escapeRegExp(placeholderValue), ".+?");
-    }
-    if (new RegExp(`^${pattern}$`).test(text)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 export function annotateRecentMessageMetadataInContext(params: {
   simplifiedMessages: SimplifiedMessageForContext[];
   contextSegments: StructuredContextItem[];
@@ -273,7 +294,7 @@ export function annotateRecentMessageMetadataInContext(params: {
   // into that turn. Merged turns expand to all constituents; plain turns map to one.
   const constituentIdsByEntryId = new Map<string, string[]>();
   for (const message of params.simplifiedMessages) {
-    // 1. Resolve the original messages folded into this entry. Merged entries carry
+    // Resolve the original messages folded into this entry. Merged entries carry
     //    combinedMessageIds + combinedCreatedAts (parallel arrays); plain entries
     //    fall back to their own id + createdAt.
     const isMerged = !!message.combinedMessageIds && message.combinedMessageIds.length > 0;
@@ -319,7 +340,7 @@ export function annotateRecentMessageMetadataInContext(params: {
     if (textParts.some((part) => part.text.includes("[System: Message metadata: ref="))) {
       continue;
     }
-    // 2. Emit one metadata line per constituent message (in message order) so each
+    // Emit one metadata line per constituent message (in message order) so each
     //    original message in a merged turn still exposes its own ref_N handle and
     //    sent timestamp for manage_message / interact_with_recent_message.
     const annotationBlock = constituentIds
@@ -389,8 +410,13 @@ export async function buildReplyReferenceContextAnnotation(params: {
 
   const replyRef = params.messageIdMap.register(params.replyMessage.id, "ref");
   const referencedRef = params.messageIdMap.register(params.referencedMessage.id, "ref");
+  const referencedSummary = `${formatInlineSystemContent(params.referencedMessage.content)}${buildReplyReferenceAttachmentInfo(params.referencedMessage)}`;
 
-  return `[System: This message (ID: ${replyRef}) by ${replyAuthorName} is referring to a previous message (ID: ${referencedRef}) by ${referencedAuthorName} saying: ${formatInlineSystemContent(params.referencedMessage.content)}${buildReplyReferenceAttachmentInfo(params.referencedMessage)}]`;
+  if (params.replyMessage.type === MessageType.ChannelPinnedMessage) {
+    return `[System: ${replyAuthorName} pinned a previous message (ID: ${referencedRef}) by ${referencedAuthorName} saying: ${referencedSummary}]`;
+  }
+
+  return `[System: This message (ID: ${replyRef}) by ${replyAuthorName} is referring to a previous message (ID: ${referencedRef}) by ${referencedAuthorName} saying: ${referencedSummary}]`;
 }
 
 export async function buildReactionContextAnnotation(
@@ -479,13 +505,6 @@ function parseBooleanEnvFlag(value: string | undefined, defaultValue: boolean): 
   return defaultValue;
 }
 
-function parseIntegerEnvFlag(value: string | undefined, defaultValue: number, minimum: number): number {
-  if (typeof value !== "string") return defaultValue;
-  const parsed = Number.parseInt(value, 10);
-  if (Number.isNaN(parsed)) return defaultValue;
-  return Math.max(minimum, parsed);
-}
-
 function buildRecentMessageMetadataInline(createdAt: number): string {
   return `sent ${formatTimestampInline(createdAt)}`;
 }
@@ -513,7 +532,12 @@ async function resolveMessageAuthorDisplayName(params: {
   serverPersonalizationDisabled: boolean;
 }): Promise<string> {
   const webhookName = stripBridgePrefix(params.message.author.username);
-  const matchedPersona = params.message.webhookId ? params.personaByNickname.get(webhookName.toLowerCase()) : undefined;
+  const renderModifierSource = params.message.webhookId
+    ? resolveRenderModifierSourcePersona(webhookName, params.personaByNickname)
+    : null;
+  const matchedPersona = params.message.webhookId
+    ? (renderModifierSource?.persona ?? params.personaByNickname.get(normalizeRenderModifierName(webhookName)))
+    : undefined;
   const userRow =
     params.message.author.id !== params.clientUserId && !matchedPersona
       ? await getCachedUserRow(params.message.author.id)
@@ -529,7 +553,19 @@ async function resolveMessageAuthorDisplayName(params: {
   if (params.message.author.id === params.clientUserId) {
     return params.botDisplayName || "Bot";
   }
+
+  const spriteDisplayName =
+    !renderModifierSource && matchedPersona
+      ? await resolveSpriteMessageDisplayName(
+          params.message.id,
+          matchedPersona.persona_id,
+          matchedPersona.persona_nickname,
+        )
+      : null;
+
   return (
+    renderModifierSource?.displayName ??
+    spriteDisplayName ??
     matchedPersona?.persona_nickname ??
     (userBlacklisted || params.serverPersonalizationDisabled || !userRow?.user_nickname
       ? fallbackName
@@ -564,4 +600,40 @@ function formatReactionUserLabel(
 
 export function formatInlineSystemContent(content: string | null | undefined): string {
   return content?.replace(/\s+/g, " ").trim() || "[System: No text content was included]";
+}
+
+// Turn-ephemeral `[System: …]` annotations the context builder injects into message
+// text. They carry per-turn `ref_N` handles and message/channel IDs that are minted
+// fresh each turn (see buildReplyReferenceContextAnnotation / buildRecentMessageMetadataAnnotation
+// / buildReactionContextAnnotation and the provider media notices). Persisting them
+// verbatim into durable stores (e.g. short-term memory) leaves stale handles that a
+// later turn re-renders against a different messageIdMap: risking mis-targeted
+// manage_message / interact_with_recent_message actions. Strip them before storing.
+const INJECTED_CONTEXT_ANNOTATION_PATTERNS: RegExp[] = [
+  // Reply-reference annotation AND media/GIF notices: "[System: This message (ID: …) …]"
+  /\[System: This message \(ID: [^)]*\)[^\]]*\]/g,
+  // Recent-message metadata: "[System: Message metadata: ref=… | …]"
+  /\[System: Message metadata:[^\]]*\]/g,
+  // Reaction context: "[System: Reactions on this message: …]"
+  /\[System: Reactions on this message:[^\]]*\]/g,
+];
+
+/**
+ * Removes injected, turn-ephemeral `[System: …]` annotations from message text so the
+ * clean conversational content can be persisted (e.g. into short-term memory) without
+ * stale per-turn `ref_N` handles or IDs leaking into future turns.
+ *
+ * @param content - Raw message text that may carry injected context annotations.
+ * @returns The text with known injected annotations removed and blank lines collapsed.
+ */
+export function stripInjectedContextAnnotations(content: string): string {
+  let cleaned = content;
+  for (const pattern of INJECTED_CONTEXT_ANNOTATION_PATTERNS) {
+    cleaned = cleaned.replace(pattern, "");
+  }
+  // Collapse trailing whitespace and blank lines left behind by removed annotations.
+  return cleaned
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
 }

@@ -11,7 +11,7 @@ type BooleanColumn<T> = {
 type ServerCapabilitiesBooleanColumn = BooleanColumn<ServerCapabilitiesConfigRow>;
 type ServerMemberPermissionsBooleanColumn = BooleanColumn<ServerMemberPermissionsConfigRow>;
 
-export type CapabilitiesManageCapabilityColumn = Extract<
+type CapabilitiesManageCapabilityColumn = Extract<
   ServerCapabilitiesBooleanColumn,
   | "emoji_usage_enabled"
   | "sticker_usage_enabled"
@@ -21,9 +21,13 @@ export type CapabilitiesManageCapabilityColumn = Extract<
   | "imagegen_enabled"
   | "videogen_enabled"
   | "voice_message_enabled"
+  | "user_blocking_enabled"
+  | "short_term_memory_enabled"
+  | "user_info_updates_enabled"
+  | "time_awareness_enabled"
 >;
 
-export type CapabilitiesManageMemberPermissionColumn = Extract<
+type CapabilitiesManageMemberPermissionColumn = Extract<
   ServerMemberPermissionsBooleanColumn,
   "self_teaching_enabled" | "personal_memories_enabled"
 >;
@@ -34,6 +38,7 @@ export type CapabilitiesManageConfigState = Pick<
 >;
 
 interface PermissionDefinitionBase {
+  page: "available-tools" | "context-additions";
   /** Value used as the checkbox option identifier */
   value: string;
   /** Locale key for the option label */
@@ -58,7 +63,7 @@ export type CapabilitiesManagePermissionDefinition =
       dbColumn: CapabilitiesManageCapabilityColumn;
     });
 
-export type CapabilitiesManageConfigChange =
+type CapabilitiesManageConfigChange =
   | {
       value: string;
       table: "memberPermissions";
@@ -83,9 +88,10 @@ export interface CapabilitiesManageConfigWritePlan {
   changes: CapabilitiesManageConfigChange[];
 }
 
-export const CAPABILITIES_MANAGE_PERMISSION_DEFINITIONS: readonly CapabilitiesManagePermissionDefinition[] = [
+const CAPABILITIES_MANAGE_PERMISSION_DEFINITIONS: readonly CapabilitiesManagePermissionDefinition[] = [
   {
     value: "selfteaching",
+    page: "available-tools",
     table: "memberPermissions",
     dbColumn: "self_teaching_enabled",
     labelKey: "commands.capabilities.manage.selfteaching_option",
@@ -93,23 +99,17 @@ export const CAPABILITIES_MANAGE_PERMISSION_DEFINITIONS: readonly CapabilitiesMa
     getState: (c) => c.self_teaching_enabled,
   },
   {
-    value: "personalization",
-    table: "memberPermissions",
-    dbColumn: "personal_memories_enabled",
-    labelKey: "commands.capabilities.manage.personalization_option",
-    descKey: "commands.capabilities.manage.personalization_desc",
-    getState: (c) => c.personal_memories_enabled,
-  },
-  {
-    value: "emojiusage",
+    value: "userinfo",
+    page: "available-tools",
     table: "capabilities",
-    dbColumn: "emoji_usage_enabled",
-    labelKey: "commands.capabilities.manage.emojiusage_option",
-    descKey: "commands.capabilities.manage.emojiusage_desc",
-    getState: (c) => c.emoji_usage_enabled,
+    dbColumn: "user_info_updates_enabled",
+    labelKey: "commands.capabilities.manage.userinfo_option",
+    descKey: "commands.capabilities.manage.userinfo_desc",
+    getState: (c) => c.user_info_updates_enabled ?? true,
   },
   {
     value: "stickerusage",
+    page: "available-tools",
     table: "capabilities",
     dbColumn: "sticker_usage_enabled",
     labelKey: "commands.capabilities.manage.stickerusage_option",
@@ -118,6 +118,7 @@ export const CAPABILITIES_MANAGE_PERMISSION_DEFINITIONS: readonly CapabilitiesMa
   },
   {
     value: "websearch",
+    page: "available-tools",
     table: "capabilities",
     dbColumn: "web_search_enabled",
     labelKey: "commands.capabilities.manage.websearch_option",
@@ -126,6 +127,7 @@ export const CAPABILITIES_MANAGE_PERMISSION_DEFINITIONS: readonly CapabilitiesMa
   },
   {
     value: "managemessage",
+    page: "available-tools",
     table: "capabilities",
     dbColumn: "manage_message_enabled",
     labelKey: "commands.capabilities.manage.managemessage_option",
@@ -134,6 +136,7 @@ export const CAPABILITIES_MANAGE_PERMISSION_DEFINITIONS: readonly CapabilitiesMa
   },
   {
     value: "threadcreation",
+    page: "available-tools",
     table: "capabilities",
     dbColumn: "thread_creation_enabled",
     labelKey: "commands.capabilities.manage.threadcreation_option",
@@ -142,6 +145,7 @@ export const CAPABILITIES_MANAGE_PERMISSION_DEFINITIONS: readonly CapabilitiesMa
   },
   {
     value: "imagegen",
+    page: "available-tools",
     table: "capabilities",
     dbColumn: "imagegen_enabled",
     labelKey: "commands.capabilities.manage.imagegen_option",
@@ -150,6 +154,7 @@ export const CAPABILITIES_MANAGE_PERMISSION_DEFINITIONS: readonly CapabilitiesMa
   },
   {
     value: "videogen",
+    page: "available-tools",
     table: "capabilities",
     dbColumn: "videogen_enabled",
     labelKey: "commands.capabilities.manage.videogen_option",
@@ -158,6 +163,7 @@ export const CAPABILITIES_MANAGE_PERMISSION_DEFINITIONS: readonly CapabilitiesMa
   },
   {
     value: "voicemessage",
+    page: "available-tools",
     table: "capabilities",
     dbColumn: "voice_message_enabled",
     labelKey: "commands.capabilities.manage.voicemessage_option",
@@ -165,21 +171,70 @@ export const CAPABILITIES_MANAGE_PERMISSION_DEFINITIONS: readonly CapabilitiesMa
     getState: (c) => c.voice_message_enabled ?? true,
     requiresElevenLabs: true,
   },
+  {
+    value: "userblocking",
+    page: "available-tools",
+    table: "capabilities",
+    dbColumn: "user_blocking_enabled",
+    labelKey: "commands.capabilities.manage.userblocking_option",
+    descKey: "commands.capabilities.manage.userblocking_desc",
+    getState: (c) => c.user_blocking_enabled ?? true,
+  },
+  {
+    value: "personalization",
+    page: "context-additions",
+    table: "memberPermissions",
+    dbColumn: "personal_memories_enabled",
+    labelKey: "commands.capabilities.manage.personalization_option",
+    descKey: "commands.capabilities.manage.personalization_desc",
+    getState: (c) => c.personal_memories_enabled,
+  },
+  {
+    value: "emojiusage",
+    page: "context-additions",
+    table: "capabilities",
+    dbColumn: "emoji_usage_enabled",
+    labelKey: "commands.capabilities.manage.emojiusage_option",
+    descKey: "commands.capabilities.manage.emojiusage_desc",
+    getState: (c) => c.emoji_usage_enabled,
+  },
+  {
+    value: "shorttermmemory",
+    page: "context-additions",
+    table: "capabilities",
+    dbColumn: "short_term_memory_enabled",
+    labelKey: "commands.capabilities.manage.shorttermmemory_option",
+    descKey: "commands.capabilities.manage.shorttermmemory_desc",
+    getState: (c) => c.short_term_memory_enabled ?? true,
+  },
+  {
+    value: "timeawareness",
+    page: "context-additions",
+    table: "capabilities",
+    dbColumn: "time_awareness_enabled",
+    labelKey: "commands.capabilities.manage.timeawareness_option",
+    descKey: "commands.capabilities.manage.timeawareness_desc",
+    getState: (c) => c.time_awareness_enabled ?? true,
+  },
 ];
 
 export function getCapabilitiesManagePermissionDefinitions(options?: {
   includeElevenLabs?: boolean;
+  page?: "available-tools" | "context-additions";
 }): readonly CapabilitiesManagePermissionDefinition[] {
+  const definitions = options?.page
+    ? CAPABILITIES_MANAGE_PERMISSION_DEFINITIONS.filter((def) => def.page === options.page)
+    : CAPABILITIES_MANAGE_PERMISSION_DEFINITIONS;
   if (options?.includeElevenLabs === false) {
-    return CAPABILITIES_MANAGE_PERMISSION_DEFINITIONS.filter((def) => !def.requiresElevenLabs);
+    return definitions.filter((def) => !def.requiresElevenLabs);
   }
-  return CAPABILITIES_MANAGE_PERMISSION_DEFINITIONS;
+  return definitions;
 }
 
 export function buildCapabilitiesManageConfigWritePlan(
   config: CapabilitiesManageConfigState,
   selectedValues: Iterable<string>,
-  options?: { includeElevenLabs?: boolean },
+  options?: { includeElevenLabs?: boolean; page?: "available-tools" | "context-additions" },
 ): CapabilitiesManageConfigWritePlan {
   const selectedValueSet = new Set(selectedValues);
   const definitions = getCapabilitiesManagePermissionDefinitions(options);

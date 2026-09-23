@@ -8,6 +8,7 @@ import type {
   Message,
 } from "discord.js";
 import { StreamOrchestrator } from "@/utils/discord/streamOrchestrator";
+import { buildStreamContext } from "@/utils/provider/streamContext";
 import { nvidiaProviderInfo } from "@/providers/nvidia/providerInfo";
 import { NvidiaStreamAdapter, type NvidiaStreamConfig } from "@/providers/nvidia/nvidiaStreamAdapter";
 import { getNvidiaToolAdapter } from "@/providers/nvidia/nvidiaToolAdapter";
@@ -16,6 +17,8 @@ import {
   NVIDIA_DEFAULT_EMBEDDING_MODEL,
   NVIDIA_DEFAULT_TEXT_MODEL,
   NVIDIA_EMBEDDINGS_URL,
+  NVIDIA_MIN_P_UNSUPPORTED_MODELS,
+  NVIDIA_MODELS_URL,
 } from "@/providers/nvidia/nvidiaConstants";
 import {
   createOpenAICompatibleHttpError,
@@ -62,11 +65,13 @@ import type { ProviderError, StreamContext } from "@/types/stream/interfaces";
 import { DISCORD_STREAMING_CONSTANTS } from "@/types/stream/types";
 import type { StreamingContext } from "@/types/tool/interfaces";
 import { type ToolStateForContext, getAvailableToolsWithMCP } from "@/tools/toolRegistry";
+import { applyStreamContextAvailability } from "@/tools/availability";
 import { getCachedDefaultLLM, isLLMCacheReady } from "@/utils/cache/llmCache";
 import { llmModelRepo } from "@/utils/db/repositories";
 import { log } from "@/utils/misc/logger";
 import { buildRuntimeLogitBiasMapForLlm } from "@/utils/provider/logitBiasResolver";
 import { applyDeliberateToolAllowlist } from "@/utils/tools/deliberateToolMode";
+import { resolveToolsEnabled } from "@/utils/tools/toolUseGate";
 
 async function getDefaultNvidiaModel(): Promise<string> {
   const providerName = "nvidia";
@@ -173,19 +178,12 @@ export class NvidiaProvider
 
   async validateApiKey(apiKey: string): Promise<ApiKeyValidationResult> {
     try {
-      const validationModel = (await getDefaultNvidiaModel().catch(() => null)) || NVIDIA_DEFAULT_TEXT_MODEL;
-      const response = await fetch(NVIDIA_CHAT_COMPLETIONS_URL, {
-        method: "POST",
+      // Use the models list endpoint: no model needed, no tokens consumed
+      const response = await fetch(NVIDIA_MODELS_URL, {
+        method: "GET",
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          model: validationModel,
-          messages: [{ role: "user", content: "ping" }],
-          max_tokens: 1,
-          stream: false,
-        }),
       });
 
       if (!response.ok) {
@@ -256,8 +254,10 @@ export class NvidiaProvider
     tomoriState: TomoriState,
     streamingContext?: StreamingContext,
   ): Promise<Array<Record<string, unknown>>> {
-    if (!tomoriState.llm.has_tools) {
-      log.info("NVIDIA provider: Model does not support tools (seeded capability)");
+    if (!resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
+      log.info(
+        `NVIDIA provider: Tools unavailable (tool_use_enabled=${tomoriState.config.tool_use_enabled}, has_tools=${tomoriState.llm.has_tools})`,
+      );
       return [];
     }
 
@@ -290,6 +290,8 @@ export class NvidiaProvider
           imagegen_enabled: tomoriState.config.imagegen_enabled,
           videogen_enabled: tomoriState.config.videogen_enabled,
           voice_message_enabled: tomoriState.config.voice_message_enabled,
+          user_blocking_enabled: tomoriState.config.user_blocking_enabled,
+          user_info_updates_enabled: tomoriState.config.user_info_updates_enabled,
           thread_creation_enabled: tomoriState.config.thread_creation_enabled,
         },
       };
@@ -300,31 +302,14 @@ export class NvidiaProvider
         totalCount,
       } = await getAvailableToolsWithMCP("nvidia", toolStateForContext);
 
-      let finalBuiltInTools = availableBuiltInTools;
+      let finalBuiltInTools = applyStreamContextAvailability({
+        providerLabel: "NVIDIA provider",
+        provider: "nvidia",
+        builtInTools: availableBuiltInTools,
+        streamContext: streamingContext,
+        tomoriState,
+      });
       let finalMcpFunctionNames = availableMcpFunctionNames;
-      if (streamingContext) {
-        const minimalContext = {
-          streamContext: streamingContext,
-          provider: "nvidia" as const,
-          channel: {} as BaseGuildTextChannel,
-          client: {} as Client,
-          tomoriState,
-          locale: "en-US",
-        };
-
-        finalBuiltInTools = availableBuiltInTools.filter((tool) => {
-          const isContextAvailable =
-            "isAvailableForContext" in tool && typeof tool.isAvailableForContext === "function"
-              ? tool.isAvailableForContext("nvidia", minimalContext)
-              : true;
-
-          return isContextAvailable;
-        });
-
-        log.info(
-          `Applied NVIDIA streaming context filtering: ${availableBuiltInTools.length} -> ${finalBuiltInTools.length} built-in tools`,
-        );
-      }
 
       ({ builtInTools: finalBuiltInTools, mcpFunctionNames: finalMcpFunctionNames } = applyDeliberateToolAllowlist({
         providerLabel: "NVIDIA provider",
@@ -357,6 +342,10 @@ export class NvidiaProvider
 
   async createConfig(tomoriState: TomoriState, apiKey: string): Promise<NvidiaProviderConfig> {
     const samplingParams = buildActiveSamplingParams(tomoriState.config);
+    if (NVIDIA_MIN_P_UNSUPPORTED_MODELS.has(tomoriState.llm.llm_codename)) {
+      delete samplingParams.minP;
+    }
+
     const config: NvidiaProviderConfig = {
       model: tomoriState.llm.llm_codename,
       apiKey,
@@ -369,13 +358,12 @@ export class NvidiaProvider
       ...samplingParams,
     };
 
-    // Attach runtime logit_bias map if the server has any active entries for this model
     const runtimeLogitBias = buildRuntimeLogitBiasMapForLlm(tomoriState.config.llm_logit_biases ?? [], tomoriState.llm);
     if (Object.keys(runtimeLogitBias).length > 0) {
       config.logitBias = runtimeLogitBias;
     }
 
-    if (tomoriState.llm.has_tools) {
+    if (resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
       config.tools = await this.getTools(tomoriState);
     }
 
@@ -425,12 +413,13 @@ export class NvidiaProvider
         isManuallyTriggered: streamingContext?.isManuallyTriggered,
       };
 
-      if (streamingContext && tomoriState.llm.has_tools) {
+      if (streamingContext && resolveToolsEnabled(tomoriState, tomoriState.llm.has_tools)) {
         log.info("NvidiaProvider: Reloading tools with streaming context for context-aware availability");
         streamConfig.tools = await this.getTools(tomoriState, streamingContext);
       }
 
-      const streamContext: StreamContext = {
+      const streamContext: StreamContext = buildStreamContext({
+        provider: "nvidia",
         channel,
         client,
         initialInteraction,
@@ -440,24 +429,13 @@ export class NvidiaProvider
         currentTurnModelParts,
         emojiStrings,
         functionInteractionHistory,
-        provider: "nvidia",
-        locale: userLocale ?? "en-US",
-        suppressUserErrors: streamingContext?.suppressUserErrors,
-        rotationKeyRetriesUsed: streamingContext?.rotationKeyRetriesUsed,
-        outputPrefill: streamingContext?.outputPrefill,
-        outputPrefillState: streamingContext?.outputPrefillState,
-        replyNoticeState: streamingContext?.replyNoticeState,
+        userLocale,
+        streamingContext,
         webhook,
         personaAvatarUrl,
         personaUsername,
         prefixStrippingName,
-        forcedMentions: streamingContext?.forcedMentions,
-        abortSignal: streamingContext?.abortSignal,
-
-        // Opaque message ID map for snowflake ID abstraction in LLM-visible text
-        messageIdMap: streamingContext?.messageIdMap,
-        recordTurnOutputMessage: streamingContext?.recordTurnOutputMessage,
-      };
+      });
 
       const orchestrator = new StreamOrchestrator();
       const adapter = new NvidiaStreamAdapter();
@@ -528,6 +506,8 @@ export class NvidiaProvider
         imagegen_enabled: false,
         videogen_enabled: false,
         voice_message_enabled: false,
+        user_blocking_enabled: false,
+        user_info_updates_enabled: false,
         thread_creation_enabled: false,
       },
     };

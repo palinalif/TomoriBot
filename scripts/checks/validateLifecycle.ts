@@ -1,8 +1,9 @@
-import { SQL } from "bun";
+import type { SQL } from "bun";
 import { config } from "dotenv";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { initializeDatabase } from "@/utils/db/initializeDatabase";
+import { createScriptSqlClient } from "./lib/scriptSqlClient";
 
 config({ quiet: true });
 
@@ -58,6 +59,7 @@ const requiredTables = [
   "personal_memories",
   "saved_provider_configs",
   "user_saved_provider_configs",
+  "custom_endpoint_connections",
   "custom_endpoints",
   "nai_presets",
   "st_presets",
@@ -126,14 +128,6 @@ function requireSafeTarget(baseUrl: URL): void {
         "Set TOMORI_VL_ALLOW_NONLOCAL_DB=true only when you intentionally target a disposable database server.",
     );
   }
-}
-
-function createSqlClient(url: string): SQL {
-  return new SQL(url, {
-    max: 1,
-    idleTimeout: 1,
-    connectionTimeout: 10,
-  });
 }
 
 async function createValidationDatabase(adminSql: SQL): Promise<void> {
@@ -311,7 +305,7 @@ async function main(): Promise<void> {
   const maintenanceDatabase = process.env.POSTGRES_MAINTENANCE_DB || "postgres";
   const adminUrl = databaseUrlFor(baseUrl, maintenanceDatabase);
   const validationUrl = databaseUrlFor(baseUrl, tempDatabaseName);
-  const adminSql = createSqlClient(adminUrl);
+  const adminSql = createScriptSqlClient(adminUrl);
   let appSql: SQL | null = null;
 
   try {
@@ -321,7 +315,7 @@ async function main(): Promise<void> {
     writeValidationEnv(validationUrl, baseUrl);
 
     section("Validating Fresh Initialization");
-    appSql = createSqlClient(validationUrl);
+    appSql = createScriptSqlClient(validationUrl);
     await validateFreshInitialization(appSql);
 
     const commandEnv = buildCommandEnv(validationUrl, baseUrl);
@@ -330,7 +324,6 @@ async function main(): Promise<void> {
     await runCommand("bun run backup", ["bun", "run", "backup"], commandEnv);
     const backupBundleDir = assertBackupBundleCreated();
     await runCommand("bun run backup:personas", ["bun", "run", "backup:personas"], commandEnv);
-    await runCommand("bun run backup:memories", ["bun", "run", "backup:memories"], commandEnv);
     await runCommand("bun run audit-keys", ["bun", "run", "audit-keys"], commandEnv);
     await runCommand("bun run rotate-keys --dry-run", ["bun", "run", "rotate-keys", "--dry-run"], commandEnv);
 
@@ -338,7 +331,7 @@ async function main(): Promise<void> {
     await appSql.close({ timeout: 1 });
     appSql = null;
     await runCommand("bun run nuke-db --yes", ["bun", "run", "nuke-db", "--yes"], commandEnv);
-    appSql = createSqlClient(validationUrl);
+    appSql = createScriptSqlClient(validationUrl);
     await assertNoPublicTablesRemain(appSql);
     await appSql.close({ timeout: 1 });
     appSql = null;
@@ -349,7 +342,7 @@ async function main(): Promise<void> {
       ["bun", "run", "restore-backup", "--from", backupBundleDir],
       commandEnv,
     );
-    appSql = createSqlClient(validationUrl);
+    appSql = createScriptSqlClient(validationUrl);
     await assertRequiredTablesExist(appSql);
     await assertSeedDataExists(appSql);
     await appSql.close({ timeout: 1 });
@@ -357,7 +350,7 @@ async function main(): Promise<void> {
 
     section("Validating Fresh Reinitialize After Nuke");
     await runCommand("bun run nuke-db --yes", ["bun", "run", "nuke-db", "--yes"], commandEnv);
-    appSql = createSqlClient(validationUrl);
+    appSql = createScriptSqlClient(validationUrl);
     await assertNoPublicTablesRemain(appSql);
     await validateFreshInitialization(appSql);
 

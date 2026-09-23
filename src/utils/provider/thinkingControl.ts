@@ -12,10 +12,6 @@ const DEFAULT_HIGH_BUDGET_TOKENS = 8192;
 const GOOGLE_GEMINI_25_PRO_MIN_BUDGET = 128;
 const GOOGLE_GEMINI_25_FLASH_LITE_MIN_BUDGET = 512;
 
-export interface ThinkingLevelSource {
-  thinking_level?: string | null;
-}
-
 export interface AnthropicThinkingRequest {
   thinking?: {
     type: "adaptive" | "disabled";
@@ -47,6 +43,7 @@ export interface CustomThinkingRequest {
 }
 
 type ProviderEffortLevel = "low" | "medium" | "high";
+type ProviderReasoningEffortLevel = "none" | ProviderEffortLevel;
 
 function parseBudgetEnv(name: string, fallback: number): number {
   const raw = Number.parseInt(process.env[name] ?? String(fallback), 10);
@@ -105,8 +102,11 @@ function isDeepSeekReasonerModel(model: string): boolean {
   return normalizeModel(model) === "deepseek-reasoner";
 }
 
+// deepseek-v4-flash absorbed deepseek-chat's opt-in thinking toggle; deepseek-chat stays
+// listed so servers still configured with the deprecated codename keep working unchanged.
 function isDeepSeekChatModel(model: string): boolean {
-  return normalizeModel(model) === "deepseek-chat";
+  const normalized = normalizeModel(model);
+  return normalized === "deepseek-chat" || normalized === "deepseek-v4-flash";
 }
 
 function looksLikeOllamaEndpoint(endpointUrl: string): boolean {
@@ -123,11 +123,15 @@ function toProviderEffortLevel(level: Exclude<ThinkingLevelValue, "auto" | "none
   return level === "minimal" ? "low" : level;
 }
 
+function toProviderReasoningEffortLevel(level: Exclude<ThinkingLevelValue, "auto">): ProviderReasoningEffortLevel {
+  return level === "none" ? "none" : toProviderEffortLevel(level);
+}
+
 export function resolveConfiguredThinkingLevel(value: string | null | undefined): ThinkingLevelValue {
   return value && isThinkingLevelValue(value) ? value : DEFAULT_THINKING_LEVEL;
 }
 
-export function resolveEffectiveThinkingLevel(
+function resolveEffectiveThinkingLevel(
   configuredLevel: string | null | undefined,
   forceReason?: boolean,
 ): ThinkingLevelValue {
@@ -182,13 +186,17 @@ export function buildGoogleThinkingConfig(
   }
 
   if (effectiveLevel === "none") {
+    const isMinimalSupported = isGeminiFlashModel(model) && !model.includes("3.7");
     return {
-      thinkingLevel: isGeminiFlashModel(model) ? ThinkingLevel.MINIMAL : ThinkingLevel.LOW,
+      thinkingLevel: isMinimalSupported ? ThinkingLevel.MINIMAL : ThinkingLevel.LOW,
     };
   }
 
   if (effectiveLevel === "minimal") {
-    return { thinkingLevel: ThinkingLevel.MINIMAL };
+    const isMinimalSupported = !model.includes("3.7");
+    return {
+      thinkingLevel: isMinimalSupported ? ThinkingLevel.MINIMAL : ThinkingLevel.LOW,
+    };
   }
 
   if (effectiveLevel === "low") {
@@ -259,7 +267,7 @@ export function buildOpenRouterReasoningRequest(
 
   return {
     reasoning: {
-      effort: effectiveLevel === "minimal" ? "low" : effectiveLevel,
+      effort: toProviderReasoningEffortLevel(effectiveLevel),
     },
   };
 }
@@ -323,7 +331,7 @@ export function buildCustomThinkingRequest(
   }
 
   // Non-Ollama OpenAI-compatible servers (vLLM, etc.) may support reasoning_effort.
-  return { reasoning_effort: effectiveLevel === "minimal" ? "low" : effectiveLevel };
+  return { reasoning_effort: toProviderReasoningEffortLevel(effectiveLevel) };
 }
 
 export function getNovelAiThinkingDirective(

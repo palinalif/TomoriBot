@@ -8,7 +8,7 @@ import { MessageFlags, EmbedBuilder, AttachmentBuilder } from "discord.js";
 import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed } from "../../utils/discord/interactionHelper";
-import type { UserRow } from "../../types/db/schema";
+import type { PersonaSpriteRow, UserRow } from "../../types/db/schema";
 import { memoryGuard, IMPORT_LIMITS, reserveImportQuota } from "../../utils/security/rateLimiter";
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { presetRepository } from "@/utils/db/repositories/PresetRepository";
@@ -20,20 +20,38 @@ import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilena
 import { safeDownload } from "@/utils/security/safeDownload";
 import { dedupeTriggerWords, parseTriggerWordListInput } from "@/utils/text/triggerWords";
 import { uploadPersonaAvatarToStorage } from "../../utils/storage/avatarStorage";
+import { isAvatarUpdateRateLimited } from "@/utils/discord/avatarRateLimit";
 import { importAlterPreset } from "@/utils/persona/importAlterPreset";
+import { readCharxCard, type CharxReadFailureReason } from "@/utils/persona/charxArchive";
+import {
+  cleanupMainPersonaSpritesAfterImport,
+  snapshotMainPersonaSprites,
+} from "@/utils/persona/mainImportSpriteCleanup";
 
-/**
- * Maximum file size for imports (uses centralized constant)
- */
+/** Maximum file size for imports (uses centralized constant). */
 const MAX_FILE_SIZE = IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB * 1024 * 1024;
+/** Byte budget for the `card.json` payload the archive reader will decompress. */
+const MAX_CHARX_CARD_BYTES = IMPORT_LIMITS.MAX_CHARX_CARD_SIZE_MB * 1024 * 1024;
+const MAX_CHARX_ASSET_TOTAL_BYTES = IMPORT_LIMITS.MAX_CHARX_ASSET_TOTAL_MB * 1024 * 1024;
 const MAX_SILLY_TAVERN_DEBUG_BYTES = 1_000_000;
 
-type PersonaImportSource = "tomori-png" | "tomori-json" | "sillytavern-png" | "sillytavern-json";
+type PersonaImportSource = "tomori-png" | "tomori-json" | "sillytavern-png" | "sillytavern-json" | "charx";
 
 type ResolvedImportFile = {
   avatarImageBuffer: Buffer | null;
   presetData: PresetExportData;
   source: PersonaImportSource;
+  /**
+   * Embedded assets the archive carried but the import does not read. Reported
+   * in the success embed so the omission is stated rather than discovered.
+   */
+  ignoredAssetCount?: number;
+  /**
+   * Card fields the conversion had no destination for. Carried to the single
+   * convergence point below so every converter path reports its losses the same
+   * way, rather than only the path that happened to be written last.
+   */
+  unmappedCardFields?: string | null;
 };
 
 function truncateBufferForAttachment(buffer: Buffer, maxBytes: number, noticeText: string): Buffer {
@@ -93,9 +111,164 @@ function parseCommaSeparatedTriggers(input: string): string[] {
 }
 
 /**
+ * Replies when a card was decoded but could not be converted.
+ *
+ * Shared by all three card formats so the reply, the attachment name, and the
+ * prose stay identical across them. `sourceLabel` naming where the payload came
+ * from is what distinguishes the three, and it is the operator-facing half of
+ * the reply, so the visible text is localized like every other reply.
+ */
+async function replyCardConversionFailure(options: {
+  interaction: ChatInputCommandInteraction;
+  locale: string;
+  parsedJson: unknown;
+  conversionError: string;
+  sourceLabel: string;
+  attachmentName: string;
+  debugContext?: {
+    metadataKey: string;
+    rawValueLength: number;
+    decodedValueLength: number;
+    decodedFromBase64: boolean;
+  };
+}): Promise<void> {
+  const debugText = buildSillyTavernDebugText({
+    conversionError: options.conversionError,
+    parsedJson: options.parsedJson,
+    sourceLabel: options.sourceLabel,
+    ...options.debugContext,
+  });
+  const debugBuffer = truncateBufferForAttachment(
+    Buffer.from(debugText, "utf8"),
+    MAX_SILLY_TAVERN_DEBUG_BYTES,
+    "\n\n[Truncated: decoded payload exceeded attachment size budget.]",
+  );
+  const debugFilename = `${options.attachmentName}-${Date.now()}.txt`;
+
+  await options.interaction.editReply({
+    embeds: [
+      new EmbedBuilder()
+        .setTitle(localizer(options.locale, "commands.persona.import.card_conversion_failed_title"))
+        .setDescription(
+          localizer(options.locale, "commands.persona.import.card_conversion_failed_description", {
+            source: options.sourceLabel,
+          }),
+        )
+        .setColor(ColorCode.WARN),
+    ],
+    files: [new AttachmentBuilder(debugBuffer, { name: debugFilename })],
+  });
+}
+
+/**
+ * Maps a `.charx` container failure to its reply text.
+ *
+ * The two unreadable-container reasons share one message: from the reader's
+ * side they are the same problem, and the distinction is a detail of the zip.
+ */
+function localizeCharxFailure(locale: string, reason: CharxReadFailureReason): string {
+  switch (reason) {
+    case "invalid_zip":
+    case "missing_card":
+    case "invalid_card":
+      return localizer(locale, "commands.persona.import.invalid_charx_description");
+    case "not_character_card":
+      return localizer(locale, "commands.persona.import.charx_not_card_description");
+    case "card_too_large":
+      return localizer(locale, "commands.persona.import.charx_too_large_description", {
+        max_size: IMPORT_LIMITS.MAX_CHARX_CARD_SIZE_MB,
+      });
+    case "assets_too_large":
+      return localizer(locale, "commands.persona.import.charx_assets_too_large_description");
+  }
+}
+
+/** Replies with the `.charx` container failure that stopped the import. */
+async function replyInvalidCharx(
+  interaction: ChatInputCommandInteraction,
+  locale: string,
+  reason: CharxReadFailureReason,
+): Promise<void> {
+  await interaction.editReply({
+    embeds: [
+      new EmbedBuilder()
+        .setTitle(localizer(locale, "commands.persona.import.invalid_charx_title"))
+        .setDescription(localizeCharxFailure(locale, reason))
+        .setColor(ColorCode.ERROR),
+    ],
+  });
+}
+
+/** Narrows an unknown value to a plain object, or null. */
+function asPlainObject(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+/** True when the field holds non-blank text. */
+function hasText(container: Record<string, unknown>, key: string): boolean {
+  const value = container[key];
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+/** True when the field holds at least one array element. */
+function hasItems(container: Record<string, unknown>, key: string): boolean {
+  const value = container[key];
+  return Array.isArray(value) && value.length > 0;
+}
+
+/**
+ * Names the card fields an import cannot carry anywhere.
+ *
+ * A conversion that succeeds is not the same as a conversion that lost nothing,
+ * and the fields below change how a card reads rather than merely annotating it:
+ * `nickname` is the name the card's own text addresses, and `group_only_greetings`
+ * is content that must not be dropped when the card has no other first message.
+ * Reporting them is what keeps a successful import from reading as a faithful one.
+ *
+ * An unset field is not a lost field, so a `depth_prompt` carrying settings but
+ * no text is left alone: SillyTavern writes exactly that shape into its default
+ * export, and reporting it would put noise at the front of every log line.
+ */
+export function describeUnmappedCardFields(card: unknown): string | null {
+  const root = asPlainObject(card);
+  if (!root) {
+    return null;
+  }
+
+  // V3 nests the card under `data`; a root-level V2 card does not. Either may
+  // carry the fields, so both scopes are checked.
+  const scopes = [root];
+  const cardData = asPlainObject(root.data);
+  if (cardData) {
+    scopes.push(cardData);
+  }
+
+  const dropped: string[] = [];
+  if (scopes.some((scope) => hasText(scope, "nickname"))) {
+    dropped.push("nickname");
+  }
+  if (scopes.some((scope) => hasItems(scope, "group_only_greetings"))) {
+    dropped.push("group_only_greetings");
+  }
+
+  const characterBook = scopes.map((scope) => asPlainObject(scope.character_book)).find(Boolean);
+  const entries = characterBook?.entries;
+  if (Array.isArray(entries)) {
+    const disabledCount = entries.filter((entry) => asPlainObject(entry)?.enabled === false).length;
+    if (disabledCount > 0) {
+      dropped.push(`${disabledCount} disabled character_book entr(ies)`);
+    }
+  }
+
+  return dropped.length > 0 ? dropped.join(", ") : null;
+}
+
+/**
  * Helper function to localize error messages from utility functions
  * Handles both simple locale keys and keys with pipe-separated variables
- * @param locale - User's locale
  * @param errorString - Error string (locale key or key|var1|var2...)
  * @returns Localized error message
  */
@@ -104,11 +277,9 @@ function localizeError(locale: string, errorString: string): string {
   const key = parts[0];
 
   if (parts.length === 1) {
-    // Simple locale key without variables
     return localizer(locale, key);
   }
 
-  // Handle keys with variables
   if (key === "commands.persona.import.error_invalid_attribute") {
     return localizer(locale, key, { details: parts[1] });
   }
@@ -133,46 +304,6 @@ function localizeError(locale: string, errorString: string): string {
 
   // Fallback: just localize the key
   return localizer(locale, key);
-}
-
-type DiscordApiErrorPayload = {
-  message?: string;
-  code?: number | string;
-  errors?: {
-    avatar?: { _errors?: Array<{ code?: string; message?: string }> };
-    nick?: { _errors?: Array<{ code?: string; message?: string }> };
-  };
-};
-
-function isAvatarUpdateRateLimited(status: number, errorText: string): boolean {
-  if (status === 429) {
-    return true;
-  }
-
-  if (!errorText) {
-    return false;
-  }
-
-  try {
-    const parsed = JSON.parse(errorText) as DiscordApiErrorPayload;
-    const avatarErrors = parsed.errors?.avatar?._errors ?? [];
-    const nickErrors = parsed.errors?.nick?._errors ?? [];
-    const hasRateLimitCode = [...avatarErrors, ...nickErrors].some((error) =>
-      (error.code ?? "").toString().toUpperCase().includes("RATE_LIMIT"),
-    );
-
-    if (hasRateLimitCode) {
-      return true;
-    }
-
-    if (parsed.message?.toLowerCase().includes("rate limit")) {
-      return true;
-    }
-  } catch {
-    // Fall through to text matching below
-  }
-
-  return /AVATAR_RATE_LIMIT/i.test(errorText) || /RATE_LIMIT/i.test(errorText) || /too fast/i.test(errorText);
 }
 
 async function persistImportedMainAvatar(serverDiscId: string, avatarImageBuffer: Buffer): Promise<void> {
@@ -259,10 +390,6 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
 /**
  * Executes the 'import' command
  * Imports TomoriBot's personality from an uploaded PNG or JSON file
- * @param client - The Discord client instance
- * @param interaction - The chat input command interaction
- * @param userData - The user data for the invoking user
- * @param locale - The user's preferred locale
  */
 export async function execute(
   client: Client,
@@ -271,7 +398,6 @@ export async function execute(
   locale: string,
 ): Promise<void> {
   try {
-    // 1. Get import type (main or alter)
     const importType = interaction.options.getString("type", true);
     const additionalTriggersInput = interaction.options.getString("triggers");
     const identityMode =
@@ -295,7 +421,7 @@ export async function execute(
       return;
     }
 
-    // 2. Check permissions (ManageGuild required for import in guilds only)
+    // Check permissions (ManageGuild required for import in guilds only)
     if (interaction.guild) {
       const hasPermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
 
@@ -314,15 +440,14 @@ export async function execute(
       }
     }
 
-    // 3. Get uploaded file attachment
     const attachment = interaction.options.getAttachment("file", true);
 
-    // 5. Validate file type and size
     const normalizedAttachmentName = attachment.name.toLowerCase();
     const isPngImport = normalizedAttachmentName.endsWith(".png");
     const isJsonImport = normalizedAttachmentName.endsWith(".json");
+    const isCharxImport = normalizedAttachmentName.endsWith(".charx");
 
-    if (!isPngImport && !isJsonImport) {
+    if (!isPngImport && !isJsonImport && !isCharxImport) {
       await replyInfoEmbed(
         interaction,
         locale,
@@ -336,13 +461,19 @@ export async function execute(
       return;
     }
 
-    if (attachment.size > MAX_FILE_SIZE) {
+    const maxFileSizeMB = isCharxImport
+      ? IMPORT_LIMITS.MAX_CHARX_IMPORT_SIZE_MB
+      : IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB;
+    const maxFileSize = maxFileSizeMB * 1024 * 1024;
+
+    if (attachment.size > maxFileSize) {
       await replyInfoEmbed(
         interaction,
         locale,
         {
           titleKey: "commands.persona.import.file_too_large_title",
           descriptionKey: "commands.persona.import.file_too_large_description",
+          descriptionVars: { max_size: maxFileSizeMB },
           color: ColorCode.ERROR,
         },
         MessageFlags.Ephemeral,
@@ -350,10 +481,10 @@ export async function execute(
       return;
     }
 
-    // 6. Defer reply while we process (ephemeral so all errors are private)
+    // Defer reply while we process (ephemeral so all errors are private)
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    // 6.25. Reserve import operation quota (atomic check+increment for DDoS protection)
+    // Reserve import operation quota (atomic check+increment for DDoS protection)
     const quotaReserve = reserveImportQuota(interaction.user.id);
     if (!quotaReserve.allowed) {
       const resetTime = quotaReserve.resetAt ? new Date(quotaReserve.resetAt).toLocaleString(locale) : "unknown";
@@ -373,7 +504,6 @@ export async function execute(
       return;
     }
 
-    // 6.5. Memory guard check (defense-in-depth)
     const memCheck = memoryGuard.checkMemory();
     if (memCheck.status === "critical") {
       await interaction.editReply({
@@ -387,12 +517,11 @@ export async function execute(
       return;
     }
 
-    // 7. Download the import file with timeout
     let importFileBuffer: Buffer;
 
     try {
       const response = await safeDownload(attachment.url, {
-        maxSizeMB: IMPORT_LIMITS.MAX_PERSONA_IMPORT_SIZE_MB,
+        maxSizeMB: maxFileSizeMB,
         timeoutMs: 15_000,
         knownSize: attachment.size,
       });
@@ -403,7 +532,6 @@ export async function execute(
 
       importFileBuffer = response.buffer;
     } catch (error) {
-      // Handle timeout vs other errors
       if (error instanceof Error && error.name === "AbortError") {
         log.warn("Persona import download timed out");
         await interaction.editReply({
@@ -416,7 +544,6 @@ export async function execute(
         return;
       }
 
-      // Other download errors
       log.error("Failed to download attachment:", error as Error);
       await interaction.editReply({
         embeds: [
@@ -429,10 +556,48 @@ export async function execute(
       return;
     }
 
-    // 8. Parse supported import file
     let resolvedImport: ResolvedImportFile | null = null;
 
-    if (isPngImport) {
+    if (isCharxImport) {
+      // A `.charx` is a zip around a card that is already V2-shaped in every
+      // field this converter reads, so unwrapping the container is the whole
+      // job and the existing converter stays untouched.
+      const archive = await readCharxCard(importFileBuffer, {
+        maxCardBytes: MAX_CHARX_CARD_BYTES,
+        maxAssets: IMPORT_LIMITS.MAX_CHARX_ASSETS,
+        maxTotalAssetBytes: MAX_CHARX_ASSET_TOTAL_BYTES,
+      });
+
+      if (!archive.ok) {
+        log.warn(`Persona import rejected a .charx archive: ${archive.reason}`);
+        await replyInvalidCharx(interaction, locale, archive.reason);
+        return;
+      }
+
+      const conversion = presetRepository.convertSillyTavernJsonToPresetData(archive.card);
+      if (!conversion.success) {
+        await replyCardConversionFailure({
+          interaction,
+          locale,
+          parsedJson: archive.card,
+          conversionError: conversion.error,
+          sourceLabel: "CHARX card.json",
+          attachmentName: "sillytavern-charx-decode",
+        });
+        return;
+      }
+
+      resolvedImport = {
+        avatarImageBuffer: null,
+        presetData: conversion.data,
+        source: "charx",
+        ignoredAssetCount: archive.ignoredAssetCount,
+        unmappedCardFields: describeUnmappedCardFields(archive.card),
+      };
+      log.info(
+        `[Persona Import] Converted Character Card V3 archive to preset format for "${conversion.data.tomori_nickname}" (ignored ${archive.ignoredAssetCount} embedded asset(s))`,
+      );
+    } else if (isPngImport) {
       const pngValidation = validatePNGBuffer(importFileBuffer, MAX_FILE_SIZE);
       if (!pngValidation.isValid) {
         log.warn(`Invalid PNG buffer during preset import: ${pngValidation.error}`);
@@ -488,35 +653,19 @@ export async function execute(
 
         const conversion = presetRepository.convertSillyTavernMetadataToPresetData(sillyTavernData);
         if (!conversion.success) {
-          const debugText = buildSillyTavernDebugText({
-            conversionError: conversion.error,
-            decodedFromBase64: sillyTavernData.decodedFromBase64,
-            decodedValueLength: sillyTavernData.decodedValue.length,
-            metadataKey: sillyTavernData.metadataKey,
+          await replyCardConversionFailure({
+            interaction,
+            locale,
             parsedJson: sillyTavernData.parsedJson,
-            rawValueLength: sillyTavernData.rawValue.length,
+            conversionError: conversion.error,
             sourceLabel: "PNG metadata",
-          });
-          const debugBuffer = truncateBufferForAttachment(
-            Buffer.from(debugText, "utf8"),
-            MAX_SILLY_TAVERN_DEBUG_BYTES,
-            "\n\n[Truncated: decoded payload exceeded attachment size budget.]",
-          );
-          const debugFilename = `sillytavern-decode-${Date.now()}.txt`;
-          const debugAttachment = new AttachmentBuilder(debugBuffer, {
-            name: debugFilename,
-          });
-
-          await interaction.editReply({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle("SillyTavern card detected (conversion failed)")
-                .setDescription(
-                  "SillyTavern-style `chara` metadata was decoded, but conversion to Tomori format failed. The decoded payload is attached for inspection.",
-                )
-                .setColor(ColorCode.WARN),
-            ],
-            files: [debugAttachment],
+            attachmentName: "sillytavern-decode",
+            debugContext: {
+              metadataKey: sillyTavernData.metadataKey,
+              rawValueLength: sillyTavernData.rawValue.length,
+              decodedValueLength: sillyTavernData.decodedValue.length,
+              decodedFromBase64: sillyTavernData.decodedFromBase64,
+            },
           });
           return;
         }
@@ -525,6 +674,7 @@ export async function execute(
           avatarImageBuffer: importFileBuffer,
           presetData: conversion.data,
           source: "sillytavern-png",
+          unmappedCardFields: describeUnmappedCardFields(sillyTavernData.parsedJson),
         };
         log.info(
           `[Persona Import] Converted SillyTavern PNG card to preset format for "${conversion.data.tomori_nickname}"`,
@@ -557,31 +707,13 @@ export async function execute(
       } else if (presetRepository.looksLikeSillyTavernCardJson(parsedJson)) {
         const conversion = presetRepository.convertSillyTavernJsonToPresetData(parsedJson);
         if (!conversion.success) {
-          const debugText = buildSillyTavernDebugText({
-            conversionError: conversion.error,
+          await replyCardConversionFailure({
+            interaction,
+            locale,
             parsedJson,
+            conversionError: conversion.error,
             sourceLabel: "JSON attachment",
-          });
-          const debugBuffer = truncateBufferForAttachment(
-            Buffer.from(debugText, "utf8"),
-            MAX_SILLY_TAVERN_DEBUG_BYTES,
-            "\n\n[Truncated: decoded payload exceeded attachment size budget.]",
-          );
-          const debugFilename = `sillytavern-json-decode-${Date.now()}.txt`;
-          const debugAttachment = new AttachmentBuilder(debugBuffer, {
-            name: debugFilename,
-          });
-
-          await interaction.editReply({
-            embeds: [
-              new EmbedBuilder()
-                .setTitle("SillyTavern JSON card detected (conversion failed)")
-                .setDescription(
-                  "SillyTavern-style JSON was detected, but conversion to Tomori format failed. The parsed payload is attached for inspection.",
-                )
-                .setColor(ColorCode.WARN),
-            ],
-            files: [debugAttachment],
+            attachmentName: "sillytavern-json-decode",
           });
           return;
         }
@@ -590,6 +722,7 @@ export async function execute(
           avatarImageBuffer: null,
           presetData: conversion.data,
           source: "sillytavern-json",
+          unmappedCardFields: describeUnmappedCardFields(parsedJson),
         };
         log.info(
           `[Persona Import] Converted SillyTavern JSON card to preset format for "${conversion.data.tomori_nickname}"`,
@@ -626,6 +759,15 @@ export async function execute(
       return;
     }
 
+    // Reported once here rather than inside each converter branch: every card
+    // format loses the same fields, so a per-branch call would silently cover
+    // only whichever format was written most recently.
+    if (resolvedImport.unmappedCardFields) {
+      log.info(
+        `[Persona Import] Fields with no destination in this ${resolvedImport.source} card: ${resolvedImport.unmappedCardFields}`,
+      );
+    }
+
     const additionalTriggers = additionalTriggersInput ? parseCommaSeparatedTriggers(additionalTriggersInput) : [];
     const mergedPresetData: PresetExportData = {
       ...presetDataFromFile,
@@ -651,12 +793,35 @@ export async function execute(
     }
     const presetData = mergedPresetValidation.data;
 
-    // 11. Branch logic based on import type
     const serverDiscId = interaction.guild?.id ?? interaction.user.id;
     const isDM = !interaction.guild;
 
     if (importType === "main") {
-      // Main persona import: replace existing main persona
+      const currentMainPersona = (await personaRepository.loadAllForServer(serverDiscId)).find(
+        (persona) => !persona.is_alter,
+      );
+      const mainPersonaId = currentMainPersona?.persona_id ?? null;
+      let spritesBeforeImport: PersonaSpriteRow[] = [];
+      if (mainPersonaId) {
+        try {
+          spritesBeforeImport = await snapshotMainPersonaSprites(mainPersonaId);
+        } catch (error) {
+          await log.error(`Failed to snapshot sprites before importing main persona ${mainPersonaId}:`, error, {
+            errorType: "PersonaImportSpriteSnapshotError",
+            metadata: { personaId: mainPersonaId, serverDiscId },
+          });
+          await interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle(localizer(locale, "commands.persona.import.failed_title"))
+                .setDescription(localizer(locale, "commands.persona.import.sprite_snapshot_failed_description"))
+                .setColor(ColorCode.ERROR),
+            ],
+          });
+          return;
+        }
+      }
+
       const importResult = await presetRepository.importPresetData(serverDiscId, presetData, identityMode);
 
       if (!importResult.success) {
@@ -678,7 +843,33 @@ export async function execute(
       // Invalidate cache so next message gets fresh persona/config
       invalidateTomoriStateCache(serverDiscId);
 
-      // 12. Try to set TomoriBot's server-specific avatar and nickname (guild-only, non-fatal if fails)
+      let failedSpriteStorageDeletes = 0;
+      if (mainPersonaId) {
+        try {
+          failedSpriteStorageDeletes = await cleanupMainPersonaSpritesAfterImport({
+            personaId: mainPersonaId,
+            serverDiscId,
+            importedAsPointer: importResult.mainPersonaIsPointer,
+            spritesBeforeImport,
+          });
+        } catch (error) {
+          await log.error(`Failed to clear sprites after importing main persona ${mainPersonaId}:`, error, {
+            errorType: "PersonaImportSpriteCleanupError",
+            metadata: { personaId: mainPersonaId, serverDiscId },
+          });
+          await interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle(localizer(locale, "commands.persona.import.failed_title"))
+                .setDescription(localizer(locale, "commands.persona.import.sprite_cleanup_failed_description"))
+                .setColor(ColorCode.ERROR),
+            ],
+          });
+          return;
+        }
+      }
+
+      // Try to set TomoriBot's server-specific avatar and nickname (guild-only, non-fatal if fails)
       let avatarUpdateSucceeded = false;
       let avatarUpdateRateLimited = false;
       let avatarUpdateFailed = false;
@@ -689,10 +880,8 @@ export async function execute(
       if (!isDM) {
         const endpoint = `https://discord.com/api/v10/guilds/${interaction.guild.id}/members/@me`;
 
-        // Get the imported nickname for the bot
         const importedNickname = importResult.itemsImported?.nickname;
 
-        // Update nickname separately so avatar rate limits don't block it
         if (importedNickname) {
           try {
             const nicknameResponse = await fetch(endpoint, {
@@ -766,7 +955,6 @@ export async function execute(
         }
       }
 
-      // 13. Send success message with import summary
       const itemsImported = importResult.itemsImported;
 
       if (!itemsImported) {
@@ -782,7 +970,6 @@ export async function execute(
         return;
       }
 
-      // Build success embed with DM-aware messaging
       const descriptionLines = [
         localizer(locale, "commands.persona.import.success_description", {
           nickname: itemsImported.nickname,
@@ -791,6 +978,18 @@ export async function execute(
           trigger_word_count: itemsImported.triggerWordCount,
         }),
       ];
+
+      if (failedSpriteStorageDeletes > 0) {
+        descriptionLines.push(
+          localizer(locale, "commands.persona.import.sprite_storage_cleanup_partial_description", {
+            failed_count: failedSpriteStorageDeletes,
+          }),
+        );
+      }
+
+      if ((resolvedImport.ignoredAssetCount ?? 0) > 0) {
+        descriptionLines.push(localizer(locale, "commands.persona.import.charx_assets_ignored_description"));
+      }
 
       if (nicknameUpdateRateLimited || nicknameUpdateFailed) {
         descriptionLines.push(localizer(locale, "commands.persona.import.nickname_update_failed"));
@@ -817,12 +1016,12 @@ export async function execute(
             avatarUpdateRateLimited ||
             avatarUpdateFailed ||
             nicknameUpdateRateLimited ||
-            nicknameUpdateFailed
+            nicknameUpdateFailed ||
+            failedSpriteStorageDeletes > 0
             ? ColorCode.WARN
             : ColorCode.SUCCESS,
         );
 
-      // Build footer: always include refresh reminder; in DM, prepend avatar skip note
       const footerParts: string[] = [];
       if (isDM) {
         footerParts.push(localizer(locale, "commands.persona.import.avatar_update_skipped_dm"));
@@ -830,7 +1029,6 @@ export async function execute(
       footerParts.push(localizer(locale, "commands.persona.import.refresh_reminder"));
       successEmbed.setFooter({ text: footerParts.join(" • ") });
 
-      // Send public message to channel with avatar (for URL extraction)
       if (!interaction.channel || !("send" in interaction.channel)) {
         log.error("No channel available for persona import success message");
         await interaction.editReply({
@@ -866,7 +1064,6 @@ export async function execute(
         });
       }
 
-      // Send ephemeral confirmation to user
       await interaction.editReply({
         embeds: [
           new EmbedBuilder()
@@ -904,7 +1101,6 @@ export async function execute(
         avatarImageBuffer,
       });
 
-      // 11a. Map any failure reason to its localized error embed.
       if (!alterResult.ok) {
         const errorEmbed = new EmbedBuilder().setColor(ColorCode.ERROR);
         switch (alterResult.reason) {
@@ -943,8 +1139,6 @@ export async function execute(
         return;
       }
 
-      // 11b. Build the public success embed (warn-colored when triggers are
-      //      missing or the main persona avatar had to be inherited).
       const alterEmbedColor =
         alterResult.hasNoTriggers || alterResult.usedMainAvatarFallback ? ColorCode.WARN : ColorCode.SUCCESS;
       const alterDescriptionParts = [
@@ -964,6 +1158,11 @@ export async function execute(
       if (alterResult.hasNoTriggers) {
         alterDescriptionParts.push(`\n\n${localizer(locale, "commands.persona.import.alter_no_triggers_warning")}`);
       }
+      if ((resolvedImport.ignoredAssetCount ?? 0) > 0) {
+        alterDescriptionParts.push(
+          `\n\n${localizer(locale, "commands.persona.import.charx_assets_ignored_description")}`,
+        );
+      }
 
       const alterSuccessEmbed = new EmbedBuilder()
         .setTitle(localizer(locale, "commands.persona.import.alter_success_title"))
@@ -973,7 +1172,7 @@ export async function execute(
         alterSuccessEmbed.setThumbnail(alterResult.fallbackAvatarDisplayUrl);
       }
 
-      // 11c. Post the public confirmation in-channel, attaching the avatar image
+      // Post the public confirmation in-channel, attaching the avatar image
       //      when one was supplied. The persona already exists, so a missing
       //      channel only skips the public notice (the invoker still gets one).
       if (interaction.channel && "send" in interaction.channel) {
@@ -997,7 +1196,6 @@ export async function execute(
         }
       }
 
-      // 11d. Send the ephemeral confirmation to the invoking user.
       await interaction.editReply({
         embeds: [
           new EmbedBuilder()
@@ -1018,7 +1216,6 @@ export async function execute(
       metadata: { commandName: "preset import" },
     });
 
-    // If we haven't replied yet, reply with error
     if (!interaction.replied && !interaction.deferred) {
       await replyInfoEmbed(
         interaction,

@@ -88,7 +88,11 @@ function replaceEndpointPath(endpointUrl: string, pathname: string): string {
   return url.toString();
 }
 
-async function waitForKoboldCppLlmState(endpointUrl: string, expectedLoaded: boolean, timeoutMs: number): Promise<boolean> {
+async function waitForKoboldCppLlmState(
+  endpointUrl: string,
+  expectedLoaded: boolean,
+  timeoutMs: number,
+): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
@@ -116,9 +120,17 @@ async function requestKoboldCppModelState(params: {
   return ((await response.json()) as { success?: boolean }).success === true;
 }
 
-async function prepareKoboldCpp(endpoint: CustomEndpointRow, apiKey: string, kind: ComfyUiGenerationKind): Promise<boolean> {
+async function prepareKoboldCpp(
+  endpoint: CustomEndpointRow,
+  apiKey: string,
+  kind: ComfyUiGenerationKind,
+): Promise<boolean> {
   log.info(`KoboldCpp unload requested before ComfyUI ${kind} generation.`);
-  const accepted = await requestKoboldCppModelState({ endpointUrl: endpoint.endpoint_url, apiKey, filename: "unload_model" });
+  const accepted = await requestKoboldCppModelState({
+    endpointUrl: endpoint.endpoint_url,
+    apiKey,
+    filename: "unload_model",
+  });
   if (!accepted || !(await waitForKoboldCppLlmState(endpoint.endpoint_url, false, 30_000))) {
     log.warn(`KoboldCpp did not confirm its text-model unload before ComfyUI ${kind} generation.`);
     return false;
@@ -126,11 +138,19 @@ async function prepareKoboldCpp(endpoint: CustomEndpointRow, apiKey: string, kin
   return true;
 }
 
-async function restoreKoboldCpp(endpoint: CustomEndpointRow, apiKey: string, kind: ComfyUiGenerationKind): Promise<void> {
+async function restoreKoboldCpp(
+  endpoint: CustomEndpointRow,
+  apiKey: string,
+  kind: ComfyUiGenerationKind,
+): Promise<void> {
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
       log.info(`KoboldCpp reload started after ComfyUI ${kind} generation (attempt ${attempt}/3).`);
-      const accepted = await requestKoboldCppModelState({ endpointUrl: endpoint.endpoint_url, apiKey, filename: "initial_model" });
+      const accepted = await requestKoboldCppModelState({
+        endpointUrl: endpoint.endpoint_url,
+        apiKey,
+        filename: "initial_model",
+      });
       if (accepted && (await waitForKoboldCppLlmState(endpoint.endpoint_url, true, 60_000))) return;
     } catch (error) {
       log.warn(`KoboldCpp reload attempt ${attempt}/3 failed after ComfyUI ${kind} generation`, error);
@@ -140,7 +160,12 @@ async function restoreKoboldCpp(endpoint: CustomEndpointRow, apiKey: string, kin
   log.error(`KoboldCpp reload failed after ComfyUI ${kind} generation; allowing normal text requests to retry it.`);
 }
 
-async function prepareOllama(endpoint: CustomEndpointRow, apiKey: string, model: string, kind: ComfyUiGenerationKind): Promise<boolean> {
+async function prepareOllama(
+  endpoint: CustomEndpointRow,
+  apiKey: string,
+  model: string,
+  kind: ComfyUiGenerationKind,
+): Promise<boolean> {
   const response = await fetchUserRemoteUrl(replaceEndpointPath(endpoint.endpoint_url, "/api/generate"), {
     method: "POST",
     headers: buildCustomHeaders(apiKey),
@@ -197,7 +222,9 @@ export async function beginTextModelHandoffBeforeComfyUi(params: {
 
   let apiKey = "";
   try {
-    const credentials = await resolveCapabilityCredentials(params.tomoriState.server_id, "text", { userId: params.userId ?? null });
+    const credentials = await resolveCapabilityCredentials(params.tomoriState.server_id, "text", {
+      userId: params.userId ?? null,
+    });
     if (credentials.provider === provider) apiKey = credentials.apiKey;
   } catch {
     // Unauthenticated local endpoints are supported.
@@ -213,7 +240,8 @@ export async function beginTextModelHandoffBeforeComfyUi(params: {
 
     markUnavailable(state);
     try {
-      const model = params.tomoriState.config.custom_model_name || endpoint.model_name || params.tomoriState.llm.llm_codename;
+      const model =
+        params.tomoriState.config.custom_model_name || endpoint.model_name || params.tomoriState.llm.llm_codename;
       const prepared =
         strategy === "koboldcpp"
           ? await prepareKoboldCpp(endpoint, apiKey, params.generationKind)

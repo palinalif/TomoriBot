@@ -69,6 +69,31 @@ describe("applyAssistantPrefixCompletion", () => {
     const body: { messages: unknown[] } = { messages: [] };
     expect(() => applyAssistantPrefixCompletion(body, prefill)).not.toThrow();
   });
+
+  it("stamps reasoning_content: '' on the prefix turn when requiresReasoningContent is true", () => {
+    const body = {
+      messages: [
+        { role: "user", content: "hi" },
+        { role: "assistant", content: prefill },
+      ],
+    };
+    applyAssistantPrefixCompletion(body, prefill, true);
+    const last = body.messages.at(-1) as Record<string, unknown>;
+    expect(last.prefix).toBe(true);
+    expect(last.reasoning_content).toBe("");
+  });
+
+  it("omits reasoning_content when requiresReasoningContent is false or omitted", () => {
+    const body = { messages: [{ role: "assistant", content: prefill }] };
+    applyAssistantPrefixCompletion(body, prefill, false);
+    expect((body.messages[0] as Record<string, unknown>).reasoning_content).toBeUndefined();
+  });
+
+  it("does not clobber an already-present reasoning_content", () => {
+    const body = { messages: [{ role: "assistant", content: prefill, reasoning_content: "captured CoT" }] };
+    applyAssistantPrefixCompletion(body, prefill, true);
+    expect((body.messages[0] as Record<string, unknown>).reasoning_content).toBe("captured CoT");
+  });
 });
 
 describe("mergeConsecutiveSameRole", () => {
@@ -85,20 +110,14 @@ describe("mergeConsecutiveSameRole", () => {
     expect(mergeConsecutiveSameRole(input)).toEqual(input);
   });
 
-  it("merges consecutive same-role string turns into combined content parts", () => {
+  it("merges consecutive same-role string turns into flattened text", () => {
     const input: NormalizableMessage[] = [
       { role: "user", content: "one" },
       { role: "user", content: "two" },
       { role: "assistant", content: "ok" },
     ];
     expect(mergeConsecutiveSameRole(input)).toEqual([
-      {
-        role: "user",
-        content: [
-          { type: "text", text: "one" },
-          { type: "text", text: "two" },
-        ],
-      },
+      { role: "user", content: "one\ntwo" },
       { role: "assistant", content: "ok" },
     ]);
   });
@@ -136,14 +155,14 @@ describe("mergeConsecutiveSameRole", () => {
 
     const merged = mergeConsecutiveSameRole(input) as unknown as Array<Record<string, unknown>>;
 
-    // 1. The plain dialogue assistant turn is preserved as its own (still-string) turn — not merged.
+    // The plain dialogue assistant turn is preserved as its own (still-string) turn; not merged.
     expect(merged[1]).toEqual({ role: "assistant", content: "let me check that" });
 
-    // 2. The tool_calls turn survives intact with its wiring.
+    // The tool_calls turn survives intact with its wiring.
     const toolCallsTurn = merged.find((m) => Array.isArray(m.tool_calls));
-    expect((toolCallsTurn?.tool_calls as Array<{ id: string }>)[0].id).toBe("call_1");
+    expect((toolCallsTurn?.tool_calls as Array<{ id: string }> | undefined)?.[0]?.id).toBe("call_1");
 
-    // 3. The tool result's tool_call_id still references a surviving tool_calls entry (no orphan).
+    // The tool result's tool_call_id still references a surviving tool_calls entry (no orphan).
     const toolMsg = merged.find((m) => m.role === "tool");
     const referenced = merged.some(
       (m) =>

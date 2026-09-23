@@ -4,6 +4,11 @@
  */
 
 import { z } from "zod";
+import {
+  EMPTY_PERSONA_NAMING_CONFIG,
+  personaNamingConfigSchema,
+  type PersonaNamingConfig,
+} from "@/types/personaNaming";
 
 /**
  * Current version of the preset export format
@@ -29,9 +34,9 @@ function parsePositiveIntegerEnv(name: string, defaultValue: number): number {
  */
 export const PRESET_MAX_STRING_LENGTH = parsePositiveIntegerEnv("PRESET_MAX_STRING_LENGTH", 5000);
 export const PRESET_MAX_ATTRIBUTES = parsePositiveIntegerEnv("PRESET_MAX_ATTRIBUTES", 200);
-export const PRESET_MAX_SAMPLE_DIALOGUES = parsePositiveIntegerEnv("PRESET_MAX_SAMPLE_DIALOGUES", 100);
-export const PRESET_MAX_TRIGGER_WORDS = parsePositiveIntegerEnv("PRESET_MAX_TRIGGER_WORDS", 100);
-export const PRESET_MAX_IMAGE_TAGS = parsePositiveIntegerEnv("PRESET_MAX_IMAGE_TAGS", 200);
+const PRESET_MAX_SAMPLE_DIALOGUES = parsePositiveIntegerEnv("PRESET_MAX_SAMPLE_DIALOGUES", 100);
+const PRESET_MAX_TRIGGER_WORDS = parsePositiveIntegerEnv("PRESET_MAX_TRIGGER_WORDS", 100);
+const PRESET_MAX_IMAGE_TAGS = parsePositiveIntegerEnv("PRESET_MAX_IMAGE_TAGS", 200);
 
 /**
  * Generated presets use the canonical 6-attribute layout from presetCommon.ts:
@@ -60,6 +65,7 @@ export interface PresetExportData {
   sample_dialogues_out: string[];
   trigger_words: string[];
   persona_prompt?: string | null;
+  naming_config?: PersonaNamingConfig;
   persona_lineage_id?: number;
   /** Official preset lineage, when this export was materialized from a preset pointer */
   preset_lineage_id?: number;
@@ -115,6 +121,8 @@ export type ImportResult =
         dialogueCount: number;
         triggerWordCount: number;
       };
+      /** Whether the imported main persona now resolves sprites from an official preset. */
+      mainPersonaIsPointer: boolean;
     }
   | {
       success: false;
@@ -141,6 +149,7 @@ export const presetExportDataSchema = z.object({
   sample_dialogues_out: z.array(z.string().max(PRESET_MAX_STRING_LENGTH)).max(PRESET_MAX_SAMPLE_DIALOGUES),
   trigger_words: z.array(z.string().max(PRESET_MAX_STRING_LENGTH)).max(PRESET_MAX_TRIGGER_WORDS),
   persona_prompt: z.string().max(PRESET_MAX_STRING_LENGTH).nullable().optional(),
+  naming_config: personaNamingConfigSchema.default(EMPTY_PERSONA_NAMING_CONFIG),
   persona_lineage_id: z
     .preprocess((value) => {
       if (typeof value === "bigint") {
@@ -181,9 +190,3 @@ export const presetExportSchema = z.object({
   exported_at: z.string(), // ISO 8601 format
   data: presetExportDataSchema,
 });
-
-/**
- * Type inference from Zod schemas for TypeScript safety
- */
-export type PresetExportDataValidated = z.infer<typeof presetExportDataSchema>;
-export type PresetExportValidated = z.infer<typeof presetExportSchema>;

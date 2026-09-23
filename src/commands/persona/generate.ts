@@ -7,7 +7,7 @@ import type {
   ChatInputCommandInteraction,
   Client,
   ComponentInContainerData,
-  ContainerComponentData,
+  InteractionEditReplyOptions,
   ModalSubmitInteraction,
   SlashCommandSubcommandBuilder,
   TopLevelComponentData,
@@ -18,7 +18,9 @@ import { localizer } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
 import { replyInfoEmbed, promptWithRawModal } from "../../utils/discord/interactionHelper";
 import { buildPersonaResultContainer, type PersonaResultContainerOptions } from "@/utils/discord/ui/statusComponents";
+import { buildPanelContainer } from "@/utils/discord/ui/panel";
 import { attachImportNowCollector, importNowButton } from "@/utils/persona/importNowButton";
+import { validateAndFallbackPanelPayload } from "@/utils/discord/ui/interactionCore";
 import type { UserRow } from "../../types/db/schema";
 import { personaRepository } from "@/utils/db/repositories";
 import { decryptApiKey } from "../../utils/security/crypto";
@@ -39,16 +41,19 @@ import {
   PRESET_EXPORT_VERSION,
 } from "../../types/preset/presetExport";
 import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
+import { CONFIRMATION_PREVIEW_BUDGET } from "@/utils/text/textPreview";
 import { dedupeTriggerWords } from "@/utils/text/triggerWords";
 import type { PresetExport } from "../../types/preset/presetExport";
 import type { ModalComponent } from "../../types/discord/modal";
 import type { ToolContext } from "../../types/tool/interfaces";
 import { generatePresetForProvider } from "@/providers/utils/providerFeatureExecutors";
-import { providerSupportsFeature } from "@/utils/provider/providerInfoRegistry";
+import { analyzeImageWithVisionModel } from "@/utils/provider/visionCaption";
+import { resolvePresetGenerationMaxOutputTokens } from "@/utils/provider/maxOutputTokens";
+import { getOpenRouterTokenLimits, isOpenRouterCapabilityCacheReady } from "@/utils/cache/openrouterCapabilityCache";
+import { providerSupportsFeature, normalizeProviderName } from "@/utils/provider/providerInfoRegistry";
 import { getEffectiveLlmModelName } from "@/utils/provider/modelDisplay";
 import { applyPersonalProviderSelectionsToTomoriState } from "@/utils/provider/personalProviderRuntime";
 
-// Modal constants
 const MODAL_CUSTOM_ID = "preset_generate_modal";
 const CHARACTER_NAME_ID = "character_name";
 const CHARACTER_INFO_ID = "character_info"; // Combined description and speech examples
@@ -81,24 +86,19 @@ function formatDialoguePreview(
   maxExamples = 3,
   maxLength = 100,
 ): string {
-  // 1. Determine how many dialogues to show (min of array lengths and maxExamples)
   const numDialogues = Math.min(dialoguesIn.length, dialoguesOut.length, maxExamples);
 
-  // 2. Build preview string with truncated dialogues
   const previews: string[] = [];
   for (let i = 0; i < numDialogues; i++) {
     const userInput = dialoguesIn[i].substring(0, maxLength);
     const botResponse = dialoguesOut[i].substring(0, maxLength);
 
-    // 3. Add ellipsis if truncated
     const userText = dialoguesIn[i].length > maxLength ? `${userInput}...` : userInput;
     const botText = dialoguesOut[i].length > maxLength ? `${botResponse}...` : botResponse;
 
-    // 4. Format as User/Bot pair
     previews.push(`**User:** ${userText}\n**Bot:** ${botText}`);
   }
 
-  // 5. Join all examples with line breaks
   return previews.join("\n\n");
 }
 
@@ -183,13 +183,21 @@ function buildGenerateStatusComponents(options: {
     );
   }
 
-  const container: ContainerComponentData<ComponentInContainerData> = {
-    type: ComponentType.Container,
-    accentColor: resolveComponentsV2AccentColor(options.color),
-    components,
-  };
+  return [buildPanelContainer(components, resolveComponentsV2AccentColor(options.color))];
+}
 
-  return [container];
+function buildGenerateResultPayload(
+  options: PersonaResultContainerOptions,
+  attachment: AttachmentBuilder,
+): InteractionEditReplyOptions {
+  return validateAndFallbackPanelPayload(
+    {
+      components: buildPersonaResultContainer(options),
+      files: [attachment],
+      flags: MessageFlags.IsComponentsV2,
+    },
+    options.locale,
+  );
 }
 
 async function editGenerateStatusReply(
@@ -204,19 +212,24 @@ async function editGenerateStatusReply(
     inputAttachment?: AttachmentBuilder;
   },
 ): Promise<void> {
-  await interaction.editReply({
-    components: buildGenerateStatusComponents({
-      locale: options.locale,
-      titleKey: options.titleKey,
-      descriptionKey: options.descriptionKey,
-      color: options.color,
-      descriptionVars: options.descriptionVars,
-      details: options.details,
-      showInputAttachment: Boolean(options.inputAttachment),
-    }),
-    ...(options.inputAttachment ? { files: [options.inputAttachment] } : {}),
-    flags: MessageFlags.IsComponentsV2,
-  });
+  await interaction.editReply(
+    validateAndFallbackPanelPayload(
+      {
+        components: buildGenerateStatusComponents({
+          locale: options.locale,
+          titleKey: options.titleKey,
+          descriptionKey: options.descriptionKey,
+          color: options.color,
+          descriptionVars: options.descriptionVars,
+          details: options.details,
+          showInputAttachment: Boolean(options.inputAttachment),
+        }),
+        ...(options.inputAttachment ? { files: [options.inputAttachment] } : {}),
+        flags: MessageFlags.IsComponentsV2,
+      },
+      options.locale,
+    ),
+  );
 }
 
 type ToolContextChannel = ToolContext["channel"];
@@ -229,13 +242,86 @@ function isToolContextChannel(channel: unknown): channel is ToolContextChannel {
 }
 
 /**
+ * Builds the question the vision model answers about an uploaded avatar.
+ *
+ * The persona schema's Appearance attribute is what consumes this text, so the request names
+ * the facets that attribute expects instead of asking for a general description. The user's
+ * own words are included as the subject the description has to serve: without them the model
+ * describes everything visible, and the primary model has to guess which details matter.
+ */
+function buildAppearanceCaptionPrompt(characterDescription: string, additionalInstructions?: string): string {
+  let prompt = `Describe the visual appearance of the character in this image, for a written character profile.
+
+Cover, in this order: apparent age range and gender presentation, hair (color, length, style), eyes (color, shape, notable features), skin tone, build and height impression, clothing and outfit details, accessories, and any distinctive marks such as tattoos, scars, or unusual features.
+
+Report only what is visible. State when something is unclear, hidden, or out of frame instead of guessing, and do not infer personality, backstory, or role from the art style. Write plain prose, not a list, in at most two paragraphs.`;
+
+  const trimmedDescription = characterDescription.trim();
+  if (trimmedDescription) {
+    prompt += `\n\nThe character's own description, for context on what matters here:\n${trimmedDescription}`;
+  }
+
+  const trimmedInstructions = additionalInstructions?.trim();
+  if (trimmedInstructions) {
+    prompt += `\n\nAdditional instructions from the user:\n${trimmedInstructions}`;
+  }
+
+  return prompt;
+}
+
+/**
+ * The model's own output ceiling, when the provider publishes one.
+ *
+ * OpenRouter is currently the only provider whose capability cache reports
+ * `max_completion_tokens`; elsewhere the registry has no ceiling to offer, so the caller falls
+ * back to the configured and env-derived budget alone.
+ */
+function resolvePresetModelCeiling(providerName: string, modelCodename: string): number | undefined {
+  if (normalizeProviderName(providerName) !== "openrouter" || !isOpenRouterCapabilityCacheReady()) {
+    return undefined;
+  }
+  return getOpenRouterTokenLimits(modelCodename)?.maxCompletionTokens;
+}
+
+/**
+ * What an uploaded image requires before generation can run.
+ *
+ * - `primary_with_image`: the primary model reads the image itself.
+ * - `caption_then_generate`: a vision model describes it, then the primary model generates.
+ * - `text_only_extracted`: an extracted card/preset carries the character, so no vision is needed.
+ * - `fail_no_vision`: nothing can read the image and no card data exists to replace it.
+ */
+export type ImageHandlingPlan =
+  | "primary_with_image"
+  | "caption_then_generate"
+  | "text_only_extracted"
+  | "fail_no_vision";
+
+/**
+ * Decides how an uploaded image reaches generation.
+ *
+ * Extracted card data only matters when nothing can read the image. When a model can see it,
+ * the image wins and the card stays reference material: the card is a text approximation of the
+ * character, while the upload is the character the user actually chose.
+ */
+export function planImageHandling(input: {
+  primarySeesImages: boolean;
+  visionSeesImages: boolean;
+  hasExtractedPreset: boolean;
+}): ImageHandlingPlan {
+  if (input.primarySeesImages) {
+    return "primary_with_image";
+  }
+  if (input.visionSeesImages) {
+    return "caption_then_generate";
+  }
+  return input.hasExtractedPreset ? "text_only_extracted" : "fail_no_vision";
+}
+
+/**
  * Executes the 'generate' command
  * AI-powered personality generation using structured output providers
  *
- * @param client - The Discord client instance
- * @param interaction - The chat input command interaction
- * @param userData - The user data for the invoking user
- * @param locale - The user's preferred locale
  */
 export async function execute(
   client: Client,
@@ -247,7 +333,7 @@ export async function execute(
   let replyUsesComponentsV2 = false;
 
   try {
-    // 1. Load Tomori state to check provider (works for both guilds and DMs)
+    // Load Tomori state to check provider (works for both guilds and DMs)
     const serverDiscId = interaction.guild?.id ?? interaction.user.id;
     const baseTomoriState = await personaRepository.loadState(serverDiscId);
     if (!baseTomoriState) {
@@ -260,9 +346,9 @@ export async function execute(
       return;
     }
 
-    // 2. Overlay the invoking user's personal (BYOK) provider selections onto the
+    // Overlay the invoking user's personal (BYOK) provider selections onto the
     //    server state. This mirrors every other AI-generation command (e.g.
-    //    /generate image, /memory document add) and ensures generation uses the
+    //    /generate image, /memories) and ensures generation uses the
     //    user's personal text provider when configured, instead of always falling
     //    back to the server's configured model.
     const { tomoriState } = await applyPersonalProviderSelectionsToTomoriState(
@@ -270,11 +356,24 @@ export async function execute(
       userData.user_id ?? null,
     );
 
-    // 3. Validate provider and model capabilities
     const providerName = tomoriState.llm.llm_provider.toLowerCase();
     const effectiveModelName = getEffectiveLlmModelName(tomoriState.llm, tomoriState.config.custom_model_name);
 
     if (!providerSupportsFeature(providerName, "presetGeneration")) {
+      log.warn(
+        `[Generate Persona] Provider "${tomoriState.llm.llm_provider}" does not support preset generation`,
+        undefined,
+        {
+          userId: userData.user_id,
+          serverId: tomoriState.server_id,
+          personaId: tomoriState.persona_id,
+          metadata: {
+            command: "persona generate",
+            provider: tomoriState.llm.llm_provider,
+            model: effectiveModelName,
+          },
+        },
+      );
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.persona.generate.wrong_provider_title",
         descriptionKey: "commands.persona.generate.wrong_provider_description",
@@ -290,6 +389,16 @@ export async function execute(
     // Only check for structured output before modal (always required)
     // Image vision and tools will be validated after modal based on user selections
     if (!tomoriState.llm.supports_structoutput) {
+      log.warn(`[Generate Persona] Model "${effectiveModelName}" does not support structured output`, undefined, {
+        userId: userData.user_id,
+        serverId: tomoriState.server_id,
+        personaId: tomoriState.persona_id,
+        metadata: {
+          command: "persona generate",
+          provider: tomoriState.llm.llm_provider,
+          model: effectiveModelName,
+        },
+      });
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.persona.generate.model_incompatible_title",
         descriptionKey: "commands.persona.generate.model_incompatible_description",
@@ -302,8 +411,16 @@ export async function execute(
       return;
     }
 
-    // 4. Get API key and decrypt
     if (!tomoriState.config.api_key) {
+      log.warn(`[Generate Persona] API key missing for provider "${tomoriState.llm.llm_provider}"`, undefined, {
+        userId: userData.user_id,
+        serverId: tomoriState.server_id,
+        personaId: tomoriState.persona_id,
+        metadata: {
+          command: "persona generate",
+          provider: tomoriState.llm.llm_provider,
+        },
+      });
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.persona.generate.no_api_key_title",
         descriptionKey: "commands.persona.generate.no_api_key_description",
@@ -316,6 +433,19 @@ export async function execute(
     const keyVersion = tomoriState.config.key_version || 1; // Default to V1 for backward compatibility
     const decryptedApiKey = await decryptApiKey(tomoriState.config.api_key, keyVersion);
     if (!decryptedApiKey) {
+      log.warn(
+        `[Generate Persona] Failed to decrypt API key for provider "${tomoriState.llm.llm_provider}"`,
+        undefined,
+        {
+          userId: userData.user_id,
+          serverId: tomoriState.server_id,
+          personaId: tomoriState.persona_id,
+          metadata: {
+            command: "persona generate",
+            provider: tomoriState.llm.llm_provider,
+          },
+        },
+      );
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.persona.generate.api_key_decrypt_failed_title",
         descriptionKey: "commands.persona.generate.api_key_decrypt_failed_description",
@@ -325,7 +455,6 @@ export async function execute(
       return;
     }
 
-    // 5. Show modal with generation fields
     const modalComponents: ModalComponent[] = [
       {
         customId: CHARACTER_NAME_ID,
@@ -391,7 +520,6 @@ export async function execute(
       true, // Auto-defer with public reply
     );
 
-    // 7. Handle modal outcome
     if (modalResult.outcome !== "submit") {
       log.info(`Generate modal ${modalResult.outcome}`);
       return;
@@ -404,7 +532,6 @@ export async function execute(
     const webSearch = modalResult.values?.[WEB_SEARCH_ID];
     const additionalInst = modalResult.values?.[ADDITIONAL_INST_ID];
 
-    // Safety checks
     if (!modalSubmitInteraction || !characterNameInput || !characterInfo || !webSearch) {
       log.error("Modal result unexpectedly missing values");
       return;
@@ -421,7 +548,6 @@ export async function execute(
     }
     const characterName = parsedNames[0];
 
-    // 8. Capture optional image attachment and prep snapshot attachment
     const imageAttachment = modalResult.attachments?.[FILE_UPLOAD_ID];
     let imageBase64: string | undefined;
     let imageMimeType: string | undefined;
@@ -438,7 +564,7 @@ export async function execute(
         imageMimeType: imageMimeType ?? imageAttachment?.content_type,
       });
 
-    // 9. Reserve persona operation quota (atomic check+increment for DDoS protection)
+    // Reserve persona operation quota (atomic check+increment for DDoS protection)
     const quotaReserve = reservePersonaQuota(interaction.user.id);
     if (!quotaReserve.allowed) {
       const resetTime = quotaReserve.resetAt ? new Date(quotaReserve.resetAt).toLocaleString(locale) : "unknown";
@@ -465,13 +591,16 @@ export async function execute(
     const characterDesc = characterInfo;
     const speechExamples = characterInfo; // AI will extract speech patterns from context
 
-    // Effective generation context — may be overridden to use vision_llm when the primary
-    // model lacks vision support but a dedicated vision model is configured
-    let generationTomoriState = tomoriState;
-    let generationProviderName = providerName;
+    // The primary model always performs generation, so these stay the primary model's own
+    // resolved provider and key. A vision model only ever contributes a text description.
+    const generationTomoriState = tomoriState;
+    const generationProviderName = providerName;
+    const generationApiKey = decryptedApiKey;
+    // Set when the primary model cannot see the image and a vision model must describe it
+    // first. The caption travels to the primary model as text, never as image data.
+    let visionCaptionPending = false;
 
     if (imageAttachment) {
-      // Early memory guard check
       const memCheck = memoryGuard.checkMemory();
       if (memCheck.status === "critical") {
         // Preserve modal inputs for user convenience
@@ -480,7 +609,6 @@ export async function execute(
           .setDescription(localizer(locale, "rate_limit.error_memory_critical_description"))
           .setColor(ColorCode.ERROR);
 
-        // Add modal inputs as fields (excluding image)
         embed.addFields(
           {
             name: localizer(locale, "commands.persona.generate.field_character_name"),
@@ -511,7 +639,6 @@ export async function execute(
         return;
       }
 
-      // Validate image type
       if (!imageAttachment.content_type?.startsWith("image/")) {
         await modalSubmitInteraction.editReply({
           embeds: [
@@ -533,7 +660,6 @@ export async function execute(
       });
 
       if (!downloadResult.success) {
-        // Handle different error types with localized messages
         let errorKey: string;
         if (downloadResult.error === "size_exceeded") {
           errorKey = "commands.persona.generate.error_file_too_large";
@@ -544,7 +670,15 @@ export async function execute(
         }
 
         await modalSubmitInteraction.editReply({
-          embeds: [new EmbedBuilder().setTitle(localizer(locale, errorKey)).setColor(ColorCode.ERROR)],
+          embeds: [
+            new EmbedBuilder()
+              .setTitle(
+                localizer(locale, errorKey, {
+                  max_size: PERSONA_LIMITS.MAX_AVATAR_SIZE_MB.toString(),
+                }),
+              )
+              .setColor(ColorCode.ERROR),
+          ],
           files: [getInputAttachment()],
         });
         return;
@@ -569,18 +703,16 @@ export async function execute(
       imageMimeType = imageAttachment.content_type || "image/png";
       log.info("Image attachment downloaded and converted to base64");
 
-      // 8a. Attempt to extract existing card/preset data from the uploaded image
+      // Attempt to extract existing card/preset data from the uploaded image
       // This enables "transform/tweak" workflows where users upload a card
       // and ask the AI to modify it (e.g., "make it more conversational")
 
-      // 1. Try Tomori preset format first (native format)
       const tomoriPreset = extractMetadataFromPNG(imageBuffer);
       if (tomoriPreset?.data) {
         extractedPresetContext = JSON.stringify(tomoriPreset.data);
         log.info("Extracted Tomori preset data from uploaded image");
       }
 
-      // 2. Try SillyTavern card format if no native preset was found
       if (!extractedPresetContext) {
         const stMetadata = extractSillyTavernMetadataFromPNG(imageBuffer);
         if (stMetadata) {
@@ -592,78 +724,56 @@ export async function execute(
         }
       }
 
-      // Validate that model supports image vision; fall back to vision_llm if configured
-      // If card/preset data was extracted, vision is optional — the data serves as text context
-      if (!tomoriState.llm.sees_images) {
-        const visionLlm = tomoriState.vision_llm;
+      // The image path is decided by a pure helper so all four documented cases stay covered
+      // by tests rather than by reading this branch.
+      const imagePlan = planImageHandling({
+        primarySeesImages: tomoriState.llm.sees_images ?? false,
+        visionSeesImages: tomoriState.vision_llm?.sees_images ?? false,
+        hasExtractedPreset: Boolean(extractedPresetContext),
+      });
 
-        if (!visionLlm?.sees_images) {
-          // Neither the primary model nor the vision model supports vision
-          if (extractedPresetContext) {
-            // Card data was found — proceed without vision, using extracted data instead
-            log.info(
-              "No vision support available, but card/preset data was extracted from image. Proceeding with text-only context.",
-            );
-            imageBase64 = undefined;
-            imageMimeType = undefined;
-          } else {
-            // No card data and no vision — cannot process the image at all
-            await modalSubmitInteraction.editReply({
-              embeds: [
-                new EmbedBuilder()
-                  .setTitle(localizer(locale, "commands.persona.generate.image_vision_required_title"))
-                  .setDescription(
-                    localizer(locale, "commands.persona.generate.image_vision_required_description", {
-                      model_name: effectiveModelName,
-                    }),
-                  )
-                  .setColor(ColorCode.ERROR),
-              ],
-              files: [getInputAttachment()],
-            });
-            return;
-          }
-        } else {
-          const visionProviderName = visionLlm.llm_provider.toLowerCase();
-          if (!providerSupportsFeature(visionProviderName, "presetGeneration")) {
-            // Vision model is set but its provider cannot perform preset generation
-            if (extractedPresetContext) {
-              // Fall back to text-only with extracted card data
-              log.info(
-                "Vision model provider unsupported for preset generation, but card/preset data was extracted. Proceeding with text-only context.",
-              );
-              imageBase64 = undefined;
-              imageMimeType = undefined;
-            } else {
-              await modalSubmitInteraction.editReply({
-                embeds: [
-                  new EmbedBuilder()
-                    .setTitle(localizer(locale, "commands.persona.generate.vision_model_provider_unsupported_title"))
-                    .setDescription(
-                      localizer(locale, "commands.persona.generate.vision_model_provider_unsupported_description", {
-                        vision_model_name: visionLlm.llm_codename,
-                        vision_provider: visionLlm.llm_provider,
-                      }),
-                    )
-                    .setColor(ColorCode.ERROR),
-                ],
-                files: [getInputAttachment()],
-              });
-              return;
-            }
-          } else {
-            // Delegate preset generation to the vision model so the image can be analyzed
-            log.info(
-              `Primary model lacks vision; delegating preset generation to vision model ${visionLlm.llm_codename} (${visionLlm.llm_provider})`,
-            );
-            generationTomoriState = { ...tomoriState, llm: visionLlm };
-            generationProviderName = visionProviderName;
-          }
-        }
+      if (imagePlan === "fail_no_vision") {
+        log.warn(
+          `[Generate Persona] Image provided but neither primary model "${effectiveModelName}" nor vision model supports image input`,
+          undefined,
+          {
+            userId: userData.user_id,
+            serverId: tomoriState.server_id,
+            personaId: tomoriState.persona_id,
+            metadata: {
+              command: "persona generate",
+              model: effectiveModelName,
+              visionModel: tomoriState.vision_llm?.llm_codename ?? null,
+            },
+          },
+        );
+        await modalSubmitInteraction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle(localizer(locale, "commands.persona.generate.image_vision_required_title"))
+              .setDescription(
+                localizer(locale, "commands.persona.generate.image_vision_required_description", {
+                  model_name: effectiveModelName,
+                }),
+              )
+              .setColor(ColorCode.ERROR),
+          ],
+          files: [getInputAttachment()],
+        });
+        return;
+      }
+
+      if (imagePlan === "text_only_extracted") {
+        log.info("No model can read the image; proceeding text-only from extracted card/preset data.");
+        imageBase64 = undefined;
+        imageMimeType = undefined;
+      }
+
+      if (imagePlan === "caption_then_generate") {
+        visionCaptionPending = true;
       }
     }
 
-    // 10. Validate web search capability before processing
     const webSearchRequested = webSearch.trim().toLowerCase() === "yes";
     const useWebSearch = webSearchRequested && tomoriState.config.web_search_enabled;
 
@@ -671,6 +781,19 @@ export async function execute(
       log.info("Web search requested but disabled by server configuration; proceeding without search.");
     }
     if (webSearchRequested && tomoriState.config.web_search_enabled && !tomoriState.llm.has_tools) {
+      log.warn(
+        `[Generate Persona] Web search requested but model "${effectiveModelName}" lacks tool calling support`,
+        undefined,
+        {
+          userId: userData.user_id,
+          serverId: tomoriState.server_id,
+          personaId: tomoriState.persona_id,
+          metadata: {
+            command: "persona generate",
+            model: effectiveModelName,
+          },
+        },
+      );
       await modalSubmitInteraction.editReply({
         embeds: [
           new EmbedBuilder()
@@ -687,16 +810,90 @@ export async function execute(
       return;
     }
 
-    // 11. Show processing status
     await editGenerateStatusReply(modalSubmitInteraction, {
       locale,
-      titleKey: "commands.persona.generate.processing_title",
-      descriptionKey: "commands.persona.generate.processing_description",
+      // The caption is a second model call the user is waiting on, so the status names it
+      // rather than reporting generation while a different model is still reading the image.
+      titleKey: visionCaptionPending
+        ? "commands.persona.generate.captioning_title"
+        : "commands.persona.generate.processing_title",
+      descriptionKey: visionCaptionPending
+        ? "commands.persona.generate.captioning_description"
+        : "commands.persona.generate.processing_description",
+      descriptionVars: visionCaptionPending ? { model_name: tomoriState.vision_llm?.llm_codename ?? "" } : undefined,
       color: ColorCode.INFO,
     });
     replyUsesComponentsV2 = true;
 
-    // 12. Prepare generation parameters
+    let appearanceDescription: string | undefined;
+    // The pending flag is only set alongside the base64 pair, so a missing image here would
+    // mean generation silently proceeds without the appearance it promised to describe.
+    if (visionCaptionPending && (!imageBase64 || !imageMimeType)) {
+      log.error("Vision caption was pending but the image data was already cleared");
+      await editGenerateStatusReply(modalSubmitInteraction, {
+        locale,
+        titleKey: "commands.persona.generate.generation_failed_title",
+        descriptionKey: "commands.persona.generate.generation_failed_description",
+        descriptionVars: { error: "The uploaded image could not be prepared for description." },
+        color: ColorCode.ERROR,
+        inputAttachment: getInputAttachment(),
+      });
+      return;
+    }
+
+    if (visionCaptionPending && imageBase64 && imageMimeType) {
+      const captionResult = await analyzeImageWithVisionModel({
+        serverId: tomoriState.server_id,
+        image: { data: imageBase64, mimeType: imageMimeType },
+        prompt: buildAppearanceCaptionPrompt(characterDesc, additionalInst),
+        cachedVisionLlm: tomoriState.vision_llm,
+        userId: userData.user_id ?? null,
+      });
+
+      if (!captionResult.ok) {
+        const reason = captionResult.failure?.reason ?? "request_failed";
+        log.warn(
+          `Vision caption failed before preset generation (${reason}): ${captionResult.failure?.detail ?? "no detail"}`,
+        );
+
+        // A credential failure is the one case the user fixes in a different place than the
+        // model choice, so it keeps its own copy instead of the generic caption failure.
+        const credentialsUnavailable = reason === "credentials_unavailable";
+        await editGenerateStatusReply(modalSubmitInteraction, {
+          locale,
+          titleKey: credentialsUnavailable
+            ? "commands.persona.generate.vision_credentials_unavailable_title"
+            : "commands.persona.generate.vision_caption_failed_title",
+          descriptionKey: credentialsUnavailable
+            ? "commands.persona.generate.vision_credentials_unavailable_description"
+            : "commands.persona.generate.vision_caption_failed_description",
+          descriptionVars: {
+            vision_model_name: tomoriState.vision_llm?.llm_codename ?? "",
+            vision_provider: tomoriState.vision_llm?.llm_provider ?? "",
+          },
+          color: ColorCode.ERROR,
+          inputAttachment: getInputAttachment(),
+        });
+        return;
+      }
+
+      appearanceDescription = captionResult.text;
+      // The image is consumed by the caption, so the primary call stays text-only: sending it
+      // again would either be ignored or rejected by a model that cannot read it.
+      imageBase64 = undefined;
+      imageMimeType = undefined;
+      log.info(
+        `Vision caption produced ${appearanceDescription?.length ?? 0} characters via ${captionResult.provider}/${captionResult.model}`,
+      );
+    }
+
+    // Resolved once here, where both the server's ceiling and the model registry are in scope,
+    // and passed down so every provider asks for the same budget.
+    const presetMaxOutputTokens = resolvePresetGenerationMaxOutputTokens({
+      configured: tomoriState.config.llm_max_output_tokens,
+      modelCeiling: resolvePresetModelCeiling(generationProviderName, tomoriState.llm.llm_codename),
+    });
+
     const genParams: GeneratePresetParams = {
       characterName,
       characterDescription: characterDesc,
@@ -706,6 +903,8 @@ export async function execute(
       imageMimeType,
       useWebSearch,
       existingPresetContext: extractedPresetContext,
+      appearanceDescription,
+      maxOutputTokens: presetMaxOutputTokens,
     };
 
     let presetToolContext: ToolContext | undefined;
@@ -725,12 +924,11 @@ export async function execute(
       log.warn("Preset generation web search skipped: no channel context available.");
     }
 
-    // 13. Generate preset data
     log.info(`Generating preset data with ${generationTomoriState.llm.llm_provider}...`);
 
     const genResult = await generatePresetForProvider({
       providerName: generationProviderName,
-      apiKey: decryptedApiKey,
+      apiKey: generationApiKey,
       tomoriState: generationTomoriState,
       params: genParams,
       locale,
@@ -738,7 +936,6 @@ export async function execute(
     });
 
     if (genResult.error || !genResult.preset) {
-      // Show error status
       await editGenerateStatusReply(modalSubmitInteraction, {
         locale,
         titleKey: "commands.persona.generate.generation_failed_title",
@@ -760,15 +957,12 @@ export async function execute(
       );
     }
 
-    // 14. Validate generated data against schema
     const validationResult = presetExportDataSchema.safeParse(genResult.preset);
     if (!validationResult.success) {
-      // Log detailed validation errors
       log.error("Generated preset failed validation:");
       log.error("Validation errors:", JSON.stringify(validationResult.error.format(), null, 2));
       log.error("Generated preset data:", JSON.stringify(genResult.preset, null, 2));
 
-      // Extract specific error messages for user
       const errorDetails = validationResult.error.issues
         .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
         .join("\n");
@@ -786,13 +980,12 @@ export async function execute(
 
     log.success("Generated preset passed validation");
 
-    // 15. Get image for export (uploaded image or server avatar)
+    // Get image for export (uploaded image or server avatar)
     let pngBuffer: Buffer;
 
     if (imageBuffer) {
       // Use uploaded image (already downloaded earlier, reuse buffer)
       try {
-        // Crop to 1:1 square
         pngBuffer = await centerCropToSquare(imageBuffer);
         log.info("Uploaded image cropped to 1:1 square (reused buffer)");
       } catch (error) {
@@ -825,7 +1018,6 @@ export async function execute(
       }
     }
 
-    // 16. Create preset export structure with metadata
     const presetExport: PresetExport = {
       version: PRESET_EXPORT_VERSION,
       type: "preset",
@@ -833,7 +1025,6 @@ export async function execute(
       data: genResult.preset,
     };
 
-    // 17. Embed metadata in PNG
     let finalPngBuffer: Buffer;
     try {
       finalPngBuffer = await embedMetadataInPNG(pngBuffer, presetExport);
@@ -850,7 +1041,6 @@ export async function execute(
       return;
     }
 
-    // 18. Create attachment
     const sanitizedNickname = sanitizeAttachmentFilenamePart(characterName, {
       fallback: "persona",
       maxLength: 50,
@@ -861,12 +1051,16 @@ export async function execute(
       name: filename,
     });
 
-    // 19. Detect DM context and create success container with main image
     const isDM = !interaction.guild;
 
-    // Format attribute preview (first attribute, truncated to 200 chars)
-    const attributePreview = genResult.preset.attribute_list[0]
-      ? `${genResult.preset.attribute_list[0].substring(0, 200)}...`
+    // Format attribute preview (first attribute). The ellipsis is conditional:
+    // it previously appended unconditionally, claiming truncation that had not
+    // happened for any attribute under the preview width.
+    const firstAttribute = genResult.preset.attribute_list[0];
+    const attributePreview = firstAttribute
+      ? firstAttribute.length > CONFIRMATION_PREVIEW_BUDGET
+        ? `${firstAttribute.substring(0, CONFIRMATION_PREVIEW_BUDGET)}...`
+        : firstAttribute
       : "No attributes generated";
 
     // Format dialogue preview (up to 3 examples, 100 chars each)
@@ -907,31 +1101,26 @@ export async function execute(
         },
       ],
       buttonAlignment: "right",
-      // Closing note sits on its own row below the button.
       trailingNoteKey: "commands.persona.generate.success_next_steps_footer",
       ...(isDM ? { footerKey: "commands.persona.generate.avatar_update_skipped_dm" } : {}),
     };
 
-    // 20. Send the result. In guilds, attach an "Import Now" button (manager-only)
+    // Send the result. In guilds, attach an "Import Now" button (manager-only)
     //     so the persona can be imported as an alter without re-uploading the PNG.
     //     Alter import is guild-only, so DMs get the container without the button.
     if (isDM || !interaction.guild) {
-      await modalSubmitInteraction.editReply({
-        components: buildPersonaResultContainer(successContainerOptions),
-        files: [attachment],
-        flags: MessageFlags.IsComponentsV2,
-      });
+      await modalSubmitInteraction.editReply(buildGenerateResultPayload(successContainerOptions, attachment));
     } else {
-      await modalSubmitInteraction.editReply({
-        components: buildPersonaResultContainer({
-          ...successContainerOptions,
-          button: importNowButton("active"),
-        }),
-        files: [attachment],
-        flags: MessageFlags.IsComponentsV2,
-      });
+      await modalSubmitInteraction.editReply(
+        buildGenerateResultPayload(
+          {
+            ...successContainerOptions,
+            button: importNowButton("active"),
+          },
+          attachment,
+        ),
+      );
 
-      // Wire the Import Now collector to the just-sent public message.
       const sentMessage = await modalSubmitInteraction.fetchReply();
       attachImportNowCollector({
         message: sentMessage,
@@ -952,7 +1141,6 @@ export async function execute(
     log.error("Error in preset generate command:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
-    // Try to send an error response if possible.
     try {
       const errorEmbed = new EmbedBuilder()
         .setTitle(localizer(locale, "general.errors.unexpected_title"))
@@ -982,7 +1170,6 @@ export async function execute(
         });
       }
     } catch {
-      // If we can't send the error embed, just log it
       log.error("Failed to send error embed");
     }
   }

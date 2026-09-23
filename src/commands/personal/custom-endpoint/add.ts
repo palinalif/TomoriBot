@@ -237,15 +237,12 @@ export async function execute(
         return;
       }
 
-      const displayName = parsed.displayName || parsed.modelName || label;
-
       const registered = await registerCustomEndpoint({
         scope: { kind: "personal", ownerId: userData.user_id, baseConfig: tomoriState.config },
         label,
         capability,
         apiStyle,
         endpointUrl,
-        displayName,
         modelName: parsed.modelName,
         authToken,
         numCtx: parsed.numCtx,
@@ -269,7 +266,7 @@ export async function execute(
       await replyInfoEmbed(modalSubmit, locale, {
         titleKey: "commands.personal.custom_models.add.success_title",
         descriptionKey: "commands.personal.custom_models.add.success_description",
-        descriptionVars: { display_name: displayName, label, capability },
+        descriptionVars: { label, capability },
         color: ColorCode.SUCCESS,
       });
     } catch (error) {
@@ -308,13 +305,6 @@ export async function execute(
         maxLength: 200,
       },
       {
-        customId: ModalFieldId.display_name,
-        labelKey: "commands.config.custom_models.capability_modal.display_name_label",
-        placeholder: localizer(locale, "commands.config.custom_models.capability_modal.display_name_placeholder"),
-        required: false,
-        maxLength: 100,
-      },
-      {
         customId: WORKFLOW_UPLOAD_ID,
         labelKey: "commands.config.custom_models.capability_modal.workflow_json_label",
         descriptionKey: "commands.config.custom_models.capability_modal.workflow_json_description",
@@ -337,7 +327,6 @@ export async function execute(
     await modalSubmit.deferReply({ flags: MessageFlags.Ephemeral });
 
     const modelName = modalResult.values?.[ModalFieldId.model_name]?.trim() || null;
-    const displayName = modalResult.values?.[ModalFieldId.display_name]?.trim() || label;
     const workflowAttachment = modalResult.attachments?.[WORKFLOW_UPLOAD_ID];
     const workflowSupportValues = modalResult.multiValues?.[IMAGE_ENDPOINT_SUPPORTS_ID];
 
@@ -386,7 +375,6 @@ export async function execute(
       capability,
       apiStyle,
       endpointUrl,
-      displayName,
       modelName,
       authToken,
       extraConfig: {
@@ -407,7 +395,7 @@ export async function execute(
     await replyInfoEmbed(modalSubmit, locale, {
       titleKey: "commands.personal.custom_models.add.success_title",
       descriptionKey: "commands.personal.custom_models.add.success_description",
-      descriptionVars: { display_name: displayName, label, capability },
+      descriptionVars: { label, capability },
       color: ColorCode.SUCCESS,
     });
   } catch (error) {

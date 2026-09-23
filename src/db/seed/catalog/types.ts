@@ -1,3 +1,5 @@
+import type { LocaleCode } from "@/constants/locales";
+
 // Input types for the human-authored seed catalogs (`*.ts`).
 //
 // These are deliberately *narrower* than the DB row schemas in
@@ -27,8 +29,8 @@ interface CommonInput {
   codename: string;
   /** English description; `null` emits SQL `NULL`. */
   desc: string | null;
-  /** Japanese description; `null` emits SQL `NULL`. */
-  ja: string | null;
+  /** Optional localized descriptions; English comes from `desc`. */
+  i18n?: Partial<Record<Exclude<LocaleCode, "en-US">, string>>;
   /** Marks the provider's default model. Exactly one per provider (see validator). */
   isDefault?: boolean;
   /** Hides the model from selection; deprecated rows are split into a separate INSERT. */
@@ -49,14 +51,21 @@ export interface LlmInput extends CommonInput {
   supportsStructoutput?: boolean;
   /**
    * Requires strict role alternation (merge consecutive same-role turns + leading user turn).
-   * Required for anthropic; enforced by the check-models per-provider invariant.
+   * Required for anthropic; enforced by the check-seed-catalogs per-provider invariant.
    */
   strictRoleAlternation?: boolean;
   /**
    * Supports assistant prefix-completion (`prefix: true` on the trailing prefill turn).
-   * Required for deepseek/zai/zaicoding; enforced by the check-models per-provider invariant.
+   * Required for deepseek/zai/zaicoding; enforced by the check-seed-catalogs per-provider invariant.
    */
   supportsPrefixCompletion?: boolean;
+  /**
+   * Official uncached input price in USD per million tokens. Omit for OpenRouter (priced live from its
+   * API) and free/non-metered models, so the column stays NULL and the cost command falls back.
+   */
+  inputPricePerMillion?: number;
+  /** Official uncached output price in USD per million tokens. See {@link inputPricePerMillion}. */
+  outputPricePerMillion?: number;
 }
 
 /** A row in the `image_diffusion_models` table. */
@@ -76,6 +85,22 @@ export interface EmbeddingInput extends CommonInput {
   family: string;
 }
 
+/**
+ * One official preset sprite, authored in the persona catalog.
+ * The image file lives inside the persona's `avatarPath` directory and is
+ * uploaded once to shared storage at seed time; pointer personas resolve it live.
+ * @property name Display label / lookup label, e.g. `"mad"` (normalized to a key).
+ * @property file Image path relative to the persona's `avatarPath` dir, e.g. `"sprites/mad.png"`.
+ * @property usageInstructions Optional prompt guidance for when to use this sprite.
+ * @property isIdentity When true, renders the decorated `sprite (Persona)` name (DID alter style).
+ */
+export interface PresetSpriteInput {
+  name: string;
+  file: string;
+  usageInstructions?: string;
+  isIdentity?: boolean;
+}
+
 /** A row in the `persona_presets` seed catalog. */
 export interface PersonaInput {
   name: string;
@@ -87,22 +112,29 @@ export interface PersonaInput {
   avatarPath: string;
   triggerWords: string[];
   lineageId: number;
+  namingConfig: import("@/types/personaNaming").PersonaNamingConfig;
+  /**
+   * Optional official sprite set for this preset. Seeded into `preset_sprites`
+   * and resolved live by pointer personas. Omit (or leave empty) and the persona
+   * simply has no default sprites, so a graceful no-op.
+   */
+  sprites?: PresetSpriteInput[];
 }
 
 /** A row in the `system_prompt_presets` seed catalog. */
 export interface SystemPromptInput {
   name: string;
   desc: string;
-  jaDescription: string;
+  i18n?: Partial<Record<Exclude<LocaleCode, "en-US">, string>>;
   promptText: string;
 }
 
 export type NaiModelTarget = "kayra" | "erato";
 
-export type NaiPhraseRepPen = "off" | "light" | "medium" | "aggressive" | "very_aggressive";
+type NaiPhraseRepPen = "off" | "light" | "medium" | "aggressive" | "very_aggressive";
 
 /** NovelAI sampling parameter JSON stored in `nai_presets.parameters`. */
-export interface NaiSamplingParameters {
+interface NaiSamplingParameters {
   order?: number[];
   temperature?: number;
   max_length?: number;
@@ -129,6 +161,6 @@ export interface NaiPresetInput {
   modelTarget: NaiModelTarget;
   isDefault?: boolean;
   desc: string;
-  jaDesc: string;
+  i18n?: Partial<Record<Exclude<LocaleCode, "en-US">, string>>;
   parameters: NaiSamplingParameters;
 }

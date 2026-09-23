@@ -6,7 +6,8 @@ import {
   type Client,
   type SlashCommandSubcommandBuilder,
 } from "discord.js";
-import { configRepository, personaRepository } from "@/utils/db/repositories";
+import { configRepository, personaRepository, personaSpriteRepository } from "@/utils/db/repositories";
+import { invalidatePersonaSpriteCache } from "@/utils/cache/personaSpriteCache";
 import { getCachedTomoriState, invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { localizer, getBaseTriggerWords, getDefaultBotName } from "../../utils/text/localizer";
 import { log, ColorCode } from "../../utils/misc/logger";
@@ -16,8 +17,9 @@ import type { SelectOption } from "../../types/discord/modal";
 import { sanitizeAttachmentFilenamePart } from "@/utils/discord/attachmentFilename";
 import { getCachedPresetAvatar, getPresetAvatarBuffer } from "../../utils/image/avatarHelper";
 import { getMemoryLimits } from "@/utils/misc/memoryLimits";
-import { uploadPersonaAvatarToStorage } from "../../utils/storage/avatarStorage";
+import { deletePersonaAvatarFromStorage, deletePersonaSpriteFromStorage } from "../../utils/storage/avatarStorage";
 import { dedupeTriggerWords, normalizeTriggerWord, selectUnclaimedTriggerWords } from "@/utils/text/triggerWords";
+import { orderPersonaPresetChoices } from "@/utils/persona/presetOrdering";
 
 function isUniqueViolation(error: unknown): boolean {
   return (
@@ -25,7 +27,6 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
-// Modal configuration constants
 const MODAL_CUSTOM_ID = "preset_default_modal";
 const PRESET_SELECT_ID = "preset_select";
 export const PRESET_LINEAGE_BY_AVATAR: Record<string, number> = {
@@ -37,7 +38,6 @@ export const PRESET_LINEAGE_BY_AVATAR: Record<string, number> = {
 };
 
 type PersonaDefaultTargetType = "default" | "alter";
-const DEFAULT_TARGET_TYPE: PersonaDefaultTargetType = "default";
 
 function normalizeForComparison(value: string): string {
   return normalizeTriggerWord(value);
@@ -128,7 +128,6 @@ export function resolvePresetLineageId(preset: TomoriPresetRow): number | null {
   return null;
 }
 
-// Configure the subcommand
 export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =>
   subcommand
     .setName("default")
@@ -137,7 +136,7 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
       option
         .setName("type")
         .setDescription(localizer("en-US", "commands.persona.default.type_description"))
-        .setRequired(false)
+        .setRequired(true)
         .addChoices(
           {
             name: localizer("en-US", "commands.persona.default.type_choice_default"),
@@ -152,7 +151,7 @@ export const configureSubcommand = (subcommand: SlashCommandSubcommandBuilder) =
 
 /**
  * Applies a preset personality configuration to Tomori.
- * - type=default (default): updates the main persona.
+ * - type=default: updates the main persona.
  * - type=alter: creates an alter persona from the selected preset.
  *
  * Preset trigger words come from persona_presets.preset_trigger_words,
@@ -166,7 +165,6 @@ export async function execute(
   userData: UserRow,
   locale: string,
 ): Promise<void> {
-  // 1. Ensure command is run in a channel
   if (!interaction.channel) {
     await replyInfoEmbed(interaction, locale, {
       titleKey: "general.errors.channel_only_title",
@@ -177,7 +175,7 @@ export async function execute(
     return;
   }
 
-  const targetType = (interaction.options.getString("type") as PersonaDefaultTargetType | null) ?? DEFAULT_TARGET_TYPE;
+  const targetType = interaction.options.getString("type", true) as PersonaDefaultTargetType;
 
   if (targetType === "alter" && !interaction.guild) {
     await replyInfoEmbed(interaction, locale, {
@@ -189,7 +187,7 @@ export async function execute(
     return;
   }
 
-  // 2. Check permissions (ManageGuild required in guilds)
+  // Check permissions (ManageGuild required in guilds)
   if (interaction.guild) {
     const hasPermission = interaction.memberPermissions?.has("ManageGuild") ?? false;
 
@@ -205,7 +203,6 @@ export async function execute(
   }
 
   try {
-    // 3. Load the Tomori state for this server
     const serverDiscId = interaction.guild?.id ?? interaction.user.id;
     const tomoriState = await getCachedTomoriState(serverDiscId);
     if (!tomoriState) {
@@ -218,10 +215,8 @@ export async function execute(
       return;
     }
 
-    // 4. Fetch available presets for the user's locale using shared helper
     const presets = await configRepository.loadPresetRowsByLocale(locale);
 
-    // 5. Check if there are any presets available
     if (!presets || presets.length === 0) {
       await replyInfoEmbed(interaction, locale, {
         titleKey: "commands.persona.default.no_presets_title",
@@ -231,14 +226,14 @@ export async function execute(
       return;
     }
 
-    // 6. Create preset options for the select menu using full descriptions
-    const presetSelectOptions: SelectOption[] = presets.map((preset: TomoriPresetRow) => ({
+    const sortedPresets = orderPersonaPresetChoices(presets);
+
+    const presetSelectOptions: SelectOption[] = sortedPresets.map((preset: TomoriPresetRow) => ({
       label: safeSelectOptionText(preset.persona_preset_name),
       value: safeSelectOptionText(preset.persona_preset_name),
       description: safeSelectOptionText(preset.persona_preset_desc),
     }));
 
-    // 7. Show the modal with preset selection
     const modalResult = await promptWithRawModal(
       interaction,
       locale,
@@ -259,19 +254,17 @@ export async function execute(
       MessageFlags.Ephemeral,
     );
 
-    // 8. Handle modal outcome
     if (modalResult.outcome !== "submit") {
       log.info(`Preset selection modal ${modalResult.outcome} for user ${userData.user_id}`);
       return;
     }
 
-    // Extract values from the modal
     // biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
     const modalSubmitInteraction = modalResult.interaction!;
     // biome-ignore lint/style/noNonNullAssertion: Modal submission outcome "submit" guarantees these values exist
     const selectedPresetName = modalResult.values![PRESET_SELECT_ID];
 
-    // 9. Find the selected preset - let helper functions manage interaction state
+    // Find the selected preset - let helper functions manage interaction state
     const selectedPreset = presets.find((preset: TomoriPresetRow) => preset.persona_preset_name === selectedPresetName);
 
     if (!selectedPreset) {
@@ -281,7 +274,6 @@ export async function execute(
       return;
     }
 
-    // 10. Build preset payloads for database update/insert
     const presetPersonaPrompt = selectedPreset.persona_preset_desc || null;
 
     const presetTriggerWords = resolvePresetTriggerWords(selectedPreset, locale);
@@ -323,7 +315,18 @@ export async function execute(
         return;
       }
 
-      // 11a. Turn the main persona into a live preset pointer.
+      // Capture the persona's current sprite images BEFORE re-pointing, so we
+      //      can clean up server-owned ones afterward (resetting to the preset set).
+      //      For a still-pointer persona these are shared preset URLs (the delete
+      //      guard skips them); for a materialized persona they are its own rows.
+      const spritesBeforeReset = await personaSpriteRepository.listForPersona(targetPersonaId);
+
+      // applyPresetPointerToPersona clears webhook_avatar_url, so retain the current
+      // server-owned image for deletion afterward. The guard skips shared presets/ images.
+      const previousMainAvatarUrl = mainPersona.webhook_avatar_url ?? null;
+
+      // Turn the main persona into a live preset pointer (this also drops the
+      //      persona's own sprite rows, so it resolves preset sprites live again).
       const updatedTomoriResult = await personaRepository.applyPresetPointerToPersona({
         personaId: targetPersonaId,
         nickname: resolvedPersonaName,
@@ -333,7 +336,6 @@ export async function execute(
         personaPrompt: presetPersonaPrompt,
       });
 
-      // 11b. Validate the result
       if (!updatedTomoriResult) {
         const context: ErrorContext = {
           userId: userData.user_id,
@@ -363,7 +365,18 @@ export async function execute(
 
       invalidateTomoriStateCache(serverDiscId);
 
-      // 11c. Update guild avatar/nickname only for main/default target
+      // Finish the sprite reset: delete server-owned sprite images now that
+      //      the rows are gone (the guard skips shared preset images), and drop the
+      //      stale sprite cache so the next read resolves the new preset's sprites.
+      await Promise.all(spritesBeforeReset.map((sprite) => deletePersonaSpriteFromStorage(sprite.avatar_url)));
+      invalidatePersonaSpriteCache(targetPersonaId);
+
+      // The old server-owned main avatar is unreferenced after the repoint clears
+      // webhook_avatar_url. The guard skips shared presets/.
+      if (previousMainAvatarUrl) {
+        await deletePersonaAvatarFromStorage(previousMainAvatarUrl);
+      }
+
       const isDM = !interaction.guild;
       let avatarUpdateFailed = false;
       let nicknameUpdateFailed = false;
@@ -409,6 +422,10 @@ export async function execute(
                 ? `Set preset avatar for "${selectedPreset.persona_preset_name}"`
                 : "Reset guild avatar to bot default";
               log.info(`${actionDescription} for guild ${interaction.guild.id} after applying preset`);
+              // Stamp the applied avatar hash so the background fan-out reconciler
+              // skips this server until the catalog art changes again (avoids a
+              // redundant guild-avatar re-PATCH on the next boot).
+              await personaRepository.markServerMainAvatarSynced(interaction.guild.id);
             } else {
               avatarUpdateFailed = true;
               log.warn(`Failed to update guild avatar: ${response.status} ${response.statusText}`);
@@ -504,7 +521,6 @@ export async function execute(
       return;
     }
 
-    // 12. Alter target flow: create a new alter persona from the selected preset
     const personaLimits = getMemoryLimits();
     if (allPersonas.length >= personaLimits.maxPersonasPerServer) {
       await replyInfoEmbed(modalSubmitInteraction, locale, {
@@ -643,28 +659,14 @@ export async function execute(
       files: avatarAttachment ? [avatarAttachment] : [],
     });
 
-    // Mirror /persona import alter avatar persistence flow so webhook avatars remain stable.
-    let storedAvatarUrl: string | null = null;
-    if (presetAvatarBuffer) {
-      const s3AvatarUrl = await uploadPersonaAvatarToStorage({
-        personaId: newAlterId,
-        serverDiscId,
-        label: "default alter preset",
-        buffer: presetAvatarBuffer,
-      });
-      storedAvatarUrl = s3AvatarUrl;
+    // No per-server avatar upload: a preset-pointer alter leaves webhook_avatar_url
+    // NULL and live-resolves the shared preset avatar (preset_avatar_shared_url)
+    // at state-load time. This both dedups storage (N servers share one image) and
+    // makes catalog avatar edits fan out to this alter on the next reseed, exactly
+    // like its sprites/triggers/prompt. The avatar is materialized by reference
+    // only if the user later forks the persona with a content edit.
 
-      if (storedAvatarUrl) {
-        const avatarUpdated = await personaRepository.setAvatar(newAlterId, storedAvatarUrl);
-        if (!avatarUpdated) {
-          log.warn(`Failed to persist preset avatar for alter persona ${newAlterId}`);
-        }
-      } else {
-        log.warn(`Failed to persist preset avatar for alter persona ${newAlterId}`);
-      }
-    }
-
-    // Match /persona import cache invalidation timing: after avatar URL persistence.
+    // Match /persona import cache invalidation timing.
     invalidateTomoriStateCache(serverDiscId);
 
     log.success(
@@ -696,7 +698,6 @@ export async function execute(
       return;
     }
 
-    // 13. Log error with context
     let serverIdForError: number | null = null;
     let personaIdForError: number | null = null;
     if (interaction.guild?.id) {
@@ -719,7 +720,6 @@ export async function execute(
     };
     await log.error(`Error executing /persona default for user ${userData.user_disc_id}`, error as Error, context);
 
-    // 14. Inform user of unknown error
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: localizer(locale, "general.errors.unknown_error_description"),

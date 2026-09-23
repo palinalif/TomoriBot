@@ -2,6 +2,8 @@ import type { GuildMember, Message } from "discord.js";
 import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
 import { userRepository } from "@/utils/db/repositories";
 import { resolvePreferredDiscordDisplayName } from "@/utils/discord/displayName";
+import { normalizeRenderModifierName } from "@/utils/discord/renderModifierParser";
+import { resolveWebhookPersonaAuthor } from "@/utils/discord/webhookPersonaAuthor";
 import { stripBridgePrefix } from "@/utils/bridges";
 import { log } from "@/utils/misc/logger";
 
@@ -33,11 +35,14 @@ export async function resolveContextAuthorLabel(
     if (guildId && guildId !== "DM") {
       try {
         const personas = await getCachedAllPersonas(guildId);
-        const matchedPersona = personas.find(
-          (persona) => persona.persona_nickname?.trim().toLowerCase() === webhookName?.trim().toLowerCase(),
+        const personaByNickname = new Map(
+          personas.map((persona) => [normalizeRenderModifierName(persona.persona_nickname), persona]),
         );
-        if (matchedPersona?.persona_nickname) {
-          return matchedPersona.persona_nickname;
+        if (webhookName) {
+          const resolvedPersona = await resolveWebhookPersonaAuthor(message.id, webhookName, personaByNickname);
+          if (resolvedPersona) {
+            return resolvedPersona.displayName;
+          }
         }
       } catch (error) {
         log.warn("Failed to resolve persona name for webhook-authored boomerang context message", error);

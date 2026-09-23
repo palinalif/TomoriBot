@@ -1,7 +1,7 @@
 /**
  * Command loader utility for Tomori Bot
  * Loads command modules from the commands directory structure
- * Supports both flat subcommands and subcommand groups via folder structure
+ * Supports root commands, flat subcommands, and subcommand groups via folder structure
  */
 import path from "node:path";
 import { log } from "../misc/logger";
@@ -13,10 +13,20 @@ import {
   PermissionsBitField,
   InteractionContextType,
   type SlashCommandSubcommandGroupBuilder,
+  type SlashCommandOptionsOnlyBuilder,
 } from "discord.js";
-import type { SlashCommandSubcommandBuilder } from "discord.js";
+import type { AutocompleteInteraction, SlashCommandSubcommandBuilder } from "discord.js";
 import type { UserRow, ErrorContext } from "../../types/db/schema";
-import { localizer, getSupportedLocales } from "../text/localizer";
+import {
+  getRegisterableLocales,
+  hasLocaleKey,
+  initializeLocalizer,
+  localizer,
+  resolveSupportedLocale,
+} from "@/utils/text/localizer";
+
+export const ROOT_COMMAND_EXECUTION_KEY = "__root__";
+type RootCommandBuilder = SlashCommandBuilder | SlashCommandOptionsOnlyBuilder;
 
 /**
  * Type for the command execution function
@@ -32,25 +42,65 @@ export type CommandExecuteFunction = (
  * Map structure for the command execution functions
  * First level: category name (e.g., 'config')
  * Second level: subcommand path
+ *   - For root commands: ROOT_COMMAND_EXECUTION_KEY
  *   - For flat subcommands: 'subcommand' (e.g., 'model')
  *   - For grouped subcommands: 'group.subcommand' (e.g., 'apikey.set')
  */
 export type CommandExecutionMap = Map<string, Map<string, CommandExecuteFunction>>;
+export type CommandAutocompleteFunction = (client: Client, interaction: AutocompleteInteraction) => Promise<void>;
+export type CommandAutocompleteMap = Map<string, Map<string, CommandAutocompleteFunction>>;
+
+/**
+ * One row of the command catalog (the full universe of registered commands).
+ * `commandName` is the space-joined full path: identical to what
+ * `handleCommands.ts` records as `stat_counters.metric_key` for `command_used`,
+ * so the catalog JOINs directly against the stat table with no remapping.
+ */
+export interface CommandCatalogEntry {
+  /** Space-joined full path, e.g. "update", "config humanizer", "server welcome-channel set". */
+  commandName: string;
+  /** Top-level command/category name (first path segment). */
+  category: string;
+}
 
 /**
  * Map for command cooldowns (category -> duration)
  */
 export type CommandCooldownMap = Map<string, number>;
 
-type LoadedCommandModule = {
+/**
+ * Result shape produced by {@link loadCommandData}: the Discord registration
+ * payload plus the runtime execution/cooldown lookup maps.
+ */
+export type LoadCommandDataResult = {
+  registrationData: ApplicationCommandData[];
+  executionMap: CommandExecutionMap;
+  autocompleteMap: CommandAutocompleteMap;
+  cooldownMap: CommandCooldownMap;
+};
+
+export type LoadedCommandModule = {
   configureSubcommand?: (subcommand: SlashCommandSubcommandBuilder) => SlashCommandSubcommandBuilder;
+  configureCommand?: (command: SlashCommandBuilder) => RootCommandBuilder;
+  isCommandEnabled?: (context: CommandAvailabilityContext) => boolean | Promise<boolean>;
   execute?: CommandExecuteFunction;
+  autocomplete?: CommandAutocompleteFunction;
   cooldown?: number;
+  guildOnly?: boolean;
+  managerOnly?: boolean;
+  nsfw?: boolean;
 };
 
 type LoadedCommandFile = {
   file: string;
   module: LoadedCommandModule;
+};
+
+export type CommandAvailabilityContext = {
+  commandFile: string;
+  commandKind: "root" | "flat" | "grouped";
+  categoryName?: string;
+  groupName?: string;
 };
 
 type DirectoryItem = {
@@ -61,23 +111,22 @@ type DirectoryItem = {
 };
 
 // Categories that are completely restricted to guilds only
-const GUILD_ONLY_CATEGORIES: string[] = ["server", "conditioning"];
-// Categories that require manage permissions in guild context
-const MANAGER_ONLY_CATEGORIES = [
-  "config",
-  "model",
-  "provider",
-  "mcp",
-  "capabilities",
-  "nsfw",
-  "optional-key",
+const GUILD_ONLY_CATEGORIES: string[] = [
   "server",
+  "conditioning",
+  "stats",
+  "expressions",
+  "matrix",
+  "punish",
+  "reward",
+  "impersonate",
+  "quota",
 ];
+// Categories that require manage permissions in guild context
+const MANAGER_ONLY_CATEGORIES = ["model", "nsfw", "server", "expressions", "matrix", "quota"];
 
 const COMMAND_LOCALIZATION_ALIASES: Record<string, string> = {
   "commands.memory.description": "commands.teach.memory.description",
-  "commands.conditioning.reward.description": "commands.reward.description",
-  "commands.conditioning.punish.description": "commands.punish.description",
   "commands.persona.attribute.description": "commands.teach.attribute.description",
   "commands.persona.sample-dialogue.description": "commands.teach.sampledialogue.description",
   "commands.persona.prompt.description": "commands.teach.personaprompt.description",
@@ -106,6 +155,11 @@ function getCommandLocalizationAliases(key: string): string[] {
     aliases.push(staticAlias);
   }
 
+  const compatibilityPrefix = ["commands", "tool", "status"].join(".");
+  if (key.startsWith(`${compatibilityPrefix}.`)) {
+    aliases.push(key.replace(`${compatibilityPrefix}.`, "commands.status."));
+  }
+
   if (key.includes(".deliberate-tool-mode.")) {
     aliases.push(key.replace(".deliberate-tool-mode.", ".deliberatetoolmode."));
   }
@@ -128,22 +182,10 @@ function getCommandLocalizationAliases(key: string): string[] {
     "commands.server.deliberate-tool-mode.description": "commands.server.deliberatetoolmode.description",
     "commands.personal.deliberate-trigger-mode.description": "commands.personal.deliberatetriggermode.description",
     "commands.personal.deliberate-tool-mode.description": "commands.personal.deliberatetoolmode.description",
-    "commands.server.quota.image-generation.description": "commands.server.quota.imagegen.description",
-    "commands.server.quota.text-generation.description": "commands.server.quota.textgen.description",
-    "commands.server.quota.video-generation.description": "commands.server.quota.videogen.description",
-    "commands.model.override.remove.description": "commands.config.remove.modeloverride.description",
   };
   const configAlias = configDescriptionAliases[key];
   if (configAlias) {
     aliases.push(configAlias);
-  }
-
-  const conditioningMatch = key.match(
-    /^commands\.conditioning\.(reward|punish)\.([a-z0-9-]+)\.([a-z][a-z0-9]*(?:_[a-z0-9]+)*_description|description)$/,
-  );
-  if (conditioningMatch) {
-    const [, type, actionKey, suffix] = conditioningMatch;
-    aliases.push(`commands.${type}.${actionKey}.${suffix}`);
   }
 
   return aliases;
@@ -151,15 +193,36 @@ function getCommandLocalizationAliases(key: string): string[] {
 
 function localizeWithAliases(locale: string, key: string): string {
   const candidateKeys = [key, ...getCommandLocalizationAliases(key)];
+  const authoredLocale = resolveSupportedLocale(locale);
 
   for (const candidateKey of candidateKeys) {
-    const localizedValue = localizer(locale, candidateKey);
-    if (localizedValue && localizedValue !== candidateKey) {
+    if (hasLocaleKey(authoredLocale, candidateKey)) {
+      const localizedValue = localizer(locale, candidateKey);
+      if (!localizedValue || localizedValue === candidateKey) continue;
       return localizedValue;
     }
   }
 
-  return localizer(locale, key);
+  return key;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getOptionName(option: unknown): string | null {
+  if (!isRecord(option) || typeof option.name !== "string") return null;
+  return option.name;
+}
+
+function applyOptionDescriptionLocalizations(option: unknown, localizations: Record<string, string>): void {
+  if (!isRecord(option) || typeof option.setDescriptionLocalizations !== "function") return;
+  option.setDescriptionLocalizations(localizations);
+}
+
+function getOptionChoices(option: unknown): Record<string, unknown>[] {
+  if (!isRecord(option) || !Array.isArray(option.choices)) return [];
+  return option.choices.filter(isRecord);
 }
 
 async function readVisibleDirectory(directory: string): Promise<DirectoryItem[]> {
@@ -198,20 +261,19 @@ async function getCommandFiles(directory: string): Promise<string[]> {
 // Guild-only commands are now in the "server" category which is entirely guild-restricted.
 
 /**
- * Helper function to apply localizations to a subcommand and its options/choices
- * @param configuredSubcommand - The configured subcommand builder
- * @param categoryName - The category name
- * @param subcommandPath - The subcommand path (flat: 'name', grouped: 'group.name')
+ * Helper function to apply localizations to a command/subcommand and its options/choices
+ * @param subcommandPath - Optional subcommand path (flat: 'name', grouped: 'group.name')
  * @param availableLocales - Array of available locale codes
  */
-function applySubcommandLocalizations(
-  configuredSubcommand: SlashCommandSubcommandBuilder,
+function applyCommandLocalizations(
+  configuredCommand: RootCommandBuilder | SlashCommandSubcommandBuilder,
   categoryName: string,
-  subcommandPath: string,
+  subcommandPath: string | null,
   availableLocales: string[],
 ): void {
-  // 1. Apply subcommand description localizations
-  const localizationKey = `commands.${categoryName}.${subcommandPath}.description`;
+  const localizationKey = subcommandPath
+    ? `commands.${categoryName}.${subcommandPath}.description`
+    : `commands.${categoryName}.description`;
   const subcommandLocalizationsMap: { [key: string]: string } = {};
 
   for (const locale of availableLocales) {
@@ -222,20 +284,20 @@ function applySubcommandLocalizations(
   }
 
   if (Object.keys(subcommandLocalizationsMap).length > 0) {
-    configuredSubcommand.setDescriptionLocalizations(subcommandLocalizationsMap);
+    configuredCommand.setDescriptionLocalizations(subcommandLocalizationsMap);
   }
 
-  // 2. Apply option description localizations
-  if (configuredSubcommand.options) {
-    for (const option of configuredSubcommand.options) {
-      if (option.name) {
-        // Build localization key for option description
-        const optionLocalizationKey = `commands.${categoryName}.${subcommandPath}.${option.name}_description`;
+  if (configuredCommand.options) {
+    for (const option of configuredCommand.options) {
+      const optionName = getOptionName(option);
+      if (optionName) {
+        const commandPath = subcommandPath ? `${categoryName}.${subcommandPath}` : categoryName;
+        const optionLocalizationKey = `commands.${commandPath}.${optionName}_description`;
         const optionLocalizationsMap: { [key: string]: string } = {};
 
         for (const locale of availableLocales) {
           let localizedDesc = localizeWithAliases(locale, optionLocalizationKey);
-          const fallbackKey = `commands.${categoryName}.${subcommandPath}.option_description`;
+          const fallbackKey = `commands.${commandPath}.option_description`;
 
           // Fallback to generic 'option_description' for backwards compatibility
           if (!localizedDesc || localizedDesc === optionLocalizationKey) {
@@ -248,21 +310,21 @@ function applySubcommandLocalizations(
           }
         }
 
-        // Apply option description localizations if we have any
         if (Object.keys(optionLocalizationsMap).length > 0) {
-          option.setDescriptionLocalizations(optionLocalizationsMap);
+          applyOptionDescriptionLocalizations(option, optionLocalizationsMap);
         }
 
-        // 3. Apply choice name localizations
-        if ("choices" in option && Array.isArray(option.choices) && option.choices.length > 0) {
-          for (const choice of option.choices) {
+        const optionChoices = getOptionChoices(option);
+        if (optionChoices.length > 0) {
+          for (const choice of optionChoices) {
             if (choice.value === undefined || choice.value === null) continue;
 
             const choiceValue = String(choice.value);
+            const commandPath = subcommandPath ? `${categoryName}.${subcommandPath}` : categoryName;
             const choiceLocalizationKeys = [
-              `commands.${categoryName}.${subcommandPath}.${option.name}_choice_${choiceValue}`,
-              `commands.${categoryName}.${subcommandPath}.${choiceValue}_option`,
-              `commands.${categoryName}.${subcommandPath}.${option.name}_${choiceValue}`,
+              `commands.${commandPath}.${optionName}_choice_${choiceValue}`,
+              `commands.${commandPath}.${choiceValue}_option`,
+              `commands.${commandPath}.${optionName}_${choiceValue}`,
               `commands.choices.${choiceValue}`,
             ];
             const choiceLocalizationsMap: { [key: string]: string } = {};
@@ -271,12 +333,6 @@ function applySubcommandLocalizations(
               let localizedChoice: string | null = null;
 
               for (const localizationKey of choiceLocalizationKeys) {
-                const candidate = localizer(locale, localizationKey);
-                if (candidate && candidate !== localizationKey) {
-                  localizedChoice = candidate;
-                  break;
-                }
-
                 const aliasedCandidate = localizeWithAliases(locale, localizationKey);
                 if (aliasedCandidate && aliasedCandidate !== localizationKey) {
                   localizedChoice = aliasedCandidate;
@@ -289,7 +345,6 @@ function applySubcommandLocalizations(
               }
             }
 
-            // Apply choice name localizations if we have any
             if (Object.keys(choiceLocalizationsMap).length > 0) {
               choice.name_localizations = choiceLocalizationsMap;
             }
@@ -300,47 +355,235 @@ function applySubcommandLocalizations(
   }
 }
 
+function applyRootCommandRestrictions(command: RootCommandBuilder, commandModule: LoadedCommandModule): void {
+  if (commandModule.guildOnly || GUILD_ONLY_CATEGORIES.includes(command.name)) {
+    command.setContexts(InteractionContextType.Guild);
+  }
+  if (commandModule.managerOnly || MANAGER_ONLY_CATEGORIES.includes(command.name)) {
+    command.setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild);
+  }
+  if (commandModule.nsfw || command.name === "nsfw") {
+    command.setNSFW(true);
+  }
+}
+
+/**
+ * Resolves the description key for a directory-backed root, or an empty string to keep the
+ * conventional `commands.<root>.description`.
+ *
+ * `/legal` is the only root whose leaf set depends on the environment, and its wording names the
+ * documents those leaves link to. Advertising terms and a privacy policy on a self-hosted bot that
+ * registers neither would promise two commands the client cannot resolve, so its wording follows
+ * the leaf set rather than re-deriving the environment decision.
+ *
+ * Scoped by name rather than derived from "some leaves were gated out", because other roots narrow
+ * for unrelated reasons: `/reset` lists two direct leaf files while only one of them is a
+ * registered leaf, the other being a gate-disabled operation module.
+ *
+ * @param leafFileNames - Direct subcommand files found in the root's directory
+ * @param enabledLeafFileNames - The subset whose gate returned true
+ */
+function resolveRootDescriptionKey(
+  categoryName: string,
+  leafFileNames: readonly string[],
+  enabledLeafFileNames: readonly string[],
+): string {
+  if (categoryName !== "legal") return "";
+  if (enabledLeafFileNames.length >= leafFileNames.length) return "";
+
+  return `commands.${categoryName}.license-only.description`;
+}
+
+export async function isCommandModuleEnabledForRegistration(
+  commandModule: LoadedCommandModule,
+  context: CommandAvailabilityContext,
+): Promise<boolean> {
+  if (!commandModule.isCommandEnabled) return true;
+
+  try {
+    return await commandModule.isCommandEnabled(context);
+  } catch (error) {
+    const errorContext: ErrorContext = {
+      errorType: "CommandAvailabilityError",
+      metadata: context,
+    };
+    await log.error(`Command availability gate failed for ${context.commandFile}:`, error, errorContext);
+    return false;
+  }
+}
+
 /**
  * Loads all command modules, builds registration data and command maps
  * @returns Object containing command data for registration and execution maps
  */
-export async function loadCommandData(): Promise<{
-  registrationData: ApplicationCommandData[];
-  executionMap: CommandExecutionMap;
-  cooldownMap: CommandCooldownMap;
-}> {
-  // Initialize our maps
+/**
+ * Single-flight cache for the in-progress (or completed) command load.
+ *
+ * Both the startup registration path (`clientReady/01_registercommands.ts`)
+ * and the lazy first-interaction path (`interactionCreate/handleCommands.ts`)
+ * call `loadCommandData()`. Without this guard those two callers could run
+ * `loadCommandDataUncached()` concurrently, each independently `await import()`-ing
+ * the same command modules. Because ES module evaluation interleaves across
+ * `await` points, the second loader could observe a command module that the
+ * first had begun but not finished evaluating, reading an export binding while
+ * it was still in its Temporal Dead Zone: surfacing as
+ * "Cannot access 'configureSubcommand' before initialization" and silently
+ * skipping that command. Memoizing the promise makes every caller await one
+ * shared evaluation, eliminating the race.
+ */
+let cachedCommandDataPromise: Promise<LoadCommandDataResult> | null = null;
+
+/**
+ * Loads and caches all command data behind a single shared promise.
+ *
+ * Concurrent callers receive the same in-flight promise; later callers receive
+ * the already-resolved result. A catastrophic load (empty execution map) or a
+ * rejection is NOT cached, so a subsequent call can retry instead of locking the
+ * bot into a permanently "dead" command state.
+ *
+ * @returns The registration payload and runtime execution/cooldown maps.
+ */
+export function loadCommandData(): Promise<LoadCommandDataResult> {
+  if (!cachedCommandDataPromise) {
+    cachedCommandDataPromise = loadCommandDataUncached()
+      .then((result) => {
+        // An empty execution map means the load failed catastrophically
+        //    (see the catch block in loadCommandDataUncached). Drop the cached
+        //    promise so the next caller re-attempts a full load.
+        if (result.executionMap.size === 0) {
+          cachedCommandDataPromise = null;
+        }
+        return result;
+      })
+      .catch((error) => {
+        // Never persist a rejected load, so allow retries.
+        cachedCommandDataPromise = null;
+        throw error;
+      });
+  }
+  return cachedCommandDataPromise;
+}
+
+/**
+ * Drops the memoized load so the next caller re-imports and re-gates every command module.
+ *
+ * A module-level `isCommandEnabled` gate reads the environment, so a test that has to observe
+ * both environments would otherwise read whichever one happened to run first. Nothing in the
+ * running bot calls this: production loads the graph exactly once.
+ */
+export function resetCommandDataCache(): void {
+  cachedCommandDataPromise = null;
+}
+
+/**
+ * Flattens the execution map into the full list of registered command paths.
+ *
+ * Produces exactly the space-joined format `handleCommands.ts` records for the
+ * `command_used` metric, so the resulting catalog JOINs 1:1 against
+ * `stat_counters.metric_key`:
+ *   - root command      → `category`                     (e.g. "update")
+ *   - flat subcommand   → `category subcommand`          (e.g. "config humanizer")
+ *   - grouped subcommand→ `category group subcommand`    (e.g. "server welcome-channel set")
+ *
+ * This is the single source of truth for "which commands exist", derived from the
+ * loaded modules (never a hardcoded list), so the persisted catalog cannot drift.
+ *
+ * @returns One {@link CommandCatalogEntry} per registered (sub)command.
+ */
+export function getCommandCatalogEntries(executionMap: CommandExecutionMap): CommandCatalogEntry[] {
+  const entries: CommandCatalogEntry[] = [];
+
+  for (const [category, subMap] of executionMap) {
+    for (const subKey of subMap.keys()) {
+      // Root commands live under a single sentinel key; the path is just the name.
+      if (subKey === ROOT_COMMAND_EXECUTION_KEY) {
+        entries.push({ commandName: category, category });
+        continue;
+      }
+      // Grouped subcommands use a "group.subcommand" key (exactly one dot);
+      //    flat subcommands have no dot. Replacing the first dot with a space
+      //    yields the space-joined path for both shapes.
+      entries.push({ commandName: `${category} ${subKey.replace(".", " ")}`, category });
+    }
+  }
+
+  return entries;
+}
+
+async function loadCommandDataUncached(): Promise<LoadCommandDataResult> {
+  // Command descriptions are cached for the process lifetime, so a cold loader must establish its
+  // own localization prerequisite instead of relying on startup import order or module identity.
+  await initializeLocalizer();
+
   const executionMap: CommandExecutionMap = new Map();
+  const autocompleteMap: CommandAutocompleteMap = new Map();
   const cooldownMap: CommandCooldownMap = new Map();
   // This will store our category builders (one per directory)
-  const builders = new Map<string, SlashCommandBuilder>();
+  const builders = new Map<string, RootCommandBuilder>();
   let commandCount = 0;
 
   try {
     // Get available locales for auto-localization (exclude en-US as it's the base locale)
-    const availableLocales = getSupportedLocales().filter((locale) => locale !== "en-US");
-    // 1. Get all command category directories
+    const availableLocales = getRegisterableLocales().filter((locale) => locale !== "en-US");
     const commandsPath = path.join(process.cwd(), "src", "commands");
     const categoryDirs = await getCommandDirectories(commandsPath);
 
-    // 2. Process each category directory
     for (const categoryDir of categoryDirs) {
       const categoryName = path.basename(categoryDir);
       log.info(`Processing category: ${categoryName}`);
 
-      // 3. Create or get the SlashCommandBuilder for this category
-      let categoryBuilder = builders.get(categoryName);
+      // Get all items (files and directories) in this category
+      const items = await readVisibleDirectory(categoryDir);
+
+      /**
+       * Direct subcommand files that passed their own gate, keyed by absolute path.
+       *
+       * Collected before the category builder exists because the root's description depends on
+       * which leaves survive, and a builder's description cannot be changed once applied. Each
+       * file is gated exactly once here; the loop below reuses these modules rather than
+       * re-importing and re-gating them.
+       */
+      const enabledLeafModules = new Map<string, LoadedCommandModule>();
+      const leafFileNames: string[] = [];
+
+      for (const item of items) {
+        const itemPath = path.join(categoryDir, item.name);
+        if (!item.isFile || !itemPath.endsWith(".ts")) continue;
+
+        leafFileNames.push(item.name);
+
+        try {
+          const commandModule = (await import(itemPath)) as LoadedCommandModule;
+          const commandEnabled = await isCommandModuleEnabledForRegistration(commandModule, {
+            commandFile: itemPath,
+            commandKind: "flat",
+            categoryName,
+          });
+          if (!commandEnabled) {
+            log.info(`Skipping disabled command module: ${itemPath}`);
+            continue;
+          }
+          enabledLeafModules.set(itemPath, commandModule);
+        } catch (error) {
+          const context: ErrorContext = {
+            errorType: "CommandLoadingError",
+            metadata: { commandFile: itemPath, categoryName },
+          };
+          await log.error(`Failed to load command from ${itemPath}:`, error, context);
+        }
+      }
+
+      let categoryBuilder = builders.get(categoryName) as SlashCommandBuilder | undefined;
       if (!categoryBuilder) {
-        // Initialize a new builder for this category
-        // Get category description from localizations (try to find 'commands.<category>.description')
-        const categoryDescription =
-          localizeWithAliases("en-US", `commands.${categoryName}.description`) || `${categoryName} commands`; // Fallback if no localization exists
+        const categoryDescriptionKey =
+          resolveRootDescriptionKey(categoryName, leafFileNames, [...enabledLeafModules.keys()]) ||
+          `commands.${categoryName}.description`;
+        const categoryDescription = localizeWithAliases("en-US", categoryDescriptionKey) || `${categoryName} commands`; // Fallback if no localization exists
 
         const categoryLocalizationsMap: { [key: string]: string } = {};
-        // Check all available locales for category description
         for (const locale of availableLocales) {
-          const localizedDesc = localizeWithAliases(locale, `commands.${categoryName}.description`);
-          if (localizedDesc && localizedDesc !== `commands.${categoryName}.description`) {
+          const localizedDesc = localizeWithAliases(locale, categoryDescriptionKey);
+          if (localizedDesc && localizedDesc !== categoryDescriptionKey) {
             categoryLocalizationsMap[locale] = localizedDesc;
           }
         }
@@ -361,29 +604,25 @@ export async function loadCommandData(): Promise<{
           log.info("Applied age restriction to /nsfw");
         }
 
-        // Add localizations if we have any
         if (Object.keys(categoryLocalizationsMap).length > 0) {
           categoryBuilder.setDescriptionLocalizations(categoryLocalizationsMap);
         }
 
         builders.set(categoryName, categoryBuilder);
         executionMap.set(categoryName, new Map()); // Initialize subcommand map
+        autocompleteMap.set(categoryName, new Map()); // Initialize autocomplete map
       }
 
-      // 4. Get all items (files and directories) in this category
-      const items = await readVisibleDirectory(categoryDir);
-
-      // 5. Process each item (file or directory)
+      // Process each item (file or directory)
       for (const item of items) {
         const itemPath = path.join(categoryDir, item.name);
 
-        // 6. Handle subcommand groups (directories)
+        // Handle subcommand groups (directories)
         if (item.isDirectory) {
           const groupName = item.name;
           log.info(`Processing subcommand group: ${categoryName}/${groupName}`);
 
           try {
-            // Get all command files in this group
             const groupCommandFiles = await getCommandFiles(itemPath);
 
             // Pre-load all command modules asynchronously to support top-level await
@@ -391,6 +630,16 @@ export async function loadCommandData(): Promise<{
             for (const commandFile of groupCommandFiles) {
               try {
                 const commandModule = (await import(commandFile)) as LoadedCommandModule;
+                const commandEnabled = await isCommandModuleEnabledForRegistration(commandModule, {
+                  commandFile,
+                  commandKind: "grouped",
+                  categoryName,
+                  groupName,
+                });
+                if (!commandEnabled) {
+                  log.info(`Skipping disabled grouped command module: ${commandFile}`);
+                  continue;
+                }
                 loadedModules.push({ file: commandFile, module: commandModule });
               } catch (error) {
                 const context: ErrorContext = {
@@ -405,15 +654,17 @@ export async function loadCommandData(): Promise<{
               }
             }
 
-            // Add subcommand group to category
+            if (loadedModules.length === 0) {
+              log.info(`Skipping empty subcommand group: ${categoryName}/${groupName}`);
+              continue;
+            }
+
             categoryBuilder.addSubcommandGroup((group: SlashCommandSubcommandGroupBuilder) => {
-              // Get group description from localizations
               const groupLocalizationKey = `commands.${categoryName}.${groupName}.description`;
               const groupDescription = localizeWithAliases("en-US", groupLocalizationKey) || `${groupName} commands`;
 
               group.setName(groupName).setDescription(groupDescription);
 
-              // Apply group description localizations
               const groupLocalizationsMap: { [key: string]: string } = {};
               for (const locale of availableLocales) {
                 const localizedDesc = localizeWithAliases(locale, groupLocalizationKey);
@@ -425,10 +676,8 @@ export async function loadCommandData(): Promise<{
                 group.setDescriptionLocalizations(groupLocalizationsMap);
               }
 
-              // Process each loaded command in the group
               for (const { file: commandFile, module: commandModule } of loadedModules) {
                 try {
-                  // Validate exports
                   if (!commandModule.configureSubcommand || !commandModule.execute) {
                     log.warn(`Command at ${commandFile} is missing required exports`);
                     continue;
@@ -438,14 +687,12 @@ export async function loadCommandData(): Promise<{
                   const execute = commandModule.execute;
                   let subcommandName = "";
 
-                  // Add subcommand to group
                   group.addSubcommand((subcommand: SlashCommandSubcommandBuilder) => {
                     const configuredSubcommand = configureSubcommand(subcommand);
                     subcommandName = configuredSubcommand.name;
 
-                    // Apply subcommand localizations
                     if (subcommandName) {
-                      applySubcommandLocalizations(
+                      applyCommandLocalizations(
                         configuredSubcommand,
                         categoryName,
                         `${groupName}.${subcommandName}`,
@@ -464,6 +711,10 @@ export async function loadCommandData(): Promise<{
                   // Store execute function with group.subcommand format
                   const executionKey = `${groupName}.${subcommandName}`;
                   executionMap.get(categoryName)?.set(executionKey, execute);
+
+                  if (commandModule.autocomplete) {
+                    autocompleteMap.get(categoryName)?.set(executionKey, commandModule.autocomplete);
+                  }
 
                   // Store cooldown if defined
                   if (commandModule.cooldown && typeof commandModule.cooldown === "number") {
@@ -498,14 +749,14 @@ export async function loadCommandData(): Promise<{
             await log.error(`Failed to load command group ${groupName}:`, error, context);
           }
         }
-        // 7. Handle flat subcommands (direct .ts files)
+        // Handle flat subcommands (direct .ts files)
         else if (item.isFile && itemPath.endsWith(".ts")) {
           const commandFile = itemPath;
+          // Already imported and gated by this category's leaf pre-pass.
+          const commandModule = enabledLeafModules.get(commandFile);
+          if (!commandModule) continue;
 
           try {
-            // Import the command module
-            const commandModule = (await import(commandFile)) as LoadedCommandModule;
-
             // Validate exports: must have configureSubcommand and execute
             if (!commandModule.configureSubcommand || !commandModule.execute) {
               log.warn(`Command at ${commandFile} is missing required exports (configureSubcommand or execute)`);
@@ -517,16 +768,12 @@ export async function loadCommandData(): Promise<{
             // Use a temporary variable to store the subcommand name
             let subcommandName = "";
 
-            // Add the subcommand to the category builder
             categoryBuilder.addSubcommand((subcommand: SlashCommandSubcommandBuilder) => {
-              // Call the module's configureSubcommand function and capture its result
               const configuredSubcommand = configureSubcommand(subcommand);
-              // Get the name that was set
               subcommandName = configuredSubcommand.name;
 
-              // Apply subcommand localizations
               if (subcommandName) {
-                applySubcommandLocalizations(configuredSubcommand, categoryName, subcommandName, availableLocales);
+                applyCommandLocalizations(configuredSubcommand, categoryName, subcommandName, availableLocales);
               }
 
               return configuredSubcommand;
@@ -539,6 +786,9 @@ export async function loadCommandData(): Promise<{
 
             // Store the execute function in the map
             executionMap.get(categoryName)?.set(subcommandName, execute);
+            if (commandModule.autocomplete) {
+              autocompleteMap.get(categoryName)?.set(subcommandName, commandModule.autocomplete);
+            }
 
             // Store cooldown if defined (optional feature)
             if (commandModule.cooldown && typeof commandModule.cooldown === "number") {
@@ -559,13 +809,86 @@ export async function loadCommandData(): Promise<{
           }
         }
       }
+
+      const categoryExecutionMap = executionMap.get(categoryName);
+      if (categoryExecutionMap && categoryExecutionMap.size === 0) {
+        builders.delete(categoryName);
+        executionMap.delete(categoryName);
+        autocompleteMap.delete(categoryName);
+        log.info(`Skipped top-level command /${categoryName} because it has no enabled subcommands`);
+      }
     }
 
-    // Convert builders to the registration data array
+    const rootCommandFiles = await getCommandFiles(commandsPath);
+    for (const commandFile of rootCommandFiles) {
+      try {
+        const commandModule = (await import(commandFile)) as LoadedCommandModule;
+        const commandEnabled = await isCommandModuleEnabledForRegistration(commandModule, {
+          commandFile,
+          commandKind: "root",
+        });
+        if (!commandEnabled) {
+          log.info(`Skipping disabled root command module: ${commandFile}`);
+          continue;
+        }
+
+        if (!commandModule.configureCommand || !commandModule.execute) {
+          log.warn(`Root command at ${commandFile} is missing required exports (configureCommand or execute)`);
+          continue;
+        }
+
+        const commandBuilder = commandModule.configureCommand(new SlashCommandBuilder());
+        const commandName = commandBuilder.name;
+
+        if (!commandName) {
+          log.warn(`Root command in ${commandFile} did not set a name`);
+          continue;
+        }
+
+        if (builders.has(commandName)) {
+          log.warn(
+            `Skipping root command ${commandName} from ${commandFile}: a command category with that name already exists`,
+          );
+          continue;
+        }
+
+        applyRootCommandRestrictions(commandBuilder, commandModule);
+        applyCommandLocalizations(commandBuilder, commandName, null, availableLocales);
+
+        builders.set(commandName, commandBuilder);
+        executionMap.set(commandName, new Map([[ROOT_COMMAND_EXECUTION_KEY, commandModule.execute]]));
+        autocompleteMap.set(commandName, new Map());
+        if (commandModule.autocomplete) {
+          autocompleteMap.get(commandName)?.set(ROOT_COMMAND_EXECUTION_KEY, commandModule.autocomplete);
+        }
+
+        if (commandModule.cooldown && typeof commandModule.cooldown === "number") {
+          cooldownMap.set(commandName, commandModule.cooldown);
+        }
+
+        commandCount++;
+        log.info(`Loaded root command: ${commandName}`);
+      } catch (error) {
+        const context: ErrorContext = {
+          errorType: "CommandLoadingError",
+          metadata: {
+            commandFile,
+            commandKind: "root",
+          },
+        };
+        await log.error(`Failed to load root command from ${commandFile}:`, error, context);
+      }
+    }
+
     const registrationData = Array.from(builders.values()).map((builder) => builder.toJSON() as ApplicationCommandData);
 
-    log.success(`Successfully loaded ${commandCount} subcommands in ${builders.size} categories`);
-    return { registrationData, executionMap, cooldownMap };
+    log.success(`Successfully loaded ${commandCount} commands in ${builders.size} top-level command definitions`);
+    return {
+      registrationData,
+      executionMap,
+      autocompleteMap,
+      cooldownMap,
+    };
   } catch (error) {
     const context: ErrorContext = {
       errorType: "CommandLoaderError",
@@ -576,6 +899,7 @@ export async function loadCommandData(): Promise<{
     return {
       registrationData: [],
       executionMap: new Map(),
+      autocompleteMap: new Map(),
       cooldownMap: new Map(),
     };
   }

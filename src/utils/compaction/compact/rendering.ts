@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder } from "discord.js";
 import { ColorCode } from "@/utils/misc/logger";
 import { localizer } from "@/utils/text/localizer";
-import type { SendableChannel } from "./types";
+import type {} from "./types";
 
 export function buildConversationEmbed(
   locale: string,
@@ -10,8 +10,8 @@ export function buildConversationEmbed(
   editDeadline?: string,
 ): EmbedBuilder {
   const title = refresh
-    ? localizer(locale, "commands.tool.compact.summary_title_refreshed")
-    : localizer(locale, "commands.tool.compact.summary_title");
+    ? localizer(locale, "commands.compact.summary_title_refreshed")
+    : localizer(locale, "commands.compact.summary_title");
 
   const embed = new EmbedBuilder()
     .setTitle(title)
@@ -20,7 +20,6 @@ export function buildConversationEmbed(
 
   const footerText = buildFooterText(locale, refresh, editDeadline);
   if (footerText) embed.setFooter({ text: footerText });
-
   return embed;
 }
 
@@ -31,8 +30,8 @@ export function buildRoleplayEmbeds(
   editDeadline?: string,
 ): EmbedBuilder[] {
   const title = refresh
-    ? localizer(locale, "commands.tool.compact.roleplay_scene_title_refreshed")
-    : localizer(locale, "commands.tool.compact.roleplay_scene_title");
+    ? localizer(locale, "commands.compact.roleplay_scene_title_refreshed")
+    : localizer(locale, "commands.compact.roleplay_scene_title");
 
   const embed = new EmbedBuilder()
     .setTitle(title)
@@ -41,14 +40,13 @@ export function buildRoleplayEmbeds(
 
   const footerText = buildFooterText(locale, refresh, editDeadline);
   if (footerText) embed.setFooter({ text: footerText });
-
   return [embed];
 }
 
 function buildFooterText(locale: string, refresh: boolean, editDeadline?: string): string {
   const parts: string[] = [];
-  if (refresh) parts.push(localizer(locale, "commands.tool.compact.refresh_footer"));
-  if (editDeadline) parts.push(localizer(locale, "commands.tool.compact.edit_footer", { deadline: editDeadline }));
+  if (refresh) parts.push(localizer(locale, "commands.compact.refresh_footer"));
+  if (editDeadline) parts.push(localizer(locale, "commands.compact.edit_footer", { deadline: editDeadline }));
   return parts.join(" · ");
 }
 
@@ -64,13 +62,6 @@ export function isDiscordThreadChannel(channel: unknown): boolean {
   );
 }
 
-export async function sendEmbedsInChunks(channel: SendableChannel, embeds: EmbedBuilder[]): Promise<void> {
-  const chunkSize = 10;
-  for (let index = 0; index < embeds.length; index += chunkSize) {
-    await channel.send({ embeds: embeds.slice(index, index + chunkSize) });
-  }
-}
-
 export function buildManualEmbed(
   locale: string,
   summaryText: string,
@@ -78,8 +69,8 @@ export function buildManualEmbed(
   editDeadline?: string,
 ): EmbedBuilder {
   const title = refresh
-    ? localizer(locale, "commands.tool.compact.manual_entry_title_refreshed")
-    : localizer(locale, "commands.tool.compact.manual_entry_title");
+    ? localizer(locale, "commands.compact.manual_entry_title_refreshed")
+    : localizer(locale, "commands.compact.manual_entry_title");
 
   const embed = new EmbedBuilder()
     .setTitle(title)
@@ -88,16 +79,24 @@ export function buildManualEmbed(
 
   const footerText = buildFooterText(locale, refresh, editDeadline);
   if (footerText) embed.setFooter({ text: footerText });
-
   return embed;
 }
 
 export const COMPACT_EDIT_BUTTON_ID = "compact_edit_summary";
+export const COMPACT_ADD_TO_DOCS_BUTTON_ID = "compact_add_to_docs";
 
 export function buildEditSummaryButtonRow(locale: string): ActionRowBuilder<ButtonBuilder> {
   const button = new ButtonBuilder()
     .setCustomId(COMPACT_EDIT_BUTTON_ID)
-    .setLabel(localizer(locale, "commands.tool.compact.edit_button_label"))
+    .setLabel(localizer(locale, "commands.compact.edit_button_label"))
+    .setStyle(ButtonStyle.Secondary);
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(button);
+}
+
+export function buildAddToDocsButtonRow(locale: string): ActionRowBuilder<ButtonBuilder> {
+  const button = new ButtonBuilder()
+    .setCustomId(COMPACT_ADD_TO_DOCS_BUTTON_ID)
+    .setLabel(localizer(locale, "commands.compact.add_to_docs_button_label"))
     .setStyle(ButtonStyle.Secondary);
   return new ActionRowBuilder<ButtonBuilder>().addComponents(button);
 }

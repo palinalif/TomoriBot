@@ -1,36 +1,33 @@
 import { configRepository } from "./ConfigRepository";
-import { errorLogRepository } from "./ErrorLogRepository";
 import { mcpRepository } from "./McpRepository";
-import { quotaRepository } from "./QuotaRepository";
-import { speechRepository } from "./SpeechRepository";
+import { channelContextNoteRepo } from "./ChannelContextNoteRepository";
 import { channelPromptRepo } from "./ChannelPromptRepository";
 import { cooldownRepository } from "./CooldownRepository";
-import { conditioningMemoryRepository } from "./ConditioningMemoryRepository";
 import { exportRepository } from "./ExportRepository";
 import { importRepository } from "./ImportRepository";
 import { llmModelRepo } from "./LlmModelRepository";
 import { llmOverrideRepo } from "./LlmOverrideRepository";
 import { llmProviderRepo } from "./LlmProviderRepository";
 import { personalMemoryRepository } from "./PersonalMemoryRepository";
+import { personaUserBlockRepository } from "./PersonaUserBlockRepository";
+import { personaSpriteRepository } from "./PersonaSpriteRepository";
 import { personaRepository } from "./PersonaRepository";
 import { presetRepository } from "./PresetRepository";
 import { ragRepository } from "./RagRepository";
 import { serverMemoryRepository } from "./ServerMemoryRepository";
 import { serverRepository } from "./ServerRepository";
 import { serverScheduleRepository } from "./ServerScheduleRepository";
-import { shortTermMemoryRepository } from "./ShortTermMemoryRepository";
+import { statRepository } from "./StatRepository";
 import { toolRepository } from "./ToolRepository";
 import { userRepository } from "./UserRepository";
+import { userNamingRepository } from "./UserNamingRepository";
 import { whitelistRepository } from "./WhitelistRepository";
 
 export {
   configRepository,
-  errorLogRepository,
   mcpRepository,
-  quotaRepository,
-  speechRepository,
+  channelContextNoteRepo,
   channelPromptRepo,
-  conditioningMemoryRepository,
   cooldownRepository,
   exportRepository,
   importRepository,
@@ -38,18 +35,20 @@ export {
   llmOverrideRepo,
   llmProviderRepo,
   personalMemoryRepository,
+  personaUserBlockRepository,
+  personaSpriteRepository,
   personaRepository,
   presetRepository,
   ragRepository,
   serverMemoryRepository,
   serverRepository,
   serverScheduleRepository,
-  shortTermMemoryRepository,
+  statRepository,
   toolRepository,
   userRepository,
+  userNamingRepository,
   whitelistRepository,
 };
 
-export type { OpenRouterModelScope } from "./LlmModelRepository";
-export type { ImportValidationResult, ImportFileType } from "./ImportRepository";
+export type { UnsyncedMainPointer } from "./PersonaRepository";
 export type { ReminderSelectionRow } from "./ServerScheduleRepository";

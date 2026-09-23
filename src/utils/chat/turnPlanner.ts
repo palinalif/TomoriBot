@@ -1,6 +1,7 @@
 import type { Guild, Message } from "discord.js";
 import type { TomoriState, UserRow } from "@/types/db/schema";
 import { CooldownType, PrivacyLevel } from "@/types/db/schema";
+import { DatabaseUnavailableError } from "@/types/errors";
 import { getCachedUserRow, getCachedBlacklistStatus, getCachedPrivacyLevel } from "@/utils/cache/userCache";
 import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
 import { configRepository, userRepository, whitelistRepository } from "@/utils/db/repositories";
@@ -21,10 +22,11 @@ import {
   setMessageTriggerCooldownForAdmission,
   validateDirectChatTrigger,
 } from "@/utils/chat/admissionGuards";
-import { channelLocks, setActiveChannelTurnState } from "@/utils/chat/channelQueue";
+import { channelLocks, queueScenePersonaJobsAtFront, setActiveChannelTurnState } from "@/utils/chat/channelQueue";
 import { shouldSurfaceChatUserErrors } from "@/utils/chat/errorVisibility";
 import { queueAdditionalPersonaTurns } from "@/utils/chat/personaQueue";
 import { shouldBotReply } from "@/utils/chat/replyDecision";
+import { buildSceneTextQuotaTriggerKey, buildSceneTurnDirective } from "@/utils/chat/sceneTurn";
 import {
   determineMatchingPersonas,
   getAutochatAssignedPersonaId,
@@ -41,6 +43,8 @@ import {
 import { getLastRespondedPersonaId, getSelfReplyChainState } from "@/utils/chat/selfReplyState";
 import type { TextQuotaTriggerState } from "@/utils/chat/textQuotaState";
 import type { ChatTurn, ChatTurnPlan, LockedChatTurn } from "@/utils/chat/types";
+import { userNamingRepository, userPersonaNamingPairKey } from "@/utils/db/repositories/UserNamingRepository";
+import { resolveEffectiveUserNaming } from "@/utils/text/userNaming";
 const DEFAULT_CASCADE_LIMIT = 3;
 const MAX_CASCADE_LIMIT = 10;
 const DEFAULT_MATCH_LIMIT = 3;
@@ -70,20 +74,20 @@ export async function planChatTurns(lockedTurn: LockedChatTurn): Promise<ChatTur
       allPersonas,
     });
     incoming.shouldSurfaceUserErrors = shouldSurfaceNoStateError;
-    // Surface the "not set up" error when the user directly triggered Tomori,
-    // rather than failing silently — validateDirectChatTrigger handles null state.
-    await validateDirectChatTrigger({
-      client,
-      message,
-      guild,
-      allPersonas,
-      tomoriState: null,
-      isDMChannel,
-      isManuallyTriggered: shouldSurfaceNoStateError && incoming.isManuallyTriggered,
-      userDiscId,
-      serverDiscId,
-      locale: admission.locale ?? "en-US",
-    });
+    if (shouldSurfaceNoStateError) {
+      await validateDirectChatTrigger({
+        client,
+        message,
+        guild,
+        allPersonas,
+        tomoriState: null,
+        isDMChannel,
+        isManuallyTriggered: incoming.isManuallyTriggered,
+        userDiscId,
+        serverDiscId,
+        locale: admission.locale ?? "en-US",
+      });
+    }
     log.info(`No persona state available for message ${message.id} in server ${serverDiscId}.`);
     return { lockedTurn, turns: [] };
   }
@@ -150,8 +154,8 @@ export async function planChatTurns(lockedTurn: LockedChatTurn): Promise<ChatTur
     isManuallyTriggered: incoming.isManuallyTriggered,
     isSelfMessage,
     isAutochatOverride,
-    guildDiscId: guild?.id ?? message.author.id,
-    fallbackUserDiscId: message.author.id,
+    guildDiscId: serverDiscId,
+    fallbackUserDiscId: userDiscId,
     message,
     memberRoleDiscIds: incoming.manualTriggerInvoker?.member
       ? incoming.manualTriggerInvoker.member.roles.cache.map((role) => role.id)
@@ -162,7 +166,7 @@ export async function planChatTurns(lockedTurn: LockedChatTurn): Promise<ChatTur
     userId: userRow.user_id,
     allPersonas,
   });
-  // Reminder turns are system-initiated — the role whitelist guards against unauthorized
+  // Reminder turns are system-initiated because the role whitelist guards against unauthorized
   // users triggering Tomori, but reminders were authorized at creation time. The channel
   // whitelist (is this channel allowed at all?) still applies via whitelistStatus.isTriggerAllowed,
   // but role-based rejection that derives from the last message author is skipped.
@@ -261,6 +265,49 @@ export async function planChatTurns(lockedTurn: LockedChatTurn): Promise<ChatTur
   }
 
   if (
+    incoming.sceneTurn &&
+    incoming.sceneTurn.turnIndex === 0 &&
+    !incoming.skipLock &&
+    incoming.retryCount === 0 &&
+    lockEntry
+  ) {
+    const rootSceneTurn = incoming.sceneTurn;
+    const remainingSceneJobs = rootSceneTurn.sequence.slice(1).map((speaker, offset) => {
+      const sceneTurn = {
+        ...rootSceneTurn,
+        turnIndex: offset + 1,
+      };
+
+      return {
+        personaName: speaker.personaName,
+        selectedPersonaId: speaker.personaId,
+        sceneTurn,
+        manualSystemPrompt: buildSceneTurnDirective(sceneTurn),
+        textQuotaTriggerKey: buildSceneTextQuotaTriggerKey(sceneTurn),
+      };
+    });
+
+    if (remainingSceneJobs.length > 0) {
+      queueScenePersonaJobsAtFront({
+        lockEntry,
+        message,
+        sceneJobs: remainingSceneJobs,
+        triggeredPersonaIds,
+        forceReason: incoming.forceReason,
+        reasoningQuery: incoming.reasoningQuery,
+        llmOverrideCodename: incoming.llmOverrideCodename,
+        textQuotaSource: incoming.textQuotaSource,
+        textQuotaUserDiscId: incoming.textQuotaUserDiscId ?? cooldownUserDiscId,
+        shouldSurfaceUserErrors,
+        injectedContextItems: incoming.injectedContextItems,
+        forcedMentions: incoming.forcedMentions,
+        manualTriggerInvoker: incoming.manualTriggerInvoker,
+        manualStreamingContextOverrides: incoming.manualStreamingContextOverrides,
+      });
+    }
+  }
+
+  if (
     !incoming.isManuallyTriggered &&
     !incoming.reminderRecipientID &&
     !incoming.reminderData?.self_reminder &&
@@ -293,54 +340,102 @@ export async function planChatTurns(lockedTurn: LockedChatTurn): Promise<ChatTur
     triggererPrivacyLevel: await getCachedPrivacyLevel(userDiscId),
     preloadedMember: !isDMChannel && guild ? await guild.members.fetch(userDiscId).catch(() => null) : null,
   };
-  const displayName =
-    incoming.manualTriggerInvoker?.member?.displayName ??
-    incoming.manualTriggerInvoker?.username ??
-    message.author.username;
-  const triggererName =
+  const displayName = resolvePreferredDiscordDisplayName({
+    memberDisplayName:
+      incoming.manualTriggerInvoker?.member?.displayName ??
+      requestSnapshot.preloadedMember?.displayName ??
+      message.member?.displayName,
+    user: incoming.manualTriggerInvoker ? { username: incoming.manualTriggerInvoker.username } : message.author,
+    fallback: incoming.manualTriggerInvoker?.username ?? message.author.username,
+  });
+  let triggererName =
     requestSnapshot.isTriggererBlacklisted ||
     tomoriState.config.personal_memories_enabled === false ||
     !userRow.user_nickname
       ? displayName
       : userRow.user_nickname;
+  const canUsePersonalizedNaming =
+    !requestSnapshot.isTriggererBlacklisted && tomoriState.config.personal_memories_enabled !== false;
+  const namingPreferences = userRow.user_id
+    ? await userNamingRepository.loadPreferences(
+        personasToRespond.map((persona) => ({
+          userId: userRow.user_id as number,
+          personaLineageId: persona.persona_lineage_id,
+        })),
+      )
+    : new Map();
 
-  const turns: ChatTurn[] = personasToRespond.map((persona, personaIndex) => ({
-    lockedTurn,
-    persona,
-    personaIndex,
-    totalPersonas: personasToRespond.length,
-    allPersonas,
-    tomoriState: persona,
-    mainPersona,
-    userRow,
-    requestSnapshot,
-    serverDiscId,
-    guild,
-    isDMChannel,
-    isSelfMessage,
-    userDiscId,
-    cooldownUserDiscId,
-    triggererName,
-    channelName: isDMChannel
-      ? "Direct Message"
-      : "name" in channel
-        ? (channel.name ?? "Unknown Channel")
-        : "Unknown Channel",
-    channelDescription: isDMChannel ? null : "topic" in channel ? channel.topic : null,
-    serverName: isDMChannel ? "Direct Message" : (guild?.name ?? "Unknown Server"),
-    serverDescription: isDMChannel ? null : (guild?.description ?? null),
-    textCredentialSource: credentialPolicy.source,
-    personalRoutingUserId: credentialPolicy.personalRoutingUserId,
-    personalTextProvider: credentialPolicy.personalTextProvider,
-    shouldApplyTextQuota: textQuota.shouldApply,
-    textQuotaTriggerKey: textQuota.triggerKey,
-    textQuotaState: textQuota.state,
-    shouldSurfaceUserErrors,
-    forcedMentions: incoming.forcedMentions,
-    isUserImpersonation: incoming.isUserImpersonation,
-    impersonatedUserId: incoming.impersonatedUserId,
-    triggeredPersonaIds,
-  }));
+  // Scene turns are a scripted persona-to-persona chain: each speaker responds to the
+  // PREVIOUS speaker, so {{user}} (which resolves to triggererName) should be that prior
+  // persona rather than the command invoker: matching how a normal self-reply queue
+  // resolves the triggerer to the last persona in the chain. Turn 0 has no prior speaker
+  // and keeps the invoker as the entity being responded to.
+  if (incoming.sceneTurn && incoming.sceneTurn.turnIndex > 0) {
+    const previousSpeakerName = incoming.sceneTurn.sequence[incoming.sceneTurn.turnIndex - 1]?.personaName.trim();
+    if (previousSpeakerName) {
+      triggererName = previousSpeakerName;
+    }
+  }
+
+  const turns: ChatTurn[] = personasToRespond.map((persona, personaIndex) => {
+    const isPersonaSceneTarget = Boolean(incoming.sceneTurn && incoming.sceneTurn.turnIndex > 0);
+    const preference = userRow.user_id
+      ? namingPreferences.get(userPersonaNamingPairKey(userRow.user_id, persona.persona_lineage_id))
+      : undefined;
+    const effectiveNaming = resolveEffectiveUserNaming({
+      global: {
+        userNickname: canUsePersonalizedNaming ? userRow.user_nickname : null,
+        prefixOverride: canUsePersonalizedNaming ? (userRow.prefix_override ?? null) : null,
+        suffixOverride: canUsePersonalizedNaming ? (userRow.suffix_override ?? null) : null,
+        addressingStyle: canUsePersonalizedNaming ? (userRow.addressing_style ?? null) : null,
+      },
+      liveDisplayName: displayName,
+      persona: canUsePersonalizedNaming ? persona.naming_config : undefined,
+      preference: canUsePersonalizedNaming ? preference : null,
+    });
+    const perPersonaTriggererName = isPersonaSceneTarget ? triggererName : effectiveNaming.nickname;
+    const triggererFormattedName = isPersonaSceneTarget ? triggererName : effectiveNaming.formattedName;
+
+    return {
+      lockedTurn,
+      persona,
+      personaIndex,
+      totalPersonas: personasToRespond.length,
+      allPersonas,
+      tomoriState: persona,
+      mainPersona,
+      userRow,
+      requestSnapshot,
+      serverDiscId,
+      guild,
+      isDMChannel,
+      isSelfMessage,
+      userDiscId,
+      cooldownUserDiscId,
+      triggererName: perPersonaTriggererName,
+      triggererFormattedName,
+      triggererAddressTerm: effectiveNaming.addressTerm,
+      channelName: isDMChannel
+        ? "Direct Message"
+        : "name" in channel
+          ? (channel.name ?? "Unknown Channel")
+          : "Unknown Channel",
+      channelDescription: isDMChannel ? null : "topic" in channel ? channel.topic : null,
+      serverName: isDMChannel ? "Direct Message" : (guild?.name ?? "Unknown Server"),
+      serverDescription: isDMChannel ? null : (guild?.description ?? null),
+      textCredentialSource: credentialPolicy.source,
+      personalRoutingUserId: credentialPolicy.personalRoutingUserId,
+      personalTextProvider: credentialPolicy.personalTextProvider,
+      shouldApplyTextQuota: textQuota.shouldApply,
+      textQuotaTriggerKey: textQuota.triggerKey,
+      textQuotaState: textQuota.state,
+      shouldSurfaceUserErrors,
+      forcedMentions: incoming.forcedMentions,
+      isUserImpersonation: incoming.isUserImpersonation,
+      impersonatedUserId: incoming.impersonatedUserId,
+      triggeredPersonaIds,
+    };
+  });
 
   log.info(
     `${turns.length} persona(s) will respond to message ${message.id}: ${turns
@@ -359,7 +454,7 @@ async function loadOrRegisterTriggerUser(
   const existing = await getCachedUserRow(userDiscId);
   if (existing) return existing;
 
-  const locale = manualTriggerInvoker?.locale ?? (guild?.preferredLocale.startsWith("ja") ? "ja" : "en-US");
+  const locale = manualTriggerInvoker?.locale ?? guild?.preferredLocale ?? "en-US";
   const displayName = resolvePreferredDiscordDisplayName({
     memberDisplayName: manualTriggerInvoker?.member?.displayName ?? message.member?.displayName,
     user: manualTriggerInvoker ? { username: manualTriggerInvoker.username } : message.author,
@@ -452,8 +547,30 @@ async function resolveTextCredentialPolicy(params: {
       personalTextProvider: textCreds.source === "personal" ? textCreds.provider : null,
     };
   } catch (error) {
+    // Checked ahead of CredentialUnavailableError because an unreadable database used to arrive
+    // here as `no_saved_config` and render "API Key Missing", telling an admin to run
+    // /config setup during a transient blip. That embed logged 41 times in one cascade.
+    if (error instanceof DatabaseUnavailableError) {
+      if (params.shouldSurfaceUserErrors) {
+        await sendStandardEmbed(params.channel as SendableChannel, params.locale, {
+          color: ColorCode.ERROR,
+          titleKey: "general.errors.database_unavailable_title",
+          descriptionKey: "general.errors.database_unavailable_description",
+        });
+      } else {
+        log.warn("Suppressing database-unavailable embed for non-deliberate chat turn.", error);
+      }
+      return null;
+    }
     if (error instanceof PersonalProviderRequiredError) {
       if (params.shouldSurfaceUserErrors) {
+        log.warn(`Personal provider required for deliberate chat turn in channel ${params.channel.id}`, error, {
+          serverId: params.tomoriState.server_id,
+          personaId: params.tomoriState.persona_id,
+          metadata: {
+            channelId: params.channel.id,
+          },
+        });
         await sendStandardEmbed(params.channel as SendableChannel, params.locale, {
           color: ColorCode.ERROR,
           titleKey: "general.errors.personal_provider_required_title",
@@ -476,6 +593,19 @@ async function resolveTextCredentialPolicy(params: {
       const isPersonalError = error.source === "personal";
       const isMissingConfig = error.reason === "no_saved_config" || error.reason === "missing_model_id";
       if (params.shouldSurfaceUserErrors) {
+        log.warn(
+          `Credential unavailable for deliberate chat turn in channel ${params.channel.id}: source=${error.source}, reason=${error.reason}`,
+          error,
+          {
+            serverId: params.tomoriState.server_id,
+            personaId: params.tomoriState.persona_id,
+            metadata: {
+              channelId: params.channel.id,
+              source: error.source,
+              reason: error.reason,
+            },
+          },
+        );
         await sendStandardEmbed(params.channel as SendableChannel, params.locale, {
           color: ColorCode.ERROR,
           titleKey: isPersonalError
@@ -520,6 +650,12 @@ function selectPersonasForTurn(args: {
   const selectedPersona = incoming.selectedPersonaId
     ? (args.allPersonas.find((persona) => persona.persona_id === incoming.selectedPersonaId) ?? args.fallbackPersona)
     : args.fallbackPersona;
+  const isAllowedByAccessState = (persona: TomoriState | null | undefined): persona is TomoriState =>
+    Boolean(
+      persona &&
+        (!args.allowedPersonaIds ||
+          (typeof persona.persona_id === "number" && args.allowedPersonaIds.has(persona.persona_id))),
+    );
 
   // Reminder turns are system-initiated: bypass personal spotlight (a user preference
   // that governs which persona responds *to them*, not system-triggered events). Only
@@ -532,7 +668,8 @@ function selectPersonasForTurn(args: {
   }
   if (incoming.isManuallyTriggered) {
     return selectedPersona &&
-      isPersonaAllowedForTrigger(args.whitelistStatus, args.personalSpotlightStatus, selectedPersona.persona_id)
+      isPersonaAllowedForTrigger(args.whitelistStatus, args.personalSpotlightStatus, selectedPersona.persona_id) &&
+      isAllowedByAccessState(selectedPersona)
       ? [selectedPersona]
       : [];
   }
@@ -633,9 +770,9 @@ async function enforceTurnGuards(
     if (!rateLimitAllowed) return false;
   }
 
-  if (!incoming.isStopResponse && !isSelfMessage && textCredentialSource !== "personal") {
+  if (!incoming.isStopResponse && !incoming.isPersonaJob && !isSelfMessage && textCredentialSource !== "personal") {
     const rejectedByCooldown = await rejectOnMessageTriggerCooldown({
-      serverDiscId: message.guild?.id ?? message.author.id,
+      serverDiscId,
       userDiscId: admission.cooldownUserDiscId ?? userDiscId,
       channelId: message.channelId,
       cooldownType: tomoriState.config.cooldown_type ?? CooldownType.OFF,
@@ -652,7 +789,7 @@ async function enforceTurnGuards(
     if (rejectedByCooldown) return false;
 
     await setMessageTriggerCooldownForAdmission({
-      serverDiscId: message.guild?.id ?? message.author.id,
+      serverDiscId,
       userDiscId: admission.cooldownUserDiscId ?? userDiscId,
       channelId: message.channelId,
       cooldownType: tomoriState.config.cooldown_type ?? CooldownType.OFF,
@@ -667,7 +804,7 @@ async function enforceTurnGuards(
   );
   const triggerState = getSelfReplyChainState(channel.id);
   if (
-    (isSelfMessage || incoming.isPersonaJob) &&
+    (isSelfMessage || (incoming.isPersonaJob && !incoming.sceneTurn)) &&
     !incoming.reminderRecipientID &&
     !incoming.reminderData?.self_reminder &&
     !incoming.isStopResponse
@@ -690,6 +827,7 @@ async function prepareTextQuota(
 ): Promise<{ allowed: boolean; shouldApply: boolean; triggerKey: string; state: TextQuotaTriggerState | null }> {
   const incoming = lockedTurn.admission.incoming;
   const triggerKey = incoming.textQuotaTriggerKey ?? lockedTurn.admission.message.id;
+  const shouldTreatAsQuotaSharedPersonaJob = incoming.isPersonaJob && !incoming.sceneTurn;
   const shouldApply =
     incoming.textQuotaSource === "user" &&
     !lockedTurn.admission.isDMChannel &&
@@ -700,7 +838,7 @@ async function prepareTextQuota(
 
   const quota = await checkTextQuotaForAdmission({
     shouldApplyTextQuota: shouldApply,
-    isPersonaJob: incoming.isPersonaJob,
+    isPersonaJob: shouldTreatAsQuotaSharedPersonaJob,
     triggerKey,
     serverId: tomoriState.server_id,
     userDiscId: incoming.textQuotaUserDiscId ?? lockedTurn.admission.cooldownUserDiscId ?? userRow.user_disc_id,

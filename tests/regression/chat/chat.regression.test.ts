@@ -5,15 +5,21 @@ import { evaluateAdmissionQueueAndTriggerGate } from "@/utils/chat/admissionQueu
 import {
   acquireChannelLockForTurn,
   channelLocks,
+  clearChannelProcessingQueue,
   enqueueBusyChannelMessage,
+  forceKillChannelStream,
   getOrCreateChannelLockEntry,
   releaseChannelLockAndReplayQueue,
+  setActiveChannelTurnState,
 } from "@/utils/chat/channelQueue";
 import { shouldSurfaceChatUserErrors } from "@/utils/chat/errorVisibility";
 import { shouldBotReply } from "@/utils/chat/replyDecision";
-import type { ChatIncoming } from "@/utils/chat/types";
+import type { ChatIncoming, ChatTurnContext } from "@/utils/chat/types";
+import { runToolLoop } from "@/utils/chat/toolLoop";
 import { determineMatchingPersonas, isSelfTriggerMessage } from "@/utils/chat/triggerProcessor";
+import { StreamOrchestrator } from "@/utils/discord/streamOrchestrator";
 import { parseTriggerWordListInput } from "@/utils/text/triggerWords";
+import type { LLMProvider, StreamResult } from "@/types/provider/interfaces";
 
 type ProviderFixtureName = "google" | "openrouter" | "novelai";
 
@@ -164,6 +170,7 @@ function makeTomoriState(fixture: ConversationFixture, persona: PersonaFixture):
 
 describe("chat regression harness", () => {
   afterEach(() => {
+    StreamOrchestrator.clearStopRequest(channelId);
     channelLocks.clear();
   });
 
@@ -417,6 +424,79 @@ describe("chat regression harness", () => {
     expect(shouldBotReply(message, mainPersona, personas)).toBe(true);
   });
 
+  it("does not treat a diacritic letter as a word boundary around a trigger word", () => {
+    const client = makeClient();
+    // Boundary semantics live in tests/unit/text/regexUtils.test.ts; this pins that persona
+    // routing consumes them, so a trigger buried in an unrelated word admits no persona.
+    const triggerWord = "lex";
+    const wordContainingTrigger = `prä${triggerWord}`;
+    const fixture: ConversationFixture = {
+      id: "diacritic-word-boundary",
+      provider: "google",
+      description: "an accented letter must not fake a word boundary next to a trigger substring",
+      message: {
+        authorId: "user_diacritic_trigger",
+        authorName: "Diacritic User",
+        content: `this message only contains the unrelated word ${wordContainingTrigger}`,
+        mentionedUserIds: [],
+      },
+      state: {
+        deliberateTriggerMode: false,
+        alwaysReplyEnabled: false,
+        autochDiscIds: [],
+        autochPersonaOverrides: [],
+        autochCounter: 0,
+        autochNextTarget: 0,
+      },
+      personas: [
+        {
+          id: 1,
+          nickname: "Tomori",
+          isAlter: false,
+          triggers: ["tomori"],
+        },
+        {
+          id: 2,
+          nickname: "Placeholder",
+          isAlter: true,
+          triggers: [triggerWord],
+        },
+      ],
+      triggerContext: {
+        isReplyToBot: false,
+        replyPersonaId: null,
+        isBotMentioned: false,
+        isAutoMsgHit: false,
+        isAlwaysReply: false,
+        autoTriggerPersonaId: null,
+        alwaysReplyFallbackPersonaId: null,
+        deliberateTriggerMode: false,
+        isAutochatDtmExemptChannel: false,
+        allowedPersonaIds: null,
+      },
+    };
+    const message = makeMessage(fixture, client);
+    const personas = fixture.personas.map((persona) => makeTomoriState(fixture, persona));
+
+    expect(
+      determineMatchingPersonas(
+        message,
+        personas,
+        client,
+        fixture.triggerContext.isReplyToBot,
+        null,
+        fixture.triggerContext.isBotMentioned,
+        fixture.triggerContext.isAutoMsgHit,
+        fixture.triggerContext.isAlwaysReply,
+        fixture.triggerContext.autoTriggerPersonaId,
+        fixture.triggerContext.alwaysReplyFallbackPersonaId,
+        fixture.triggerContext.deliberateTriggerMode,
+        fixture.triggerContext.isAutochatDtmExemptChannel,
+        null,
+      ).map((persona) => persona.persona_nickname),
+    ).toEqual([]);
+  });
+
   it("acquireChannelLockForTurn sets isLocked and releaseChannelLockAndReplayQueue clears it", () => {
     const lockEntry = getOrCreateChannelLockEntry(channelId, guildId);
 
@@ -486,6 +566,320 @@ describe("chat regression harness", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(processedMessageIds).toEqual([queuedMessage.id]);
+  });
+
+  it("queues a manual user impersonation in FIFO and replays its incoming target", async () => {
+    const client = makeClient();
+    const fixture = conversations[0];
+    const activeMessage = makeMessage(fixture, client);
+    const queuedMessage = makeMessage(
+      {
+        ...fixture,
+        id: "queued_user_impersonation",
+        message: {
+          ...fixture.message,
+          authorBot: true,
+          content: "latest channel message",
+        },
+      },
+      client,
+    );
+    const targetUserId = "target_user_001";
+    const tomoriState = makeTomoriState(fixture, {
+      id: 1001,
+      nickname: "Tomori",
+      isAlter: false,
+      triggers: ["tomori"],
+    });
+    const incoming: ChatIncoming = {
+      client,
+      message: queuedMessage,
+      isFromQueue: false,
+      isManuallyTriggered: true,
+      retryCount: 0,
+      skipLock: false,
+      isPersonaJob: false,
+      isUserImpersonation: true,
+      impersonatedUserId: targetUserId,
+      textQuotaSource: "user",
+      manualTriggerInvoker: {
+        userDiscId: activeMessage.author.id,
+        username: "Sparrow",
+      },
+    };
+    const lockEntry = getOrCreateChannelLockEntry(channelId, guildId);
+    acquireChannelLockForTurn(lockEntry, {
+      messageId: activeMessage.id,
+      userDiscId: activeMessage.author.id,
+      isPersonaJob: false,
+      isCommandTriggered: false,
+    });
+    setActiveChannelTurnState(lockEntry, {
+      activePersonaId: tomoriState.persona_id,
+      triggeredPersonaIds: [tomoriState.persona_id],
+      followUpEligible: true,
+      isUserImpersonation: false,
+    });
+
+    const disposition = await evaluateAdmissionQueueAndTriggerGate({
+      incoming,
+      channelScope: {
+        guild: null,
+        serverDiscId: guildId,
+        isDMChannel: false,
+      },
+      earlyTomoriState: tomoriState,
+      earlyAllPersonas: [tomoriState],
+      userDiscId: activeMessage.author.id,
+      cooldownUserDiscId: activeMessage.author.id,
+      isActiveNaturalStopMessage: false,
+      isNaturalStopMessage: false,
+    });
+
+    expect(disposition?.disposition).toBe("queued");
+    expect(disposition?.reason).toBe("locked_busy_queued");
+    expect(lockEntry.messageQueue).toHaveLength(1);
+    expect(lockEntry.messageQueue[0]).toMatchObject({
+      isUserImpersonation: true,
+      impersonatedUserId: targetUserId,
+      isManuallyTriggered: true,
+    });
+
+    const replayedTargets: string[] = [];
+    releaseChannelLockAndReplayQueue({
+      channelId,
+      lockEntry,
+      completedMessageId: activeMessage.id,
+      handleStopResponse: async () => {},
+      processQueuedMessage: async (queued) => {
+        if (queued.isUserImpersonation && queued.impersonatedUserId) {
+          replayedTargets.push(queued.impersonatedUserId);
+        }
+      },
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(replayedTargets).toEqual([targetUserId]);
+  });
+
+  it("reports accepted live follow-ups as queued and keeps incoming impersonation metadata", async () => {
+    const client = makeClient();
+    const fixture = conversations[0];
+    const activeMessage = makeMessage(fixture, client);
+    const followUpMessage = makeMessage(
+      {
+        ...fixture,
+        id: "eligible_follow_up_impersonation",
+        message: {
+          ...fixture.message,
+          content: "Tomori, continue",
+        },
+      },
+      client,
+    );
+    const targetUserId = "follow_up_target_001";
+    const tomoriState = makeTomoriState(fixture, {
+      id: 1001,
+      nickname: "Tomori",
+      isAlter: false,
+      triggers: ["tomori"],
+    });
+    const incoming: ChatIncoming = {
+      client,
+      message: followUpMessage,
+      isFromQueue: false,
+      retryCount: 0,
+      skipLock: false,
+      isPersonaJob: false,
+      isUserImpersonation: true,
+      impersonatedUserId: targetUserId,
+      textQuotaSource: "user",
+    };
+    const lockEntry = getOrCreateChannelLockEntry(channelId, guildId);
+    acquireChannelLockForTurn(lockEntry, {
+      messageId: activeMessage.id,
+      userDiscId: activeMessage.author.id,
+      isPersonaJob: false,
+      isCommandTriggered: false,
+    });
+    setActiveChannelTurnState(lockEntry, {
+      activePersonaId: tomoriState.persona_id,
+      triggeredPersonaIds: [tomoriState.persona_id],
+      followUpEligible: true,
+      isUserImpersonation: false,
+    });
+
+    const disposition = await evaluateAdmissionQueueAndTriggerGate({
+      incoming,
+      channelScope: {
+        guild: null,
+        serverDiscId: guildId,
+        isDMChannel: false,
+      },
+      earlyTomoriState: tomoriState,
+      earlyAllPersonas: [tomoriState],
+      userDiscId: activeMessage.author.id,
+      cooldownUserDiscId: activeMessage.author.id,
+      isActiveNaturalStopMessage: false,
+      isNaturalStopMessage: false,
+    });
+
+    expect(disposition?.disposition).toBe("queued");
+    expect(disposition?.reason).toBe("locked_follow_up_queued");
+    expect(lockEntry.messageQueue[0]).toMatchObject({
+      isFollowUp: true,
+      isUserImpersonation: true,
+      impersonatedUserId: targetUserId,
+    });
+  });
+
+  it("notifies queued message discard handlers when the channel queue is cleared", async () => {
+    const client = makeClient();
+    const fixture = conversations[0];
+    const queuedMessage = makeMessage(fixture, client);
+    const discardedReasons: string[] = [];
+    const lockEntry = getOrCreateChannelLockEntry(channelId, guildId);
+
+    enqueueBusyChannelMessage({
+      lockEntry,
+      channelId,
+      simulatedAutochatCounterReset: false,
+      queuedMessage: {
+        message: queuedMessage,
+        textQuotaSource: "system",
+        onQueueDiscard: (reason) => {
+          discardedReasons.push(reason);
+        },
+      },
+    });
+
+    expect(clearChannelProcessingQueue(channelId)).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(discardedReasons).toEqual(["channel_queue_cleared"]);
+  });
+
+  it("does not queue same-user follow-ups while a hard stop is pending", async () => {
+    const client = makeClient();
+    const fixture = conversations[0];
+    const message = makeMessage(
+      {
+        ...fixture,
+        id: "post_kill_follow_up",
+        message: {
+          ...fixture.message,
+          content: "Tomori, are you still there?",
+          mentionedUserIds: [],
+        },
+      },
+      client,
+    );
+    const tomoriState = makeTomoriState(fixture, {
+      id: 1001,
+      nickname: "Tomori",
+      isAlter: false,
+      triggers: ["tomori"],
+    });
+    const incoming: ChatIncoming = {
+      client,
+      message,
+      isFromQueue: false,
+      retryCount: 0,
+      skipLock: false,
+      isPersonaJob: false,
+      isUserImpersonation: false,
+      textQuotaSource: "user",
+    };
+    const lockEntry = getOrCreateChannelLockEntry(channelId, guildId);
+    acquireChannelLockForTurn(lockEntry, {
+      messageId: "active_before_kill",
+      userDiscId: message.author.id,
+      isPersonaJob: false,
+      isCommandTriggered: false,
+    });
+    setActiveChannelTurnState(lockEntry, {
+      activePersonaId: tomoriState.persona_id,
+      triggeredPersonaIds: [tomoriState.persona_id],
+      followUpEligible: true,
+    });
+    StreamOrchestrator.requestStop(channelId, message.author.id);
+
+    const disposition = await evaluateAdmissionQueueAndTriggerGate({
+      incoming,
+      channelScope: {
+        guild: null,
+        serverDiscId: guildId,
+        isDMChannel: false,
+      },
+      earlyTomoriState: tomoriState,
+      earlyAllPersonas: [tomoriState],
+      userDiscId: message.author.id,
+      cooldownUserDiscId: message.author.id,
+      isActiveNaturalStopMessage: false,
+      isNaturalStopMessage: false,
+    });
+
+    expect(disposition?.disposition).toBe("ignore");
+    expect(disposition?.reason).toBe("locked_stop_requested");
+    expect(lockEntry.messageQueue).toHaveLength(0);
+  });
+
+  it("treats /kill stream aborts as stopped_by_user and clears the stop request", async () => {
+    const client = makeClient();
+    const fixture = conversations[0];
+    const message = makeMessage(fixture, client);
+    const tomoriState = makeTomoriState(fixture, {
+      id: 1001,
+      nickname: "Tomori",
+      isAlter: false,
+      triggers: ["tomori"],
+    });
+    const lockEntry = getOrCreateChannelLockEntry(channelId, guildId);
+    acquireChannelLockForTurn(lockEntry, {
+      messageId: message.id,
+      userDiscId: message.author.id,
+      isPersonaJob: false,
+      isCommandTriggered: false,
+    });
+    const provider = {
+      streamToDiscord: () => new Promise<StreamResult>(() => {}),
+    } as unknown as LLMProvider;
+    const context = {
+      turn: {
+        lockedTurn: {
+          admission: {
+            incoming: {},
+          },
+        },
+      },
+      client,
+      message,
+      channel: message.channel,
+      isFromQueue: false,
+      streamingContext: {
+        suppressUserErrors: true,
+      },
+      currentPersona: tomoriState,
+      isUserImpersonation: false,
+    } as unknown as ChatTurnContext;
+
+    const resultPromise = runToolLoop({
+      context,
+      provider,
+      providerConfig: {
+        model: "test",
+        apiKey: "test",
+        temperature: 0,
+      },
+      tomoriState,
+    });
+
+    StreamOrchestrator.requestStop(channelId, message.author.id);
+    expect(forceKillChannelStream(channelId)).toBe(true);
+
+    const result = await resultPromise;
+
+    expect(result.status).toBe("stopped_by_user");
+    expect(StreamOrchestrator.hasStopRequest(channelId)).toBe(false);
   });
 
   it("pre-lock admission ignores non-triggering messages without locking the channel", async () => {

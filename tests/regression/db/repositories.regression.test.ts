@@ -1,8 +1,8 @@
 /**
- * Regression harness — Repository layer delegation.
+ * Regression harness: Repository layer delegation.
  *
  * Proves that each repository singleton correctly delegates to the underlying
- * DB functions and fires cache invalidation as a side effect of writes —
+ * DB functions and fires cache invalidation as a side effect of writes
  * without any manual cache wrangling in the test itself.
  *
  * Contrast with cache-invalidation.regression.test.ts, which calls
@@ -10,10 +10,10 @@
  * method to do it, so a missing invalidation call surfaces as a test failure.
  *
  * Covered:
- *   UserRepository  — register, loadByDiscordId, setPrivacyLevel, update,
+ *   UserRepository : register, loadByDiscordId, setPrivacyLevel, update,
  *                     isBlacklisted, getBlacklistedMemberIds,
  *                     toExportShape, fromExportShape, cache side-effects
- *   LlmRepository   — loadAvailableLlms, loadLlmById, getLlmsByIds,
+ *   LlmRepository  : loadAvailableLlms, loadLlmById, getLlmsByIds,
  *                     result parity with repository SQL reads
  *
  * Requires: a local Postgres connection (see docs/guides/testing-db-changes.md)
@@ -40,8 +40,6 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Repositories — delegation & cache regres
     clearUserCache();
     await cleanupFixtures(testSql);
   });
-
-  // ── UserRepository — reads ─────────────────────────────────────────────────
 
   describe("UserRepository.loadByDiscordId", () => {
     it("returns null for a non-existent user", async () => {
@@ -88,8 +86,6 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Repositories — delegation & cache regres
     });
   });
 
-  // ── UserRepository — writes + cache side-effects ───────────────────────────
-
   describe("UserRepository.register (cache side-effect)", () => {
     it("creates a new row and invalidates the cache without explicit invalidation call", async () => {
       // Pre-warm the cache with null (simulates a prior miss).
@@ -101,27 +97,31 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Repositories — delegation & cache regres
       expect(user).not.toBeNull();
       expect(user?.user_disc_id).toBe(REPO_USER_ID);
 
-      // No explicit invalidation here — the repository must have done it.
+      // No explicit invalidation here: the repository must have done it.
       const fresh = await getCachedUserRow(REPO_USER_ID);
       expect(fresh).not.toBeNull();
       expect(fresh?.user_disc_id).toBe(REPO_USER_ID);
     });
 
-    it("is idempotent — re-registering preserves the original nickname", async () => {
+    it("is idempotent and leaves an uncustomized nickname unset", async () => {
       const again = await userRepository.register(REPO_USER_ID, "_rt_different_name", "en");
-      expect(again?.user_nickname).toBe("_rt_repo_name");
+      expect(again?.user_nickname).toBeNull();
+    });
+
+    it("exports an unset nickname without freezing a Discord ID", async () => {
+      const shape = await userRepository.toExportShape(REPO_USER_ID);
+      expect(shape?.user_nickname).toBeNull();
     });
   });
 
   describe("UserRepository.setPrivacyLevel (cache side-effect)", () => {
     it("updates the row and the cache reflects the new level without manual invalidation", async () => {
-      // Warm cache with the current row.
       await getCachedUserRow(REPO_USER_ID);
 
       const updated = await userRepository.setPrivacyLevel(REPO_USER_ID, PrivacyLevel.PARTIAL);
       expect(updated?.privacy_level).toBe(PrivacyLevel.PARTIAL);
 
-      // No manual invalidation — repository must flush it.
+      // No manual invalidation: repository must flush it.
       const cached = await getCachedUserRow(REPO_USER_ID);
       expect(cached?.privacy_level).toBe(PrivacyLevel.PARTIAL);
     });
@@ -143,8 +143,6 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Repositories — delegation & cache regres
     });
   });
 
-  // ── UserRepository — export contract ──────────────────────────────────────
-
   describe("UserRepository.toExportShape / fromExportShape", () => {
     it("toExportShape returns null for a non-existent user", async () => {
       const shape = await userRepository.toExportShape("_rt_nonexistent_export");
@@ -162,7 +160,6 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Repositories — delegation & cache regres
       const original = await userRepository.toExportShape(REPO_USER_ID);
       if (!original) throw new Error("Expected toExportShape to return data");
 
-      // Modify the row, then restore.
       const row = await userRepository.loadByDiscordId(REPO_USER_ID);
       if (!row) throw new Error("Row should exist");
       await userRepository.update(row.user_id, { user_nickname: "_rt_repo_temp" });
@@ -176,15 +173,27 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Repositories — delegation & cache regres
     });
   });
 
-  // ── LlmRepository — result parity ─────────────────────────────────────────
   // Each test asserts that the repository returns the same data as the direct
   // repository SQL call, proving delegation is correct rather than silent no-ops.
+
+  // `llms.input_price_per_million` / `output_price_per_million` are Postgres NUMERIC, which the driver
+  // returns as strings on a raw SELECT (e.g. "0.1"). The repository parses rows through `llmSchema`, whose
+  // `z.coerce.number()` turns those columns into real numbers so `/tool estimate cost` can do price math.
+  // Normalize the raw rows the same way before comparing, so this parity check tracks data rather than the
+  // driver's NUMERIC-as-string serialization.
+  const coerceLlmPriceColumns = <T extends Record<string, unknown>>(row: T): T => ({
+    ...row,
+    input_price_per_million:
+      row.input_price_per_million == null ? row.input_price_per_million : Number(row.input_price_per_million),
+    output_price_per_million:
+      row.output_price_per_million == null ? row.output_price_per_million : Number(row.output_price_per_million),
+  });
 
   describe("LlmRepository.loadAvailableLlms", () => {
     it("returns the same rows as the direct repository SQL call", async () => {
       const direct = await testSql`SELECT * FROM llms WHERE is_deprecated = false ORDER BY llm_id ASC`;
       const via = await llmModelRepo.loadAvailableLlms();
-      expect(via).toEqual(direct);
+      expect(via).toEqual(direct.map(coerceLlmPriceColumns));
     });
 
     it("with includeDeprecated=true returns >= non-deprecated count", async () => {
@@ -203,7 +212,7 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Repositories — delegation & cache regres
 
       const direct = await testSql`SELECT * FROM llms WHERE llm_id = ${id} LIMIT 1`;
       const via = await llmModelRepo.loadById(id);
-      expect(via).toEqual(direct[0]);
+      expect(via).toEqual(coerceLlmPriceColumns(direct[0]));
     });
 
     it("returns null for a non-existent ID", async () => {
@@ -226,8 +235,6 @@ describe.skipIf(!DB_TESTS_AVAILABLE)("Repositories — delegation & cache regres
       expect(via.map((l) => l.llm_id).sort()).toEqual(direct.map((l) => l.llm_id).sort());
     });
   });
-
-  // ── Regression probes ──────────────────────────────────────────────────────
 
   it.skip("[REGRESSION PROBE] missing invalidation in register() would fail cache test", async () => {
     // To prove: remove the `invalidateUserCache` call from UserRepository.register()

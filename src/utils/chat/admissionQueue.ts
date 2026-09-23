@@ -25,6 +25,7 @@ import {
 } from "@/utils/chat/admissionGuards";
 import { shouldBotReply } from "@/utils/chat/replyDecision";
 import { shouldSurfaceChatUserErrors } from "@/utils/chat/errorVisibility";
+import { StreamOrchestrator } from "@/utils/discord/streamOrchestrator";
 import type { ChatIncoming, NonRunnableChatAdmission } from "@/utils/chat/types";
 
 type RateLimitedChannel = Parameters<typeof enforceGlobalRateLimit>[0]["channel"];
@@ -92,6 +93,10 @@ async function evaluateLockedChannelAdmission(args: {
     reason,
   });
 
+  if (StreamOrchestrator.hasStopRequest(channelId) && !StreamOrchestrator.isFollowUpRequest(channelId)) {
+    return ignored("locked_stop_requested");
+  }
+
   if (args.isActiveNaturalStopMessage) {
     await requestNaturalStopForLockedTurn({
       channelId,
@@ -120,6 +125,7 @@ async function evaluateLockedChannelAdmission(args: {
   if (
     !incoming.isStopResponse &&
     !incoming.isPersonaJob &&
+    !incoming.isManuallyTriggered &&
     !hasCrossPersonaTrigger &&
     queueFollowUpForLockedTurn({
       lockEntry,
@@ -132,9 +138,18 @@ async function evaluateLockedChannelAdmission(args: {
       manualStreamingContextOverrides: followUpOverrides,
       isNaturalStopMessage: args.isNaturalStopMessage,
       shouldSurfaceUserErrors: true,
+      isUserImpersonation: incoming.isUserImpersonation,
+      impersonatedUserId: incoming.impersonatedUserId,
+      onGenerationResult: incoming.onGenerationResult,
+      onQueueDiscard: incoming.onQueueDiscard,
     })
   ) {
-    return ignored("locked_follow_up_queued");
+    return {
+      incoming,
+      disposition: "queued",
+      locale: "en-US",
+      reason: "locked_follow_up_queued",
+    };
   }
 
   if (!earlyTomoriState) {
@@ -195,7 +210,7 @@ async function evaluateLockedChannelAdmission(args: {
     const tempUserRow = await getCachedUserRow(userDiscId);
     const cooldownLocale = tempUserRow?.language_pref ?? channelScope.guild?.preferredLocale ?? "en-US";
     const rejectedByCooldown = await rejectOnMessageTriggerCooldown({
-      serverDiscId: channelScope.guild?.id ?? message.author.id,
+      serverDiscId: channelScope.serverDiscId,
       userDiscId: cooldownUserDiscId,
       channelId: message.channelId,
       cooldownType: earlyTomoriState.config.cooldown_type ?? CooldownType.OFF,
@@ -236,8 +251,12 @@ async function evaluateLockedChannelAdmission(args: {
       injectedContextItems: incoming.injectedContextItems,
       forcedMentions: incoming.forcedMentions,
       manualTriggerInvoker: incoming.manualTriggerInvoker,
+      systemTriggerIdentity: incoming.systemTriggerIdentity,
       reminderRecipientID: incoming.reminderRecipientID,
       reminderData: incoming.reminderData,
+      onGenerationResult: incoming.onGenerationResult,
+      onQueueDiscard: incoming.onQueueDiscard,
+      sceneTurn: incoming.sceneTurn,
       manualStreamingContextOverrides: incoming.manualStreamingContextOverrides
         ? {
             ...(incoming.manualStreamingContextOverrides.disableCrossChannelMessage
@@ -364,6 +383,7 @@ async function evaluateEarlyAccessState(args: {
       whitelistStatus: null,
       personalSpotlightStatus: null,
       allowedPersonaIds: null,
+      blockedPersonaIds: new Set(),
       rejectedByWhitelist: false,
       personalDtm,
     };
@@ -375,8 +395,8 @@ async function evaluateEarlyAccessState(args: {
     isManuallyTriggered: args.incoming.isManuallyTriggered,
     isSelfMessage: args.isSelfMessage,
     isAutochatOverride: isAutochatOverrideChannel(args.tomoriState.config, args.channelIds.effectiveChannelId),
-    guildDiscId: args.channelScope.guild.id,
-    fallbackUserDiscId: args.incoming.message.author.id,
+    guildDiscId: args.channelScope.serverDiscId,
+    fallbackUserDiscId: args.userDiscId,
     message: args.incoming.message,
     memberRoleDiscIds: args.incoming.manualTriggerInvoker?.member
       ? args.incoming.manualTriggerInvoker.member.roles.cache.map((role) => role.id)

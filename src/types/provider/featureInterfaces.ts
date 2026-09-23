@@ -59,22 +59,41 @@ export interface GeneratePresetParams {
   modelName?: string;
   /** Serialized existing card/preset data extracted from the uploaded image, used as AI reference context */
   existingPresetContext?: string;
+  /**
+   * Visual appearance text a vision model produced from the uploaded avatar.
+   *
+   * Kept separate from `existingPresetContext` because the two are different kinds of input:
+   * that field carries a structured character card the user uploaded, while this carries a
+   * description of an image the primary model cannot see. The prompt labels them separately
+   * so the model does not read a caption as extracted card data.
+   */
+  appearanceDescription?: string;
+  /**
+   * Output-token budget for this request, already resolved by the caller.
+   *
+   * Passed through rather than re-derived in each provider so the server's configured ceiling
+   * and a known model limit apply once, and every provider asks for the same budget.
+   */
+  maxOutputTokens?: number;
 }
+
+/** Failure classes a provider reports to the command layer, which maps each to its own copy. */
+export type PresetGenerationErrorType =
+  | "RATE_LIMIT"
+  | "BLOCKED_CONTENT"
+  | "API_KEY"
+  | "CONNECTION"
+  | "MODEL_ERROR"
+  | "TIMEOUT"
+  | "EMPTY_RESPONSE"
+  | "INVALID_JSON"
+  | "VALIDATION_ERROR"
+  | "UNKNOWN";
 
 export interface PresetGenerationResult {
   preset?: PresetExportData;
   error?: string;
-  errorType?:
-    | "RATE_LIMIT"
-    | "BLOCKED_CONTENT"
-    | "API_KEY"
-    | "CONNECTION"
-    | "MODEL_ERROR"
-    | "TIMEOUT"
-    | "EMPTY_RESPONSE"
-    | "INVALID_JSON"
-    | "VALIDATION_ERROR"
-    | "UNKNOWN";
+  errorType?: PresetGenerationErrorType;
 }
 
 export interface ProviderPresetGenerationRequest {
@@ -106,13 +125,13 @@ export interface CompactRoleplayResult {
   error?: string;
 }
 
-export interface ProviderLiveTokenCountRequest {
+interface ProviderLiveTokenCountRequest {
   apiKey: string;
   tomoriState: TomoriState;
   contextItems: StructuredContextItem[];
 }
 
-export interface ProviderLiveTokenCountResult {
+interface ProviderLiveTokenCountResult {
   providerLabel: string;
   model: string;
   inputTokens: number;
@@ -120,12 +139,12 @@ export interface ProviderLiveTokenCountResult {
   outputPricePerMillion: number;
 }
 
-export interface ProviderNativeImageReference {
+interface ProviderNativeImageReference {
   mimeType: string;
   data: string;
 }
 
-export type ImageGenerationRequest = {
+type ImageGenerationRequest = {
   prompt: string;
   negativePrompt?: string | null;
   referenceImageDataUrl?: string | null;
@@ -192,7 +211,7 @@ export interface SupportsNativeImageGeneration {
 }
 
 /** Reference image input for image-to-video generation */
-export interface ProviderNativeVideoReference {
+interface ProviderNativeVideoReference {
   mimeType: string;
   data: string; // Base64-encoded image data (used when url is not available)
   url?: string; // Original source URL — preferred over base64 for remote APIs to avoid body size limits
@@ -208,6 +227,12 @@ export interface ProviderNativeVideoGenerationRequest {
   prompt: string;
   aspectRatio?: string;
   durationSeconds?: number;
+  /**
+   * Target frames-per-second for the generated video. Optional : most hosted providers
+   * (Google Veo, OpenRouter, Z.ai) do not expose an FPS control and silently ignore this.
+   * Primarily consumed by custom ComfyUI workflows via the `TOMORI_VIDEO_FPS` placeholder.
+   */
+  fps?: number;
   resolution?: ProviderNativeVideoResolution;
   endpointUrl?: string;
   referenceImages?: ProviderNativeVideoReference[];
@@ -221,7 +246,7 @@ export interface ProviderNativeVideoGenerationRequest {
 
 /** Result of a native video generation operation */
 export interface ProviderNativeVideoGenerationResult {
-  videoData: Buffer | null; // Raw MP4 bytes (not base64 — videos are too large)
+  videoData: Buffer | null; // Raw MP4 bytes (not base64 : videos are too large)
   mimeType: string | null;
   filename?: string;
   durationSeconds?: number;

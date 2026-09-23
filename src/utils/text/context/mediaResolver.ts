@@ -2,7 +2,7 @@ import type { TomoriState } from "@/types/db/schema";
 import type { ContextPart, MediaDescriptor, StructuredContextItem } from "@/types/misc/context";
 import { getOpenRouterCapabilities, isOpenRouterCapabilityCacheReady } from "@/utils/cache/openrouterCapabilityCache";
 import { log } from "@/utils/misc/logger";
-import { createToolPromptMacroResolver } from "@/utils/tools/toolPromptMacros";
+import { createToolPromptMacroResolver, resolvePromptCapabilityValues } from "@/utils/tools/toolPromptMacros";
 
 interface MediaCapabilities {
   seesImages: boolean;
@@ -15,6 +15,7 @@ export async function resolveMediaForModel(
 ): Promise<StructuredContextItem[]> {
   const toolPromptMacroResolver = createToolPromptMacroResolver({
     provider: tomoriState.llm.llm_provider,
+    capabilities: resolvePromptCapabilityValues(tomoriState.config),
     stateForContext:
       tomoriState.server_id && tomoriState.llm
         ? {
@@ -32,6 +33,8 @@ export async function resolveMediaForModel(
               imagegen_enabled: tomoriState.config.imagegen_enabled,
               videogen_enabled: tomoriState.config.videogen_enabled,
               voice_message_enabled: tomoriState.config.voice_message_enabled,
+              user_blocking_enabled: tomoriState.config.user_blocking_enabled,
+              user_info_updates_enabled: tomoriState.config.user_info_updates_enabled,
               thread_creation_enabled: tomoriState.config.thread_creation_enabled,
             },
           }
@@ -119,7 +122,7 @@ async function resolveItemMedia(params: {
           ? await params.expandToolMacros(
               `[System: This message (${buildMediaIdLabel(imageDescriptors)}) contains ${buildImageDescription(imageDescriptors)}. Do not guess the image contents. Use the {image_analysis_tool} tool with this media ID only if the user explicitly asks about the image or if unseen visual details are necessary to answer correctly. The media ID can also be used with tools that accept media references.]`,
             )
-          : `[System: This message (${buildMediaIdLabel(imageDescriptors)}) contains ${buildImageDescription(imageDescriptors)}. Current model cannot see images, please do not describe or claim to see the image contents. The media ID can still be used with tools that accept media references.]`,
+          : `[System: This message (${buildMediaIdLabel(imageDescriptors)}) contains ${buildImageDescription(imageDescriptors)}. Current model cannot see images, please do not describe or claim to see the image contents. If you need to see images, tell the user to setup \`/model vision\` or to use a different model with the "vision" capability. The media ID can still be used with tools that accept media references.]`,
       });
       log.info(
         `Images skipped for message ${params.messageId ?? imageDescriptors[0]?.mediaId ?? "unknown"} - model does not support images (visionTool=${params.hasVisionTool})`,
@@ -151,11 +154,12 @@ function resolveOutsideWindowNotice(descriptors: MediaDescriptor[], capabilities
     descriptor.kind === "image" ? capabilities.seesImages : capabilities.seesVideos,
   );
 
+  // Replying re-attaches a referenced message's media to the reply itself, which is always
+  // inside the window, so it is the only way back to media this far up the history.
   if (viewableOutsideWindow) {
-    const firstDescriptor = descriptors[0];
     return {
       type: "text",
-      text: `[System: This message (ID: ${firstDescriptor.mediaId}) contained ${description} - use increase_media_context with extend_by=${firstDescriptor.extendBy ?? 0} to view]`,
+      text: `[System: This message (${buildMediaIdLabel(descriptors)}) contained ${description}, but it is outside the current media context window. Ask the user to reply to that message if you need to see it. The media ID can still be used with tools that accept media references.]`,
     };
   }
 

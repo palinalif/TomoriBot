@@ -8,6 +8,7 @@ import { BaseTool, type ToolContext, type ToolResult, type ToolParameterSchema }
 import { invalidateTomoriStateCache } from "../../utils/cache/tomoriStateCache";
 import { invalidateUserCache } from "../../utils/cache/userCache";
 import { resolveUserTarget } from "@/utils/discord/targetResolver";
+import { renderMemoryNoticeContent, memoryServerDiscId } from "./memoryNoticeContent";
 
 /**
  * Tool for remembering and learning new information during conversations
@@ -44,17 +45,14 @@ export class MemoryTool extends BaseTool {
 
   /**
    * Check if memory tool is available for the given provider
-   * @param _provider - LLM provider name (unused)
    * @returns True if provider supports memory functionality
    */
   isAvailableFor(_provider: string): boolean {
-    // Memory functionality works with all providers
     return true;
   }
 
   /**
    * Check if self-teaching functionality is enabled in Tomori config
-   * @param context - Tool execution context
    * @returns True if self-teaching is enabled
    */
   protected isEnabled(context: ToolContext): boolean {
@@ -64,13 +62,8 @@ export class MemoryTool extends BaseTool {
   /**
    * Execute memory storage
    * @param args - Arguments containing memory details
-   * @param context - Tool execution context
-   * @returns Promise resolving to tool result
    */
   async execute(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
-    // Real implementation extracted from tomoriChat.ts:1068-1340
-
-    // Validate parameters
     const validation = this.validateParameters(args);
     if (!validation.isValid) {
       return {
@@ -83,7 +76,6 @@ export class MemoryTool extends BaseTool {
       };
     }
 
-    // Check if tool is enabled
     if (!this.isEnabled(context)) {
       return {
         success: false,
@@ -95,7 +87,6 @@ export class MemoryTool extends BaseTool {
       };
     }
 
-    // Extract arguments (from tomoriChat.ts:1070-1076)
     let memoryContentArg = args.memory_content as string;
     const memoryScopeArg = args.memory_scope as "server_wide" | "target_user";
     const targetUserArg = args.target_user as string | undefined;
@@ -104,19 +95,15 @@ export class MemoryTool extends BaseTool {
     const requestedTargetUser =
       targetUserArg?.trim() || legacyTargetUserNicknameArg?.trim() || legacyTargetUserDiscordIdArg?.trim();
 
-    // Import database functions
     const { sendMemoryEmbedWithExpand } = await import("../../utils/discord/expandableEmbedNotice");
     const { ColorCode } = await import("../../utils/misc/logger");
-    const { convertMentions } = await import("../../utils/text/contextBuilder");
     const { sanitizeUnknownTemplatePlaceholders } = await import("@/utils/text/processors/mentionProcessor");
 
-    // Import memory validation and repository singletons
     const { validateMemoryContent } = await import("@/utils/misc/memoryLimits");
     const { personalMemoryRepository, serverMemoryRepository, userRepository } = await import(
       "@/utils/db/repositories"
     );
 
-    // Critical state validation (from tomoriChat.ts:1078-1104)
     const tomoriState = context.tomoriState;
     const resolvedUserId = context.message?.author?.id || context.userId;
     const userRow = resolvedUserId ? await userRepository.loadByDiscordId(resolvedUserId) : null;
@@ -145,7 +132,6 @@ export class MemoryTool extends BaseTool {
     const personaNickname =
       context.personaUsername || tomoriState.persona_nickname || context.client.user?.username || "TomoriBot";
 
-    // Validate memory content (from tomoriChat.ts:1105-1113)
     if (typeof memoryContentArg !== "string" || !memoryContentArg.trim()) {
       return {
         success: false,
@@ -157,7 +143,6 @@ export class MemoryTool extends BaseTool {
       };
     }
 
-    // Validate memory scope (from tomoriChat.ts:1114-1122)
     if (typeof memoryScopeArg !== "string" || !["server_wide", "target_user"].includes(memoryScopeArg)) {
       return {
         success: false,
@@ -239,7 +224,7 @@ export class MemoryTool extends BaseTool {
       }
     }
 
-    // Sanitize unknown {word} placeholders (e.g. {bredrumb}) — the LLM sometimes wraps
+    // Sanitize unknown {word} placeholders (e.g. {obonya}), so the LLM sometimes wraps
     // usernames in braces imitating {user}. Strip the braces so the name appears plainly.
     const memoryContent = sanitizeUnknownTemplatePlaceholders(memoryContentArg.trim());
 
@@ -279,9 +264,7 @@ export class MemoryTool extends BaseTool {
     }
 
     if (effectiveScope === "server_wide") {
-      // Server-wide memory handling (from tomoriChat.ts:1127-1179)
       try {
-        // Check server memory limit before adding
         const serverLimitCheck = await serverMemoryRepository.checkServerMemoryLimit(
           tomoriState.server_id,
           tomoriState.persona_lineage_id,
@@ -295,7 +278,7 @@ export class MemoryTool extends BaseTool {
               scope: "server_wide",
               current_count: serverLimitCheck.currentCount,
               max_allowed: serverLimitCheck.maxAllowed,
-              reason: `Server memory limit of ${serverLimitCheck.maxAllowed} memories has been reached. Please inform the user that they need to use '/memory server remove' to remove some memories before I can learn new ones.`,
+              reason: `Server memory limit of ${serverLimitCheck.maxAllowed} memories has been reached. Please inform the user that they need to use '/memories' to remove some memories before I can learn new ones.`,
             },
           };
         }
@@ -309,27 +292,25 @@ export class MemoryTool extends BaseTool {
         );
 
         if (dbResult) {
-          log.success(`Tomori self-taught a server-wide memory (ID: ${dbResult.server_memory_id}): "${memoryContent}"`);
-
-          // Process memory content for display (convert {user} and {bot} tokens to actual names)
-          // Security: Ensure we have a valid server ID to prevent user data mixing
-          const serverId = "guild" in context.channel ? context.channel.guild.id : context.userId;
-          if (!serverId) {
-            throw new Error("Critical security error: No valid server or user ID available for memory processing");
-          }
-          const processedMemoryContent = await convertMentions(
-            memoryContent,
-            context.client,
-            serverId,
-            userRow.user_nickname, // Use triggerer's name for {user} replacement
-            tomoriState.persona_nickname, // Use bot's current nickname for {bot} replacement
-            tomoriState?.config.personal_memories_enabled,
+          log.success(
+            `Tomori self-taught a server memory for her own persona lineage (ID: ${dbResult.server_memory_id}): "${memoryContent}"`,
           );
 
-          // Send a notification notice to the channel.
-          // The expand helper attaches a "Show Full Memory" button when the
-          // processed content exceeds 200 chars (the embed truncation threshold),
-          // letting users read the full memory ephemerally without channel clutter.
+          const singleServerId = memoryServerDiscId(
+            context,
+            "Critical security error: No valid server or user ID available for memory processing",
+          );
+          const { processedContent: processedMemoryContent, preview: memoryPreview } = await renderMemoryNoticeContent({
+            content: memoryContent,
+            client: context.client,
+            serverId: singleServerId,
+            userName: userRow.user_nickname ?? context.message?.author.displayName ?? userRow.user_disc_id,
+            botNickname: tomoriState.persona_nickname,
+            personalMemoriesEnabled: tomoriState?.config.personal_memories_enabled,
+          });
+
+          // The expand helper uses the same preview limit, letting users read
+          // the full memory ephemerally without channel clutter.
           await sendMemoryEmbedWithExpand(
             context.channel,
             context.locale,
@@ -341,10 +322,7 @@ export class MemoryTool extends BaseTool {
               },
               descriptionKey: "genai.self_teach.server_memory_learned_description",
               descriptionVars: {
-                memory_content:
-                  processedMemoryContent.length > 200
-                    ? `${processedMemoryContent.substring(0, 197)}...`
-                    : processedMemoryContent,
+                memory_content: memoryPreview.text,
               },
               footerKey: "genai.self_teach.server_memory_footer",
             },
@@ -357,7 +335,7 @@ export class MemoryTool extends BaseTool {
           );
 
           // Invalidate TomoriState cache so next message includes new memory
-          invalidateTomoriStateCache(serverId);
+          invalidateTomoriStateCache(singleServerId);
 
           return {
             success: true,
@@ -371,18 +349,18 @@ export class MemoryTool extends BaseTool {
           };
         }
 
-        log.error("Failed to save server-wide memory via self-teach (DB error)");
+        log.error("Failed to save server memory via self-teach (DB error)");
         return {
           success: false,
-          error: "Database operation failed to save server-wide memory",
+          error: "Database operation failed to save server memory",
           data: {
             status: "memory_save_failed_db_error",
             scope: "server_wide",
-            reason: "Database operation failed to save server-wide memory",
+            reason: "Database operation failed to save server memory",
           },
         };
       } catch (error) {
-        log.error("Database error during server-wide memory save", error as Error);
+        log.error("Database error during server memory save", error as Error);
         return {
           success: false,
           error: "Database error occurred while saving memory",
@@ -394,11 +372,7 @@ export class MemoryTool extends BaseTool {
         };
       }
     } else if (effectiveScope === "target_user") {
-      // User-specific memory handling (from tomoriChat.ts:1180-1339)
-      // Note: bot self-target check is handled above via auto-fallback to server_wide scope.
-
       try {
-        // Load target user (from tomoriChat.ts:1204-1206)
         const targetUserRow = await userRepository.loadByDiscordId(resolvedTargetUserId as string);
 
         if (!targetUserRow?.user_id) {
@@ -413,7 +387,8 @@ export class MemoryTool extends BaseTool {
             },
           };
         }
-        const targetUserDisplayName = resolvedTargetUserLabel || targetUserRow.user_nickname;
+        const targetUserDisplayName =
+          resolvedTargetUserLabel || targetUserRow.user_nickname || targetUserRow.user_disc_id;
 
         // Check if user has opted out of personalization (privacy setting)
         const { PrivacyLevel } = await import("../../types/db/schema");
@@ -430,7 +405,7 @@ export class MemoryTool extends BaseTool {
             data: {
               status: "memory_save_failed_privacy_restricted",
               scope: "target_user",
-              reason: `The user ${targetUserDisplayName} has chosen to restrict personal memory storage. I cannot save personal memories about them unless they change their privacy settings using '/personal privacy'.`,
+              reason: `The user ${targetUserDisplayName} has chosen to restrict personal memory storage. I cannot save personal memories about them unless they change their privacy settings using '/personal config'.`,
             },
           };
         }
@@ -451,7 +426,7 @@ export class MemoryTool extends BaseTool {
               target_user: targetUserDisplayName,
               current_count: personalLimitCheck.currentCount,
               max_allowed: personalLimitCheck.maxAllowed,
-              reason: `Personal memory limit of ${personalLimitCheck.maxAllowed} memories has been reached for this user. Please inform the user that they need to use '/memory personal remove' to remove some of their memories before I can learn new ones about them.`,
+              reason: `Personal memory limit of ${personalLimitCheck.maxAllowed} memories has been reached for this user. Please inform the user that they need to use '/personal memories' to remove some of their memories before I can learn new ones about them.`,
             },
           };
         }
@@ -468,28 +443,26 @@ export class MemoryTool extends BaseTool {
             `Tomori self-taught a personal memory for ${targetUserDisplayName} (Discord ID: ${resolvedTargetUserId}, Internal ID: ${targetUserRow.user_id}): "${memoryContent}"`,
           );
 
-          // Process memory content for display (convert {user} and {bot} tokens to actual names)
           // Security: Ensure we have a valid server ID to prevent user data mixing
-          const serverId = "guild" in context.channel ? context.channel.guild.id : context.userId;
-          if (!serverId) {
-            throw new Error("Critical security error: No valid server or user ID available for memory processing");
-          }
-          const processedMemoryContent = await convertMentions(
-            memoryContent,
-            context.client,
-            serverId,
-            targetUserDisplayName, // Use target user's name for {user} replacement
-            tomoriState.persona_nickname, // Use bot's current nickname for {bot} replacement
-            tomoriState?.config.personal_memories_enabled,
+          const serverId = memoryServerDiscId(
+            context,
+            "Critical security error: No valid server or user ID available for memory processing",
           );
+          const { processedContent: processedMemoryContent, preview: memoryPreview } = await renderMemoryNoticeContent({
+            content: memoryContent,
+            client: context.client,
+            serverId,
+            userName: targetUserDisplayName,
+            botNickname: tomoriState.persona_nickname,
+            personalMemoriesEnabled: tomoriState?.config.personal_memories_enabled,
+          });
 
           // Determine footer key based on personalization settings
           const personalizationEnabled = tomoriState?.config.personal_memories_enabled ?? true;
-          // Security: Ensure we have a valid server ID to prevent user data mixing
-          const serverDiscId = "guild" in context.channel ? context.channel.guild.id : context.userId;
-          if (!serverDiscId) {
-            throw new Error("Critical security error: No valid server or user ID available for blacklist checking");
-          }
+          const serverDiscId = memoryServerDiscId(
+            context,
+            "Critical security error: No valid server or user ID available for blacklist checking",
+          );
           const targetUserIsBlacklisted =
             (await userRepository.isBlacklisted(serverDiscId, resolvedTargetUserId as string)) ?? false;
 
@@ -507,8 +480,6 @@ export class MemoryTool extends BaseTool {
           invalidateUserCache(resolvedTargetUserId as string);
 
           // Send notification notice (non-fatal: missing permissions won't block the memory save).
-          // The expand helper attaches a "Show Full Memory" button when the
-          // processed content exceeds 200 chars (the embed truncation threshold).
           try {
             await sendMemoryEmbedWithExpand(
               context.channel,
@@ -523,10 +494,7 @@ export class MemoryTool extends BaseTool {
                 descriptionKey: "genai.self_teach.personal_memory_learned_description",
                 descriptionVars: {
                   user_nickname: targetUserDisplayName,
-                  memory_content:
-                    processedMemoryContent.length > 200
-                      ? `${processedMemoryContent.substring(0, 197)}...`
-                      : processedMemoryContent,
+                  memory_content: memoryPreview.text,
                 },
                 footerKey: personalMemoryFooterKey,
               },
@@ -588,6 +556,4 @@ export class MemoryTool extends BaseTool {
       },
     };
   }
-
-  // Removed unused helper methods - functionality moved to main execute method
 }

@@ -1,6 +1,70 @@
-import { describe, expect, it } from "bun:test";
-import { OpenrouterStreamAdapter } from "@/providers/openrouter/openrouterStreamAdapter";
-import type { RawStreamChunk } from "@/types/stream/interfaces";
+import { afterEach, describe, expect, it } from "bun:test";
+import { OpenrouterStreamAdapter, type OpenrouterStreamConfig } from "@/providers/openrouter/openrouterStreamAdapter";
+import type { RawStreamChunk, StreamContext } from "@/types/stream/interfaces";
+
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
+
+function makeSseResponse(events: unknown[]): Response {
+  const body = events.map((event) => `data: ${typeof event === "string" ? event : JSON.stringify(event)}\n\n`).join("");
+  return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+}
+
+function makeStreamConfig(): OpenrouterStreamConfig {
+  return {
+    model: "example/model",
+    apiKey: "test-key",
+    temperature: 0.8,
+    topP: 0.9,
+    minP: 0.1,
+    logitBias: { "123": -100 },
+    inactivityTimeoutMs: 5_000,
+  } as OpenrouterStreamConfig;
+}
+
+function makeStreamContext(): StreamContext {
+  return {
+    channel: {},
+    client: {},
+    tomoriState: {
+      persona_nickname: "Tomori",
+      trigger_words: [],
+      config: {
+        llm_stop_speaker_pattern_enabled: false,
+        llm_stop_strings: null,
+        thinking_level: "none",
+      },
+    },
+    contextItems: [],
+    currentTurnModelParts: [],
+    provider: "openrouter",
+    locale: "en-US",
+  } as unknown as StreamContext;
+}
+
+async function collectRawChunks(adapter: OpenrouterStreamAdapter): Promise<RawStreamChunk[]> {
+  const chunks: RawStreamChunk[] = [];
+  for await (const chunk of adapter.startStream(makeStreamConfig(), makeStreamContext())) {
+    chunks.push(chunk);
+  }
+  return chunks;
+}
+
+/**
+ * Consumes a stream to completion and discards the chunks.
+ *
+ * Request assembly and provider-side processing run inside the generator, so a test that asserts on
+ * what the adapter sent has to pull every chunk first. Use `collectRawChunks` when the chunks
+ * themselves are what the test is about.
+ */
+async function drainStream(stream: AsyncIterable<unknown>): Promise<void> {
+  for await (const _chunk of stream) {
+    // Discarded: the assertion reads state the generator wrote while producing them.
+  }
+}
 
 /**
  * Builds a RawStreamChunk wrapping an OpenRouter-shaped data object.
@@ -128,10 +192,8 @@ describe("OpenrouterStreamAdapter.processChunk", () => {
   });
 
   it("assembles a function_call with correct name and args on finishReason tool_calls", () => {
-    // Fresh adapter — accumulator starts empty
     const adapter = new OpenrouterStreamAdapter();
 
-    // Single-chunk tool call: both the delta and the finish reason arrive together
     const result = adapter.processChunk(
       makeOpenrouterChunk({
         choices: [
@@ -156,14 +218,12 @@ describe("OpenrouterStreamAdapter.processChunk", () => {
     expect(result.type).toBe("function_call");
     expect(result.functionCall?.name).toBe("search_web");
     expect(result.functionCall?.args).toEqual({ query: "TomoriBot changelog" });
-    // Visible content must not leak into a function_call chunk
     expect(result.content).toBeUndefined();
   });
 
   it("accumulates split tool-call chunks and resolves on the finish chunk", () => {
     const adapter = new OpenrouterStreamAdapter();
 
-    // 1. First chunk: name arrives
     adapter.processChunk(
       makeOpenrouterChunk({
         choices: [
@@ -179,7 +239,6 @@ describe("OpenrouterStreamAdapter.processChunk", () => {
       }),
     );
 
-    // 2. Second chunk: arguments fragment arrives
     adapter.processChunk(
       makeOpenrouterChunk({
         choices: [
@@ -191,7 +250,6 @@ describe("OpenrouterStreamAdapter.processChunk", () => {
       }),
     );
 
-    // 3. Terminal chunk: finishReason signals the call is complete
     const result = adapter.processChunk(
       makeOpenrouterChunk({
         choices: [{ index: 0, finishReason: "tool_calls", delta: {} }],
@@ -283,5 +341,367 @@ describe("OpenrouterStreamAdapter.handleProviderError", () => {
     expect(typeof result.message).toBe("string");
     expect(typeof result.retryable).toBe("boolean");
     expect(result.originalError).toBe(error);
+  });
+});
+
+describe("OpenrouterStreamAdapter tool history", () => {
+  it("does not duplicate a text-only tool response as a user message", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    globalThis.fetch = (async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return makeSseResponse(["[DONE]"]);
+    }) as typeof fetch;
+
+    const context = makeStreamContext();
+    context.functionInteractionHistory = [
+      {
+        functionCall: { name: "fetch_url", args: { url: "https://example.com" } },
+        functionResponse: {
+          functionResponse: {
+            name: "fetch_url",
+            response: { result: { summary: "Fetched page content" } },
+          },
+        },
+      },
+    ];
+
+    await drainStream(new OpenrouterStreamAdapter().startStream(makeStreamConfig(), context));
+
+    const messages = requestBody?.messages as Array<Record<string, unknown>>;
+    expect(messages.map((message) => message.role)).toEqual(["assistant", "tool"]);
+    expect(String(messages[1]?.content)).toContain("Fetched page content");
+  });
+
+  it("replays a tool-returned image as inline data", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    globalThis.fetch = (async (input, init) => {
+      if (String(input).startsWith("data:")) {
+        return await originalFetch(input, init);
+      }
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return makeSseResponse(["[DONE]"]);
+    }) as typeof fetch;
+
+    const pngBytes = Buffer.from("89504e470d0a1a0a00000000", "hex");
+    const context = makeStreamContext();
+    context.functionInteractionHistory = [
+      {
+        functionCall: { name: "web_search", args: { query: "birds" } },
+        functionResponse: {
+          functionResponse: { name: "web_search", response: { result: "sent" } },
+        },
+        imageMetadata: {
+          imageUrls: [
+            {
+              url: `data:image/jpeg;base64,${pngBytes.toString("base64")}`,
+              mimeType: "image/jpeg",
+              originalUrl: "https://media.discordapp.net/proxy-image.jpg",
+            },
+          ],
+          totalSent: 1,
+          totalValidated: 1,
+        },
+      },
+    ];
+    const config = { ...makeStreamConfig(), seesImages: true };
+
+    await drainStream(new OpenrouterStreamAdapter().startStream(config, context));
+
+    const messages = requestBody?.messages as Array<Record<string, unknown>>;
+    expect(messages[2]).toEqual({
+      role: "user",
+      content: [
+        {
+          type: "image_url",
+          image_url: { url: `data:image/png;base64,${pngBytes.toString("base64")}` },
+        },
+      ],
+    });
+  });
+});
+
+describe("OpenrouterStreamAdapter parameter degradation", () => {
+  it("restarts an uncommitted SSE error with all named parameters removed", async () => {
+    const requestBodies: Array<Record<string, unknown>> = [];
+    globalThis.fetch = (async (_input, init) => {
+      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (requestBodies.length === 1) {
+        return makeSseResponse([
+          {
+            error: {
+              code: 502,
+              message: "Provider returned error",
+              metadata: {
+                raw: "The min_p and logit_bias sampling parameters are not yet supported with speculative decoding.",
+              },
+            },
+          },
+        ]);
+      }
+      return makeSseResponse([{ choices: [{ index: 0, delta: { content: "Recovered" } }] }, "[DONE]"]);
+    }) as typeof fetch;
+
+    const chunks = await collectRawChunks(new OpenrouterStreamAdapter());
+
+    expect(requestBodies).toHaveLength(2);
+    expect(requestBodies[1]).not.toHaveProperty("min_p");
+    expect(requestBodies[1]).not.toHaveProperty("logit_bias");
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.data).toMatchObject({ choices: [{ delta: { content: "Recovered" } }] });
+  });
+
+  it("does not restart an SSE error after visible content commits the stream", async () => {
+    let fetchCalls = 0;
+    globalThis.fetch = (async () => {
+      fetchCalls += 1;
+      return makeSseResponse([
+        { choices: [{ index: 0, delta: { content: "Partial output" } }] },
+        { error: { code: 502, message: "Unsupported parameter: min_p" } },
+      ]);
+    }) as typeof fetch;
+
+    const chunks = await collectRawChunks(new OpenrouterStreamAdapter());
+
+    expect(fetchCalls).toBe(1);
+    expect(chunks).toHaveLength(2);
+    expect(chunks[1]?.data).toMatchObject({ error: { code: 502, message: "Unsupported parameter: min_p" } });
+  });
+
+  it("caps message-targeted retries at three before returning to the static ladder", async () => {
+    const namedParams = ["min_p", "logit_bias", "temperature", "top_p"];
+    const requestBodies: Array<Record<string, unknown>> = [];
+    globalThis.fetch = (async (_input, init) => {
+      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      const namedParam = namedParams[requestBodies.length - 1];
+      return makeSseResponse([
+        {
+          error: {
+            code: 502,
+            message: namedParam ? `Unsupported parameter: ${namedParam}` : "Bad gateway",
+          },
+        },
+      ]);
+    }) as typeof fetch;
+
+    const chunks = await collectRawChunks(new OpenrouterStreamAdapter());
+
+    expect(requestBodies[1]).not.toHaveProperty("min_p");
+    expect(requestBodies[2]).not.toHaveProperty("min_p");
+    expect(requestBodies[2]).not.toHaveProperty("logit_bias");
+    expect(requestBodies[3]).not.toHaveProperty("temperature");
+    expect(requestBodies[3]).toHaveProperty("top_p");
+    expect(requestBodies[4]).toHaveProperty("min_p");
+    expect(requestBodies[4]).toHaveProperty("top_p");
+    expect(chunks.at(-1)?.data).toMatchObject({ error: { code: 502 } });
+  });
+});
+
+/**
+ * Unlike `makeSseResponse`, this reports whether the body was cancelled and never closes the
+ * stream, which is the state an abandoned response is really in: the server has not ended it.
+ */
+function makeCancelObservableSseResponse(events: unknown[]): {
+  response: Response;
+  wasCancelled: () => boolean;
+} {
+  let cancelled = false;
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+      }
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  return {
+    response: new Response(stream, {
+      status: 200,
+      headers: { "Content-Type": "text/event-stream" },
+    }),
+    wasCancelled: () => cancelled,
+  };
+}
+
+/**
+ * A retained response body holds its buffers and its connection. Production heap snapshots showed
+ * these accumulating one per abandoned request, so the teardown is load-bearing rather than tidiness.
+ */
+describe("OpenrouterStreamAdapter response body teardown", () => {
+  it("cancels the body when the consumer stops iterating early", async () => {
+    const { response, wasCancelled } = makeCancelObservableSseResponse([
+      { choices: [{ index: 0, delta: { content: "Hello" } }] },
+    ]);
+    globalThis.fetch = (async () => response) as typeof fetch;
+
+    for await (const _chunk of new OpenrouterStreamAdapter().startStream(makeStreamConfig(), makeStreamContext())) {
+      break;
+    }
+
+    expect(wasCancelled()).toBe(true);
+  });
+
+  it("leaves a body that ended on its own alone", async () => {
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"));
+        controller.close();
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    globalThis.fetch = (async () =>
+      new Response(stream, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      })) as typeof fetch;
+
+    await drainStream(new OpenrouterStreamAdapter().startStream(makeStreamConfig(), makeStreamContext()));
+
+    expect(cancelled).toBe(false);
+  });
+});
+
+describe("OpenrouterStreamAdapter strict chat-completion compatibility", () => {
+  it("leaves representative same-role history unchanged when strict alternation is off by default", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    globalThis.fetch = (async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return makeSseResponse(["[DONE]"]);
+    }) as typeof fetch;
+
+    const context = makeStreamContext();
+    context.contextItems = [
+      { role: "user", parts: [{ type: "text", text: "First user message" }] },
+      { role: "user", parts: [{ type: "text", text: "Second user message" }] },
+      { role: "model", parts: [{ type: "text", text: "First model response" }] },
+      { role: "model", parts: [{ type: "text", text: "Second model response" }] },
+    ];
+
+    await drainStream(new OpenrouterStreamAdapter().startStream(makeStreamConfig(), context));
+
+    const messages = requestBody?.messages as Array<Record<string, unknown>>;
+    expect(messages).toEqual([
+      { role: "user", content: "First user message" },
+      { role: "user", content: "Second user message" },
+      { role: "assistant", content: "First model response" },
+      { role: "assistant", content: "Second model response" },
+    ]);
+  });
+
+  it("merges ordinary same-role turns and inserts leading user turn while preserving tool-call/tool-result wiring", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    globalThis.fetch = (async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return makeSseResponse(["[DONE]"]);
+    }) as typeof fetch;
+
+    const context = makeStreamContext();
+    context.tomoriState.llm = {
+      strict_role_alternation: true,
+    } as unknown as import("@/types/db/schema").LlmRow;
+    context.contextItems = [
+      { role: "model", parts: [{ type: "text", text: "Hello! How can I help?" }] },
+      { role: "user", parts: [{ type: "text", text: "Check this" }] },
+      { role: "user", parts: [{ type: "text", text: "And that" }] },
+    ];
+    context.functionInteractionHistory = [
+      {
+        functionCall: { name: "lookup_data", args: { key: "abc" } },
+        functionResponse: {
+          functionResponse: {
+            name: "lookup_data",
+            response: { result: "found" },
+          },
+        },
+      },
+    ];
+
+    await drainStream(new OpenrouterStreamAdapter().startStream(makeStreamConfig(), context));
+
+    const messages = requestBody?.messages as Array<Record<string, unknown>>;
+    expect(messages[0]).toEqual({ role: "user", content: "[System: Conversation start]" });
+    expect(messages[1]).toEqual({ role: "assistant", content: "Hello! How can I help?" });
+    expect(messages[2]).toEqual({ role: "user", content: "Check this\nAnd that" });
+    expect(messages[3]?.role).toBe("assistant");
+    expect(Array.isArray(messages[3]?.tool_calls)).toBe(true);
+    expect(messages[4]?.role).toBe("tool");
+    expect(messages[4]?.tool_call_id).toBe((messages[3]?.tool_calls as Array<{ id: string }>)[0]?.id);
+    expect(messages).toHaveLength(5);
+  });
+
+  it("omits prefix when supports_prefix_completion is false and includes prefix only on matching trailing assistant prefill when true", async () => {
+    const drainAndCapture = async (
+      supportsPrefix: boolean,
+      currentTurnParts: Array<Record<string, unknown>>,
+      outputPrefill?: string,
+    ): Promise<Record<string, unknown> | undefined> => {
+      let capturedBody: Record<string, unknown> | undefined;
+      globalThis.fetch = (async (_input, init) => {
+        capturedBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return makeSseResponse(["[DONE]"]);
+      }) as typeof fetch;
+
+      const context = makeStreamContext();
+      context.tomoriState.llm = {
+        supports_prefix_completion: supportsPrefix,
+      } as unknown as import("@/types/db/schema").LlmRow;
+      context.contextItems = [{ role: "user", parts: [{ type: "text", text: "Tell me a story" }] }];
+      context.currentTurnModelParts = currentTurnParts;
+      context.outputPrefill = outputPrefill;
+
+      await drainStream(new OpenrouterStreamAdapter().startStream(makeStreamConfig(), context));
+      return capturedBody;
+    };
+
+    const bodyOff = await drainAndCapture(false, [{ text: "Once upon a time" }], "Once upon a time");
+    const messagesOff = bodyOff?.messages as Array<Record<string, unknown>>;
+    expect(messagesOff.at(-1)).toEqual({ role: "assistant", content: "Once upon a time" });
+    expect(messagesOff.at(-1)?.prefix).toBeUndefined();
+
+    const bodyMismatched = await drainAndCapture(true, [{ text: "Once upon a time" }], "Different prefill");
+    const messagesMismatched = bodyMismatched?.messages as Array<Record<string, unknown>>;
+    expect(messagesMismatched.at(-1)?.prefix).toBeUndefined();
+
+    const bodyOn = await drainAndCapture(true, [{ text: "Once upon a time" }], "Once upon a time");
+    const messagesOn = bodyOn?.messages as Array<Record<string, unknown>>;
+    expect(messagesOn.at(-1)).toEqual({ role: "assistant", content: "Once upon a time", prefix: true });
+  });
+
+  it("composes strict role alternation and assistant prefix completion", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    globalThis.fetch = (async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return makeSseResponse(["[DONE]"]);
+    }) as typeof fetch;
+
+    const context = makeStreamContext();
+    context.tomoriState.llm = {
+      strict_role_alternation: true,
+      supports_prefix_completion: true,
+    } as unknown as import("@/types/db/schema").LlmRow;
+    context.contextItems = [
+      { role: "model", parts: [{ type: "text", text: "Opening line" }] },
+      { role: "user", parts: [{ type: "text", text: "First question" }] },
+      { role: "user", parts: [{ type: "text", text: "Second question" }] },
+    ];
+    context.currentTurnModelParts = [{ text: "Let me explain:" }];
+    context.outputPrefill = "Let me explain:";
+
+    await drainStream(new OpenrouterStreamAdapter().startStream(makeStreamConfig(), context));
+
+    const messages = requestBody?.messages as Array<Record<string, unknown>>;
+    expect(messages).toEqual([
+      { role: "user", content: "[System: Conversation start]" },
+      { role: "assistant", content: "Opening line" },
+      { role: "user", content: "First question\nSecond question" },
+      { role: "assistant", content: "Let me explain:", prefix: true },
+    ]);
   });
 });

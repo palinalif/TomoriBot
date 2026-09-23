@@ -5,6 +5,8 @@ import {
   isSupportedVideoAttachmentContentType,
 } from "@/utils/chat/contextMedia";
 import { log } from "@/utils/misc/logger";
+import { DELIBERATE_TOOL_PACK_KEYS, getIntentPackUnion } from "@/utils/text/localeIntentPacks";
+import { isUnspacedScriptText } from "@/utils/text/processors/regexUtils";
 
 export const PERSONAL_DELIBERATE_TOOL_MODES = ["off", "follow", "on"] as const;
 export type PersonalDeliberateToolMode = (typeof PERSONAL_DELIBERATE_TOOL_MODES)[number];
@@ -106,6 +108,20 @@ const URL_TOOL_INTENT_PATTERNS: RegExp[] = [
   /\b(what(?:'s| is)\s+(?:this|on|in)|tell\s+me\s+about\s+this)\b/i,
 ];
 
+const SELF_DIAGNOSTIC_INTENT_PATTERNS: RegExp[] = [
+  /\b(?:capabilities|what\s+can\s+you\s+do|available\s+(?:tools|commands|settings)|review\s+(?:your\s+)?(?:capabilities|settings))\b/i,
+  /\b(?:what|which)\b.{0,50}\b(?:model|provider|tools?|commands?|settings?|configuration|config)\b.{0,80}\b(?:you|your|tomoribot)\b/i,
+  /\b(?:you|your|tomoribot)\b.{0,80}\b(?:model|provider|tools?|commands?|settings?|configuration|config)\b/i,
+  /\b(?:is|are)\b.{0,80}\b(?:web\s+search|memory|image\s+generation|video\s+generation|voice|tools?|feature)\b.{0,80}\b(?:enabled|available|configured|supported|working)\b/i,
+  /\bwhy\b.{0,100}\b(?:can(?:not|'t)|could(?:\s+not|n't)|did(?:\s+not|n't)|won't|failed\s+to)\b.{0,80}\b(?:you|tomoribot)\b/i,
+  /\bwhy\b.{0,40}\b(?:do|does)\b.{0,40}\b(?:you|tomoribot)\b.{0,80}\b(?:forget|remember|search|generate|respond|behave)\b/i,
+  /\bhow\s+(?:does|do)\s+(?:your|tomoribot(?:'s)?)\b.{0,100}\b(?:work|behave|remember|forget|search|generate|respond)\b/i,
+];
+
+function hasSelfDiagnosticIntent(text: string): boolean {
+  return SELF_DIAGNOSTIC_INTENT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 const CROSS_CHANNEL_INTENT_PATTERNS: RegExp[] = [
   /\bcross[-_\s]?channel\b.{0,80}\b(?:message|send|post|peek|check|boomerang|tool|function)\b/i,
   /\b(?:send|post|say|tell|ask|message|write)\b.{0,120}\b(?:in|to|into|over\s+in)\s+(?:<#\d+>|#[^\s]+|`[^`]+`)/iu,
@@ -128,6 +144,23 @@ const MESSAGE_METADATA_INTENT_PATTERNS: RegExp[] = [
   /\b(?:who|which\s+user)\b.{0,80}\b(?:sent|posted|said|wrote)\b/i,
 ];
 
+const USER_BLOCK_INTENT_PATTERNS: RegExp[] = [
+  /\b(?:block|mute)\b.{0,100}\b(?:user|member|person|them|him|her|someone|@[A-Za-z0-9_.-]+|<@\d+>|[A-Za-z0-9_.-]{2,})\b/i,
+  /\b(?:stop|prevent)\b.{0,100}\b(?:from\s+)?(?:triggering|calling|pinging|talking\s+to)\b.{0,80}\b(?:you|this\s+persona|the\s+persona)\b/i,
+  /\b(?:hide|do\s+not|don't)\b.{0,100}\b(?:their|his|her|that\s+user'?s|the\s+user'?s)\b.{0,80}\b(?:messages|media|context)\b/i,
+];
+
+const USER_UNBLOCK_INTENT_PATTERNS: RegExp[] = [
+  /\b(?:unblock|unmute)\b.{0,100}\b(?:user|member|person|them|him|her|someone|@[A-Za-z0-9_.-]+|<@\d+>|[A-Za-z0-9_.-]{2,})\b/i,
+  /\b(?:remove|clear|delete)\b.{0,100}\b(?:user\s+)?(?:block|mute)\b/i,
+];
+
+const USER_INFO_INTENT_PATTERNS: RegExp[] = [
+  /\b(?:call|address|refer\s+to)\s+(?:me|them|him|her|@[A-Za-z0-9_.-]+|<@\d+>)(?:\s+(?:as|by))?\s+[A-Za-z0-9_.-]+\b/i,
+  /\b(?:my|their|his|her)\s+(?:nickname|name|pronouns?|gender|title|honorific|prefix|suffix|timezone|utc\s*offset)\b/i,
+  /\b(?:change|set|update|clear|forget|use)\b.{0,100}\b(?:nickname|pronouns?|gender|addressing\s+style|title|honorific|prefix|suffix|timezone|utc\s*offset)\b/i,
+];
+
 const TOOL_FOLLOW_UP_PATTERNS: RegExp[] = [
   /\b(?:do|try|make|send|say|generate|run|repeat|redo)\b.{0,80}\b(?:that|it|this|one|again|same)\b/i,
   /\buse\s+(?:that|it|this|one|the\s+same)\b/i,
@@ -140,7 +173,6 @@ const TOOL_FOLLOW_UP_PATTERNS: RegExp[] = [
 const WEB_TOOL_NAMES = [
   "web_search",
   "web-search",
-  "felo-search",
   "iask-search",
   "monica-search",
   "brave_web_search",
@@ -153,6 +185,7 @@ const WEB_TOOL_NAMES = [
   "fetch",
   "url-metadata",
 ];
+const URL_READING_TOOL_NAMES = ["fetch_url", "fetch", "fetch-url", "url-metadata"];
 const REMINDER_TOOL_NAMES = ["create_task", "update_task"];
 const MEMORY_TOOL_NAMES = ["create_long_term_memory", "update_long_term_memory"];
 const IMAGE_GENERATION_TOOL_NAMES = ["generate_image", "generate_image_nai"];
@@ -161,7 +194,6 @@ const VOICE_GENERATION_TOOL_NAMES = ["generate_voice_message"];
 const SHORT_TERM_MEMORY_TOOL_NAMES = ["update_short_term_memory"];
 const MEDIA_ANALYSIS_TOOL_NAMES = [
   "analyze_image",
-  "increase_media_context",
   "peek_profile_picture",
   "process_gif",
   "process_youtube_video",
@@ -170,6 +202,8 @@ const MEDIA_ANALYSIS_TOOL_NAMES = [
 const MESSAGE_ACTION_TOOL_NAMES = ["interact_with_recent_message", "manage_message", "reveal_message_metadata"];
 const CAPABILITY_TOOL_NAMES = ["review_capabilities"];
 const STICKER_TOOL_NAMES = ["select_sticker_for_response"];
+const USER_BLOCKING_TOOL_NAMES = ["block_user", "unblock_user"];
+const USER_INFO_TOOL_NAMES = ["update_user_info"];
 
 export const DELIBERATE_TOOL_TRIGGER_TARGETS = [
   { value: "image", label: "Image generation", toolNames: IMAGE_GENERATION_TOOL_NAMES },
@@ -181,6 +215,8 @@ export const DELIBERATE_TOOL_TRIGGER_TARGETS = [
   { value: "memory", label: "Memory", toolNames: [...MEMORY_TOOL_NAMES, ...SHORT_TERM_MEMORY_TOOL_NAMES] },
   { value: "media-analysis", label: "Media analysis", toolNames: MEDIA_ANALYSIS_TOOL_NAMES },
   { value: "message-action", label: "Message actions", toolNames: MESSAGE_ACTION_TOOL_NAMES },
+  { value: "user-blocking", label: "Persona user blocking", toolNames: USER_BLOCKING_TOOL_NAMES },
+  { value: "user-info", label: "User info updates", toolNames: USER_INFO_TOOL_NAMES },
   { value: "sticker", label: "Sticker selection", toolNames: STICKER_TOOL_NAMES },
   { value: "thread", label: "Thread creation", toolNames: ["create_thread"] },
   { value: "capabilities", label: "Capability review", toolNames: CAPABILITY_TOOL_NAMES },
@@ -232,16 +268,23 @@ export function normalizeDeliberateToolRegexTrigger(trigger: string | null | und
   return (trigger ?? "").trim();
 }
 
+/**
+ * A trailing "*" makes the literal a word-start stem ("lembr*" matches "lembrete"). Han, kana, and
+ * Hangul literals match as substrings, because a letter-boundary requirement rejects nearly every
+ * real use in scripts without spaces or with attached particles.
+ */
 function literalTriggerMatches(text: string, trigger: string): boolean {
   const normalizedTrigger = normalizeDeliberateToolTrigger(trigger);
-  if (!normalizedTrigger) return false;
+  const isStem = normalizedTrigger.length > 1 && normalizedTrigger.endsWith("*");
+  const literal = isStem ? normalizedTrigger.slice(0, -1) : normalizedTrigger;
+  if (!literal) return false;
 
-  const escaped = escapeRegExpLiteral(normalizedTrigger).replace(/\s+/g, "\\s+");
-  const wordLike = /^[\p{L}\p{N}_-]+$/u.test(normalizedTrigger);
-  const pattern = wordLike
-    ? new RegExp(`(^|[^\\p{L}\\p{N}_-])${escaped}($|[^\\p{L}\\p{N}_-])`, "iu")
-    : new RegExp(escaped, "iu");
-  return pattern.test(text);
+  const escaped = escapeRegExpLiteral(literal).replace(/\s+/g, "\\s+");
+  if (isUnspacedScriptText(literal) || !/^[\p{L}\p{N}_-]+$/u.test(literal)) {
+    return new RegExp(escaped, "iu").test(text);
+  }
+  const trailingBoundary = isStem ? "" : "($|[^\\p{L}\\p{N}_-])";
+  return new RegExp(`(^|[^\\p{L}\\p{N}_-])${escaped}${trailingBoundary}`, "iu").test(text);
 }
 
 function regexTriggerMatches(text: string, trigger: string): boolean {
@@ -302,6 +345,10 @@ export function hasDeliberateToolIntent(
 
   if (!text) return false;
 
+  if (getCustomDeliberateToolIntentResult(text, getLocalePackTriggerMap(), "built-in").allowedToolNames.length > 0) {
+    return true;
+  }
+
   if (hasReminderCreationIntent(text)) {
     return true;
   }
@@ -338,12 +385,42 @@ export function hasDeliberateToolIntent(
     return true;
   }
 
+  if (hasSelfDiagnosticIntent(text)) {
+    return true;
+  }
+
+  if (
+    USER_BLOCK_INTENT_PATTERNS.some((pattern) => pattern.test(text)) ||
+    USER_UNBLOCK_INTENT_PATTERNS.some((pattern) => pattern.test(text))
+  ) {
+    return true;
+  }
+
   return URL_PATTERN.test(text) && URL_TOOL_INTENT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+/**
+ * Locale keyword packs expressed as a trigger map, so they reuse the custom-trigger matcher. English
+ * relies on the built-in patterns above and ships empty packs.
+ */
+function getLocalePackTriggerMap(): DeliberateToolTriggerMap {
+  return Object.fromEntries(
+    DELIBERATE_TOOL_TRIGGER_TARGETS.map((target) => [
+      target.value,
+      getIntentPackUnion(DELIBERATE_TOOL_PACK_KEYS[target.value]),
+    ]),
+  );
+}
+
+/** True when any authored locale's keyword pack for `targetValue` matches `text`. */
+export function matchesLocaleDeliberateToolPack(targetValue: DeliberateToolTriggerTarget, text: string): boolean {
+  return getIntentPackUnion(DELIBERATE_TOOL_PACK_KEYS[targetValue]).some((entry) => literalTriggerMatches(text, entry));
 }
 
 function getCustomDeliberateToolIntentResult(
   text: string,
   customTriggers: DeliberateToolTriggerMap | null | undefined,
+  source: DeliberateToolIntentMatchSource = "custom",
 ): DeliberateToolIntentResult {
   const allowedToolNames: string[] = [];
   const matches: DeliberateToolIntentMatch[] = [];
@@ -359,14 +436,14 @@ function getCustomDeliberateToolIntentResult(
         if (!normalizedTrigger) continue;
         // "^" is the deliberate-tool wildcard: expose this target on every turn.
         if (normalizedTrigger !== "^" && !literalTriggerMatches(text, normalizedTrigger)) continue;
-        addToolMatches(allowedToolNames, matches, toolNames, normalizedTrigger, "custom");
+        addToolMatches(allowedToolNames, matches, toolNames, normalizedTrigger, source);
         continue;
       }
 
       if (trigger.type === "regex") {
         const normalizedTrigger = normalizeDeliberateToolRegexTrigger(trigger.value);
         if (!normalizedTrigger || !regexTriggerMatches(text, normalizedTrigger)) continue;
-        addToolMatches(allowedToolNames, matches, toolNames, `/${normalizedTrigger}/`, "custom");
+        addToolMatches(allowedToolNames, matches, toolNames, `/${normalizedTrigger}/`, source);
       }
     }
   }
@@ -397,6 +474,10 @@ export function getDeliberateToolIntentResult(
     };
   }
 
+  const localePackResult = getCustomDeliberateToolIntentResult(text, getLocalePackTriggerMap(), "built-in");
+  allowedToolNames.push(...localePackResult.allowedToolNames);
+  matches.push(...localePackResult.matches);
+
   if (hasReminderCreationIntent(text)) {
     addToolMatches(allowedToolNames, matches, ["create_task"], "reminder/timer request", "built-in");
   }
@@ -406,9 +487,10 @@ export function getDeliberateToolIntentResult(
   }
 
   if (
-    /\b(search|web\s*search|look\s+up|browse|google|fetch|latest|today|current|currently|up[- ]?to[- ]?date|news|recent)\b/i.test(
-      text,
-    ) ||
+    (!hasSelfDiagnosticIntent(text) &&
+      /\b(search|web\s*search|look\s+up|browse|google|fetch|latest|today|current|currently|up[- ]?to[- ]?date|news|recent)\b/i.test(
+        text,
+      )) ||
     (URL_PATTERN.test(text) && URL_TOOL_INTENT_PATTERNS.some((pattern) => pattern.test(text)))
   ) {
     addToolMatches(
@@ -499,6 +581,18 @@ export function getDeliberateToolIntentResult(
     addToolMatches(allowedToolNames, matches, ["reveal_message_metadata"], "message metadata request", "built-in");
   }
 
+  if (USER_BLOCK_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
+    addToolMatches(allowedToolNames, matches, ["block_user"], "persona user block request", "built-in");
+  }
+
+  if (USER_UNBLOCK_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
+    addToolMatches(allowedToolNames, matches, ["unblock_user"], "persona user unblock request", "built-in");
+  }
+
+  if (USER_INFO_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
+    addToolMatches(allowedToolNames, matches, USER_INFO_TOOL_NAMES, "structured user info request", "built-in");
+  }
+
   if (CROSS_CHANNEL_INTENT_PATTERNS.some((pattern) => pattern.test(text))) {
     addToolMatches(allowedToolNames, matches, ["cross_channel_message"], "cross-channel request", "built-in");
   }
@@ -511,12 +605,14 @@ export function getDeliberateToolIntentResult(
     addToolMatches(allowedToolNames, matches, ["create_thread"], "thread request", "built-in");
   }
 
-  if (
-    /\b(capabilities|what\s+can\s+you\s+do|available\s+(?:tools|commands|settings)|review\s+(?:your\s+)?(?:capabilities|settings))\b/i.test(
-      text,
-    )
-  ) {
-    addToolMatches(allowedToolNames, matches, CAPABILITY_TOOL_NAMES, "capability review request", "built-in");
+  if (hasSelfDiagnosticIntent(text)) {
+    addToolMatches(
+      allowedToolNames,
+      matches,
+      [...CAPABILITY_TOOL_NAMES, ...URL_READING_TOOL_NAMES],
+      "self-diagnostic request",
+      "built-in",
+    );
   }
 
   return {

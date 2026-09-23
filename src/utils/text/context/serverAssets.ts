@@ -4,6 +4,7 @@ import type { ServerEmojiRow, ServerStickerRow, AssembledServerConfig, TomoriSta
 import type { ToolPromptMacroResolver } from "@/utils/tools/toolPromptMacros";
 import type { MentionConverter } from "./templates";
 import { serverRepository } from "@/utils/db/repositories/ServerRepository";
+import { isStickerSendable } from "@/utils/discord/stickerAvailability";
 
 type EmojiMetadata =
   | ServerEmojiRow
@@ -103,7 +104,7 @@ export async function buildServerEmojiContextItem(params: {
   const emojiContent = `## ${params.serverName}'s Emojis\n- ${emojiLines.join("\n- ")}.`;
   const emojiUsage = params.isUserImpersonation
     ? `\nTo use ${params.serverName}'s emojis, write :name: (name only, no IDs). Names are case-insensitive.\n`
-    : `\nTo use ${params.serverName}'s emojis, just write :name: (name only, no IDs). Names are case-insensitive, and {bot} will expand them to the correct custom emoji. {bot} only uses server emojis when it matches their actual mood.\n`;
+    : `\nTo use ${params.serverName}'s emojis, just write :name: (name only, no IDs). Names are case-insensitive. {bot} only uses server emojis when it matches their actual mood.\n`;
 
   return {
     role: "system",
@@ -178,9 +179,9 @@ export async function buildServerStickerContextItem(params: {
     }
   }
 
-  const sortedStickers = Array.from(guildStickersCache.values()).sort(
-    (a, b) => (a.createdTimestamp || 0) - (b.createdTimestamp || 0),
-  );
+  const sortedStickers = Array.from(guildStickersCache.values())
+    .filter((sticker) => isStickerSendable(sticker))
+    .sort((a, b) => (a.createdTimestamp || 0) - (b.createdTimestamp || 0));
   const latestStickerByName = new Map<string, (typeof sortedStickers)[number]>();
   for (const sticker of sortedStickers) {
     if (sticker.name) latestStickerByName.set(sticker.name.toLowerCase(), sticker);

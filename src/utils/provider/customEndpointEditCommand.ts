@@ -98,8 +98,8 @@ function buildEndpointSelectOptions(
   keys: ExecuteCustomEndpointEditOptions["keys"],
 ): SelectOption[] {
   return endpoints.map((endpoint) => {
-    const primaryName = endpoint.model_name?.trim() || endpoint.display_name;
-    const description = `${getCapabilityLabel(locale, keys, endpoint.capability)} — ${endpoint.display_name}`;
+    const primaryName = endpoint.model_name?.trim() || endpoint.label;
+    const description = `${getCapabilityLabel(locale, keys, endpoint.capability)} — ${endpoint.label}`;
     return {
       label: safeSelectOptionText(`${endpoint.label} — ${primaryName}`),
       value: getEndpointSelectionValue(endpoint),
@@ -143,9 +143,9 @@ function buildEndpointSummaryEmbed(locale: string, endpoint: CustomEndpointRow):
     );
   }
 
-  if (endpoint.display_name) {
+  if (endpoint.label) {
     lines.push(
-      `**${localizer(locale, "commands.config.custom_models.capability_modal.display_name_label")}:** ${endpoint.display_name}`,
+      `**${localizer(locale, "commands.config.custom_models.capability_modal.display_name_label")}:** ${endpoint.label}`,
     );
   }
 
@@ -331,7 +331,6 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
     locale,
     {
       modelName: existingEndpoint.model_name,
-      displayName: existingEndpoint.display_name,
       endpointUrl: existingEndpoint.endpoint_url,
       numCtx: existingEndpoint.num_ctx,
       hasTools: existingEndpoint.has_tools,
@@ -382,7 +381,6 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
 
     // Merge parsed values with existing, treating blank text inputs as "keep existing".
     const endpointUrl = parsed.endpointUrl || existingEndpoint.endpoint_url;
-    const displayName = parsed.displayName || existingEndpoint.display_name;
     const modelName =
       parsed.modelName !== null
         ? parsed.modelName || existingEndpoint.model_name || null
@@ -482,7 +480,6 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
       capability: existingEndpoint.capability,
       apiStyle: existingEndpoint.api_style,
       endpointUrl,
-      displayName,
       modelName,
       authToken,
       numCtx,
@@ -516,7 +513,6 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
           .setTitle(localizer(locale, keys.successTitle))
           .setDescription(
             localizer(locale, keys.successDescription)
-              .replace("{display_name}", displayName)
               .replace("{label}", existingEndpoint.label)
               .replace("{capability}", existingEndpoint.capability),
           ),

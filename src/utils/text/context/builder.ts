@@ -2,7 +2,7 @@ import { getCachedActivePreset } from "@/utils/cache/stPresetCache";
 import { personaRepository } from "@/utils/db/repositories";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
 import { reassembleWithPreset } from "@/utils/text/presetContextBuilder";
-import { createToolPromptMacroResolver } from "@/utils/tools/toolPromptMacros";
+import { createToolPromptMacroResolver, resolvePromptCapabilityValues } from "@/utils/tools/toolPromptMacros";
 import { buildContextNative } from "./nativeBuilder";
 import { resolveRandomChoiceMacrosInBuildOutput } from "./templates";
 import type { BuildContextParams, BuildContextResult } from "./types";
@@ -29,6 +29,8 @@ export async function buildContext(params: BuildContextParams): Promise<BuildCon
           params.simplifiedMessageHistory.filter((message) => message.authorType === "user").at(-1)?.content ?? "";
         const presetToolPromptMacroResolver = createToolPromptMacroResolver({
           provider: tomoriStateForPreset?.llm?.llm_provider,
+          capabilities: resolvePromptCapabilityValues(params.tomoriConfig),
+          deliberateToolAllowedNames: params.deliberateToolAllowedNames,
           stateForContext:
             tomoriStateForPreset?.server_id && tomoriStateForPreset.llm
               ? {
@@ -46,6 +48,8 @@ export async function buildContext(params: BuildContextParams): Promise<BuildCon
                     imagegen_enabled: params.tomoriConfig.imagegen_enabled,
                     videogen_enabled: params.tomoriConfig.videogen_enabled,
                     voice_message_enabled: params.tomoriConfig.voice_message_enabled,
+                    user_blocking_enabled: params.tomoriConfig.user_blocking_enabled,
+                    user_info_updates_enabled: params.tomoriConfig.user_info_updates_enabled,
                     thread_creation_enabled: params.tomoriConfig.thread_creation_enabled,
                   },
                 }
@@ -68,6 +72,8 @@ export async function buildContext(params: BuildContextParams): Promise<BuildCon
             client: params.client,
             guildId: params.guildId,
             triggererName: params.triggererName,
+            triggererFormattedName: params.triggererFormattedName,
+            triggererAddressTerm: params.triggererAddressTerm,
             botName: params.tomoriNickname,
             personalMemoriesEnabled: params.tomoriConfig.personal_memories_enabled ?? true,
             toolPromptMacroResolver: presetToolPromptMacroResolver,

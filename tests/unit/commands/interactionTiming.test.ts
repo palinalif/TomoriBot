@@ -4,9 +4,9 @@
  * Verifies that command execute() functions follow the Discord acknowledgement
  * rules documented in docs/subsystems/command-system.md:
  *
- *   Contract 1 — Modal commands: showModal() fires without a preceding deferReply().
- *   Contract 2 — Async commands: deferReply() is the first call; editReply() follows.
- *   Contract 3 — Guard paths: a single reply() is the only acknowledgement;
+ *   Contract 1: Modal commands: showModal() fires without a preceding deferReply().
+ *   Contract 2: Async commands: deferReply() is the first call; editReply() follows.
+ *   Contract 3: Guard paths: a single reply() is the only acknowledgement;
  *                no interaction is acknowledged twice.
  *
  * All tests use the fake interaction harness from tests/helpers/fakeInteraction.ts
@@ -17,35 +17,45 @@ import { describe, expect, it, mock } from "bun:test";
 import type { Client } from "discord.js";
 import type { UserRow } from "@/types/db/schema";
 import { makeFakeInteraction, callMethods } from "../../helpers/fakeInteraction";
+import { createScopedModuleMocker, overrideMembers, stubLogMembers } from "../../helpers/mockSurface";
+// Real namespaces captured at link time, before any `mock.module` below runs.
+// Spreading them keeps each factory full-surface: `mock.module` is process-global
+// and never restored, so an omitted export breaks files loaded later.
+import * as realTomoriStateCache from "@/utils/cache/tomoriStateCache";
+import * as realRepositories from "@/utils/db/repositories";
+import * as realInteractionCore from "@/utils/discord/ui/interactionCore";
+import * as realLocalizer from "@/utils/text/localizer";
 
-// ─── Module mocks ──────────────────────────────────────────────────────────────
 // All mock.module() calls are hoisted by bun before static imports are resolved.
 // They must appear before the first dynamic import() of any command module.
 //
 // Key design choice: mock @/utils/discord/ui/interactionCore rather than the
-// individual barrel re-exports (ui/modals, ui/embeds, ui/buttons, etc.).
+// individual barrel re-exports (ui/modals, ui/embeds, etc.).
 // The barrels just re-export from interactionCore, so mocking the source once
 // keeps all import paths consistent and avoids "ambiguous multiple bindings"
 // errors that arise when two barrels independently re-export the same name
 // (e.g. safeSelectOptionText) while one of them is replaced with a mock.
 
-mock.module("@/utils/misc/logger", () => ({
-  ColorCode: {
-    SUCCESS: 0x57f287,
-    WARN: 0xfee75c,
-    ERROR: 0xed4245,
-    INFO: 0x5865f2,
-  },
-  log: {
-    error: () => undefined,
-    info: () => undefined,
-    warn: () => undefined,
-    success: () => undefined,
-    section: () => undefined,
-  },
-}));
+// The real `ColorCode` enum passes through the spread, keeping its hex STRING
+// values for modules that call string methods on them at load time (e.g.
+// contextEmbeds.ts does ColorCode.ERROR.replace("#", "")).
+const scopedMock = createScopedModuleMocker(mock, {
+  "@/utils/text/localizer": realLocalizer,
+  "@/utils/discord/ui/interactionCore": realInteractionCore,
+  "@/utils/cache/tomoriStateCache": realTomoriStateCache,
+  "@/utils/db/repositories": realRepositories,
+});
 
-mock.module("@/utils/text/localizer", () => ({
+stubLogMembers({
+  error: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  success: () => undefined,
+  section: () => undefined,
+});
+
+scopedMock.module("@/utils/text/localizer", () => ({
+  ...realLocalizer,
   /**
    * Returns the key so assertions don't depend on locale file content.
    * Image-footer keys are rendered because generated image payload tests can run
@@ -64,8 +74,8 @@ mock.module("@/utils/text/localizer", () => ({
 }));
 
 /**
- * interactionCore mock — the single source that all UI barrels re-export from.
- * Mocking here ensures ui/modals, ui/embeds, ui/buttons, etc. all see the same
+ * interactionCore mock: the single source that all UI barrels re-export from.
+ * Mocking here ensures ui/modals, ui/embeds, etc. all see the same
  * stub without creating duplicate-binding conflicts in the barrel chain.
  *
  * replyInfoEmbed faithfully replicates state-based routing so reply() / editReply()
@@ -73,8 +83,9 @@ mock.module("@/utils/text/localizer", () => ({
  * promptWithRawModal and promptWithPaginatedModal call showModal() then return
  * "timeout" so commands exit cleanly without a real awaitModalSubmit loop.
  */
-mock.module("@/utils/discord/ui/interactionCore", () => ({
-  // ── used directly by commands under test ────────────────────────────────
+scopedMock.module("@/utils/discord/ui/interactionCore", () => ({
+  ...realInteractionCore,
+  // Used directly by commands under test.
   replyInfoEmbed: async (
     interaction: {
       deferred: boolean;
@@ -110,27 +121,18 @@ mock.module("@/utils/discord/ui/interactionCore", () => ({
     return { outcome: "timeout" as const };
   },
   safeSelectOptionText: (text: string) => text,
-  // ── stubs for exports not exercised by these tests ────────────────────
   replySummaryEmbed: async () => undefined,
   replyComponentsV2Status: async () => undefined,
   updateButtonComponentsV2Status: async () => undefined,
   acknowledgeModalSubmitForRefresh: async () => undefined,
   promptWithConfirmation: async () => ({ confirmed: false }),
   promptWithUnacknowledgedConfirmation: async () => ({ confirmed: false }),
-  promptWithModal: async (
-    interaction: { showModal: (...a: unknown[]) => Promise<void> },
-    _locale: string,
-    _options: unknown,
-  ) => {
-    await interaction.showModal({});
-    return { outcome: "timeout" as const };
-  },
   replyPaginatedChoices: async () => ({ outcome: "timeout" }),
   replyPaginatedPersonaChoicesV2: async () => ({ outcome: "timeout", reason: "timeout" }),
   replyPaginatedStatusPages: async () => undefined,
 }));
 
-/** Fake Tomori state returned by cache lookups — has the fields /nsfw jailbreaks reads. */
+/** Fake Tomori state returned by cache lookups: has the fields /nsfw jailbreaks reads. */
 const fakeTomoriState = {
   server_id: 1,
   persona_id: 1,
@@ -143,47 +145,46 @@ const fakeTomoriState = {
   },
 };
 
-mock.module("@/utils/cache/tomoriStateCache", () => ({
+scopedMock.module("@/utils/cache/tomoriStateCache", () => ({
+  ...realTomoriStateCache,
   getCachedTomoriState: async () => fakeTomoriState,
   invalidateTomoriStateCache: () => undefined,
   getLastDbError: () => null,
 }));
 
 /**
- * Repositories mock — re-declared here to ensure it is comprehensive even when
- * a prior test file (e.g. generationTurnFallback.test.ts) applied a partial mock
- * that only exports llmProviderRepo.  Bun's mock registry is global across files,
- * so the last mock.module call for a path wins; we must explicitly set what our
- * test commands need rather than relying on the partial mock from another file.
+ * Repositories mock. Bun's mock registry is global across files and the last
+ * mock.module call for a path wins, so this must not rely on another file's
+ * factory. It spreads the real barrel and delegates through each repository
+ * instance's prototype, overriding only the methods these commands drive.
  *
  * Commands under test:
- *   /nsfw jailbreaks  — imports configRepository (never calls it in our paths)
- *   /tool ping        — no repository imports
- *   /tool comment     — no repository imports
+ *   /nsfw jailbreaks : imports configRepository (never calls it in our paths)
+ *   /ping            : no repository imports
+ *   /comment         : no repository imports
  */
-mock.module("@/utils/db/repositories", () => ({
-  configRepository: {
+scopedMock.module("@/utils/db/repositories", () => ({
+  ...realRepositories,
+  configRepository: overrideMembers(realRepositories.configRepository, {
     updateNsfwConfig: async () => true,
-  },
-  personaRepository: {
+  }),
+  personaRepository: overrideMembers(realRepositories.personaRepository, {
     loadAllForServer: async () => [],
     hasNicknameConflict: async () => false,
     renamePersona: async () => true,
     addTrigger: async () => true,
-  },
-  llmProviderRepo: {
+  }),
+  llmProviderRepo: overrideMembers(realRepositories.llmProviderRepo, {
     loadSavedProviderConfig: async () => null,
-  },
-  userRepository: {
+  }),
+  userRepository: overrideMembers(realRepositories.userRepository, {
     loadOrCreateUser: async () => null,
     updateLastSeen: async () => undefined,
-  },
-  serverRepository: {
+  }),
+  serverRepository: overrideMembers(realRepositories.serverRepository, {
     loadServerState: async () => null,
-  },
+  }),
 }));
-
-// ─── Shared test helpers ───────────────────────────────────────────────────────
 
 /** Minimal UserRow that satisfies the execute() signature. */
 function makeUserData(): UserRow {
@@ -194,7 +195,7 @@ function makeUserData(): UserRow {
   } as unknown as UserRow;
 }
 
-/** Empty Client stub — commands that don't use the client still receive one. */
+/** Empty Client stub: commands that don't use the client still receive one. */
 function makeClient(): Client {
   return {} as unknown as Client;
 }
@@ -211,8 +212,6 @@ function makeFakeGuildChannel(): object {
   };
 }
 
-// ─── Contract 1: Modal command — /nsfw jailbreaks ─────────────────────────────
-//
 // Pattern 3 (command-system.md): the first interaction acknowledgement must be
 // showModal(). No deferReply() should appear before or instead of the modal.
 
@@ -282,23 +281,21 @@ describe("Contract 1: modal command /nsfw jailbreaks", () => {
     const { execute } = await import("@/commands/nsfw/jailbreaks");
     await execute(makeClient(), interaction as never, makeUserData(), "en-US");
 
-    // reply() and deferReply() are mutually exclusive — only showModal() is expected
+    // reply() and deferReply() are mutually exclusive only showModal() is expected
     expect(callMethods(calls)).not.toContain("reply");
     expect(callMethods(calls)).not.toContain("deferReply");
   });
 });
 
-// ─── Contract 2: Async defer command — /tool ping ─────────────────────────────
-//
 // Pattern 2 (command-system.md): deferReply() must be the very first call.
 // All async work (fetchReply, latency measurement) happens after the deferral.
 // The final response goes through editReply(), not reply().
 
-describe("Contract 2: async defer command /tool ping", () => {
+describe("Contract 2: async defer command /ping", () => {
   it("calls deferReply() as the first acknowledgement", async () => {
     const { interaction, calls } = makeFakeInteraction();
 
-    const { execute } = await import("@/commands/tool/ping");
+    const { execute } = await import("@/commands/ping");
     await execute(makeClient(), interaction as never, makeUserData(), "en-US");
 
     expect(calls[0]?.method).toBe("deferReply");
@@ -307,7 +304,7 @@ describe("Contract 2: async defer command /tool ping", () => {
   it("follows deferReply() with editReply() — not a second reply()", async () => {
     const { interaction, calls } = makeFakeInteraction();
 
-    const { execute } = await import("@/commands/tool/ping");
+    const { execute } = await import("@/commands/ping");
     await execute(makeClient(), interaction as never, makeUserData(), "en-US");
 
     const methods = callMethods(calls);
@@ -321,20 +318,20 @@ describe("Contract 2: async defer command /tool ping", () => {
   it("produces exactly two acknowledgement calls: deferReply then editReply", async () => {
     const { interaction, calls } = makeFakeInteraction();
 
-    const { execute } = await import("@/commands/tool/ping");
+    const { execute } = await import("@/commands/ping");
     await execute(makeClient(), interaction as never, makeUserData(), "en-US");
 
     expect(callMethods(calls)).toEqual(["deferReply", "editReply"]);
   });
 });
 
-// ─── Contract 3: Guard-path no-double-ack — /tool comment ─────────────────────
+// ─── Contract 3: Guard-path no-double-ack: /comment ─────────────────────
 //
 // Pattern 1 / Pattern 5 (command-system.md): fast validation paths that exit
 // early must use a single reply(). The normal async path must defer first and
 // never double-acknowledge the same interaction.
 
-describe("Contract 3: /tool comment acknowledgement ordering", () => {
+describe("Contract 3: /comment acknowledgement ordering", () => {
   it("non-guild early-exit: sends exactly one reply() with no prior deferReply()", async () => {
     // Arrange: no guild → command hits the guild-only guard and returns after replyInfoEmbed
     const { interaction, calls } = makeFakeInteraction({
@@ -342,13 +339,13 @@ describe("Contract 3: /tool comment acknowledgement ordering", () => {
       channel: null,
     });
 
-    const { execute } = await import("@/commands/tool/comment");
+    const { execute } = await import("@/commands/comment");
     await execute(makeClient(), interaction as never, makeUserData(), "en-US");
 
     const methods = callMethods(calls);
     // Exactly one acknowledgement: reply() from replyInfoEmbed
     expect(methods).toEqual(["reply"]);
-    // Never deferred — the guard fires before any async work
+    // Never deferred: the guard fires before any async work
     expect(methods).not.toContain("deferReply");
   });
 
@@ -358,7 +355,7 @@ describe("Contract 3: /tool comment acknowledgement ordering", () => {
       channel: null,
     });
 
-    const { execute } = await import("@/commands/tool/comment");
+    const { execute } = await import("@/commands/comment");
     await execute(makeClient(), interaction as never, makeUserData(), "en-US");
 
     const methods = callMethods(calls);
@@ -391,18 +388,18 @@ describe("Contract 3: /tool comment acknowledgement ordering", () => {
       },
     });
 
-    const { execute } = await import("@/commands/tool/comment");
+    const { execute } = await import("@/commands/comment");
     await execute(makeClient(), interaction as never, makeUserData(), "en-US");
 
     const methods = callMethods(calls);
 
-    // 1. Defer is first (before any async work like channel.send)
+    // Defer is first (before any async work like channel.send)
     expect(methods[0]).toBe("deferReply");
 
-    // 2. editReply appears as the final acknowledgement (via replyInfoEmbed after defer)
+    // editReply appears as the final acknowledgement (via replyInfoEmbed after defer)
     expect(methods).toContain("editReply");
 
-    // 3. reply() must not appear — using editReply after deferReply is the correct pattern
+    // reply() must not appear: using editReply after deferReply is the correct pattern
     expect(methods).not.toContain("reply");
   });
 
@@ -428,7 +425,7 @@ describe("Contract 3: /tool comment acknowledgement ordering", () => {
       },
     });
 
-    const { execute } = await import("@/commands/tool/comment");
+    const { execute } = await import("@/commands/comment");
     await execute(makeClient(), interaction as never, makeUserData(), "en-US");
 
     const methods = callMethods(calls);

@@ -18,11 +18,26 @@ export type StreamStopRequest = {
 
 const activeStopRequests = new Map<string, StreamStopRequest>();
 
+/**
+ * Requester ids raised by the delivery layer itself rather than by a user or another turn.
+ *
+ * These are scoped to the stream that raised them: unlike a `/kill`, they carry no
+ * stopContext and have no meaning once that stream ends, so any exit path that does not
+ * surface them as a stop must clear them before the next turn reads the registry.
+ */
+export const INTERNAL_STOP_REQUESTER_IDS: ReadonlySet<string> = new Set([
+  "speaker_guard",
+  "send_message_limit",
+  "flush_limit",
+  "channel_deleted",
+  "missing_access",
+]);
+
 export function isSilentSpeakerGuardStop(requesterId: string | undefined, state: StreamState): boolean {
   return requesterId === "speaker_guard" && state.messageSentCount === 0 && !state.accumulatedText.trim();
 }
 
-export function getStopReasonFromRequesterId(requesterId?: string): StreamStopReason {
+function getStopReasonFromRequesterId(requesterId?: string): StreamStopReason {
   switch (requesterId) {
     case undefined:
     case "system":
@@ -33,6 +48,10 @@ export function getStopReasonFromRequesterId(requesterId?: string): StreamStopRe
       return "send_message_limit";
     case "flush_limit":
       return "flush_limit";
+    case "channel_deleted":
+      return "channel_deleted";
+    case "missing_access":
+      return "missing_access";
     default:
       return "user_request";
   }

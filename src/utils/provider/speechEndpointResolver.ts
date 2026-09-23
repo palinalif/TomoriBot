@@ -1,6 +1,6 @@
 import type { CustomEndpointRow } from "@/types/db/schema";
 import { log } from "@/utils/misc/logger";
-import { buildServerCustomProviderName } from "@/utils/provider/customProviderUtils";
+import { buildCustomProviderName } from "@/utils/provider/customProviderUtils";
 import { decryptApiKey } from "@/utils/security/crypto";
 import { loadActiveEndpoint, loadEndpointCredentials } from "@/utils/db/repositories/SpeechRepository";
 
@@ -14,7 +14,6 @@ export interface SpeechEndpointResult {
  * Resolves the active speech or transcription endpoint for a server by querying
  * `custom_endpoints` directly (capability-first lookup, bypassing the LLM/model chain).
  *
- * @param serverId - Database server_id
  * @param capability - "speech" or "transcription"
  * @returns Endpoint row + decrypted API key, or null if none is registered
  */
@@ -23,20 +22,20 @@ async function resolveActiveEndpointByCapability(
   capability: "speech" | "transcription",
 ): Promise<SpeechEndpointResult | null> {
   try {
-    // 1. Find the active (is_default) custom endpoint for this capability on the server via repository
+    // Find the active (is_default) custom endpoint for this capability on the server via repository
     const endpoint = await loadActiveEndpoint(serverId, capability);
 
-    if (!endpoint) {
+    if (!endpoint?.connection_id) {
       return null;
     }
 
-    // 2. Endpoints that don't require auth (local servers) need no key lookup.
+    // Endpoints that don't require auth (local servers) need no key lookup.
     if (!endpoint.requires_auth) {
       return { endpoint, apiKey: "" };
     }
 
-    // 3. Credentials are stored in saved_provider_configs keyed by the internal provider name via repository
-    const providerName = buildServerCustomProviderName(serverId, endpoint.label);
+    // Credentials are stored in saved_provider_configs keyed by the internal provider name via repository
+    const providerName = buildCustomProviderName(endpoint.connection_id);
     const configRow = await loadEndpointCredentials(serverId, providerName);
 
     if (!configRow?.api_key) {

@@ -1,5 +1,3 @@
-// locales/en-US/tools.ts
-
 export default {
   tools: {
     generate_image: {
@@ -19,10 +17,12 @@ export default {
       quota_resets_in_days: `Quota resets in {days} day(s).`,
       quota_remaining: `You have {remaining} video(s) remaining for today.`,
       file_too_large: `The generated video ({size_mb} MB) exceeds Discord's 25 MB file size limit.`,
+      reference_unsupported: `The selected OpenRouter model \`{model}\` cannot use an image as the exact first frame. Remove the reference image or choose a compatible video model.`,
+      loop_unsupported: `The selected OpenRouter model \`{model}\` cannot use a last frame for looping video. Disable looping or choose a compatible video model.`,
     },
     generate_image_nai: {
-      no_google_api_key: `Inpainting requires saved Google provider credentials for image segmentation. Add them with \`/config provider add\`, or switch to the Google provider.`,
-      model_not_configured: `NovelAI image generation is disabled right now. Select a NovelAI image model with \`/model image\` first.`,
+      no_google_api_key: `Inpainting requires saved Google provider credentials for image segmentation. Add them with \`/providers\`, or switch to the Google provider.`,
+      model_not_configured: `NovelAI image generation is disabled right now. Select a NovelAI image model with \`/config\` > Models > Switch Models first.`,
       provider_quota_exceeded: `NovelAI image generation quota is exhausted for this account. Recharge Anlas or wait for the quota to refresh, then try again.`,
       characters_require_v4: `Character positioning requires a NovelAI V4 diffusion model or newer.`,
       character_requires_id_or_tags: `Character entry #{index} must include either an id or tags.`,
@@ -30,11 +30,6 @@ export default {
     },
     search: {
       category_search_title: `🔍 Searching __{category}__ for \`{query}\`...`,
-      web_search_title: `🔍 Searching for \`{query}\` on the web...`,
-      image_search_title: `🔍 Searching for \`{query}\` images...`,
-      video_search_title: `🔍 Searching for \`{query}\` videos...`,
-      news_search_title: `🔍 Searching for \`{query}\` in the news...`,
-      searxng_search_title: `🔍 Searching SearXNG for \`{query}\`...`,
       category_labels: {
         text: `the web`,
         image: `images`,
@@ -54,8 +49,50 @@ export default {
       tool_invoke_no_params: `No parameters.`,
     },
     tool_notice: {
-      hide_footer: `Hide this using \`/config notice-embeds visibility\``,
-      hide_footer_with_kill: `Hide this using \`/config notice-embeds visibility\` · Use \`/bot kill\` if you think I'm stuck`,
+      hide_footer: `Hide this using \`/config\` > Behavior > Notices`,
+      hide_footer_with_kill: `Hide this using \`/config\` > Behavior > Notices · Use \`/kill\` if you think I'm stuck`,
+    },
+    user_block: {
+      type_mute: `mute`,
+      type_block: `block`,
+      effect_mute: `The target cannot trigger this persona.`,
+      effect_block: `The target cannot trigger this persona, and their recent messages/media are hidden from this persona's context.`,
+      block_mute_title: `🔇 {persona_name} Muted {user_name} for {duration_hours} hour(s)`,
+      block_block_title: `❌ {persona_name} Blocked {user_name} for {duration_hours} hour(s)`,
+      block_success_description: `{user_name} cannot trigger {persona_name} and their messages/media are now hidden until {expires_at}.`,
+      mute_success_description: `{user_name} cannot trigger {persona_name} until {expires_at}.`,
+      block_footer: `Server managers may remove this with /moderation. Disable blocking through /capabilities manage`,
+      unmute_success_title: `🔊 {persona_name} Unmuted {user_name}`,
+      unblock_success_title: `✅ {persona_name} Unblocked {user_name}`,
+      unblock_success_description: `Removed the active {block_type} for {user_name} from {persona_name}.`,
+    },
+    user_info_update: {
+      success_title: `✅ Updated {target_user}'s Profile`,
+      success_intro: `Updated the following:`,
+      change_line: `{index}. {field}: \`{previous}\` → \`{next}\``,
+      success_summary: `{persona_name} now calls {target_user} "{formatted_name}".`,
+      success_footer: `{target_user} can manage this anytime with \`/personal\``,
+      value_none: `none`,
+      value_cleared: `cleared`,
+      value_unspecified: `unspecified`,
+      error_disabled: `User info updates are disabled for this server.`,
+      error_invalid_changes: `The requested profile changes are invalid.`,
+      error_specific_target: `A specific user is required.`,
+      error_duplicate_change: `Each field and scope may appear only once.`,
+      error_ambiguous_target: `Multiple users matched the requested target.`,
+      error_target_not_found: `The requested registered Discord user was not found.`,
+      error_dm_target: `Direct messages can update only the triggering user.`,
+      error_unregistered: `The target must be a registered user.`,
+      error_privacy_restricted: `The target's privacy settings permit clearing values but not adding or changing profile values.`,
+      error_save_failed: `The profile update could not be saved.`,
+      field_persona_scoped: `{field} ({persona_name} only)`,
+      field_nickname: `Nickname`,
+      field_prefix: `Naming prefix`,
+      field_suffix: `Naming suffix`,
+      field_gender_identity: `Gender identity`,
+      field_pronouns: `Pronouns`,
+      field_addressing_style: `Addressing style`,
+      field_timezone_offset: `Timezone`,
     },
     video: {
       youtube_processing_title: `👁️  Watching YouTube Video...`,
@@ -69,6 +106,7 @@ export default {
       notice_reference_line: `Reference: {message_url}`,
       notice_reference_count_line: `Using {count} reference image(s).`,
       generating_footer: `This may take 1-3 minutes.`,
+      generated_after_seconds_line: `Generated in {seconds} seconds`,
     },
     document: {
       reading_title: `📄 Reading File Contents...`,
@@ -101,7 +139,7 @@ export default {
     },
     vision: {
       analyzing_title: `🖼️  Analyzing Image...`,
-      analyzing_description: `Current model is non-vision; using configured vision model to analyze images.`,
+      analyzing_description: `Current model is non-vision; using the vision model configured on \`/config\` > Models > Switch Models ({model}) to analyze images.`,
       analyzing_footer: `This may take a moment depending on image count`,
     },
     gif: {
@@ -112,12 +150,39 @@ export default {
     fetch: {
       fetch_url_title: `🌐  Reading Webpage...`,
       fetch_failed_description: `I couldn't fetch that page: {error}`,
-      private_network_blocked_description: `I couldn't fetch that page because it points to a private or internal network address. TomoriBot blocks those by default with \`FETCH_URL_ALLOW_PRIVATE_NETWORK=false\`. {error}`,
-      reading_title: `🌐  Reading Webpage...`,
+      private_network_blocked_description: `I couldn't fetch that page because it points to a private or internal network address. TomoriBot blocks those in production unless the host sets \`FETCH_URL_ALLOW_PRIVATE_NETWORK=true\`. {error}`,
       reading_title_page: `🌐  Reading Webpage (Page {page})...`,
       reading_description: `Fetching and reading: {url}`,
       reading_offset_line: `Starting from character {start_index}`,
       reading_footer: `This may take a moment depending on the page size`,
+    },
+    intent_packs: {
+      // English stays empty because the built-in patterns in deliberateToolMode.ts already cover
+      // English grammar; keywords here would widen English matching beyond those patterns.
+      deliberate: {
+        image: [],
+        video: [],
+        voice: [],
+        reminder: [],
+        "cross-channel": [],
+        search: [],
+        memory: [],
+        "media-analysis": [],
+        "message-action": [],
+        "user-blocking": [],
+        "user-info": [],
+        sticker: [],
+        thread: [],
+        capabilities: [],
+      },
+      explicit_memory: [
+        "remember",
+        "don't forget",
+        "note",
+        "commit to memory",
+        "for future conversations",
+        "for future reference",
+      ],
     },
   },
 };

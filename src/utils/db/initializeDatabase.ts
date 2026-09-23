@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { seedNaiPresetsFromCatalog } from "@/db/seed/catalog/naiSeed";
 import { seedPersonasFromCatalog } from "@/db/seed/catalog/personaSeed";
+import { seedPersonaSpritesFromCatalog } from "@/db/seed/catalog/presetSpriteSeed";
+import { seedPersonaAvatarsFromCatalog } from "@/db/seed/catalog/presetAvatarSeed";
 import { seedModelsFromCatalog } from "@/db/seed/catalog/modelSeed";
 import { seedSystemPromptsFromCatalog } from "@/db/seed/catalog/systemPromptSeed";
 import { markAllMigrationsApplied, runMigrations } from "@/db/migrationRunner";
@@ -179,12 +181,11 @@ async function runPreSchemaServerwideQuotaRenameBridge(client: SQL, migrationPat
  *
  * Used by the pre-schema rename bridge to tell an empty rollback artifact
  * (safe to drop) apart from a populated legacy table (must not be touched).
- * `tableName` is always a hardcoded constant from this module — never user
- * input — so interpolating it into the query is safe.
+ * `tableName` is always a hardcoded constant from this module: never user
+ * input so interpolating it into the query is safe.
  *
  * @param client - Active SQL connection.
  * @param tableName - Fully-trusted, hardcoded `public`-schema table identifier.
- * @returns Row count for the table.
  */
 async function countTableRows(client: SQL, tableName: string): Promise<number> {
   const [row] = (await client.unsafe(`SELECT COUNT(*)::INT AS count FROM public.${tableName}`)) as Array<{
@@ -204,13 +205,9 @@ async function countTableRows(client: SQL, tableName: string): Promise<number> {
  * step can reconcile, so we refuse and require human review.
  *
  * No-ops when the pair does not collide (e.g. a legitimate pre-rename database
- * where only the legacy table exists — migration 016 renames it normally).
+ * where only the legacy table exists (migration 016 renames it normally).
  *
  * @param client - Active SQL connection.
- * @param legacyTable - Legacy table name (e.g. "tomoris").
- * @param renamedTable - Post-rename table name (e.g. "personas").
- * @param legacyExists - Whether the legacy table is present.
- * @param renamedExists - Whether the renamed table is present.
  */
 async function resolveLegacyRenameCollision(
   client: SQL,
@@ -219,15 +216,13 @@ async function resolveLegacyRenameCollision(
   legacyExists: boolean,
   renamedExists: boolean,
 ): Promise<void> {
-  // 1. Only a coexisting (legacy + renamed) pair is a collision worth resolving.
   if (!legacyExists || !renamedExists) {
     return;
   }
 
-  // 2. Classify the collision by inspecting the legacy table's row count.
   const legacyRows = await countTableRows(client, legacyTable);
 
-  // 3. Populated legacy table = real data fork. Refuse to auto-resolve.
+  // Populated legacy table = real data fork. Refuse to auto-resolve.
   if (legacyRows > 0) {
     throw new Error(
       `Legacy table "${legacyTable}" (${legacyRows} rows) coexists with renamed table ` +
@@ -236,7 +231,7 @@ async function resolveLegacyRenameCollision(
     );
   }
 
-  // 4. Empty legacy table = rollback artifact. Drop it (CASCADE clears any
+  // Empty legacy table = rollback artifact. Drop it (CASCADE clears any
   //    leftover FKs from sibling legacy tables) and continue.
   await client.unsafe(`DROP TABLE IF EXISTS public.${legacyTable} CASCADE`);
   log.warn(
@@ -263,12 +258,11 @@ async function runPreSchemaPersonaRenameBridge(client: SQL, migrationPath: strin
       to_regclass('public.tomori_configs') IS NOT NULL AS has_tomori_configs
   `;
 
-  // 1. No legacy persona-era tables present: nothing for this bridge to do.
   if (!state?.has_tomoris && !state?.has_tomori_presets && !state?.has_tomori_configs) {
     return;
   }
 
-  // 2. Sweep an empty, deprecated `tomori_configs` first. Migration 008 drops it
+  // Sweep an empty, deprecated `tomori_configs` first. Migration 008 drops it
   //    on the forward path, but pre-008 code re-creates it as an empty shell on
   //    rollback. A *populated* tomori_configs is a legitimate pre-refactor
   //    database that migration 008 rescues + drops, so we leave it untouched.
@@ -283,7 +277,7 @@ async function runPreSchemaPersonaRenameBridge(client: SQL, migrationPath: strin
     }
   }
 
-  // 3. Resolve the rename collisions: drop empty rollback artifacts, refuse
+  // Resolve the rename collisions: drop empty rollback artifacts, refuse
   //    populated data forks. Empty leftovers self-heal so the bot boots; real
   //    data forks still stop here for human review.
   await resolveLegacyRenameCollision(client, "tomoris", "personas", state.has_tomoris, state.has_personas);
@@ -295,9 +289,8 @@ async function runPreSchemaPersonaRenameBridge(client: SQL, migrationPath: strin
     state.has_persona_presets,
   );
 
-  // 4. Apply the idempotent rename migration. This covers the legitimate forward
-  //    case (legacy table present, renamed table absent) and is a no-op once the
-  //    collisions above are cleared.
+  // The idempotent migration handles the normal forward rename and becomes a
+  // no-op after the collision cases above have been resolved.
   await executeSqlFile(client, migrationPath);
   log.success("Pre-schema legacy persona rename bridge applied");
 }
@@ -320,10 +313,13 @@ export async function initializeDatabase(options: InitializeDatabaseOptions = {}
     serverwideQuotaRenameMigrationPath,
     personaRenameMigrationPath,
   } = getSchemaPaths();
-  const ragAvailable = includeRag === "auto" ? await detectRagAvailability(client) : includeRag;
-
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
+      // Probed per attempt rather than once above the loop: a probe that could not reach
+      // the server reports `false`, and skipping the RAG schema on that basis would leave
+      // document features dead until the next restart.
+      const ragAvailable = includeRag === "auto" ? await detectRagAvailability(client) : includeRag;
+
       const freshDatabaseBeforeSchema = await isFreshDatabaseBeforeSchema(client);
 
       await runPreSchemaServerwideQuotaRenameBridge(client, serverwideQuotaRenameMigrationPath);
@@ -337,7 +333,7 @@ export async function initializeDatabase(options: InitializeDatabaseOptions = {}
         log.success("PostgreSQL RAG schema verified");
       } else {
         log.info(
-          "Skipping RAG schema init (pgvector extension not detected). Install pgvector to enable document features (see README.md).",
+          "Skipping RAG schema init (pgvector extension not detected). Install pgvector to enable document features (see https://docs.tomoribot.app/self-hosting/manual-setup/).",
         );
       }
 
@@ -350,6 +346,24 @@ export async function initializeDatabase(options: InitializeDatabaseOptions = {}
 
       await seedPersonasFromCatalog(client);
       log.success("PostgreSQL persona catalog seeded");
+
+      // Preset sprites are seeded after personas (they share the preset lineage)
+      // and upload their shared images once to the immutable `presets/` prefix.
+      // The seeder logs its own zero-seed error, so this line carries the counts that separate a
+      // healthy boot from a damaged one. Each count is per preset variant, because every authored
+      // locale declares the full sprite set.
+      const spriteSeed = await seedPersonaSpritesFromCatalog(client);
+      log.success(
+        `PostgreSQL preset sprite catalog seeded (${spriteSeed.seeded}/${spriteSeed.declarations} declarations seeded, ` +
+          `${spriteSeed.failed} failed, ${spriteSeed.removed} removed, ${spriteSeed.presets} preset variants)`,
+      );
+
+      // Preset avatars follow the same shared-upload model: each persona's avatar
+      // is uploaded once and its URL + content hash recorded on the preset row,
+      // so pointer alters live-resolve it and the main-avatar reconciler can gate
+      // guild-avatar PATCHes on a real byte change.
+      await seedPersonaAvatarsFromCatalog(client);
+      log.success("PostgreSQL preset avatar catalog seeded");
 
       await seedSystemPromptsFromCatalog(client);
       log.success("PostgreSQL system prompt catalog seeded");

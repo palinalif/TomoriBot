@@ -3,12 +3,13 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "astro build && bun run scripts/checkLlmsOutput.ts",
     "preview": "astro preview"
   },
   "devDependencies": {
-    "@astrojs/starlight": "^0.30.0",
-    "astro": "^5.0.0",
-    "picocolors": "^1.1.1"
+    "@astrojs/sitemap": "^3.7.3",
+    "@astrojs/starlight": "^0.41.3",
+    "astro": "^7.2.8",
+    "starlight-llms-txt": "0.11.0"
   }
 }

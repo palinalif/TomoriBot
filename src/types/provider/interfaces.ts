@@ -18,17 +18,19 @@ import type { TomoriState } from "../db/schema";
 import type { StructuredContextItem } from "../misc/context";
 import type { StreamingContext } from "../tool/interfaces";
 import type { ProviderError } from "../stream/interfaces";
+import type { SpriteShownEntry } from "../stream/types";
+import type { TokenUsage } from "@/utils/text/tokenEstimate";
 
 export type ProviderApiFamily = "google-genai" | "openrouter" | "novelai" | "openai-compatible" | "anthropic";
 
 /** LLM generation parameters that providers may support via DB config. */
 export type SupportedParam = SupportedParamValue;
 
-export type ImageGenerationStyle = "chat-completion" | "nai-pipeline" | "none";
+type ImageGenerationStyle = "chat-completion" | "nai-pipeline" | "none";
 
-export type VideoGenerationStyle = "chat-completion" | "none";
+type VideoGenerationStyle = "chat-completion" | "none";
 
-export interface ProviderFeatureSupport {
+interface ProviderFeatureSupport {
   imageGeneration: ImageGenerationStyle;
   videoGeneration: VideoGenerationStyle;
   embeddings: boolean;
@@ -63,9 +65,11 @@ export type StreamStopReason =
   | "speaker_guard"
   | "send_message_limit"
   | "flush_limit"
+  | "channel_deleted"
+  | "missing_access"
   | "unknown";
 
-export type ThoughtLogKind = "summary" | "raw";
+type ThoughtLogKind = "summary" | "raw";
 
 export interface ThoughtLogEntry {
   kind: ThoughtLogKind;
@@ -80,6 +84,8 @@ export interface ThoughtLogPayload {
   firstReplyUrl?: string;
   /** Total provider streaming time represented by this thought log, in milliseconds. */
   generationDurationMs?: number;
+  /** OpenRouter-only: upstream serving backend (e.g. "minimax-cn"), shown in the footer. */
+  servingProvider?: string;
 }
 
 /**
@@ -102,6 +108,24 @@ export interface StreamResult {
   thoughtLog?: ThoughtLogPayload; // Reasoning/thought text captured separately from visible output
   /** NAI GLM-4.6: incomplete trailing sentence dropped by sentenceTrailingBuffer, available for prompt continuation on retry */
   naiContinuationPrefill?: string;
+  /**
+   * Sprite labels delivered during this stream segment, in render order (one entry
+   * per delivered sprite message, so repeats are kept). Surfaced from StreamState so
+   * the post-turn stat recorder can attribute `sprite_shown` / `sprite_emotion` to the
+   * triggerer's user scope (the stream layer itself has no internal user id). Each
+   * entry carries `isIdentity` so identity sprites are excluded from `sprite_emotion`.
+   * Omitted when empty.
+   */
+  spritesShown?: SpriteShownEntry[];
+  /**
+   * Real, provider-reported token usage for this stream segment, normalized by
+   * the orchestrator from the adapter's native usage shape. Present only when
+   * the provider surfaced usage (OpenRouter, OpenAI-compatible, Anthropic,
+   * Gemini); absent for providers that report no usage, in which case the
+   * post-turn recorder falls back to the character estimate. One segment per
+   * tool-loop request, so a turn's true usage is the sum across segments.
+   */
+  usage?: TokenUsage;
 }
 
 /**
@@ -145,6 +169,12 @@ export interface ProviderInfo {
 export interface FunctionCall {
   name: string;
   args?: Record<string, unknown>;
+  /**
+   * True when the provider's argument payload was truncated and the arguments here were
+   * recovered from an incomplete stream. They hold only the keys that arrived whole, so a
+   * dispatcher must not treat them as the call the model intended to make.
+   */
+  argumentsTruncated?: boolean;
   /**
    * Optional thought signature for providers that require it (e.g., Gemini).
    * Encoded as base64 when present.
@@ -210,17 +240,13 @@ export interface LLMProvider {
   /**
    * Get available tools/functions based on Tomori's configuration
    * @param tomoriState - The current Tomori state with configuration
-   * @returns Array of tool configurations specific to this provider
    */
   getTools(tomoriState: TomoriState): Promise<Array<Record<string, unknown>>>;
 
   /**
    * Stream LLM response directly to a Discord channel
    * @param channel - The Discord text channel or thread to send messages to
-   * @param client - The Discord client instance
-   * @param tomoriState - The current Tomori state
    * @param config - Provider-specific configuration
-   * @param contextItems - An array of structured context items for the LLM
    * @param currentTurnModelParts - Accumulated model parts for the current turn
    * @param emojiStrings - Optional array of emoji strings for cleaning
    * @param functionInteractionHistory - Optional function calling history
@@ -232,7 +258,6 @@ export interface LLMProvider {
    * @param personaAvatarUrl - Optional avatar URL for current persona (used with webhook)
    * @param personaUsername - Optional username override for current persona (used with webhook)
    * @param prefixStrippingName - Optional name used for prefix stripping (may differ from personaUsername for user impersonation)
-   * @returns Promise<StreamResult> - The outcome of the streaming operation
    */
   streamToDiscord(
     channel: BaseGuildTextChannel | BaseGuildVoiceChannel | DMChannel | AnyThreadChannel,
@@ -260,16 +285,13 @@ export interface LLMProvider {
   ): Promise<StreamResult>;
 
   /**
-   * Get the default model for this provider
    * @returns Promise<string> - The default model codename
    */
   getDefaultModel(): Promise<string>;
 
   /**
    * Convert provider-specific configuration from TomoriState
-   * @param tomoriState - The current Tomori state
    * @param apiKey - The decrypted API key
-   * @returns Provider-specific configuration object
    */
   createConfig(tomoriState: TomoriState, apiKey: string): Promise<ProviderConfig>;
 }

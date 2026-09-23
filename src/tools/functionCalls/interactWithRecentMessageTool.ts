@@ -3,17 +3,20 @@
  * Lets Tomori react to or reply to a recent message without needing message-management permissions.
  */
 
-import type { BaseGuildTextChannel, Message, Webhook } from "discord.js";
+import type { BaseGuildTextChannel, Guild, Message, Webhook } from "discord.js";
+import type { TomoriState } from "@/types/db/schema";
 import { BaseTool, type ToolContext, type ToolParameterSchema, type ToolResult } from "@/types/tool/interfaces";
 import { MessageIdMap } from "@/utils/text/messageIdMap";
+import { DISCORD_ID_PATTERN, findFuzzyMessageMatch } from "@/utils/text/fuzzyMessageMatch";
 import { normalizeMessageFetchLimit } from "@/utils/discord/messageFetchLimit";
 import { getOrCreateWebhook } from "@/utils/discord/webhook/lifecycle";
 import { log } from "@/utils/misc/logger";
 import { cleanToolReplyText } from "@/utils/discord/toolReplyText";
 import { getReplyContextAuthorName, sendWebhookReplyWithContext } from "@/utils/discord/webhookReply";
+import { getCachedAllPersonas } from "@/utils/cache/tomoriStateCache";
+import { resolvePersonaForMessage } from "@/utils/chat/webhookIdentity";
+import { resolvePersonaWebhookIdentity, type ResolvedWebhookIdentity } from "@/utils/discord/webhook/identity";
 
-const DISCORD_ID_PATTERN = /^\d{17,20}$/;
-const MAX_FUZZY_DISTANCE = 1000n;
 const PREVIEW_MAX_LENGTH = 120;
 const CUSTOM_EMOJI_PATTERN = /^<(a?):([A-Za-z0-9_~]+):(\d{17,20})>$/;
 const NAMED_EMOJI_PATTERN = /^:([A-Za-z0-9_~]+):$/;
@@ -91,10 +94,25 @@ type WebhookReplyContext = {
   threadId?: string;
 };
 
+type ReplyDeliveryContext =
+  | {
+      kind: "direct";
+      senderPersona?: TomoriState;
+      targetPersonaMatched: boolean;
+    }
+  | {
+      kind: "webhook";
+      webhook: Webhook;
+      threadId?: string;
+      identity: ResolvedWebhookIdentity;
+      senderPersona?: TomoriState;
+      targetPersonaMatched: boolean;
+    };
+
 export class InteractWithRecentMessageTool extends BaseTool {
   name = "interact_with_recent_message";
   description =
-    "Interact with a recent message in the current channel for expressive follow-up behavior. `react` adds an emoji reaction. `reply` sends a short reply or backtrack comment about an earlier message. Use `reveal_message_metadata` first when you need fresh `ref_N` handles or sent timestamps.";
+    "Interact with a recent message in the current channel for expressive follow-up behavior. `react` adds an emoji reaction. `reply` sends a short reply or backtrack comment about an earlier message. Replies targeting a known persona message are delivered from that persona identity when possible. Use `reveal_message_metadata` first when you need fresh `ref_N` handles or sent timestamps.";
   category = "discord" as const;
 
   parameters: ToolParameterSchema = {
@@ -238,10 +256,6 @@ export class InteractWithRecentMessageTool extends BaseTool {
   }
 
   private async resolveWebhookReplyContext(context: ToolContext): Promise<WebhookReplyContext | null> {
-    if (!context.personaUsername) {
-      return null;
-    }
-
     if (context.webhook) {
       return {
         webhook: context.webhook,
@@ -262,6 +276,85 @@ export class InteractWithRecentMessageTool extends BaseTool {
     return {
       webhook: webhookResult.webhook,
       threadId: resolveWebhookThreadId(context.channel),
+    };
+  }
+
+  private resolveContextGuild(context: ToolContext): Guild | null {
+    if ("guild" in context.channel && context.channel.guild) {
+      return context.channel.guild;
+    }
+
+    return context.guildId ? (context.client.guilds.cache.get(context.guildId) ?? null) : null;
+  }
+
+  private async loadPersonasForContext(context: ToolContext): Promise<TomoriState[]> {
+    if (context.guildId) {
+      const cachedPersonas = await getCachedAllPersonas(context.guildId);
+      if (cachedPersonas.length > 0) {
+        return cachedPersonas;
+      }
+    }
+
+    return [context.tomoriState];
+  }
+
+  private async resolveReplyDeliveryContext(
+    context: ToolContext,
+    targetMessage: Message,
+  ): Promise<ReplyDeliveryContext> {
+    const allPersonas = await this.loadPersonasForContext(context);
+    const targetPersona = resolvePersonaForMessage(targetMessage, allPersonas, context.client.user?.id);
+
+    if (targetPersona) {
+      if (!targetPersona.is_alter) {
+        return {
+          kind: "direct",
+          senderPersona: targetPersona,
+          targetPersonaMatched: true,
+        };
+      }
+
+      const guild = this.resolveContextGuild(context);
+      const identity = guild
+        ? await resolvePersonaWebhookIdentity(targetPersona, guild)
+        : { username: targetPersona.persona_nickname };
+      const webhookReplyContext = await this.resolveWebhookReplyContext(context);
+      if (webhookReplyContext) {
+        return {
+          kind: "webhook",
+          webhook: webhookReplyContext.webhook,
+          threadId: webhookReplyContext.threadId,
+          identity,
+          senderPersona: targetPersona,
+          targetPersonaMatched: true,
+        };
+      }
+
+      return {
+        kind: "direct",
+        senderPersona: targetPersona,
+        targetPersonaMatched: true,
+      };
+    }
+
+    const webhookReplyContext = context.personaUsername ? await this.resolveWebhookReplyContext(context) : null;
+    if (webhookReplyContext && context.personaUsername) {
+      return {
+        kind: "webhook",
+        webhook: webhookReplyContext.webhook,
+        threadId: webhookReplyContext.threadId,
+        identity: {
+          username: context.personaUsername,
+          avatarUrl: context.personaAvatarUrl,
+          avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/") ? context.personaAvatarUrl : undefined,
+        },
+        targetPersonaMatched: false,
+      };
+    }
+
+    return {
+      kind: "direct",
+      targetPersonaMatched: false,
     };
   }
 
@@ -329,28 +422,12 @@ export class InteractWithRecentMessageTool extends BaseTool {
     const canFuzzyMatch = !originalWasOpaque && DISCORD_ID_PATTERN.test(rawMessageId);
 
     if (!targetMessage && canFuzzyMatch) {
-      try {
-        const targetBigInt = BigInt(messageIdResult.resolvedId);
-        let bestMatch: Message | undefined;
-        let bestDiff = MAX_FUZZY_DISTANCE;
-
-        for (const [candidateId, candidateMessage] of recentMessages) {
-          const candidateBigInt = BigInt(candidateId);
-          const diff = targetBigInt > candidateBigInt ? targetBigInt - candidateBigInt : candidateBigInt - targetBigInt;
-          if (diff > 0n && diff < bestDiff) {
-            bestDiff = diff;
-            bestMatch = candidateMessage;
-          }
-        }
-
-        if (bestMatch) {
-          targetMessage = bestMatch;
-          log.info(
-            `InteractWithRecentMessageTool: Fuzzy-matched message ID "${messageIdResult.resolvedId}" -> "${bestMatch.id}" (diff=${bestDiff})`,
-          );
-        }
-      } catch {
-        // Ignore parse failures for fuzzy matching; the normal not-found path below will handle it.
+      const fuzzyMatch = findFuzzyMessageMatch(recentMessages, messageIdResult.resolvedId);
+      if (fuzzyMatch) {
+        targetMessage = fuzzyMatch.message;
+        log.info(
+          `InteractWithRecentMessageTool: Fuzzy-matched message ID "${messageIdResult.resolvedId}" -> "${fuzzyMatch.message.id}" (diff=${fuzzyMatch.diff})`,
+        );
       }
     }
 
@@ -448,9 +525,9 @@ export class InteractWithRecentMessageTool extends BaseTool {
       }
     }
 
-    const webhookReplyContext = await this.resolveWebhookReplyContext(context);
+    const replyDeliveryContext = await this.resolveReplyDeliveryContext(context, targetMessage);
 
-    if (!webhookReplyContext && !this.canSendReplyInChannel(context)) {
+    if (replyDeliveryContext.kind !== "webhook" && !this.canSendReplyInChannel(context)) {
       return {
         success: false,
         error: "Insufficient permissions to reply",
@@ -478,19 +555,15 @@ export class InteractWithRecentMessageTool extends BaseTool {
 
       let sentMessage: Message;
 
-      if (webhookReplyContext && context.personaUsername) {
+      if (replyDeliveryContext.kind === "webhook") {
         sentMessage = await sendWebhookReplyWithContext(
-          webhookReplyContext.webhook,
+          replyDeliveryContext.webhook,
           targetMessage,
           context.locale,
           sanitizedReplyContent,
+          replyDeliveryContext.identity,
           {
-            username: context.personaUsername,
-            avatarUrl: context.personaAvatarUrl,
-            avatarDataUri: context.personaAvatarUrl?.startsWith("data:image/") ? context.personaAvatarUrl : undefined,
-          },
-          {
-            threadId: webhookReplyContext.threadId,
+            threadId: replyDeliveryContext.threadId,
           },
         );
 
@@ -523,7 +596,10 @@ export class InteractWithRecentMessageTool extends BaseTool {
             context.tomoriState.persona_nickname,
           ),
           preview: normalizePreview(sanitizedReplyContent),
-          used_webhook_context: Boolean(webhookReplyContext && context.personaUsername),
+          used_webhook_context: replyDeliveryContext.kind === "webhook",
+          target_persona_reply_routed: replyDeliveryContext.targetPersonaMatched,
+          reply_sender_persona: replyDeliveryContext.senderPersona?.persona_nickname,
+          reply_sender_persona_id: replyDeliveryContext.senderPersona?.persona_id,
         },
         endTurn: true,
       };

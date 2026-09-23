@@ -1,11 +1,11 @@
 /**
- * McpRepository — manages the `guild_mcp_servers` table.
+ * McpRepository: manages the `guild_mcp_servers` table.
  *
  * MCP guild config is a distinct integration domain (guild-registered MCP tool servers).
  * Currently one SQL operation (SELECT); isolated here so MCP config management
  * can grow without blurring server-identity concerns in ServerRepository.
  *
- * Export contract: toExportShape returns null — MCP server registrations contain
+ * Export contract: toExportShape returns null: MCP server registrations contain
  * server-specific auth tokens and are not portably exportable.
  */
 import type { GuildMcpServerRow } from "@/types/db/schema";
@@ -13,7 +13,11 @@ import { sql } from "@/utils/db/client";
 import { log } from "@/utils/misc/logger";
 import type { IRepository } from "./IRepository";
 
-export class McpRepository implements IRepository<null> {
+export type McpConfigRepositoryReadResult =
+  | { status: "fresh"; configs: GuildMcpServerRow[] }
+  | { status: "unavailable"; configs: [] };
+
+class McpRepository implements IRepository<null> {
   /**
    * Load all MCP server configs registered for a guild (enabled and disabled).
    * Callers that need only enabled entries should filter in-memory.
@@ -22,22 +26,29 @@ export class McpRepository implements IRepository<null> {
    * @returns Array of GuildMcpServerRow ordered by creation date; empty on error
    */
   async loadGuildMcpConfigs(serverId: number): Promise<GuildMcpServerRow[]> {
+    const result = await this.loadGuildMcpConfigsResult(serverId);
+    return result.configs;
+  }
+
+  /**
+   * Loads MCP registrations without collapsing a database failure into an
+   * authoritative empty collection.
+   */
+  async loadGuildMcpConfigsResult(serverId: number): Promise<McpConfigRepositoryReadResult> {
     try {
       const rows = await sql`
         SELECT guild_mcp_id, server_id, name, url, auth_token, key_version,
-               is_enabled, server_type, created_at, updated_at
+               is_enabled, server_type, last_discovered_tool_names, created_at, updated_at
         FROM guild_mcp_servers
         WHERE server_id = ${serverId}
         ORDER BY created_at ASC
       `;
-      return rows as GuildMcpServerRow[];
+      return { status: "fresh", configs: rows as GuildMcpServerRow[] };
     } catch (error) {
       log.error(`McpRepository.loadGuildMcpConfigs: failed for server ${serverId}`, error);
-      return [];
+      return { status: "unavailable", configs: [] };
     }
   }
-
-  // ── IRepository stub ───────────────────────────────────────────────────────
 
   async toExportShape(_ownerId: string | number): Promise<null> {
     return null;
@@ -48,5 +59,5 @@ export class McpRepository implements IRepository<null> {
   }
 }
 
-/** Singleton instance — import this in callers. */
+/** Singleton instance: import this in callers. */
 export const mcpRepository = new McpRepository();
