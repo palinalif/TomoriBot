@@ -290,7 +290,7 @@ export async function executeCustomEndpointEditCommand(options: ExecuteCustomEnd
   const editButton = new ButtonBuilder()
     .setCustomId(EDIT_BUTTON_ID)
     .setLabel(localizer(locale, "commands.config.custom_models.edit.edit_fields_button"))
-    .setStyle(ButtonStyle.Primary);
+    .setStyle(ButtonStyle.Secondary);
   const cancelButton = new ButtonBuilder()
     .setCustomId(CANCEL_BUTTON_ID)
     .setLabel(localizer(locale, "general.pagination.cancel"))

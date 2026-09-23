@@ -4,7 +4,6 @@ import * as realEndpointService from "@/utils/provider/customEndpointService";
 import * as realCredentialResolver from "@/utils/provider/credentialResolver";
 import * as realCustomProviderUtils from "@/utils/provider/customProviderUtils";
 import * as realRemoteFetch from "@/utils/security/userRemoteFetch";
-import * as realLogger from "@/utils/misc/logger";
 import { createScopedModuleMocker } from "../../helpers/mockSurface";
 
 const resolveEndpointMock = mock(async () => currentEndpoint);
@@ -17,7 +16,6 @@ const scopedMock = createScopedModuleMocker(mock, {
   "@/utils/provider/credentialResolver": realCredentialResolver,
   "@/utils/provider/customProviderUtils": realCustomProviderUtils,
   "@/utils/security/userRemoteFetch": realRemoteFetch,
-  "@/utils/misc/logger": realLogger,
 });
 
 scopedMock.module("@/utils/provider/customEndpointService", () => ({
@@ -36,11 +34,6 @@ scopedMock.module("@/utils/security/userRemoteFetch", () => ({
   ...realRemoteFetch,
   fetchUserRemoteUrl: remoteFetchMock,
 }));
-scopedMock.module("@/utils/misc/logger", () => ({
-  ...realLogger,
-  log: { ...realLogger.log, info: mock(() => {}), warn: mock(() => {}), error: mock(() => {}) },
-}));
-
 let beginTextModelHandoffBeforeComfyUi: typeof import("@/utils/provider/textModelComfyUiHandoff").beginTextModelHandoffBeforeComfyUi;
 let waitForTextModelHandoffBeforeTextRequest: typeof import("@/utils/provider/textModelComfyUiHandoff").waitForTextModelHandoffBeforeTextRequest;
 let currentEndpoint: CustomEndpointRow | null = null;
